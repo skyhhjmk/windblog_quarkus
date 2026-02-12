@@ -1,10 +1,13 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.model.Post;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
+import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -14,11 +17,16 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 
+import java.time.OffsetDateTime;
+import java.util.List;
+
 /**
  * Index controller
  */
 @Path("/")
 public class IndexController {
+
+    private static final int PAGE_SIZE = 10;
 
     @Inject
     @Location("blog/index.html")
@@ -42,6 +50,8 @@ public class IndexController {
     }
 
     /**
+     * 首页（文章列表）分页
+     *
      * @param subPage page number
      * @param httpHeaders HttpHeaders
      * @return subPage page
@@ -55,10 +65,58 @@ public class IndexController {
             subPage = 1;
         }
 
+        String lang = languageContext.getLang();
+        var postQuery = Post.find("status = ?1 and deletedAt is null order by publishedAt desc nulls last, createdAt desc", (short) 1);
+        long total = postQuery.count();
+        List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
+        long totalPages = total == 0 ? 1 : (long) Math.ceil((double) total / PAGE_SIZE);
+
+        List<IndexPostItem> postItems = posts.stream()
+                .map(post -> toIndexItem(post, lang))
+                .toList();
+
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? indexContent : index;
 
         return template
-                .data("language", languageContext.getLang())
-                .data("subPage", subPage);
+                .data("language", lang)
+                .data("subPage", subPage)
+                .data("pageSize", PAGE_SIZE)
+                .data("totalPosts", total)
+                .data("totalPages", totalPages)
+                .data("hasPrevPage", subPage > 1)
+                .data("hasNextPage", subPage < totalPages)
+                .data("prevPage", Math.max(1, subPage - 1))
+                .data("nextPage", Math.min(totalPages, subPage + 1))
+                .data("posts", postItems);
+    }
+
+    private IndexPostItem toIndexItem(Post post, String lang) {
+        String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
+        String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
+        if (title == null || title.isBlank()) {
+            title = post.slug;
+        }
+        if (summary == null || summary.isBlank()) {
+            summary = "暂无摘要";
+        }
+
+        return new IndexPostItem(
+                post.id,
+                post.slug,
+                title,
+                summary,
+                post.publishedAt,
+                post.createdAt
+        );
+    }
+
+    public record IndexPostItem(
+            Long id,
+            String slug,
+            String title,
+            String summary,
+            OffsetDateTime publishedAt,
+            OffsetDateTime createdAt
+    ) {
     }
 }

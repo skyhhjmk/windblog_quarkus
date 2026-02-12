@@ -7,21 +7,61 @@
             <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
                 <h3 class="font-bold mb-2">页面信息</h3>
                 <p class="text-sm">当前语言: {language ?: 'zh-CN'}</p>
-                <p class="text-sm">当前分页: 第{subPage ?: 1} 页</p>
+                <p class="text-sm">当前分页: 第{subPage ?: 1}页</p>
+                <p class="text-sm">文章总数: {totalPosts ?: 0}</p>
+                <p class="text-sm">总页数: {totalPages ?: 1}</p>
             </section>
         </div>
     </div>
 
     <section class="space-y-4">
-        <h2 class="text-2xl font-bold">欢迎访问首页</h2>
-        <p>这是首页内容片段模板，PJAX 请求时只返回这里的内容。</p>
+        <div class="flex items-end justify-between gap-3">
+            <h2 class="text-2xl font-bold">最新文章</h2>
+            <p class="text-sm opacity-80">共 {totalPosts ?: 0} 篇</p>
+        </div>
 
-        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-            <h3 class="font-bold mb-2">示例内容</h3>
-            <ul class="list-disc pl-6 space-y-1">
-                <li>最新资讯</li>
-                <li>产品推荐</li>
-            </ul>
-        </section>
+        {#if posts && !posts.isEmpty}
+            <div class="space-y-3">
+                {#for post in posts}
+                    <article class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] space-y-2">
+                        <h3 class="text-lg font-bold">
+                            <a href="/post/{post.slug}" class="hover:underline">
+                                {post.title}
+                            </a>
+                        </h3>
+                        <p class="text-sm opacity-90">{post.summary}</p>
+                        <p class="text-xs opacity-60">
+                            slug: {post.slug}
+                            {#if post.publishedAt} | 发布: {post.publishedAt}{/if}
+                        </p>
+                    </article>
+                {/for}
+            </div>
+
+            <nav class="flex items-center justify-between border border-[var(--border)] p-3 bg-[var(--panel-bg)]">
+                <div>
+                    {#if hasPrevPage}
+                        <a class="hover:underline"
+                           href="{#if prevPage == 1}/{#else}/page/{prevPage}{/if}">上一页</a>
+                    {#else}
+                        <span class="opacity-50">上一页</span>
+                    {/if}
+                </div>
+                <div class="text-sm opacity-80">
+                    第 {subPage ?: 1} / {totalPages ?: 1} 页
+                </div>
+                <div>
+                    {#if hasNextPage}
+                        <a class="hover:underline" href="/page/{nextPage}">下一页</a>
+                    {#else}
+                        <span class="opacity-50">下一页</span>
+                    {/if}
+                </div>
+            </nav>
+        {#else}
+            <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+                <p>暂无已发布文章。</p>
+            </section>
+        {/if}
     </section>
 </div>
