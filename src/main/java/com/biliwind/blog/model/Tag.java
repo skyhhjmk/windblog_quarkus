@@ -1,0 +1,45 @@
+package com.biliwind.blog.model;
+
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.time.OffsetDateTime;
+import java.util.Map;
+
+/**
+ * 标签实体，对应 tags
+ */
+@Entity
+@Table(name = "tags")
+public class Tag extends PanacheEntityBase {
+
+    /** 主键ID */
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
+
+    /** 标签slug（唯一） */
+    @Column(nullable = false, length = 160, unique = true)
+    public String slug;
+
+    /** 多语言名称（JSONB） */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    public Map<String, String> name;
+
+    /** 多语言描述（JSONB） */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    public Map<String, String> description;
+
+    /** 创建时间 */
+    @Column(name = "created_at", nullable = false)
+    public OffsetDateTime createdAt;
+}
