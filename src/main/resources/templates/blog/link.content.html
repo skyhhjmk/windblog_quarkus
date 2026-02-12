@@ -1,0 +1,90 @@
+<div id="pjax-content-root" data-page-title="{pageTitle ?: 'Links'}">
+    <div id="pjax-nav-path" class="hidden">
+        ~/windblog / links{#if pjaxTestMode} / pjax-test{/if}
+    </div>
+    <div id="pjax-sidebar-html" class="hidden">
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
+            <h3 class="font-bold mb-2">测试侧栏</h3>
+            <p class="text-sm">该内容来自 `link.content.html` 片段注入。</p>
+        </section>
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+            <h3 class="font-bold mb-2">调试信息</h3>
+            <p class="text-sm">当前语言: {language ?: 'zh-CN'}</p>
+            <p class="text-sm">路由: {#if pjaxTestMode}/link/pjax-test{#else}/link{/if}</p>
+        </section>
+    </div>
+
+    <div class="max-w-full mx-auto px-0">
+        <div class="mb-8 text-center px-2">
+            <h1 class="text-2xl font-bold mb-2">
+                <span class="text-green-500">-></span>
+                <span class="text-[var(--accent)]">~</span>
+                {pageTitle ?: 'Links'}
+            </h1>
+            <p class="text-sm opacity-80">A collection of quality resources.</p>
+            {#if pjaxTestMode}
+                <p class="text-sm text-green-400 mt-2">[PJAX TEST MODE]</p>
+            {/if}
+
+            <div class="mt-4 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm">
+                <a href="/link" class="text-[var(--accent)] hover:underline">[Links]</a>
+                <a href="/link/pjax-test" class="text-[var(--accent)] hover:underline">[PJAX Test Page]</a>
+                <div class="flex items-center gap-2">
+                    <label for="linkSortSelect" class="opacity-80">Sort:</label>
+                    <select id="linkSortSelect" class="bg-[var(--panel-bg)] border border-[var(--border)] px-2 py-1 outline-none">
+                        <option value="default">Default</option>
+                        <option value="protocol">Protocol</option>
+                        <option value="score">Score</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        {#if links.size > 0}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 link-grid">
+                {#for link in links}
+                    <div class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] flex flex-col"
+                         data-index="{link.id ?: 0}"
+                         data-protocol="{link.protocol ?: ''}"
+                         data-score="{link.score ?: 0}">
+                        <div class="flex items-start mb-4">
+                            <div class="mr-4 flex-shrink-0">
+                                {#if link.icon}
+                                    <img src="{link.icon}" alt="{link.name}" class="w-10 h-10 border border-[var(--border)]" />
+                                {#else}
+                                    <div class="w-10 h-10 border border-[var(--border)] flex items-center justify-center opacity-70">
+                                        <i class="fas fa-link"></i>
+                                    </div>
+                                {/if}
+                            </div>
+                            <div class="flex-1 min-w-0 overflow-hidden">
+                                <h2 class="font-bold truncate text-[var(--accent)] hover:underline">
+                                    <a href="{link.url}" target="{link.target ?: '_self'}">{link.name}</a>
+                                </h2>
+                                <div class="text-xs opacity-70 mt-1">
+                                    {link.createdAt}
+                                    {#if link.protocol}
+                                        <span class="ml-2 text-purple-400">[{link.protocol}]</span>
+                                    {/if}
+                                </div>
+                            </div>
+                        </div>
+
+                        <p class="text-sm mb-4 flex-grow">
+                            {link.description ?: 'No description available.'}
+                        </p>
+
+                        <div class="flex justify-between items-center text-xs border-t border-[var(--border)] pt-2 mt-auto">
+                            <a href="{link.url}" target="{link.target ?: '_self'}" class="text-green-500 hover:underline">[Visit]</a>
+                            <span class="opacity-70">{link.redirectType ?: 'direct'}</span>
+                        </div>
+                    </div>
+                {/for}
+            </div>
+        {#else}
+            <div class="border border-[var(--border)] p-10 text-center bg-[var(--panel-bg)]">
+                <p class="opacity-80">No links found.</p>
+            </div>
+        {/if}
+    </div>
+</div>

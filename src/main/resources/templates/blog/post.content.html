@@ -1,0 +1,29 @@
+<div id="pjax-content-root" data-page-title="{postTitle ?: '文章详情'}">
+    <div id="pjax-nav-path" class="hidden">
+        ~/windblog / post / {postSlug ?: 'unknown'}
+    </div>
+    <div id="pjax-sidebar-html" class="hidden">
+        <div class="space-y-4">
+            <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+                <h3 class="font-bold mb-2">文章信息</h3>
+                <p class="text-sm">Slug: {postSlug}</p>
+                <p class="text-sm">语言: {language ?: 'zh-CN'}</p>
+            </section>
+        </div>
+    </div>
+
+    <article class="space-y-4">
+        <header>
+            <h1 class="text-3xl font-bold">{postTitle ?: '文章详情'}</h1>
+            <p class="text-sm opacity-80">Slug: {postSlug}</p>
+        </header>
+
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+            {#if postBody && !postBody.isEmpty}
+                <pre class="whitespace-pre-wrap break-words">{postBody}</pre>
+            {#else}
+                <p>暂无该语言内容，且默认语言内容也不可用。</p>
+            {/if}
+        </section>
+    </article>
+</div>

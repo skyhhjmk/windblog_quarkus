@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <title>{#insert title}{page_title ?: 'WindBlog'}{/insert}</title>
+
+    <!-- PWA / 主题色（暗色） -->
+    <meta name="theme-color" content="#1e1e1e" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- CSRF（推荐后端注入），JS 会自动回退到 Cookie -->
+    <meta name="csrf-token" content="{csrfToken ?: ''}">
+
+    <!-- 字体优化 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- JetBrains Mono - 等宽更贴合终端风格 -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap"
+          rel="stylesheet" />
+
+    <!-- Tailwind（CDN 版；若生产建议改 CLI 构建，以获得 tree-shaking） -->
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+
+    <!-- Font Awesome（如需） -->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css" />
+
+    <!-- 主题样式（极简，仅少量变量与 TUI 细节） -->
+    <link rel="stylesheet" href="/assets/css/theme.css" />
+</head>
+
+<body class="min-h-screen flex flex-col bg-[var(--bg)] text-[var(--fg)] font-mono">
+<!-- Header -->
+<header class="sticky top-0 z-50 bg-[var(--bg)]/95 backdrop-blur border-b border-[var(--border)]">
+    <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+        <!-- 品牌 / 路径（zsh 风格） -->
+        <a href="/" class="flex items-center gap-2 text-xl font-bold">
+            <span class="tui-prompt"></span>
+            <span id="nav-path-text" class="text-[var(--accent)]">
+                {#insert nav_path}~/windblog{/insert}
+            </span>
+        </a>
+
+        <!-- 桌面导航 -->
+        <nav class="hidden md:flex items-center gap-6">
+            <a href="/" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Home]</a>
+            <a href="/link" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Links]</a>
+
+            <!-- 搜索 -->
+            <form action="/search" method="get" class="flex items-center gap-2">
+                <input
+                        type="text"
+                        name="q"
+                        placeholder="Search..."
+                        class="px-3 py-1 text-sm w-48 bg-[var(--panel-bg)] border border-[var(--border)] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+                        aria-label="Search" />
+                <button
+                        type="submit"
+                        class="px-3 py-1 text-sm bg-[var(--panel-bg)] border border-[var(--border)] hover:bg-[var(--selection)]">
+                    [Search]
+                </button>
+            </form>
+
+            <!-- 用户菜单 -->
+            <div class="relative" id="userMenuContainer">
+                <button id="userMenuBtn"
+                        class="px-2 py-1 bg-[var(--panel-bg)] border border-[var(--border)] hover:bg-[var(--selection)]"
+                        aria-haspopup="true" aria-expanded="false" aria-controls="userDropdown">
+                    [User]
+                </button>
+                <div id="userDropdown"
+                     class="absolute right-0 top-full mt-2 w-48 bg-[var(--bg)] border border-[var(--border)] hidden p-2 z-50"
+                     role="menu" aria-labelledby="userMenuBtn">
+                    <div id="userNotLoggedIn" class="space-y-1">
+                        <a href="/user/login" class="block py-1 hover:bg-[var(--selection)]" role="menuitem">Login</a>
+                        <a href="/user/register" class="block py-1 hover:bg-[var(--selection)]" role="menuitem">Register</a>
+                    </div>
+                    <div id="userLoggedIn" class="hidden">
+                        <div class="border-b border-[var(--border)] pb-1 mb-1" id="userNickname">User</div>
+                        <a href="/user/center" class="block py-1 hover:bg-[var(--selection)]" role="menuitem">Center</a>
+                        <a href="#" id="logoutLink"
+                           class="block py-1 text-red-400 hover:bg-[var(--selection)]"
+                           role="menuitem">Logout</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 移动端菜单按钮 -->
+        <button id="mobileMenuBtn"
+                class="md:hidden px-2 py-1 bg-[var(--panel-bg)] border border-[var(--border)] hover:bg-[var(--selection)]"
+                aria-controls="mobileMenu" aria-expanded="false">
+            [Menu]
+        </button>
+    </div>
+
+    <!-- 移动端菜单 -->
+    <div id="mobileMenu"
+         class="hidden md:hidden border-t border-[var(--border)] p-4 bg-[var(--bg)]">
+        <a href="/" class="block py-2 hover:bg-[var(--selection)]">[Home]</a>
+        <a href="/link" class="block py-2 hover:bg-[var(--selection)]">[Links]</a>
+        <div class="border-t border-[var(--border)] my-2"></div>
+        <div id="mobileUserAuth" class="space-y-1">
+            <a href="/user/login" class="block py-2 hover:bg-[var(--selection)]">Login</a>
+            <a href="/user/register" class="block py-2 hover:bg-[var(--selection)]">Register</a>
+        </div>
+    </div>
+</header>
+
+<!-- Main -->
+<main class="flex-grow container mx-auto px-4 py-8 flex flex-col md:flex-row gap-8">
+    <div id="pjax-container" class="w-full md:w-3/4">
+        {#insert content}
+            <p>[content]请填充具体内容</p>
+        {/insert}
+    </div>
+    <aside id="sidebar-container" class="w-full md:w-1/4 hidden md:block">
+        {#insert sidebar}
+            <p>[sidebar]请填充具体内容</p>
+        {/insert}
+    </aside>
+</main>
+
+<!-- Footer -->
+<footer class="py-6 text-center text-sm border-t border-[var(--border)] mt-auto">
+</footer>
+
+<!-- PJAX 进度条（可选） -->
+<div id="pjax-progress"
+     class="fixed top-0 left-0 h-[2px] w-0 z-[9999] bg-[var(--accent)]"></div>
+
+<!-- JS：无需 jQuery（如你有 PJAX 插件再单独引入） -->
+<script src="/assets/js/main.js" defer></script>
+<script src="/assets/js/user.js" defer></script>
+<script src="/assets/js/ads.js" defer></script>
+<script src="/assets/js/link.js" defer></script>
+</body>
+</html>

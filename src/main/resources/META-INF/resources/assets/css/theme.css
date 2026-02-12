@@ -1,0 +1,104 @@
+:root {
+    --bg: #1e1e1e;
+    --fg: #abb2bf;
+    --border: #3e4451;
+    --accent: #61afef;
+    --success: #98c379;
+    --warning: #e5c07b;
+    --error: #e06c75;
+    --selection: #3e4451;
+    --panel-bg: #282c34;
+}
+
+/* 基础排版（保留等宽终端风格） */
+html, body {
+    color-scheme: dark;
+}
+body {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    line-height: 1.5;
+}
+
+/* 链接 */
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+}
+
+/* 选区颜色 */
+::selection {
+    background: var(--selection);
+    color: var(--fg);
+}
+
+/* 滚动条（Chromium + Firefox） */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--bg);
+}
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border: 1px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+}
+
+/* Markdown / Prose（尽量少覆盖） */
+.prose h1, .prose h2, .prose h3 {
+    color: var(--accent);
+    border-bottom: 1px dashed var(--border);
+}
+.prose code {
+    background: var(--panel-bg);
+    color: var(--warning);
+}
+.prose pre {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+}
+.prose blockquote {
+    border-left: 4px solid var(--accent);
+    background: var(--panel-bg);
+    color: var(--fg);
+}
+
+/* TUI 风格：提示符与盒子（可选） */
+.tui-prompt::before {
+    content: "➜";
+    color: var(--success);
+    margin-right: .25rem;
+}
+.tui-box {
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    position: relative;
+    margin-bottom: 1.5rem;
+    background: var(--bg);
+}
+.tui-box[data-title]::before {
+    content: attr(data-title);
+    position: absolute;
+    top: -0.75rem;
+    left: 1rem;
+    background: var(--bg);
+    padding: 0 0.5rem;
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: bold;
+}
+
+/* 表单基础态（其余用 Tailwind） */
+input, textarea, select, button {
+    font-family: inherit;
+}
