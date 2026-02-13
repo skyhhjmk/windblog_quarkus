@@ -20,5 +20,8 @@
     <include file="./migration/012-add-indexes.sql" relativeToChangelogFile="true"/>
     <include file="./migration/013-add-constraints.sql" relativeToChangelogFile="true"/>
     <include file="./migration/016-categories-ltree-triggers.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/017-create-links.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/018-create-link-audit.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/019-create-link-monitor-log.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
