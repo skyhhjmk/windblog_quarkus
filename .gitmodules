@@ -1,0 +1,3 @@
+[submodule "admin-flutter"]
+	path = admin-flutter
+	url = https://github.com/skyhhjmk/windblog_admin_flutter.git
