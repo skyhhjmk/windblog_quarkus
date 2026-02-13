@@ -39,6 +39,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Path("/api/admin/posts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -72,7 +73,7 @@ public class AdminPostApiController {
             parameters.put("keyword", "%" + keyword.trim().toLowerCase() + "%");
         }
 
-        var query = Post.find(where.toString() + " order by updatedAt desc", parameters);
+        var query = Post.find(where + " order by updatedAt desc", parameters);
         long total = query.count();
         List<Post> entities = query.page(Page.of(safePage - 1, safePageSize)).list();
 
@@ -151,27 +152,48 @@ public class AdminPostApiController {
             throw conflict("版本冲突，请刷新后重试");
         }
 
+        boolean changed = false;
+
         if (request.slug() != null && !request.slug().isBlank()) {
             String nextSlug = request.slug().trim();
             if (!nextSlug.equals(post.slug) && Post.count("slug = ?1", nextSlug) > 0) {
                 throw conflict("slug 已存在");
             }
+            if (!nextSlug.equals(post.slug)) {
+                changed = true;
+            }
             post.slug = nextSlug;
         }
 
         if (request.summary() != null) {
+            if (!Objects.equals(post.summary, request.summary())) {
+                changed = true;
+            }
             post.summary = request.summary();
         }
         if (request.aiSummary() != null) {
+            if (!Objects.equals(post.aiSummary, request.aiSummary())) {
+                changed = true;
+            }
             post.aiSummary = request.aiSummary();
         }
         if (request.visibility() != null) {
+            if (post.visibility != request.visibility()) {
+                changed = true;
+            }
             post.visibility = request.visibility();
         }
         if (request.renderType() != null) {
-            post.renderType = requireRenderType(request.renderType());
+            PostRenderType nextRenderType = requireRenderType(request.renderType());
+            if (post.renderType != nextRenderType) {
+                changed = true;
+            }
+            post.renderType = nextRenderType;
         }
         if (request.status() != null) {
+            if (post.status != request.status()) {
+                changed = true;
+            }
             post.status = request.status();
             if (request.status() == 1 && post.publishedAt == null) {
                 post.publishedAt = OffsetDateTime.now();
@@ -179,16 +201,25 @@ public class AdminPostApiController {
         }
 
         if (request.title() != null || request.contentMarkdown() != null || request.editorType() != null) {
+            Map<String, String> nextTitle = request.title() == null ? post.title : request.title();
+            Map<String, String> currentContent = post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown;
+            Map<String, String> nextContent = request.contentMarkdown() == null ? currentContent : request.contentMarkdown();
+            short currentEditorType = post.currentRevision == null ? 0 : post.currentRevision.editorType;
+            short nextEditorType = request.editorType() == null ? currentEditorType : request.editorType();
+
+            boolean revisionChanged = !Objects.equals(nextTitle, post.title)
+                    || !Objects.equals(nextContent, currentContent)
+                    || nextEditorType != currentEditorType;
+            if (!revisionChanged) {
+                throw conflict("内容相同");
+            }
+
             User operator = mustFindOperator(requestContext);
             PostRevision nextRevision = new PostRevision();
             nextRevision.post = post;
-            nextRevision.title = request.title() == null ? post.title : request.title();
-            nextRevision.contentMarkdown = request.contentMarkdown() == null
-                    ? (post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown)
-                    : request.contentMarkdown();
-            nextRevision.editorType = request.editorType() == null
-                    ? (post.currentRevision == null ? 0 : post.currentRevision.editorType)
-                    : request.editorType();
+            nextRevision.title = nextTitle;
+            nextRevision.contentMarkdown = nextContent;
+            nextRevision.editorType = nextEditorType;
             nextRevision.revisionNumber = nextRevisionNumber(post.id);
             nextRevision.createdBy = operator;
             nextRevision.createdAt = OffsetDateTime.now();
@@ -196,6 +227,11 @@ public class AdminPostApiController {
 
             post.currentRevision = nextRevision;
             post.title = nextRevision.title;
+            changed = true;
+        }
+
+        if (!changed) {
+            throw conflict("内容相同");
         }
 
         post.updatedAt = OffsetDateTime.now();
@@ -208,8 +244,12 @@ public class AdminPostApiController {
     @Operation(summary = "发布文章")
     @APIResponse(responseCode = "200", description = "发布成功")
     @APIResponse(responseCode = "404", description = "文章不存在")
+    @APIResponse(responseCode = "409", description = "内容相同")
     public AdminPostDetail publish(@PathParam("id") Long id) {
         Post post = mustFindPost(id);
+        if (post.status == 1) {
+            throw conflict("内容相同");
+        }
         post.status = 1;
         if (post.publishedAt == null) {
             post.publishedAt = OffsetDateTime.now();
@@ -281,7 +321,7 @@ public class AdminPostApiController {
 
     private PostRenderType requireRenderType(Short renderTypeCode) {
         if (!PostRenderType.isSupportedCode(renderTypeCode)) {
-            throw badRequest("renderType 涓嶅悎娉曪紝鍙€夊€硷細0(markdown),1(html),2(vditor),3(v_builder),4(gutenberg)");
+            throw badRequest("renderType 不合法，可选值：0(markdown),1(html),2(vditor),3(v_builder),4(gutenberg)");
         }
         return PostRenderType.fromCode(renderTypeCode);
     }

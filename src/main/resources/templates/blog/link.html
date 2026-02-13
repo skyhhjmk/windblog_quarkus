@@ -3,9 +3,9 @@
         {pageTitle ?: 'Links'}
     {/title}
 
-    {#nav_path}
-        ~/windblog / links{#if pjaxTestMode} / pjax-test{/if}
-    {/nav_path}
+    {#navPath}
+        ~/windblog / links
+    {/navPath}
 
     {#content}
         {#include blog/link.content.html /}
@@ -16,9 +16,6 @@
             <h3 class="font-bold mb-2">Links Sidebar</h3>
             <p class="text-sm">等待页面片段注入侧栏内容。</p>
             <p class="text-sm mt-1">当前语言: {language ?: 'zh-CN'}</p>
-            {#if pjaxTestMode}
-                <p class="text-sm mt-1 text-green-400">模式: PJAX TEST</p>
-            {/if}
         </section>
     {/sidebar}
 {/include}

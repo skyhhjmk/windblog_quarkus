@@ -1,6 +1,6 @@
 <div id="pjax-content-root" data-page-title="{pageTitle ?: 'Links'}">
     <div id="pjax-nav-path" class="hidden">
-        ~/windblog / links{#if pjaxTestMode} / pjax-test{/if}
+        ~/windblog / links
     </div>
     <div id="pjax-sidebar-html" class="hidden">
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
@@ -10,7 +10,7 @@
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
             <h3 class="font-bold mb-2">调试信息</h3>
             <p class="text-sm">当前语言: {language ?: 'zh-CN'}</p>
-            <p class="text-sm">路由: {#if pjaxTestMode}/link/pjax-test{#else}/link{/if}</p>
+            <p class="text-sm">路由: /link</p>
         </section>
     </div>
 
@@ -22,13 +22,9 @@
                 {pageTitle ?: 'Links'}
             </h1>
             <p class="text-sm opacity-80">A collection of quality resources.</p>
-            {#if pjaxTestMode}
-                <p class="text-sm text-green-400 mt-2">[PJAX TEST MODE]</p>
-            {/if}
 
             <div class="mt-4 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm">
                 <a href="/link" class="text-[var(--accent)] hover:underline">[Links]</a>
-                <a href="/link/pjax-test" class="text-[var(--accent)] hover:underline">[PJAX Test Page]</a>
                 <div class="flex items-center gap-2">
                     <label for="linkSortSelect" class="opacity-80">Sort:</label>
                     <select id="linkSortSelect" class="bg-[var(--panel-bg)] border border-[var(--border)] px-2 py-1 outline-none">

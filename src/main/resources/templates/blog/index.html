@@ -1,25 +1,25 @@
-{#include base.html}
-    {#title}
-        首页
-    {/title}
+{#include "base.html"}
+{#title}
+首页
+{/title}
 
-    {#nav_path}
-        ~/windblog / home{#if subPage && subPage > 1} / page-{subPage}{/if}
-    {/nav_path}
+{#navPath}
+~/windblog / home{#if subPage && subPage > 1} / page-{subPage}{/if}
+{/navPath}
 
-    {#content}
-        {#include blog/index.content.html /}
-    {/content}
+{#content}
+{#include "blog/index.content.html"}{/include}
+{/content}
 
-    {#sidebar}
-        <div class="space-y-4">
-            <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-                <h3 class="font-bold mb-2">页面信息</h3>
-                <p class="text-sm">当前语言: {language ?: 'zh-CN'}</p>
-                <p class="text-sm">当前分页: 第{subPage ?: 1}页</p>
-                <p class="text-sm">文章总数: {totalPosts ?: 0}</p>
-                <p class="text-sm">总页数: {totalPages ?: 1}</p>
-            </section>
-        </div>
-    {/sidebar}
+{#sidebar}
+<div class="space-y-4">
+    <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+        <h3 class="font-bold mb-2">页面信息</h3>
+        <p class="text-sm">当前语言: {language ?: 'zh-CN'}</p>
+        <p class="text-sm">当前分页: 第{subPage ?: 1}页</p>
+        <p class="text-sm">文章总数: {totalPosts ?: 0}</p>
+        <p class="text-sm">总页数: {totalPages ?: 1}</p>
+    </section>
+</div>
+{/sidebar}
 {/include}

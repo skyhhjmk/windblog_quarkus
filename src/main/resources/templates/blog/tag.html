@@ -1,26 +1,26 @@
-{#include base.html}
-    {#title}
-        {pageTitle ?: 'Tags'}
-    {/title}
+{#include "base.html"}
+{#title}
+{pageTitle ?: 'Tags'}
+{/title}
 
-    {#nav_path}
-        {navPath ?: '~/windblog / tags'}
-    {/nav_path}
+{#navPath}
+{navPath ?: '~/windblog / tags'}
+{/navPath}
 
-    {#content}
-        {#include blog/tag.content.html /}
-    {/content}
+{#content}
+{#include "blog/tag.content.html"}{/include}
+{/content}
 
-    {#sidebar}
-        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
-            <h3 class="font-bold mb-2">Tag Info</h3>
-            <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
-            <p class="text-sm">Total: {totalCount ?: 0}</p>
-            {#if detailMode}
-                <p class="text-sm">Current: {currentTag.name}</p>
-            {#else}
-                <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
-            {/if}
-        </section>
-    {/sidebar}
+{#sidebar}
+<section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
+    <h3 class="font-bold mb-2">Tag Info</h3>
+    <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
+    <p class="text-sm">Total: {totalCount ?: 0}</p>
+    {#if detailMode}
+    <p class="text-sm">Current: {currentTag.name}</p>
+    {#else}
+    <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
+    {/if}
+</section>
+{/sidebar}
 {/include}

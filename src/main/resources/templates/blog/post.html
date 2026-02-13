@@ -1,23 +1,23 @@
-{#include base.html}
-    {#title}
-        {postTitle ?: '文章详情'}
-    {/title}
+{#include "base.html"}
+{#title}
+{postTitle ?: '文章详情'}
+{/title}
 
-    {#nav_path}
-        ~/windblog / post / {postSlug ?: 'unknown'}
-    {/nav_path}
+{#navPath}
+~/windblog / post / {postSlug ?: 'unknown'}
+{/navPath}
 
-    {#content}
-        {#include blog/post.content.html /}
-    {/content}
+{#content}
+{#include "blog/post.content.html"}{/include}
+{/content}
 
-    {#sidebar}
-        <div class="space-y-4">
-            <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-                <h3 class="font-bold mb-2">文章信息</h3>
-                <p class="text-sm">Slug: {postSlug}</p>
-                <p class="text-sm">语言: {language ?: 'zh-CN'}</p>
-            </section>
-        </div>
-    {/sidebar}
+{#sidebar}
+<div class="space-y-4">
+    <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+        <h3 class="font-bold mb-2">文章信息</h3>
+        <p class="text-sm">Slug: {postSlug}</p>
+        <p class="text-sm">语言: {language ?: 'zh-CN'}</p>
+    </section>
+</div>
+{/sidebar}
 {/include}
