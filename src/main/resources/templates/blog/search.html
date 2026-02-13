@@ -1,0 +1,24 @@
+{#include base.html}
+    {#title}
+        {pageTitle ?: 'Search'}
+    {/title}
+
+    {#nav_path}
+        ~/windblog / search
+    {/nav_path}
+
+    {#content}
+        {#include blog/search.content.html /}
+    {/content}
+
+    {#sidebar}
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
+            <h3 class="font-bold mb-2">Search Info</h3>
+            <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
+            <p class="text-sm">Keyword: {searchKeyword ?: '-'}</p>
+            <p class="text-sm">Type: {searchType ?: 'all'}</p>
+            <p class="text-sm">Total: {totalCount ?: 0}</p>
+            <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
+        </section>
+    {/sidebar}
+{/include}

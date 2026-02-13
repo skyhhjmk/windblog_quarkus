@@ -1,0 +1,105 @@
+<div id="pjax-content-root" data-page-title="{pageTitle ?: 'Categories'}">
+    <div id="pjax-nav-path" class="hidden">{navPath ?: '~/windblog / categories'}</div>
+    <div id="pjax-sidebar-html" class="hidden">
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
+            <h3 class="font-bold mb-2">Category Info</h3>
+            <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
+            {#if detailMode}
+                <p class="text-sm">Current: {currentCategory.name}</p>
+                <p class="text-sm">Children: {currentCategory.childCount}</p>
+            {#else}
+                <p class="text-sm">Total: {totalCount ?: 0}</p>
+                <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
+            {/if}
+        </section>
+    </div>
+
+    {#if detailMode}
+        <section class="space-y-4">
+            <div class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+                <h1 class="text-2xl font-bold">{currentCategory.name}</h1>
+                <p class="text-sm opacity-80 mt-2">{currentCategory.description}</p>
+                <p class="text-xs opacity-70 mt-2">Path: {currentCategory.path} | Created: {currentCategory.createdAtText}</p>
+                <div class="mt-3 text-sm flex flex-wrap gap-2">
+                    {#for node in breadcrumbs}
+                        <a href="{node.url}" class="text-[var(--accent)] hover:underline">/{node.name}</a>
+                    {/for}
+                </div>
+                <a href="/category" class="inline-block mt-3 text-[var(--accent)] hover:underline">[All Categories]</a>
+            </div>
+
+            <div class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+                <h2 class="text-lg font-bold mb-3">Child Categories</h2>
+                {#if children && children.size > 0}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {#for child in children}
+                            <article class="border border-[var(--border)] p-3 bg-[var(--panel-bg)] space-y-2">
+                                <h3 class="font-bold"><a href="/category/{child.slug}" class="hover:underline">{child.name}</a></h3>
+                                <p class="text-sm opacity-90">{child.description}</p>
+                                <p class="text-xs opacity-70">Path: {child.path} | Children: {child.childCount}</p>
+                            </article>
+                        {/for}
+                    </div>
+                {#else}
+                    <p class="text-sm opacity-80">No child categories.</p>
+                {/if}
+            </div>
+
+            <div class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+                <h2 class="text-lg font-bold">Posts In Category</h2>
+                <p class="text-sm opacity-80 mt-2">Current schema has no direct post-category mapping table yet, so this page currently focuses on category hierarchy browsing.</p>
+            </div>
+        </section>
+    {#else}
+        <section class="space-y-4">
+            <div class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+                <h1 class="text-2xl font-bold">All Categories</h1>
+                <form action="/category" method="get" class="mt-3 flex gap-2">
+                    <input type="text"
+                           name="q"
+                           value="{keyword ?: ''}"
+                           placeholder="Filter categories..."
+                           class="flex-1 bg-[var(--panel-bg)] border border-[var(--border)] p-2 outline-none focus:border-[var(--accent)]" />
+                    <button type="submit"
+                            class="px-4 py-2 border border-[var(--border)] bg-[var(--panel-bg)] hover:bg-[var(--selection)]">[Filter]</button>
+                </form>
+            </div>
+
+            {#if categories && categories.size > 0}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {#for category in categories}
+                        <article class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] space-y-2">
+                            <h2 class="text-lg font-bold">
+                                <a href="/category/{category.slug}" class="hover:underline">{category.name}</a>
+                            </h2>
+                            <p class="text-sm opacity-90">{category.description}</p>
+                            <p class="text-xs opacity-70">Path: {category.path} | Children: {category.childCount} | Created: {category.createdAtText}</p>
+                        </article>
+                    {/for}
+                </div>
+
+                <nav class="mt-2 flex items-center justify-between border border-[var(--border)] p-3 bg-[var(--panel-bg)]">
+                    <div>
+                        {#if hasPrevPage}
+                            <a class="hover:underline" href="{prevPageUrl}">Previous</a>
+                        {#else}
+                            <span class="opacity-50">Previous</span>
+                        {/if}
+                    </div>
+                    <div class="text-sm opacity-80">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
+                    <div>
+                        {#if hasNextPage}
+                            <a class="hover:underline" href="{nextPageUrl}">Next</a>
+                        {#else}
+                            <span class="opacity-50">Next</span>
+                        {/if}
+                    </div>
+                </nav>
+            {#else}
+                <section class="border border-[var(--border)] p-8 text-center bg-[var(--panel-bg)]">
+                    <p class="opacity-80">No categories found.</p>
+                </section>
+            {/if}
+        </section>
+    {/if}
+</div>

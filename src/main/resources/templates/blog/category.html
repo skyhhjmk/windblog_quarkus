@@ -1,0 +1,27 @@
+{#include base.html}
+    {#title}
+        {pageTitle ?: 'Categories'}
+    {/title}
+
+    {#nav_path}
+        {navPath ?: '~/windblog / categories'}
+    {/nav_path}
+
+    {#content}
+        {#include blog/category.content.html /}
+    {/content}
+
+    {#sidebar}
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
+            <h3 class="font-bold mb-2">Category Info</h3>
+            <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
+            {#if detailMode}
+                <p class="text-sm">Current: {currentCategory.name}</p>
+                <p class="text-sm">Children: {currentCategory.childCount}</p>
+            {#else}
+                <p class="text-sm">Total: {totalCount ?: 0}</p>
+                <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
+            {/if}
+        </section>
+    {/sidebar}
+{/include}

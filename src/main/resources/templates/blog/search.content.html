@@ -1,0 +1,108 @@
+<div id="pjax-content-root" data-page-title="{pageTitle ?: 'Search'}">
+    <div id="pjax-nav-path" class="hidden">
+        ~/windblog / search
+    </div>
+    <div id="pjax-sidebar-html" class="hidden">
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
+            <h3 class="font-bold mb-2">Search Info</h3>
+            <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
+            <p class="text-sm">Keyword: {searchKeyword ?: '-'}</p>
+            <p class="text-sm">Type: {searchType ?: 'all'}</p>
+            <p class="text-sm">Total: {totalCount ?: 0}</p>
+            <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
+        </section>
+    </div>
+
+    <div class="max-w-full mx-auto px-0">
+        <div class="mb-8 text-center px-2">
+            <h1 class="text-2xl font-bold mb-2">
+                <span class="text-green-500">-&gt;</span>
+                <span class="text-[var(--accent)]">~</span>
+                grep -r "{searchKeyword ?: ''}" .
+            </h1>
+
+            {#if hasKeyword}
+                <p class="text-sm opacity-80">Total: {totalCount ?: 0} matches</p>
+            {#else}
+                <p class="text-sm opacity-80">Input keyword to start searching.</p>
+            {/if}
+        </div>
+
+        <div class="mb-8">
+            <form action="/search" method="get" class="flex gap-2 max-w-3xl mx-auto">
+                <span class="self-center text-green-500 font-bold">-&gt;</span>
+                <input type="text"
+                       name="q"
+                       value="{searchKeyword ?: ''}"
+                       placeholder="Search..."
+                       class="flex-1 bg-[var(--panel-bg)] border border-[var(--border)] p-2 outline-none focus:border-[var(--accent)]" />
+                <button type="submit"
+                        class="bg-[var(--panel-bg)] px-4 py-2 border border-[var(--border)] hover:bg-[var(--selection)]">
+                    [Enter]
+                </button>
+            </form>
+
+            <div class="max-w-3xl mx-auto mt-4 text-sm flex flex-wrap gap-4 justify-center">
+                <div class="flex gap-2">
+                    <span class="text-gray-500">Type:</span>
+                    {#for link in typeLinks}
+                        <a href="{link.url}" class="{link.cssClass}">[{link.label}]</a>
+                    {/for}
+                </div>
+
+                <div class="flex gap-2">
+                    <span class="text-gray-500">Sort:</span>
+                    {#for link in sortLinks}
+                        <a href="{link.url}" class="{link.cssClass}">[{link.label}]</a>
+                    {/for}
+                </div>
+
+                <div class="flex gap-2">
+                    <span class="text-gray-500">Date:</span>
+                    {#for link in dateLinks}
+                        <a href="{link.url}" class="{link.cssClass}">[{link.label}]</a>
+                    {/for}
+                </div>
+            </div>
+        </div>
+
+        {#if hits && hits.size > 0}
+            <div class="space-y-4">
+                {#for hit in hits}
+                    <article class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] space-y-2">
+                        <div class="text-xs opacity-70">[{hit.typeLabel}]</div>
+                        <h2 class="text-xl font-bold">
+                            <a href="{hit.url}" class="hover:underline">{hit.title}</a>
+                        </h2>
+                        <p class="text-sm opacity-90">{hit.summary}</p>
+                        <p class="text-xs opacity-70">Date: {hit.dateText} | {hit.meta}</p>
+                        <a href="{hit.url}" class="text-[var(--accent)] hover:underline">{hit.actionLabel}</a>
+                    </article>
+                {/for}
+            </div>
+
+            <nav class="mt-6 flex items-center justify-between border border-[var(--border)] p-3 bg-[var(--panel-bg)]">
+                <div>
+                    {#if hasPrevPage}
+                        <a class="hover:underline" href="{prevPageUrl}">Previous</a>
+                    {#else}
+                        <span class="opacity-50">Previous</span>
+                    {/if}
+                </div>
+                <div class="text-sm opacity-80">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
+                <div>
+                    {#if hasNextPage}
+                        <a class="hover:underline" href="{nextPageUrl}">Next</a>
+                    {#else}
+                        <span class="opacity-50">Next</span>
+                    {/if}
+                </div>
+            </nav>
+        {#else}
+            <section class="border border-[var(--border)] p-10 text-center bg-[var(--panel-bg)]">
+                <p class="opacity-80">No matches found.</p>
+                <a href="/" class="text-[var(--accent)] hover:underline inline-block mt-3">cd ~</a>
+            </section>
+        {/if}
+    </div>
+</div>

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
 <head>
+    {! TODO: 重构为贴合新系统的写法 !}
     <meta charset="UTF-8" />
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
@@ -46,6 +47,8 @@
         <nav class="hidden md:flex items-center gap-6">
             <a href="/" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Home]</a>
             <a href="/link" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Links]</a>
+            <a href="/tag" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Tags]</a>
+            <a href="/category" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Categories]</a>
 
             <!-- 搜索 -->
             <form action="/search" method="get" class="flex items-center gap-2">
@@ -100,6 +103,8 @@
          class="hidden md:hidden border-t border-[var(--border)] p-4 bg-[var(--bg)]">
         <a href="/" class="block py-2 hover:bg-[var(--selection)]">[Home]</a>
         <a href="/link" class="block py-2 hover:bg-[var(--selection)]">[Links]</a>
+        <a href="/tag" class="block py-2 hover:bg-[var(--selection)]">[Tags]</a>
+        <a href="/category" class="block py-2 hover:bg-[var(--selection)]">[Categories]</a>
         <div class="border-t border-[var(--border)] my-2"></div>
         <div id="mobileUserAuth" class="space-y-1">
             <a href="/user/login" class="block py-2 hover:bg-[var(--selection)]">Login</a>
