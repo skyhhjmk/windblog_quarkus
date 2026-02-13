@@ -6,6 +6,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PageResult;
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PostCreateRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PostUpdateRequest;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.User;
 import io.quarkus.panache.common.Page;
@@ -111,6 +112,7 @@ public class AdminPostApiController {
         post.aiSummary = request.aiSummary();
         post.status = request.status() == null ? 0 : request.status();
         post.visibility = request.visibility() == null ? 0 : request.visibility();
+        post.renderType = resolveRenderType(request.renderType());
         post.user = operator;
         post.createdAt = now;
         post.updatedAt = now;
@@ -165,6 +167,9 @@ public class AdminPostApiController {
         }
         if (request.visibility() != null) {
             post.visibility = request.visibility();
+        }
+        if (request.renderType() != null) {
+            post.renderType = requireRenderType(request.renderType());
         }
         if (request.status() != null) {
             post.status = request.status();
@@ -261,6 +266,26 @@ public class AdminPostApiController {
                 .build());
     }
 
+    private WebApplicationException badRequest(String message) {
+        return new WebApplicationException(Response.status(Response.Status.BAD_REQUEST)
+                .entity(Map.of("success", false, "message", message))
+                .build());
+    }
+
+    private PostRenderType resolveRenderType(Short renderTypeCode) {
+        if (renderTypeCode == null) {
+            return PostRenderType.MARKDOWN;
+        }
+        return requireRenderType(renderTypeCode);
+    }
+
+    private PostRenderType requireRenderType(Short renderTypeCode) {
+        if (!PostRenderType.isSupportedCode(renderTypeCode)) {
+            throw badRequest("renderType 涓嶅悎娉曪紝鍙€夊€硷細0(markdown),1(html),2(vditor),3(v_builder),4(gutenberg)");
+        }
+        return PostRenderType.fromCode(renderTypeCode);
+    }
+
     private AdminPostItem toItem(Post post) {
         return new AdminPostItem(
                 post.id,
@@ -268,6 +293,7 @@ public class AdminPostApiController {
                 post.title,
                 post.status,
                 post.visibility,
+                post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 post.version,
                 post.user == null ? null : post.user.id,
                 post.publishedAt,
@@ -286,6 +312,7 @@ public class AdminPostApiController {
                 post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown,
                 post.status,
                 post.visibility,
+                post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 post.currentRevision == null ? 0 : post.currentRevision.editorType,
                 post.currentRevision == null ? 0 : post.currentRevision.revisionNumber,
                 post.version,

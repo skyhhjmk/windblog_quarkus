@@ -23,5 +23,6 @@
     <include file="./migration/017-create-links.sql" relativeToChangelogFile="true"/>
     <include file="./migration/018-create-link-audit.sql" relativeToChangelogFile="true"/>
     <include file="./migration/019-create-link-monitor-log.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/020-add-post-render-type.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

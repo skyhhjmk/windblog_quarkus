@@ -2,6 +2,7 @@ package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -60,6 +61,10 @@ public class Post extends PanacheEntityBase {
     /** 可见性：0公开，1私密，2密码 */
     @Column(nullable = false)
     public short visibility;
+
+    @Convert(converter = PostRenderTypeConverter.class)
+    @Column(name = "render_type", nullable = false)
+    public PostRenderType renderType;
 
     /** 作者 */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

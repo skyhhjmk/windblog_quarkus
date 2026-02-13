@@ -20,7 +20,11 @@
 
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
             {#if postBody && !postBody.isEmpty}
-                <pre class="whitespace-pre-wrap break-words">{postBody}</pre>
+                {#if postBodyHtml}
+                    <div class="prose max-w-none break-words">{postBody.raw}</div>
+                {#else}
+                    <pre class="whitespace-pre-wrap break-words">{postBody}</pre>
+                {/if}
             {#else}
                 <p>暂无该语言内容，且默认语言内容也不可用。</p>
             {/if}

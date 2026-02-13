@@ -24,6 +24,7 @@ public final class AdminPostDtos {
             Map<String, String> contentMarkdown,
             Short status,
             Short visibility,
+            Short renderType,
             Short editorType
     ) {
     }
@@ -36,6 +37,7 @@ public final class AdminPostDtos {
             Map<String, String> contentMarkdown,
             Short status,
             Short visibility,
+            Short renderType,
             Short editorType,
             @NotNull(message = "version 不能为空")
             Integer version
@@ -48,6 +50,7 @@ public final class AdminPostDtos {
             Map<String, String> title,
             Short status,
             Short visibility,
+            Short renderType,
             Integer version,
             Long userId,
             OffsetDateTime publishedAt,
@@ -65,6 +68,7 @@ public final class AdminPostDtos {
             Map<String, String> contentMarkdown,
             Short status,
             Short visibility,
+            Short renderType,
             Short editorType,
             Integer currentRevisionNumber,
             Integer version,

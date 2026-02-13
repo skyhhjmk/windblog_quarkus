@@ -100,6 +100,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-openapi</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkiverse.qute.web</groupId>
+            <artifactId>quarkus-qute-web-markdown</artifactId>
+            <version>3.4.4</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -2,9 +2,11 @@ package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.MarkdownHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -67,13 +69,15 @@ public class PostController {
         String resolvedLang = languageContext.getLang();
         String localizedTitle = LanguageHelper.resolveLocalizedValue(postEntity.title, resolvedLang);
         String localizedContent = resolveContent(postEntity.currentRevision, resolvedLang);
+        PostBodyView postBody = resolvePostBody(postEntity.renderType, localizedContent);
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? postContent : post;
         return template
                 .data("language", resolvedLang)
                 .data("postSlug", slug)
                 .data("postTitle", localizedTitle == null ? slug : localizedTitle)
-                .data("postBody", localizedContent == null ? "" : localizedContent);
+                .data("postBody", postBody.body())
+                .data("postBodyHtml", postBody.html());
     }
 
     private String normalizeSlug(String slug) {
@@ -96,5 +100,19 @@ public class PostController {
             return null;
         }
         return LanguageHelper.resolveLocalizedValue(currentRevision.contentMarkdown, lang);
+    }
+
+    private PostBodyView resolvePostBody(PostRenderType renderType, String content) {
+        if (content == null || content.isBlank()) {
+            return new PostBodyView("", false);
+        }
+        PostRenderType effectiveType = renderType == null ? PostRenderType.MARKDOWN : renderType;
+        return switch (effectiveType) {
+            case MARKDOWN, VDITOR -> new PostBodyView(MarkdownHelper.toHtml(content), true);
+            case HTML, V_BUILDER, GUTENBERG -> new PostBodyView(content, true);
+        };
+    }
+
+    private record PostBodyView(String body, boolean html) {
     }
 }
