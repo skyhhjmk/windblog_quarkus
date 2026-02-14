@@ -51,8 +51,7 @@ public class AdminPostApiController {
     @GET
     @Transactional
     @Operation(summary = "分页查询文章")
-    @APIResponse(responseCode = "200", description = "成功",
-            content = @Content(schema = @Schema(implementation = PageResult.class)))
+    @APIResponse(responseCode = "200", description = "成功", content = @Content(schema = @Schema(implementation = PageResult.class)))
     public PageResult<AdminPostItem> list(
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("pageSize") @DefaultValue("10") int pageSize,
@@ -98,7 +97,7 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "200", description = "创建成功")
     @APIResponse(responseCode = "409", description = "slug 冲突")
     public AdminPostDetail create(@Valid PostCreateRequest request,
-                                  @Context ContainerRequestContext requestContext) {
+            @Context ContainerRequestContext requestContext) {
         if (Post.count("slug = ?1", request.slug().trim()) > 0) {
             throw conflict("slug 已存在");
         }
@@ -145,8 +144,8 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "404", description = "文章不存在")
     @APIResponse(responseCode = "409", description = "版本冲突或 slug 冲突")
     public AdminPostDetail update(@PathParam("id") Long id,
-                                  @Valid PostUpdateRequest request,
-                                  @Context ContainerRequestContext requestContext) {
+            @Valid PostUpdateRequest request,
+            @Context ContainerRequestContext requestContext) {
         Post post = mustFindPost(id);
         if (!post.version.equals(request.version())) {
             throw conflict("版本冲突，请刷新后重试");
@@ -202,8 +201,10 @@ public class AdminPostApiController {
 
         if (request.title() != null || request.contentMarkdown() != null || request.editorType() != null) {
             Map<String, String> nextTitle = request.title() == null ? post.title : request.title();
-            Map<String, String> currentContent = post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown;
-            Map<String, String> nextContent = request.contentMarkdown() == null ? currentContent : request.contentMarkdown();
+            Map<String, String> currentContent = post.currentRevision == null ? Map.of()
+                    : post.currentRevision.contentMarkdown;
+            Map<String, String> nextContent = request.contentMarkdown() == null ? currentContent
+                    : request.contentMarkdown();
             short currentEditorType = post.currentRevision == null ? 0 : post.currentRevision.editorType;
             short nextEditorType = request.editorType() == null ? currentEditorType : request.editorType();
 
@@ -321,7 +322,8 @@ public class AdminPostApiController {
 
     private PostRenderType requireRenderType(Short renderTypeCode) {
         if (!PostRenderType.isSupportedCode(renderTypeCode)) {
-            throw badRequest("renderType 不合法，可选值：0(markdown),1(html),2(vditor),3(v_builder),4(gutenberg)");
+            throw badRequest(
+                    "renderType 不合法，可选值：0(markdown),1(html),2(vditor),3(v_builder),4(gutenberg),5(flutter_quill),6(flutter_markdown_plus)");
         }
         return PostRenderType.fromCode(renderTypeCode);
     }
@@ -338,8 +340,7 @@ public class AdminPostApiController {
                 post.user == null ? null : post.user.id,
                 post.publishedAt,
                 post.createdAt,
-                post.updatedAt
-        );
+                post.updatedAt);
     }
 
     private AdminPostDetail toDetail(Post post) {
@@ -359,7 +360,6 @@ public class AdminPostApiController {
                 post.user == null ? null : post.user.id,
                 post.publishedAt,
                 post.createdAt,
-                post.updatedAt
-        );
+                post.updatedAt);
     }
 }

@@ -13,7 +13,9 @@ public enum PostRenderType {
     HTML((short) 1),
     VDITOR((short) 2),
     V_BUILDER((short) 3),
-    GUTENBERG((short) 4);
+    GUTENBERG((short) 4),
+    FLUTTER_QUILL((short) 5),
+    FLUTTER_MARKDOWN_PLUS((short) 6);
 
     private static final Map<Short, PostRenderType> CODE_MAP = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(PostRenderType::code, item -> item));

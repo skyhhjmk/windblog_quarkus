@@ -105,6 +105,14 @@
             <artifactId>quarkus-qute-web-markdown</artifactId>
             <version>3.4.4</version>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-metrics</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

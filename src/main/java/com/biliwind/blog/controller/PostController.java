@@ -39,7 +39,7 @@ public class PostController {
     @Path("/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance post(@PathParam("slug") String slug,
-                                 @Context HttpHeaders httpHeaders) {
+            @Context HttpHeaders httpHeaders) {
         return render(slug, null, httpHeaders);
     }
 
@@ -47,8 +47,8 @@ public class PostController {
     @Path("/{langCode}/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance postWithLang(@PathParam("langCode") String langCode,
-                                         @PathParam("slug") String slug,
-                                         @Context HttpHeaders httpHeaders) {
+            @PathParam("slug") String slug,
+            @Context HttpHeaders httpHeaders) {
         return render(slug, langCode, httpHeaders);
     }
 
@@ -108,8 +108,8 @@ public class PostController {
         }
         PostRenderType effectiveType = renderType == null ? PostRenderType.MARKDOWN : renderType;
         return switch (effectiveType) {
-            case MARKDOWN, VDITOR -> new PostBodyView(MarkdownHelper.toHtml(content), true);
-            case HTML, V_BUILDER, GUTENBERG -> new PostBodyView(content, true);
+            case MARKDOWN, VDITOR, FLUTTER_MARKDOWN_PLUS -> new PostBodyView(MarkdownHelper.toHtml(content), true);
+            case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL -> new PostBodyView(content, true);
         };
     }
 
