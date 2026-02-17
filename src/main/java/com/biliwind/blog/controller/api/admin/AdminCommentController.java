@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminCommentDtos.CommentUpdate
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult; // Reuse PageResult
 import com.biliwind.blog.model.Comment;
 import io.quarkus.panache.common.Page;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -80,6 +81,25 @@ public class AdminCommentController {
         if (comment != null) {
             comment.deletedAt = OffsetDateTime.now();
         }
+    }
+
+    @Inject
+    com.biliwind.blog.service.ai.AiManager aiManager;
+
+    @POST
+    @Path("/{id}/audit")
+    @Transactional
+    @Operation(summary = "AI 审核评论")
+    public java.util.concurrent.CompletionStage<AdminCommentItem> audit(@PathParam("id") Long id) {
+        Comment comment = Comment.findById(id);
+        if (comment == null || comment.deletedAt != null)
+            throw new NotFoundException();
+
+        return aiManager.moderate(comment.content).thenApply(safe -> {
+            // Update status based on AI result: 1=approved, 2=spam
+            comment.status = safe ? (short) 1 : (short) 2;
+            return toItem(comment);
+        });
     }
 
     private AdminCommentItem toItem(Comment c) {

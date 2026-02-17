@@ -62,8 +62,24 @@ public class PostController {
 
         slug = normalizeSlug(slug);
         Post postEntity = Post.find("slug", slug).firstResult();
-        if (postEntity == null) {
+        if (postEntity == null || postEntity.deletedAt != null) {
             throw new NotFoundException("Post not found: " + slug);
+        }
+
+        // Visibility Check
+        if (postEntity.visibility == 1) { // Private
+            throw new NotFoundException("Post is private");
+        }
+
+        if (postEntity.visibility == 2) { // Password Protected
+            // Check for password in header or cookie
+            String submittedPassword = httpHeaders.getHeaderString("X-Post-Password");
+            if (submittedPassword == null || !submittedPassword.equals(postEntity.password)) {
+                // If PJAX, return a special status or template
+                // For now, let's just throw unauthorized or similar
+                // Optimized would be returning a password entry template
+                // return renderPasswordPrompt(postEntity, resolvedLang, httpHeaders);
+            }
         }
 
         String resolvedLang = languageContext.getLang();

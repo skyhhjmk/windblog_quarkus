@@ -24,5 +24,7 @@
     <include file="./migration/018-create-link-audit.sql" relativeToChangelogFile="true"/>
     <include file="./migration/019-create-link-monitor-log.sql" relativeToChangelogFile="true"/>
     <include file="./migration/020-add-post-render-type.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/021-add-post-password.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/022-add-post-seo-fields.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
