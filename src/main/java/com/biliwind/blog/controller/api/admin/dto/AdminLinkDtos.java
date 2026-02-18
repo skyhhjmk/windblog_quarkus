@@ -18,7 +18,7 @@ public class AdminLinkDtos {
                         boolean showUrl,
                         String email,
                         String note,
-                        String category,
+//                        String category,
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription,
@@ -38,7 +38,7 @@ public class AdminLinkDtos {
                         Boolean showUrl,
                         String email,
                         String note,
-                        String category,
+//                        String category,
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription) {
@@ -57,7 +57,7 @@ public class AdminLinkDtos {
                         Boolean showUrl,
                         String email,
                         String note,
-                        String category,
+//                        String category,
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription) {

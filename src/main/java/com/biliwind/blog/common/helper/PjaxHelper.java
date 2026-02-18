@@ -1,6 +1,7 @@
 package com.biliwind.blog.common.helper;
 
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MultivaluedMap;
 
 /**
  * PJAX 助手类
@@ -37,6 +38,18 @@ public class PjaxHelper { // 类名遵循Java规范，首字母大写
         String pjaxHeaderValue = httpHeaders.getHeaderString(PJAX_HEADER);
         return "true".equalsIgnoreCase(pjaxHeaderValue);
     }
+
+    public static boolean isPjaxRequest(MultivaluedMap<String, String> headers) {
+
+        if (headers == null) {
+            return false;
+        }
+
+        String pjaxHeaderValue = headers.getFirst(PJAX_HEADER);
+
+        return "true".equalsIgnoreCase(pjaxHeaderValue);
+    }
+
 
     /**
      * 扩展方法：获取 PJAX 容器名称

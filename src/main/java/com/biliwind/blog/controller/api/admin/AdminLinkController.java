@@ -143,10 +143,10 @@ public class AdminLinkController {
         l.status = req.status() == null ? (short) 1 : req.status();
         l.target = req.target() == null ? "_blank" : req.target();
         l.redirectType = req.redirectType() == null ? (short) 1 : req.redirectType();
-        l.showUrl = req.showUrl() == null ? true : req.showUrl();
+        l.showUrl = req.showUrl() == null || req.showUrl();
         l.email = req.email();
         l.note = req.note();
-        l.category = req.category();
+//        l.category = req.category();
         l.seoTitle = req.seoTitle();
         l.seoKeywords = req.seoKeywords();
         l.seoDescription = req.seoDescription();
@@ -190,8 +190,8 @@ public class AdminLinkController {
             l.email = req.email();
         if (req.note() != null)
             l.note = req.note();
-        if (req.category() != null)
-            l.category = req.category();
+//        if (req.category() != null)
+//            l.category = req.category();
         if (req.seoTitle() != null)
             l.seoTitle = req.seoTitle();
         if (req.seoKeywords() != null)
@@ -225,7 +225,7 @@ public class AdminLinkController {
                 l.showUrl,
                 l.email,
                 l.note,
-                l.category,
+//                l.category,
                 l.seoTitle,
                 l.seoKeywords,
                 l.seoDescription,

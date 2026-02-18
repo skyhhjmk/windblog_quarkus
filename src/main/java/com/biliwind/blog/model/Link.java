@@ -73,9 +73,9 @@ public class Link extends PanacheEntityBase {
     @Column(columnDefinition = "text")
     public String email;
 
-    /** 分类名称，用于友链分组 */
-    @Column(columnDefinition = "text")
-    public String category;
+//    /** 分类名称，用于友链分组 */
+//    @Column(columnDefinition = "text")
+//    public String category;
 
     /** 回调地址 */
     @Column(name = "callback_url", columnDefinition = "text")

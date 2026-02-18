@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.annotation.PasswordProtected;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.MarkdownHelper;
@@ -12,25 +13,19 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.*;
 
 @Path("/")
 public class PostController {
 
     @Inject
     @Location("blog/post.html")
-    Template post;
+    Template postTemplate;
 
     @Inject
     @Location("blog/post.content.html")
-    Template postContent;
+    Template postContentTemplate;
 
     @Inject
     LanguageContext languageContext;
@@ -38,56 +33,56 @@ public class PostController {
     @GET
     @Path("/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
+    @PasswordProtected
     public TemplateInstance post(@PathParam("slug") String slug,
-            @Context HttpHeaders httpHeaders) {
+                                 @Context HttpHeaders httpHeaders) {
         return render(slug, null, httpHeaders);
     }
 
     @GET
     @Path("/{langCode}/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
+    @PasswordProtected
     public TemplateInstance postWithLang(@PathParam("langCode") String langCode,
-            @PathParam("slug") String slug,
-            @Context HttpHeaders httpHeaders) {
+                                         @PathParam("slug") String slug,
+                                         @Context HttpHeaders httpHeaders) {
         return render(slug, langCode, httpHeaders);
     }
 
-    private TemplateInstance render(String slug, String langCode, HttpHeaders httpHeaders) {
-        if (langCode == null || langCode.isBlank()) {
-            languageContext.setLang(LanguageConstant.DEFAULT_LANG);
-        } else {
-            String normalizedLang = LanguageHelper.normalizeToSupportedLang(langCode);
-            languageContext.setLang(normalizedLang == null ? LanguageConstant.DEFAULT_LANG : normalizedLang);
-        }
+    private TemplateInstance render(String slug,
+                                    String langCode,
+                                    HttpHeaders httpHeaders) {
+
+        resolveLanguage(langCode);
 
         slug = normalizeSlug(slug);
-        Post postEntity = Post.find("slug", slug).firstResult();
-        if (postEntity == null || postEntity.deletedAt != null) {
+
+        Post postEntity = Post.find("slug = ?1 and deletedAt is null", slug)
+                .firstResult();
+
+        if (postEntity == null) {
             throw new NotFoundException("Post not found: " + slug);
         }
 
-        // Visibility Check
-        if (postEntity.visibility == 1) { // Private
+        if (postEntity.visibility == 1) {
             throw new NotFoundException("Post is private");
         }
 
-        if (postEntity.visibility == 2) { // Password Protected
-            // Check for password in header or cookie
-            String submittedPassword = httpHeaders.getHeaderString("X-Post-Password");
-            if (submittedPassword == null || !submittedPassword.equals(postEntity.password)) {
-                // If PJAX, return a special status or template
-                // For now, let's just throw unauthorized or similar
-                // Optimized would be returning a password entry template
-                // return renderPasswordPrompt(postEntity, resolvedLang, httpHeaders);
-            }
-        }
-
         String resolvedLang = languageContext.getLang();
-        String localizedTitle = LanguageHelper.resolveLocalizedValue(postEntity.title, resolvedLang);
-        String localizedContent = resolveContent(postEntity.currentRevision, resolvedLang);
-        PostBodyView postBody = resolvePostBody(postEntity.renderType, localizedContent);
+        String localizedTitle =
+                LanguageHelper.resolveLocalizedValue(postEntity.title, resolvedLang);
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? postContent : post;
+        String localizedContent =
+                resolveContent(postEntity.currentRevision, resolvedLang);
+
+        PostBodyView postBody =
+                resolvePostBody(postEntity.renderType, localizedContent);
+
+        Template template =
+                PjaxHelper.isPjaxRequest(httpHeaders)
+                        ? postContentTemplate
+                        : postTemplate;
+
         return template
                 .data("language", resolvedLang)
                 .data("postSlug", slug)
@@ -96,39 +91,66 @@ public class PostController {
                 .data("postBodyHtml", postBody.html());
     }
 
+    private void resolveLanguage(String langCode) {
+
+        if (langCode == null || langCode.isBlank()) {
+            languageContext.setLang(LanguageConstant.DEFAULT_LANG);
+            return;
+        }
+
+        String normalized =
+                LanguageHelper.normalizeToSupportedLang(langCode);
+
+        languageContext.setLang(
+                normalized == null
+                        ? LanguageConstant.DEFAULT_LANG
+                        : normalized
+        );
+    }
+
     private String normalizeSlug(String slug) {
+
         if (slug != null && slug.toLowerCase().endsWith(".html")) {
-            int suffixLength = ".html".length();
-            if (slug.length() >= suffixLength) {
-                slug = slug.substring(0, slug.length() - suffixLength);
-            } else {
-                slug = "";
-            }
+            slug = slug.substring(0, slug.length() - 5);
         }
+
         if (slug == null || slug.isBlank()) {
-            slug = "untitled";
+            return "untitled";
         }
+
         return slug;
     }
 
-    private String resolveContent(PostRevision currentRevision, String lang) {
-        if (currentRevision == null) {
+    private String resolveContent(PostRevision revision,
+                                  String lang) {
+
+        if (revision == null) {
             return null;
         }
-        return LanguageHelper.resolveLocalizedValue(currentRevision.contentMarkdown, lang);
+
+        return LanguageHelper
+                .resolveLocalizedValue(revision.contentMarkdown, lang);
     }
 
-    private PostBodyView resolvePostBody(PostRenderType renderType, String content) {
+    private PostBodyView resolvePostBody(PostRenderType renderType,
+                                         String content) {
+
         if (content == null || content.isBlank()) {
             return new PostBodyView("", false);
         }
-        PostRenderType effectiveType = renderType == null ? PostRenderType.MARKDOWN : renderType;
-        return switch (effectiveType) {
-            case MARKDOWN, VDITOR, FLUTTER_MARKDOWN_PLUS -> new PostBodyView(MarkdownHelper.toHtml(content), true);
-            case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL -> new PostBodyView(content, true);
+
+        PostRenderType effective =
+                renderType == null
+                        ? PostRenderType.MARKDOWN
+                        : renderType;
+
+        return switch (effective) {
+            case MARKDOWN, VDITOR, FLUTTER_MARKDOWN_PLUS ->
+                    new PostBodyView(MarkdownHelper.toHtml(content), true);
+            case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL ->
+                    new PostBodyView(content, true);
         };
     }
 
-    private record PostBodyView(String body, boolean html) {
-    }
+    private record PostBodyView(String body, boolean html) {}
 }
