@@ -10,6 +10,7 @@ import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.User;
 import io.quarkus.panache.common.Page;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
@@ -47,6 +48,29 @@ import java.util.Objects;
 @Tag(name = "AdminPost")
 @SecurityRequirement(name = "adminBearerAuth")
 public class AdminPostApiController {
+
+    @Inject
+    com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
+
+    @POST
+    @Path("/{id}/ai-summary")
+    @Transactional
+    @Operation(summary = "触发 AI 总结")
+    @APIResponse(responseCode = "200", description = "任务已提交")
+    public Response triggerAiSummary(@PathParam("id") Long id) {
+        Post post = mustFindPost(id);
+        if (post.currentRevision == null) {
+            throw badRequest("文章没有内容，无法生成总结");
+        }
+
+        aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
+                post.id,
+                post.currentRevision.contentMarkdown,
+                1 // Medium priority
+        ));
+
+        return Response.ok(Map.of("success", true, "message", "AI summary task submitted")).build();
+    }
 
     @GET
     @Transactional
@@ -112,6 +136,10 @@ public class AdminPostApiController {
         post.aiSummary = request.aiSummary();
         post.status = request.status() == null ? 0 : request.status();
         post.visibility = request.visibility() == null ? 0 : request.visibility();
+        post.password = request.password();
+        post.seoTitle = request.seoTitle();
+        post.seoKeywords = request.seoKeywords();
+        post.seoDescription = request.seoDescription();
         post.renderType = resolveRenderType(request.renderType());
         post.user = operator;
         post.createdAt = now;
@@ -181,6 +209,30 @@ public class AdminPostApiController {
                 changed = true;
             }
             post.visibility = request.visibility();
+        }
+        if (request.password() != null) {
+            if (!Objects.equals(post.password, request.password())) {
+                changed = true;
+            }
+            post.password = request.password();
+        }
+        if (request.seoTitle() != null) {
+            if (!Objects.equals(post.seoTitle, request.seoTitle())) {
+                changed = true;
+            }
+            post.seoTitle = request.seoTitle();
+        }
+        if (request.seoKeywords() != null) {
+            if (!Objects.equals(post.seoKeywords, request.seoKeywords())) {
+                changed = true;
+            }
+            post.seoKeywords = request.seoKeywords();
+        }
+        if (request.seoDescription() != null) {
+            if (!Objects.equals(post.seoDescription, request.seoDescription())) {
+                changed = true;
+            }
+            post.seoDescription = request.seoDescription();
         }
         if (request.renderType() != null) {
             PostRenderType nextRenderType = requireRenderType(request.renderType());
@@ -353,6 +405,10 @@ public class AdminPostApiController {
                 post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown,
                 post.status,
                 post.visibility,
+                post.password,
+                post.seoTitle,
+                post.seoKeywords,
+                post.seoDescription,
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 post.currentRevision == null ? 0 : post.currentRevision.editorType,
                 post.currentRevision == null ? 0 : post.currentRevision.revisionNumber,

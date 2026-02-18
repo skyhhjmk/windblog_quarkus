@@ -10,80 +10,83 @@ import java.util.Map;
 
 public final class AdminPostDtos {
 
-    private AdminPostDtos() {
-    }
+        private AdminPostDtos() {
+        }
 
-    public record PostCreateRequest(
-            @NotBlank(message = "slug 不能为空")
-            String slug,
-            @NotEmpty(message = "title 不能为空")
-            Map<String, String> title,
-            Map<String, String> summary,
-            Map<String, String> aiSummary,
-            @NotEmpty(message = "contentMarkdown 不能为空")
-            Map<String, String> contentMarkdown,
-            Short status,
-            Short visibility,
-            Short renderType,
-            Short editorType
-    ) {
-    }
+        public record PostCreateRequest(
+                        @NotBlank(message = "slug 不能为空") String slug,
+                        @NotEmpty(message = "title 不能为空") Map<String, String> title,
+                        Map<String, String> summary,
+                        Map<String, String> aiSummary,
+                        @NotEmpty(message = "contentMarkdown 不能为空") Map<String, String> contentMarkdown,
+                        Short status,
+                        Short visibility,
+                        String password,
+                        String seoTitle,
+                        String seoKeywords,
+                        String seoDescription,
+                        Short renderType,
+                        Short editorType) {
+        }
 
-    public record PostUpdateRequest(
-            String slug,
-            Map<String, String> title,
-            Map<String, String> summary,
-            Map<String, String> aiSummary,
-            Map<String, String> contentMarkdown,
-            Short status,
-            Short visibility,
-            Short renderType,
-            Short editorType,
-            @NotNull(message = "version 不能为空")
-            Integer version
-    ) {
-    }
+        public record PostUpdateRequest(
+                        String slug,
+                        Map<String, String> title,
+                        Map<String, String> summary,
+                        Map<String, String> aiSummary,
+                        Map<String, String> contentMarkdown,
+                        Short status,
+                        Short visibility,
+                        String password,
+                        String seoTitle,
+                        String seoKeywords,
+                        String seoDescription,
+                        Short renderType,
+                        Short editorType,
+                        @NotNull(message = "version 不能为空") Integer version) {
+        }
 
-    public record AdminPostItem(
-            Long id,
-            String slug,
-            Map<String, String> title,
-            Short status,
-            Short visibility,
-            Short renderType,
-            Integer version,
-            Long userId,
-            OffsetDateTime publishedAt,
-            OffsetDateTime createdAt,
-            OffsetDateTime updatedAt
-    ) {
-    }
+        public record AdminPostItem(
+                        Long id,
+                        String slug,
+                        Map<String, String> title,
+                        Short status,
+                        Short visibility,
+                        Short renderType,
+                        Integer version,
+                        Long userId,
+                        OffsetDateTime publishedAt,
+                        OffsetDateTime createdAt,
+                        OffsetDateTime updatedAt) {
+        }
 
-    public record AdminPostDetail(
-            Long id,
-            String slug,
-            Map<String, String> title,
-            Map<String, String> summary,
-            Map<String, String> aiSummary,
-            Map<String, String> contentMarkdown,
-            Short status,
-            Short visibility,
-            Short renderType,
-            Short editorType,
-            Integer currentRevisionNumber,
-            Integer version,
-            Long userId,
-            OffsetDateTime publishedAt,
-            OffsetDateTime createdAt,
-            OffsetDateTime updatedAt
-    ) {
-    }
+        public record AdminPostDetail(
+                        Long id,
+                        String slug,
+                        Map<String, String> title,
+                        Map<String, String> summary,
+                        Map<String, String> aiSummary,
+                        Map<String, String> contentMarkdown,
+                        Short status,
+                        Short visibility,
+                        String password,
+                        String seoTitle,
+                        String seoKeywords,
+                        String seoDescription,
+                        Short renderType,
+                        Short editorType,
+                        Integer currentRevisionNumber,
+                        Integer version,
+                        Long userId,
+                        OffsetDateTime publishedAt,
+                        OffsetDateTime createdAt,
+                        OffsetDateTime updatedAt) {
+        }
 
-    public record PageResult<T>(
-            List<T> items,
-            long total,
-            int page,
-            int pageSize
-    ) {
-    }
+        public record PageResult<T>(
+                        List<T> items,
+                        long total,
+                        int page,
+                        int pageSize) {
+        }
 }

@@ -62,6 +62,22 @@ public class Post extends PanacheEntityBase {
     @Column(nullable = false)
     public short visibility;
 
+    /** 访问密码 */
+    @Column(length = 100)
+    public String password;
+
+    /** SEO 标题 */
+    @Column(name = "seo_title")
+    public String seoTitle;
+
+    /** SEO 关键词 */
+    @Column(name = "seo_keywords")
+    public String seoKeywords;
+
+    /** SEO 描述 */
+    @Column(name = "seo_description", columnDefinition = "text")
+    public String seoDescription;
+
     @Convert(converter = PostRenderTypeConverter.class)
     @Column(name = "render_type", nullable = false)
     public PostRenderType renderType;
