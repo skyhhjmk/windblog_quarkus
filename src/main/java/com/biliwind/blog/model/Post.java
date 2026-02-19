@@ -54,9 +54,9 @@ public class Post extends PanacheEntityBase {
     @JoinColumn(name = "current_revision_id")
     public PostRevision currentRevision;
 
-    /** 文章状态：0草稿，1发布，2归档 */
+    /** 文章状态：参考 `PostStatus` 枚举 */
     @Column(nullable = false)
-    public short status;
+    public PostStatus status;
 
     /** 可见性：0公开，1私密，2密码 */
     @Column(nullable = false)

@@ -14,7 +14,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 public class PostRepository implements PanacheRepositoryBase<Post, Long> {
 
     public Post findVisiblePostById(Long id) {
-        return find("id = ?1 and deletedAt is null", id)
+        return find("id = :id and deletedAt is null", id)
+                .firstResult();
+    }
+
+    public Post findVisiblePostBySlug(String slug) {
+        return find("slug = :slug and deletedAt is null", slug)
                 .firstResult();
     }
 

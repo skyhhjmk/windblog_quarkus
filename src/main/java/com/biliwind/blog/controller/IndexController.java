@@ -4,6 +4,8 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostStatus;
+import io.quarkus.panache.common.Parameters;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -66,7 +68,9 @@ public class IndexController {
         }
 
         String lang = languageContext.getLang();
-        var postQuery = Post.find("status = ?1 and deletedAt is null order by publishedAt desc nulls last, createdAt desc", (short) 1);
+        var postQuery =
+                Post.find("status = :status and deletedAt is null order by publishedAt desc nulls last, createdAt desc",
+                        Parameters.with("status", PostStatus.PUBLISHED).map());
         long total = postQuery.count();
         List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
         long totalPages = total == 0 ? 1 : (long) Math.ceil((double) total / PAGE_SIZE);
