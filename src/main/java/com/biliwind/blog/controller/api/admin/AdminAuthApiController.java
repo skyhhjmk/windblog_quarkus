@@ -11,8 +11,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -26,7 +24,6 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -101,11 +98,8 @@ public class AdminAuthApiController {
     @Operation(summary = "当前管理员信息", description = "返回当前已登录管理员信息。")
     @APIResponse(responseCode = "200", description = "成功")
     @APIResponse(responseCode = "401", description = "未登录或 token 无效")
-    public Response me(@Context ContainerRequestContext requestContext) {
-        Long userId = resolveUserIdFromBearer(requestContext);
-        if (userId == null) {
-            userId = resolveUserIdFromContext(requestContext);
-        }
+    public Response me(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization) {
+        Long userId = resolveUserIdFromBearer(authorization);
         if (userId == null) {
             return Response.status(Response.Status.UNAUTHORIZED)
                     .entity(Map.of("success", false, "message", "未登录"))
@@ -125,34 +119,12 @@ public class AdminAuthApiController {
         )).build();
     }
 
-    private Long resolveUserIdFromContext(ContainerRequestContext requestContext) {
-        if (requestContext == null) {
+    private Long resolveUserIdFromBearer(String authorization) {
+        if (authorization == null || authorization.isBlank()) {
             return null;
         }
         try {
-            Object value = requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USER_ID_KEY);
-            if (!(value instanceof Number number)) {
-                return null;
-            }
-            return number.longValue();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private Long resolveUserIdFromBearer(ContainerRequestContext requestContext) {
-        if (requestContext == null) {
-            return null;
-        }
-        try {
-            String auth = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
-            if (auth == null) {
-                List<String> authList = requestContext.getHeaders().get(HttpHeaders.AUTHORIZATION);
-                if (authList != null && !authList.isEmpty()) {
-                    auth = authList.get(0);
-                }
-            }
-            AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(auth);
+            AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(authorization);
             if (verified == null) {
                 return null;
             }
@@ -164,7 +136,6 @@ public class AdminAuthApiController {
             return null;
         }
     }
-
     private Response unauthorized() {
         return Response.status(Response.Status.UNAUTHORIZED)
                 .entity(Map.of("success", false, "message", "账号或密码错误"))

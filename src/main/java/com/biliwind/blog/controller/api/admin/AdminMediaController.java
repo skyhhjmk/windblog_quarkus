@@ -7,8 +7,7 @@ import com.biliwind.blog.service.MediaManagementService;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
@@ -30,6 +29,8 @@ public class AdminMediaController {
 
     @Inject
     MediaManagementService mediaService;
+    @Inject
+    AdminTokenVerifier tokenVerifier;
 
     @GET
     @Operation(summary = "列出媒体资源")
@@ -45,9 +46,9 @@ public class AdminMediaController {
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Transactional
     @Operation(summary = "上传媒体文件")
-    public AdminMediaDtos.MediaItem upload(@Context ContainerRequestContext context,
+    public AdminMediaDtos.MediaItem upload(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization,
                                            MultipartFormDataInput input) {
-        User operator = mustFindOperator(context);
+        User operator = mustFindOperator(authorization);
         InputPart filePart = extractFilePart(input);
         String fileName = extractFileName(filePart);
         String mimeType = filePart.getMediaType() != null ? filePart.getMediaType().toString() : null;
@@ -64,7 +65,8 @@ public class AdminMediaController {
     @Path("/scan")
     @Transactional
     @Operation(summary = "重建媒体引用索引")
-    public AdminMediaDtos.MediaScanResult scan() {
+    public AdminMediaDtos.MediaScanResult scan(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization) {
+        mustFindOperator(authorization);
         return mediaService.rebuildReferences();
     }
 
@@ -107,16 +109,31 @@ public class AdminMediaController {
         }
     }
 
-    private User mustFindOperator(ContainerRequestContext requestContext) {
-        Object value = requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USER_ID_KEY);
-        if (!(value instanceof Number number)) {
+    private User mustFindOperator(String authorization) {
+        Long userId = extractUserId(authorization);
+        if (userId == null) {
             throw unauthorized();
         }
-        User user = User.find("id = ?1 and status = 1 and deletedAt is null", number.longValue()).firstResult();
+        User user = User.find("id = ?1 and status = 1 and deletedAt is null", userId).firstResult();
         if (user == null) {
             throw unauthorized();
         }
         return user;
+    }
+
+    private Long extractUserId(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authorization.substring("Bearer ".length()).trim();
+        if (token.isBlank()) {
+            return null;
+        }
+        AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(token);
+        if (verified == null || !verified.isAdmin()) {
+            return null;
+        }
+        return verified.uid();
     }
 
     private WebApplicationException unauthorized() {

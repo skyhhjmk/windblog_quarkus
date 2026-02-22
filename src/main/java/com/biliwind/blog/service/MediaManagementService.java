@@ -12,7 +12,12 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ForbiddenException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,6 +28,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
@@ -31,6 +37,7 @@ public class MediaManagementService {
     private static final Set<String> BANNED_EXTENSIONS = Set.of(
             ".exe", ".dll", ".cmd", ".bat", ".ps1", ".com", ".class", ".sh", ".jar", ".py"
     );
+    private static final long MANUAL_LOAD_THRESHOLD_BYTES = 5L * 1024L * 1024L;
 
     @ConfigProperty(name = "media.upload.dir")
     String mediaUploadDir;
@@ -192,7 +199,8 @@ public class MediaManagementService {
         media.width = null;
         media.height = null;
         media.alt = Collections.emptyMap();
-        media.metadata = Collections.emptyMap();
+        Map<String, Object> metadata = new HashMap<>();
+        media.metadata = metadata;
         media.createdAt = OffsetDateTime.now();
         media.deletedAt = null;
         if (normalizedMime.startsWith("image/")) {
@@ -201,6 +209,7 @@ public class MediaManagementService {
                 if (image != null) {
                     media.width = image.getWidth();
                     media.height = image.getHeight();
+                    generateImageVariants(image, storageKey, metadata);
                 }
             } catch (IOException ignored) {
             }
@@ -269,6 +278,9 @@ public class MediaManagementService {
                 media.id,
                 media.storageKey,
                 media.url,
+                metadataString(media, "thumbnailUrl"),
+                metadataString(media, "previewUrl"),
+                requiresManualOriginal(media),
                 media.fileName,
                 media.mimeType,
                 media.size,
@@ -316,6 +328,94 @@ public class MediaManagementService {
         }
         User user = User.findById(userId);
         return user == null ? null : user.username;
+    }
+
+    private void generateImageVariants(BufferedImage source, String storageKey, Map<String, Object> metadata) {
+        String baseName = storageKey;
+        int idx = storageKey.lastIndexOf('.');
+        if (idx > 0) {
+            baseName = storageKey.substring(0, idx);
+        }
+
+        String previewKey = baseName + "_preview.jpg";
+        String thumbKey = baseName + "_thumb.jpg";
+        Path previewPath = uploadRoot.resolve(previewKey);
+        Path thumbPath = uploadRoot.resolve(thumbKey);
+        try {
+            writeJpegVariant(source, previewPath, 48, 0.35f);
+            writeJpegVariant(source, thumbPath, 360, 0.82f);
+            metadata.put("previewUrl", buildPublicUrl(previewKey));
+            metadata.put("thumbnailUrl", buildPublicUrl(thumbKey));
+        } catch (IOException e) {
+            deleteTarget(previewPath);
+            deleteTarget(thumbPath);
+        }
+    }
+
+    private void writeJpegVariant(BufferedImage source, Path target, int maxEdge, float quality) throws IOException {
+        int srcWidth = source.getWidth();
+        int srcHeight = source.getHeight();
+        if (srcWidth <= 0 || srcHeight <= 0) {
+            throw new IOException("invalid image dimensions");
+        }
+        double scale = Math.min(1.0d, Math.min((double) maxEdge / srcWidth, (double) maxEdge / srcHeight));
+        int dstWidth = Math.max(1, (int) Math.round(srcWidth * scale));
+        int dstHeight = Math.max(1, (int) Math.round(srcHeight * scale));
+
+        BufferedImage output = new BufferedImage(dstWidth, dstHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = output.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, dstWidth, dstHeight);
+            g.drawImage(source, 0, 0, dstWidth, dstHeight, null);
+        } finally {
+            g.dispose();
+        }
+
+        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").hasNext()
+                ? ImageIO.getImageWritersByFormatName("jpg").next()
+                : null;
+        if (writer == null) {
+            throw new IOException("no jpeg writer available");
+        }
+        try (OutputStream os = Files.newOutputStream(target, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+             ImageOutputStream ios = ImageIO.createImageOutputStream(os)) {
+            writer.setOutput(ios);
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            if (param.canWriteCompressed()) {
+                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                param.setCompressionQuality(Math.max(0.05f, Math.min(1.0f, quality)));
+            }
+            writer.write(null, new IIOImage(output, null, null), param);
+        } finally {
+            writer.dispose();
+        }
+    }
+
+    private String metadataString(Media media, String key) {
+        if (media.metadata == null || key == null) {
+            return null;
+        }
+        Object value = media.metadata.get(key);
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private boolean requiresManualOriginal(Media media) {
+        if (media == null || media.size == null || media.size <= MANUAL_LOAD_THRESHOLD_BYTES) {
+            return false;
+        }
+        if (media.mimeType == null) {
+            return false;
+        }
+        String mime = media.mimeType.toLowerCase();
+        return mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/");
     }
 
     private void validateExtension(String fileName) {
