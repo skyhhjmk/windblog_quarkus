@@ -1,12 +1,7 @@
 package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.time.OffsetDateTime;
 
@@ -37,6 +32,12 @@ public class User extends PanacheEntityBase {
     /** 用户状态：0禁用，1正常 */
     @Column(nullable = false)
     public short status;
+
+    /**
+     * 用户角色
+     */
+    @Column(name = "role_name", length = 64)
+    public String roleName;
 
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)

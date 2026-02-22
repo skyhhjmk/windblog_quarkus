@@ -74,8 +74,10 @@ public class AdminTokenVerifier {
         }
 
         boolean isAdmin = Boolean.TRUE.equals(claims.get("is_admin"));
+        boolean isSuperAdmin = Boolean.TRUE.equals(claims.get("is_super_admin"));
+        String roleName = toStringValue(claims.get("role_name"));
         String username = toStringValue(claims.get("upn"));
-        return new VerifiedToken(uid, username, isAdmin);
+        return new VerifiedToken(uid, username, isAdmin, isSuperAdmin, roleName);
     }
 
     private String sign(String signingInput, String secret) {
@@ -120,6 +122,6 @@ public class AdminTokenVerifier {
         return String.valueOf(value);
     }
 
-    public record VerifiedToken(Long uid, String username, boolean isAdmin) {
+    public record VerifiedToken(Long uid, String username, boolean isAdmin, boolean isSuperAdmin, String roleName) {
     }
 }

@@ -1,12 +1,7 @@
 package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -41,9 +36,17 @@ public class Media extends PanacheEntityBase {
     @Column(name = "mime_type", length = 100)
     public String mimeType;
 
-    /** 文件大小（字节） */
+    @Column(name = "file_name", length = 255)
+    public String fileName;
+
+    /**
+     * 文件大小（字节）
+     */
     @Column
     public Long size;
+
+    @Column(name = "uploaded_by")
+    public Long uploadedBy;
 
     /** 媒体宽度 */
     @Column
@@ -70,4 +73,11 @@ public class Media extends PanacheEntityBase {
     /** 软删除时间 */
     @Column(name = "deleted_at")
     public OffsetDateTime deletedAt;
+
+    /**
+     * @return size
+     */
+    public Long getSize() {
+        return size;
+    }
 }

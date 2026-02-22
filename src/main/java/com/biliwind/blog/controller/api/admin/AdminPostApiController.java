@@ -2,6 +2,7 @@ package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.MediaManagementService;
 import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -33,6 +34,9 @@ public class AdminPostApiController {
 
     @Inject
     com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
+
+    @Inject
+    MediaManagementService mediaService;
 
     @POST
     @Path("/{id}/ai-summary")
@@ -139,6 +143,7 @@ public class AdminPostApiController {
         revision.persist();
 
         post.currentRevision = revision;
+        mediaService.syncPostReferences(post, revision.contentMarkdown);
         if (post.status == PostStatus.PUBLISHED) {
             post.publishedAt = now;
         }
@@ -265,6 +270,7 @@ public class AdminPostApiController {
             nextRevision.persist();
 
             post.currentRevision = nextRevision;
+            mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
             post.title = nextRevision.title;
             changed = true;
         }

@@ -1,7 +1,9 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.UploadRoleService;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -16,6 +18,9 @@ public class AdminBootstrapInitializer {
 
     @Inject
     PasswordHasher passwordHasher;
+
+    @Inject
+    UploadRoleService uploadRoleService;
 
     @ConfigProperty(name = "admin.init.enabled", defaultValue = "true")
     boolean initEnabled;
@@ -34,6 +39,7 @@ public class AdminBootstrapInitializer {
         if (!initEnabled) {
             return;
         }
+        uploadRoleService.ensureDefaults();
         upsertAdminUser();
     }
 
@@ -48,6 +54,7 @@ public class AdminBootstrapInitializer {
             admin.email = initEmail;
             admin.password = hashedPassword;
             admin.status = 1;
+            admin.roleName = RoleConstant.SUPER_ADMIN;
             admin.createdAt = now;
             admin.updatedAt = now;
             admin.deletedAt = null;
@@ -59,6 +66,7 @@ public class AdminBootstrapInitializer {
         admin.email = initEmail;
         admin.password = hashedPassword;
         admin.status = 1;
+        admin.roleName = RoleConstant.SUPER_ADMIN;
         admin.deletedAt = null;
         admin.updatedAt = now;
     }

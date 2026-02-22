@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.controller.api.admin.dto.AdminLoginRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminLoginResponse;
@@ -9,11 +10,7 @@ import io.smallrye.jwt.build.Jwt;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -70,12 +67,20 @@ public class AdminAuthApiController {
             return unauthorized();
         }
 
+        String roleName = user.roleName;
+        if (roleName == null || roleName.isBlank()) {
+            roleName = RoleConstant.ADMIN;
+        }
+        boolean isSuperAdmin = RoleConstant.SUPER_ADMIN.equals(roleName);
+
         Instant expiresAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, expireMinutes)));
         String token = Jwt.issuer(issuer)
                 .upn(user.username)
                 .groups(Set.of("admin"))
                 .claim("uid", user.id)
                 .claim("is_admin", true)
+                .claim("role_name", roleName)
+                .claim("is_super_admin", isSuperAdmin)
                 .expiresAt(expiresAt)
                 .signWithSecret(jwtSecret);
 
@@ -84,7 +89,7 @@ public class AdminAuthApiController {
                 token,
                 "Bearer",
                 expiresAt.getEpochSecond(),
-                new AdminUserProfile(user.id, user.username, user.email)
+                new AdminUserProfile(user.id, user.username, user.email, roleName)
         );
         return Response.ok(body).build();
     }
@@ -115,7 +120,7 @@ public class AdminAuthApiController {
 
         return Response.ok(Map.of(
                 "success", true,
-                "user", new AdminUserProfile(user.id, user.username, user.email)
+                "user", new AdminUserProfile(user.id, user.username, user.email, user.roleName)
         )).build();
     }
 

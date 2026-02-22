@@ -9,6 +9,7 @@ public class AdminUserDtos {
             String username,
             String email,
             String avatar,
+            String roleName,
             short status,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {
@@ -17,7 +18,8 @@ public class AdminUserDtos {
     public record UserUpdateRequest(
             String email,
             String password,
-            Short status) {
+            Short status,
+            String roleName) {
     }
 
     public record PageResult<T>(
