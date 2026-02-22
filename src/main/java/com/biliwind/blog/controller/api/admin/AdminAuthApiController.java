@@ -26,6 +26,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -101,9 +102,9 @@ public class AdminAuthApiController {
     @APIResponse(responseCode = "200", description = "成功")
     @APIResponse(responseCode = "401", description = "未登录或 token 无效")
     public Response me(@Context ContainerRequestContext requestContext) {
-        Long userId = resolveUserIdFromContext(requestContext);
+        Long userId = resolveUserIdFromBearer(requestContext);
         if (userId == null) {
-            userId = resolveUserIdFromBearer(requestContext);
+            userId = resolveUserIdFromContext(requestContext);
         }
         if (userId == null) {
             return Response.status(Response.Status.UNAUTHORIZED)
@@ -125,23 +126,43 @@ public class AdminAuthApiController {
     }
 
     private Long resolveUserIdFromContext(ContainerRequestContext requestContext) {
-        Object value = requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USER_ID_KEY);
-        if (!(value instanceof Number number)) {
+        if (requestContext == null) {
             return null;
         }
-        return number.longValue();
+        try {
+            Object value = requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USER_ID_KEY);
+            if (!(value instanceof Number number)) {
+                return null;
+            }
+            return number.longValue();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private Long resolveUserIdFromBearer(ContainerRequestContext requestContext) {
-        String auth = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
-        AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(auth);
-        if (verified == null) {
+        if (requestContext == null) {
             return null;
         }
-        if (!verified.isAdmin()) {
+        try {
+            String auth = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
+            if (auth == null) {
+                List<String> authList = requestContext.getHeaders().get(HttpHeaders.AUTHORIZATION);
+                if (authList != null && !authList.isEmpty()) {
+                    auth = authList.get(0);
+                }
+            }
+            AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(auth);
+            if (verified == null) {
+                return null;
+            }
+            if (!verified.isAdmin()) {
+                return null;
+            }
+            return verified.uid();
+        } catch (Exception e) {
             return null;
         }
-        return verified.uid();
     }
 
     private Response unauthorized() {

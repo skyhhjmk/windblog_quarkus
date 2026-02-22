@@ -6,16 +6,15 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
-import jakarta.ws.rs.container.PreMatching;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
+import java.util.List;
 import java.util.Map;
 
 @Provider
-@PreMatching
 @Priority(Priorities.AUTHENTICATION)
 @ApplicationScoped
 public class AdminJwtAuthFilter implements ContainerRequestFilter {
@@ -42,6 +41,12 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
         }
 
         String authHeader = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
+        if (authHeader == null) {
+            List<String> authList = requestContext.getHeaders().get(HttpHeaders.AUTHORIZATION);
+            if (authList != null && !authList.isEmpty()) {
+                authHeader = authList.get(0);
+            }
+        }
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             abort(requestContext, Response.Status.UNAUTHORIZED, "缺少 Bearer Token");
             return;
