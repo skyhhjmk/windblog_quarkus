@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.controller.api.admin.dto.AdminLoginRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminLoginResponse;
@@ -9,13 +10,7 @@ import io.smallrye.jwt.build.Jwt;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -70,12 +65,20 @@ public class AdminAuthApiController {
             return unauthorized();
         }
 
+        String roleName = user.roleName;
+        if (roleName == null || roleName.isBlank()) {
+            roleName = RoleConstant.ADMIN;
+        }
+        boolean isSuperAdmin = RoleConstant.SUPER_ADMIN.equals(roleName);
+
         Instant expiresAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, expireMinutes)));
         String token = Jwt.issuer(issuer)
                 .upn(user.username)
                 .groups(Set.of("admin"))
                 .claim("uid", user.id)
                 .claim("is_admin", true)
+                .claim("role_name", roleName)
+                .claim("is_super_admin", isSuperAdmin)
                 .expiresAt(expiresAt)
                 .signWithSecret(jwtSecret);
 
@@ -84,7 +87,7 @@ public class AdminAuthApiController {
                 token,
                 "Bearer",
                 expiresAt.getEpochSecond(),
-                new AdminUserProfile(user.id, user.username, user.email)
+                new AdminUserProfile(user.id, user.username, user.email, roleName)
         );
         return Response.ok(body).build();
     }
@@ -95,11 +98,8 @@ public class AdminAuthApiController {
     @Operation(summary = "当前管理员信息", description = "返回当前已登录管理员信息。")
     @APIResponse(responseCode = "200", description = "成功")
     @APIResponse(responseCode = "401", description = "未登录或 token 无效")
-    public Response me(@Context ContainerRequestContext requestContext) {
-        Long userId = resolveUserIdFromContext(requestContext);
-        if (userId == null) {
-            userId = resolveUserIdFromBearer(requestContext);
-        }
+    public Response me(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization) {
+        Long userId = resolveUserIdFromBearer(authorization);
         if (userId == null) {
             return Response.status(Response.Status.UNAUTHORIZED)
                     .entity(Map.of("success", false, "message", "未登录"))
@@ -115,30 +115,27 @@ public class AdminAuthApiController {
 
         return Response.ok(Map.of(
                 "success", true,
-                "user", new AdminUserProfile(user.id, user.username, user.email)
+                "user", new AdminUserProfile(user.id, user.username, user.email, user.roleName)
         )).build();
     }
 
-    private Long resolveUserIdFromContext(ContainerRequestContext requestContext) {
-        Object value = requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USER_ID_KEY);
-        if (!(value instanceof Number number)) {
+    private Long resolveUserIdFromBearer(String authorization) {
+        if (authorization == null || authorization.isBlank()) {
             return null;
         }
-        return number.longValue();
+        try {
+            AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(authorization);
+            if (verified == null) {
+                return null;
+            }
+            if (!verified.isAdmin()) {
+                return null;
+            }
+            return verified.uid();
+        } catch (Exception e) {
+            return null;
+        }
     }
-
-    private Long resolveUserIdFromBearer(ContainerRequestContext requestContext) {
-        String auth = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
-        AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(auth);
-        if (verified == null) {
-            return null;
-        }
-        if (!verified.isAdmin()) {
-            return null;
-        }
-        return verified.uid();
-    }
-
     private Response unauthorized() {
         return Response.status(Response.Status.UNAUTHORIZED)
                 .entity(Map.of("success", false, "message", "账号或密码错误"))

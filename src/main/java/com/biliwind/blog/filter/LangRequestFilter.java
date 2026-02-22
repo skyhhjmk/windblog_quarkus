@@ -3,6 +3,7 @@ package com.biliwind.blog.filter;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.context.LanguageContext;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
@@ -14,7 +15,7 @@ import java.util.List;
 public class LangRequestFilter implements ContainerRequestFilter {
 
     @Inject
-    LanguageContext languageContext;
+    Instance<LanguageContext> languageContextInstance;
 
     public static final String LANG_ATTRIBUTE = "REQUEST_LANG";
 
@@ -54,7 +55,14 @@ public class LangRequestFilter implements ContainerRequestFilter {
             finalLang = LanguageConstant.DEFAULT_LANG;
         }
 
-        languageContext.setLang(finalLang);
+        try {
+            if (!languageContextInstance.isUnsatisfied()) {
+                LanguageContext languageContext = languageContextInstance.get();
+                languageContext.setLang(finalLang);
+            }
+        } catch (Exception e) {
+            // 忽略异常
+        }
         requestContext.getHeaders().putSingle(LanguageConstant.HEADER_REQUEST_LANG, finalLang);
 
         if (!finalLang.isEmpty()) {

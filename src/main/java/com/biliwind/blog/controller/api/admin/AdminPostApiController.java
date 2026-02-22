@@ -1,30 +1,13 @@
 package com.biliwind.blog.controller.api.admin;
 
-import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.AdminPostDetail;
-import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.AdminPostItem;
-import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PageResult;
-import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PostCreateRequest;
-import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PostUpdateRequest;
-import com.biliwind.blog.model.Post;
-import com.biliwind.blog.model.PostRenderType;
-import com.biliwind.blog.model.PostRevision;
-import com.biliwind.blog.model.User;
+import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
+import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.MediaManagementService;
 import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DELETE;
-import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.PUT;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
-import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -51,6 +34,9 @@ public class AdminPostApiController {
 
     @Inject
     com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
+
+    @Inject
+    MediaManagementService mediaService;
 
     @POST
     @Path("/{id}/ai-summary")
@@ -134,7 +120,7 @@ public class AdminPostApiController {
         post.title = request.title();
         post.summary = request.summary();
         post.aiSummary = request.aiSummary();
-        post.status = request.status() == null ? 0 : request.status();
+        post.status = resolveStatus(request.status(), PostStatus.DRAFT);
         post.visibility = request.visibility() == null ? 0 : request.visibility();
         post.password = request.password();
         post.seoTitle = request.seoTitle();
@@ -157,7 +143,8 @@ public class AdminPostApiController {
         revision.persist();
 
         post.currentRevision = revision;
-        if (post.status == 1) {
+        mediaService.syncPostReferences(post, revision.contentMarkdown);
+        if (post.status == PostStatus.PUBLISHED) {
             post.publishedAt = now;
         }
 
@@ -242,11 +229,15 @@ public class AdminPostApiController {
             post.renderType = nextRenderType;
         }
         if (request.status() != null) {
-            if (post.status != request.status()) {
+            PostStatus nextStatus = PostStatus.fromCode(request.status());
+            if (nextStatus == null) {
+                throw conflict("未知文章状态: " + request.status());
+            }
+            if (!post.status.equals(nextStatus)) {
                 changed = true;
             }
-            post.status = request.status();
-            if (request.status() == 1 && post.publishedAt == null) {
+            post.status = nextStatus;
+            if (nextStatus == PostStatus.PUBLISHED && post.publishedAt == null) {
                 post.publishedAt = OffsetDateTime.now();
             }
         }
@@ -279,6 +270,7 @@ public class AdminPostApiController {
             nextRevision.persist();
 
             post.currentRevision = nextRevision;
+            mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
             post.title = nextRevision.title;
             changed = true;
         }
@@ -300,10 +292,10 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "409", description = "内容相同")
     public AdminPostDetail publish(@PathParam("id") Long id) {
         Post post = mustFindPost(id);
-        if (post.status == 1) {
+        if (post.status == PostStatus.PUBLISHED) {
             throw conflict("内容相同");
         }
-        post.status = 1;
+        post.status = PostStatus.PUBLISHED;
         if (post.publishedAt == null) {
             post.publishedAt = OffsetDateTime.now();
         }
@@ -385,7 +377,7 @@ public class AdminPostApiController {
                 post.id,
                 post.slug,
                 post.title,
-                post.status,
+                statusCode(post.status),
                 post.visibility,
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 post.version,
@@ -403,7 +395,7 @@ public class AdminPostApiController {
                 post.summary,
                 post.aiSummary,
                 post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown,
-                post.status,
+                statusCode(post.status),
                 post.visibility,
                 post.password,
                 post.seoTitle,
@@ -417,5 +409,20 @@ public class AdminPostApiController {
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt);
+    }
+
+    private PostStatus resolveStatus(Short status, PostStatus fallback) {
+        if (status == null) {
+            return fallback;
+        }
+        PostStatus resolved = PostStatus.fromCode(status);
+        if (resolved == null) {
+            throw conflict("未知文章状态: " + status);
+        }
+        return resolved;
+    }
+
+    private short statusCode(PostStatus status) {
+        return status == null ? PostStatus.DRAFT.getCode() : status.getCode();
     }
 }

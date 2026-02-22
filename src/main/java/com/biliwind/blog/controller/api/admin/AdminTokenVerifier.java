@@ -31,12 +31,21 @@ public class AdminTokenVerifier {
         }
 
         String token = rawToken.trim();
-        if (token.startsWith("[") && token.endsWith("]") && token.length() > 2) {
+
+        // 移除方括号，处理如 [Bearer token] 或 [token] 的情况
+        while (token.startsWith("[") && token.endsWith("]") && token.length() > 2) {
             token = token.substring(1, token.length() - 1).trim();
         }
+
         if (token.regionMatches(true, 0, "Bearer ", 0, "Bearer ".length())) {
             token = token.substring("Bearer ".length()).trim();
         }
+
+        // 再次检查是否还有方括号
+        while (token.startsWith("[") && token.endsWith("]") && token.length() > 2) {
+            token = token.substring(1, token.length() - 1).trim();
+        }
+        
         if (token.isBlank()) {
             return null;
         }
@@ -74,8 +83,10 @@ public class AdminTokenVerifier {
         }
 
         boolean isAdmin = Boolean.TRUE.equals(claims.get("is_admin"));
+        boolean isSuperAdmin = Boolean.TRUE.equals(claims.get("is_super_admin"));
+        String roleName = toStringValue(claims.get("role_name"));
         String username = toStringValue(claims.get("upn"));
-        return new VerifiedToken(uid, username, isAdmin);
+        return new VerifiedToken(uid, username, isAdmin, isSuperAdmin, roleName);
     }
 
     private String sign(String signingInput, String secret) {
@@ -120,6 +131,6 @@ public class AdminTokenVerifier {
         return String.valueOf(value);
     }
 
-    public record VerifiedToken(Long uid, String username, boolean isAdmin) {
+    public record VerifiedToken(Long uid, String username, boolean isAdmin, boolean isSuperAdmin, String roleName) {
     }
 }

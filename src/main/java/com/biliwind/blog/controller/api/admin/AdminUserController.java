@@ -1,12 +1,17 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.AdminUserItem;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.UserUpdateRequest;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.UploadRoleService;
 import io.quarkus.panache.common.Page;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
@@ -22,6 +27,9 @@ import java.util.Map;
 @Tag(name = "AdminUser")
 public class AdminUserController {
 
+    @Inject
+    UploadRoleService uploadRoleService;
+
     @GET
     @Operation(summary = "用户列表")
     public PageResult<AdminUserItem> list(
@@ -31,30 +39,31 @@ public class AdminUserController {
 
         StringBuilder where = new StringBuilder("deletedAt is null");
         Map<String, Object> params = new HashMap<>();
-
         if (keyword != null && !keyword.isBlank()) {
             where.append(" and (username like :keyword or email like :keyword)");
             params.put("keyword", "%" + keyword.trim() + "%");
         }
 
-        var query = User.find(where.toString() + " order by createdAt desc", params);
-        List<User> list = query.page(Page.of(page - 1, pageSize)).list();
+        var query = User.find(where + " order by createdAt desc", params);
+        List<User> list = query.page(Page.of(Math.max(page, 1) - 1, Math.max(pageSize, 1))).list();
 
         return new PageResult<>(
                 list.stream().map(this::toItem).toList(),
                 query.count(),
-                page,
-                pageSize);
+                Math.max(page, 1),
+                Math.max(pageSize, 1));
     }
 
     @PUT
     @Path("/{id}")
     @Transactional
     @Operation(summary = "更新用户")
-    public AdminUserItem update(@PathParam("id") Long id, UserUpdateRequest req) {
+    public AdminUserItem update(@PathParam("id") Long id, UserUpdateRequest req,
+                                @Context ContainerRequestContext requestContext) {
         User user = User.findById(id);
-        if (user == null || user.deletedAt != null)
+        if (user == null || user.deletedAt != null) {
             throw new NotFoundException();
+        }
 
         if (req.email() != null && !req.email().isBlank()) {
             user.email = req.email().trim();
@@ -62,21 +71,35 @@ public class AdminUserController {
         if (req.status() != null) {
             user.status = req.status();
         }
-        // Password update logic should be hashed (omitted for brevity, assume service
-        // handles it or strictly validated)
+
+        boolean isSuperAdmin = Boolean.TRUE.equals(requestContext.getProperty(AdminJwtAuthFilter.REQUEST_IS_SUPER_ADMIN_KEY));
+        if (req.roleName() != null && !req.roleName().isBlank()) {
+            if (!isSuperAdmin) {
+                throw new ForbiddenException("只有超级管理员可修改角色");
+            }
+            String targetRole = req.roleName().trim();
+            boolean knownRole = RoleConstant.DEFAULT_ROLES.contains(targetRole)
+                    || uploadRoleService.findByName(targetRole) != null;
+            if (!knownRole) {
+                throw new BadRequestException("角色不存在: " + targetRole);
+            }
+            user.roleName = targetRole;
+        }
+
+        // 密码更新需要额外验证或哈希处理，这里假设外部管控
 
         user.updatedAt = OffsetDateTime.now();
         return toItem(user);
     }
 
     private AdminUserItem toItem(User user) {
-        // Mock avatar for now
         String avatar = "https://ui-avatars.com/api/?name=" + user.username;
         return new AdminUserItem(
                 user.id,
                 user.username,
                 user.email,
                 avatar,
+                user.roleName,
                 user.status,
                 user.createdAt,
                 user.updatedAt);
