@@ -14,6 +14,6 @@ public class GlobalRequestLogFilter implements ContainerRequestFilter {
     public void filter(ContainerRequestContext requestContext) {
         String method = requestContext.getMethod();
         String path = requestContext.getUriInfo().getPath();
-        LOG.info("Quarkus 中间件：收到请求 -> 方法：" + method + "，路径：" + path);
+        LOG.info("Logger: Get a request -> method is: " + method + ",path is: " + path);
     }
 }

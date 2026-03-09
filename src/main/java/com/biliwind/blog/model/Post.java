@@ -1,18 +1,10 @@
 package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
-import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
@@ -78,6 +70,9 @@ public class Post extends PanacheEntityBase {
     @Column(name = "seo_description", columnDefinition = "text")
     public String seoDescription;
 
+    /**
+     * 前端渲染器类型
+     */
     @Convert(converter = PostRenderTypeConverter.class)
     @Column(name = "render_type", nullable = false)
     public PostRenderType renderType;
@@ -93,10 +88,12 @@ public class Post extends PanacheEntityBase {
 
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
+    @CreationTimestamp
     public OffsetDateTime createdAt;
 
     /** 更新时间 */
     @Column(name = "updated_at", nullable = false)
+    @UpdateTimestamp
     public OffsetDateTime updatedAt;
 
     /** 软删除时间 */

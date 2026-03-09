@@ -1,15 +1,9 @@
 package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
 
@@ -50,7 +44,16 @@ public class Comment extends PanacheEntityBase {
 
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
+    @CreationTimestamp
     public OffsetDateTime createdAt;
+
+
+    /**
+     * 更新时间
+     */
+    @Column(name = "updated_at", nullable = false)
+    @UpdateTimestamp
+    public OffsetDateTime updatedAt;
 
     /** 软删除时间 */
     @Column(name = "deleted_at")

@@ -1,14 +1,9 @@
 package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
-import jakarta.persistence.Column;
-import jakarta.persistence.EmbeddedId;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.MapsId;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
 
@@ -45,5 +40,14 @@ public class PostMedia extends PanacheEntityBase {
 
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
+    @CreationTimestamp
     public OffsetDateTime createdAt;
+
+
+    /**
+     * 更新时间
+     */
+    @Column(name = "updated_at", nullable = false)
+    @UpdateTimestamp
+    public OffsetDateTime updatedAt;
 }

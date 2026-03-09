@@ -1,13 +1,10 @@
 package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
@@ -41,5 +38,14 @@ public class Tag extends PanacheEntityBase {
 
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
+    @CreationTimestamp
     public OffsetDateTime createdAt;
+
+
+    /**
+     * 更新时间
+     */
+    @Column(name = "updated_at", nullable = false)
+    @UpdateTimestamp
+    public OffsetDateTime updatedAt;
 }

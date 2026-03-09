@@ -1,10 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
-import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.AdminLinkAuditItem;
-import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.AdminLinkItem;
-import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.AdminLinkMonitorLogItem;
-import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.LinkCreateRequest;
-import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.LinkUpdateRequest;
+import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.*;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkAudit;
@@ -50,12 +46,12 @@ public class AdminLinkController {
 
     @POST
     @Path("/{id}/check")
-    @Operation(summary = "手动触发链接检查")
+    @Operation(summary = "手动触发链接检查并更新链接状态")
     public void check(@PathParam("id") Long id) {
         Link link = Link.findById(id);
         if (link == null)
             throw new NotFoundException();
-        linkMonitorService.checkLink(link);
+        linkMonitorService.checkLink(link, false);
     }
 
     @POST

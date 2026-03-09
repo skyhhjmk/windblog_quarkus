@@ -2,6 +2,8 @@ package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
 
@@ -29,5 +31,13 @@ public class AiProviderConfig extends PanacheEntityBase {
     public String model;
 
     @Column(name = "updated_at", nullable = false)
+    @UpdateTimestamp
     public OffsetDateTime updatedAt;
+
+    /**
+     * 创建时间
+     */
+    @Column(name = "created_at", nullable = false, updatable = false)
+    @CreationTimestamp
+    public OffsetDateTime createdAt;
 }

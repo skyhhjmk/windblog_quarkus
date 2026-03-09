@@ -1,7 +1,7 @@
 package com.biliwind.blog.model;
 
 /**
- * 文章状态
+ * 文章状态枚举
  */
 public enum PostStatus {
 
@@ -26,10 +26,10 @@ public enum PostStatus {
         this.code = code;
     }
 
-    public short getCode() {
-        return code;
-    }
-
+    /**
+     * @param code 枚举值
+     * @return 枚举对象
+     */
     public static PostStatus fromCode(short code) {
         for (PostStatus status : values()) {
             if (status.code == code) {
@@ -37,5 +37,12 @@ public enum PostStatus {
             }
         }
         return null;
+    }
+
+    /**
+     * @return 枚举值
+     */
+    public short getCode() {
+        return code;
     }
 }
