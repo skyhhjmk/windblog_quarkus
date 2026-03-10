@@ -31,5 +31,8 @@
     <include file="./migration/025-create-upload-roles.sql" relativeToChangelogFile="true"/>
     <include file="./migration/026-add-media-info-fields.sql" relativeToChangelogFile="true"/>
     <include file="migration/027-add-table-created-at-fields.sql" relativeToChangelogFile="true"/>
+    <include file="migration/029-create-link-tags.sql" relativeToChangelogFile="true"/>
+    <include file="migration/030-create-link-tag-relations.sql" relativeToChangelogFile="true"/>
+    <include file="migration/031-add-link-tag-foreign-keys.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

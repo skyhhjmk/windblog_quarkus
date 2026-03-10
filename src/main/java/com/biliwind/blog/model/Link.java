@@ -9,9 +9,10 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * 友情链接主表实体，对应 links。
+ * 链接主表实体，对应 links。
  */
 @Entity
 @Table(name = "links")
@@ -46,6 +47,13 @@ public class Link extends PanacheEntityBase {
     @Column(name = "sort_order", nullable = false)
     public Integer sortOrder;
 
+    /**
+     * 链接类型
+     */
+    @Convert(converter = LinkTypeConverter.class)
+    @Column(nullable = false)
+    public LinkType type;
+
     /** 状态：1=visible, 2=hidden, 3=archived */
     @Column(nullable = false)
     public short status;
@@ -69,10 +77,6 @@ public class Link extends PanacheEntityBase {
     /** 联系邮箱 */
     @Column(columnDefinition = "text")
     public String email;
-
-//    /** 分类名称，用于友链分组 */
-//    @Column(columnDefinition = "text")
-//    public String category;
 
     /** 回调地址 */
     @Column(name = "callback_url", columnDefinition = "text")
@@ -108,4 +112,10 @@ public class Link extends PanacheEntityBase {
     @Column(name = "updated_at", nullable = false)
     @UpdateTimestamp
     public OffsetDateTime updatedAt;
+
+    /**
+     * 关联的标签
+     */
+    @OneToMany(mappedBy = "link", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    public Set<LinkTagRelation> tagRelations;
 }
