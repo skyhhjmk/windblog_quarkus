@@ -36,5 +36,5 @@
     <include file="migration/031-add-link-tag-foreign-keys.sql" relativeToChangelogFile="true"/>
     <include file="migration/032-add-link-type.sql" relativeToChangelogFile="true"/>
     <include file="migration/033-add-tags-updated-at.sql" relativeToChangelogFile="true"/>
-
+    <include file="migration/034-add-post-category.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

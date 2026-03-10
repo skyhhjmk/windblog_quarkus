@@ -82,6 +82,13 @@ public class Post extends PanacheEntityBase {
     @JoinColumn(name = "user_id", nullable = false)
     public User user;
 
+    /**
+     * 所属分类
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    public Category category;
+
     /** 发布时间 */
     @Column(name = "published_at")
     public OffsetDateTime publishedAt;

@@ -40,7 +40,6 @@ public class AdminCategoryController {
         if (req.parentId() != null) {
             c.parent = Category.findById(req.parentId());
         }
-        c.path = "root"; // Simplification, normally verify unique and build path
         c.createdAt = OffsetDateTime.now();
         c.persist();
         return toItem(c);

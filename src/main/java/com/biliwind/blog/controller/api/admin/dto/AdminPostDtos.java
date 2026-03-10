@@ -26,7 +26,9 @@ public final class AdminPostDtos {
                         String seoKeywords,
                         String seoDescription,
                         Short renderType,
-                        Short editorType) {
+                        Short editorType,
+                        Long categoryId,
+                        List<Long> tagIds) {
         }
 
         public record PostUpdateRequest(
@@ -43,7 +45,9 @@ public final class AdminPostDtos {
                         String seoDescription,
                         Short renderType,
                         Short editorType,
-                        @NotNull(message = "version 不能为空") Integer version) {
+                        @NotNull(message = "version 不能为空") Integer version,
+                        Long categoryId,
+                        List<Long> tagIds) {
         }
 
         public record AdminPostItem(
@@ -55,6 +59,8 @@ public final class AdminPostDtos {
                         Short renderType,
                         Integer version,
                         Long userId,
+                        Long categoryId,
+                        List<Long> tagIds,
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
                         OffsetDateTime updatedAt) {
@@ -78,6 +84,8 @@ public final class AdminPostDtos {
                         Integer currentRevisionNumber,
                         Integer version,
                         Long userId,
+                        Long categoryId,
+                        List<Long> tagIds,
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
                         OffsetDateTime updatedAt) {

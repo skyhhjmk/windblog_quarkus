@@ -2,6 +2,7 @@ package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -18,7 +19,7 @@ import java.util.Map;
 public class Category extends PanacheEntityBase {
 
     /**
-     * 主键ID
+     * 主键 ID
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,7 +33,7 @@ public class Category extends PanacheEntityBase {
     public Category parent;
 
     /**
-     * 分类slug（唯一）
+     * 分类 slug（唯一）
      */
     @Column(nullable = false, length = 160, unique = true)
     public String slug;
@@ -52,9 +53,10 @@ public class Category extends PanacheEntityBase {
     public Map<String, String> description;
 
     /**
-     * ltree层级路径
+     * ltree 层级路径
      */
     @Column(nullable = false, columnDefinition = "ltree")
+    @ColumnTransformer(write = "?::ltree", read = "path::text")
     public String path;
 
     /**

@@ -16,7 +16,6 @@ import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
-import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -27,7 +26,7 @@ import java.util.Objects;
 @Path("/api/admin/posts")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@Tag(name = "AdminPost")
+@org.eclipse.microprofile.openapi.annotations.tags.Tag(name = "AdminPost")
 @SecurityRequirement(name = "adminBearerAuth")
 public class AdminPostApiController {
 
@@ -131,6 +130,12 @@ public class AdminPostApiController {
         post.user = operator;
         post.createdAt = now;
         post.updatedAt = now;
+
+        // 设置分类
+        if (request.categoryId() != null) {
+            post.category = Category.findById(request.categoryId());
+        }
+
         post.persist();
 
         PostRevision revision = new PostRevision();
@@ -145,6 +150,21 @@ public class AdminPostApiController {
 
         post.currentRevision = revision;
         mediaService.syncPostReferences(post, revision.contentMarkdown);
+
+        // 设置标签关联
+        if (request.tagIds() != null && !request.tagIds().isEmpty()) {
+            for (Long tagId : request.tagIds()) {
+                com.biliwind.blog.model.Tag tag = com.biliwind.blog.model.Tag.findById(tagId);
+                if (tag != null) {
+                    PostTag postTag = new PostTag();
+                    postTag.id = new PostTagId(post.id, tag.id);
+                    postTag.post = post;
+                    postTag.tag = tag;
+                    postTag.persist();
+                }
+            }
+        }
+
         if (post.status == PostStatus.PUBLISHED) {
             post.publishedAt = now;
         }
@@ -242,6 +262,33 @@ public class AdminPostApiController {
             }
         }
 
+        // 更新分类
+        if (request.categoryId() != null) {
+            Category newCategory = Category.findById(request.categoryId());
+            if (newCategory != null && !newCategory.equals(post.category)) {
+                post.category = newCategory;
+                changed = true;
+            }
+        }
+
+        // 更新标签
+        if (request.tagIds() != null) {
+            // 删除现有标签关联
+            PostTag.delete("post.id = ?1", post.id);
+            // 添加新标签关联
+            for (Long tagId : request.tagIds()) {
+                com.biliwind.blog.model.Tag tag = com.biliwind.blog.model.Tag.findById(tagId);
+                if (tag != null) {
+                    PostTag postTag = new PostTag();
+                    postTag.id = new PostTagId(post.id, tag.id);
+                    postTag.post = post;
+                    postTag.tag = tag;
+                    postTag.persist();
+                }
+            }
+            changed = true;
+        }
+
         if (request.title() != null || request.contentMarkdown() != null || request.editorType() != null) {
             Map<String, String> nextTitle = request.title() == null ? post.title : request.title();
             Map<String, String> currentContent = post.currentRevision == null ? Map.of()
@@ -254,25 +301,23 @@ public class AdminPostApiController {
             boolean revisionChanged = !Objects.equals(nextTitle, post.title)
                     || !Objects.equals(nextContent, currentContent)
                     || nextEditorType != currentEditorType;
-            if (!revisionChanged) {
-                throw conflict("内容相同");
+            if (revisionChanged) {
+                User operator = mustFindOperator();
+                PostRevision nextRevision = new PostRevision();
+                nextRevision.post = post;
+                nextRevision.title = nextTitle;
+                nextRevision.contentMarkdown = nextContent;
+                nextRevision.editorType = nextEditorType;
+                nextRevision.revisionNumber = nextRevisionNumber(post.id);
+                nextRevision.createdBy = operator;
+                nextRevision.createdAt = OffsetDateTime.now();
+                nextRevision.persist();
+
+                post.currentRevision = nextRevision;
+                mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
+                post.title = nextRevision.title;
+                changed = true;
             }
-
-            User operator = mustFindOperator();
-            PostRevision nextRevision = new PostRevision();
-            nextRevision.post = post;
-            nextRevision.title = nextTitle;
-            nextRevision.contentMarkdown = nextContent;
-            nextRevision.editorType = nextEditorType;
-            nextRevision.revisionNumber = nextRevisionNumber(post.id);
-            nextRevision.createdBy = operator;
-            nextRevision.createdAt = OffsetDateTime.now();
-            nextRevision.persist();
-
-            post.currentRevision = nextRevision;
-            mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
-            post.title = nextRevision.title;
-            changed = true;
         }
 
         if (!changed) {
@@ -373,6 +418,11 @@ public class AdminPostApiController {
     }
 
     private AdminPostItem toItem(Post post) {
+        // 获取文章的标签ID列表
+        List<Long> tagIds = PostTag.find("post.id = ?1", post.id).stream()
+                .map(pt -> ((PostTag) pt).tag.id)
+                .toList();
+
         return new AdminPostItem(
                 post.id,
                 post.slug,
@@ -382,12 +432,19 @@ public class AdminPostApiController {
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 post.version,
                 post.user == null ? null : post.user.id,
+                post.category == null ? null : post.category.id,
+                tagIds,
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt);
     }
 
     private AdminPostDetail toDetail(Post post) {
+        // 获取文章的标签ID列表
+        List<Long> tagIds = PostTag.find("post.id = ?1", post.id).stream()
+                .map(pt -> ((PostTag) pt).tag.id)
+                .toList();
+
         return new AdminPostDetail(
                 post.id,
                 post.slug,
@@ -406,6 +463,8 @@ public class AdminPostApiController {
                 post.currentRevision == null ? 0 : post.currentRevision.revisionNumber,
                 post.version,
                 post.user == null ? null : post.user.id,
+                post.category == null ? null : post.category.id,
+                tagIds,
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt);
