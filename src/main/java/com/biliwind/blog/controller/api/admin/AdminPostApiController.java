@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.MediaManagementService;
@@ -8,8 +9,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -37,6 +36,9 @@ public class AdminPostApiController {
 
     @Inject
     MediaManagementService mediaService;
+
+    @Inject
+    AdminRequestContext adminRequestContext;
 
     @POST
     @Path("/{id}/ai-summary")
@@ -106,13 +108,12 @@ public class AdminPostApiController {
     @Operation(summary = "创建文章草稿")
     @APIResponse(responseCode = "200", description = "创建成功")
     @APIResponse(responseCode = "409", description = "slug 冲突")
-    public AdminPostDetail create(@Valid PostCreateRequest request,
-            @Context ContainerRequestContext requestContext) {
+    public AdminPostDetail create(@Valid PostCreateRequest request) {
         if (Post.count("slug = ?1", request.slug().trim()) > 0) {
             throw conflict("slug 已存在");
         }
 
-        User operator = mustFindOperator(requestContext);
+        User operator = mustFindOperator();
         OffsetDateTime now = OffsetDateTime.now();
 
         Post post = new Post();
@@ -159,8 +160,7 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "404", description = "文章不存在")
     @APIResponse(responseCode = "409", description = "版本冲突或 slug 冲突")
     public AdminPostDetail update(@PathParam("id") Long id,
-            @Valid PostUpdateRequest request,
-            @Context ContainerRequestContext requestContext) {
+                                  @Valid PostUpdateRequest request) {
         Post post = mustFindPost(id);
         if (!post.version.equals(request.version())) {
             throw conflict("版本冲突，请刷新后重试");
@@ -258,7 +258,7 @@ public class AdminPostApiController {
                 throw conflict("内容相同");
             }
 
-            User operator = mustFindOperator(requestContext);
+            User operator = mustFindOperator();
             PostRevision nextRevision = new PostRevision();
             nextRevision.post = post;
             nextRevision.title = nextTitle;
@@ -325,12 +325,12 @@ public class AdminPostApiController {
         return post;
     }
 
-    private User mustFindOperator(ContainerRequestContext requestContext) {
-        Object value = requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USER_ID_KEY);
-        if (!(value instanceof Number number)) {
+    private User mustFindOperator() {
+        Long userId = adminRequestContext.getUserId();
+        if (userId == null) {
             throw new WebApplicationException("未登录", Response.Status.UNAUTHORIZED);
         }
-        User user = User.find("id = ?1 and status = 1 and deletedAt is null", number.longValue()).firstResult();
+        User user = User.find("id = ?1 and status = 1 and deletedAt is null", userId).firstResult();
         if (user == null) {
             throw new WebApplicationException("用户不存在或已禁用", Response.Status.UNAUTHORIZED);
         }

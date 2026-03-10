@@ -4,6 +4,7 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.model.Tag;
 import io.quarkus.panache.common.Page;
@@ -11,13 +12,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -109,7 +104,7 @@ public class TagController {
 
         var query = Post.find("status = ?1 and deletedAt is null and id in "
                 + "(select pt.post.id from PostTag pt where pt.tag.id = ?2) "
-                + "order by publishedAt desc nulls last, createdAt desc", (short) 1, entity.id);
+                + "order by publishedAt desc nulls last, createdAt desc", PostStatus.PUBLISHED, entity.id);
 
         long totalCount = query.count();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
@@ -140,7 +135,7 @@ public class TagController {
     private TagListItem toTagListItem(Tag tag, String lang) {
         String name = resolveTagName(tag, lang);
         String description = resolveTagDescription(tag, lang);
-        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, (short) 1);
+        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, PostStatus.PUBLISHED);
         return new TagListItem(tag.slug, name, description, postCount, formatDate(tag.createdAt));
     }
 

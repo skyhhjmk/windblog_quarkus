@@ -135,6 +135,24 @@
 <div id="pjax-progress"
      class="fixed top-0 left-0 h-[2px] w-0 z-[9999] bg-[var(--accent)]"></div>
 
+<!-- 确认对话框 -->
+<div id="confirmDialog" class="fixed inset-0 bg-black/50 z-[9998] hidden flex items-center justify-center">
+    <div class="bg-[var(--panel-bg)] border border-[var(--border)] p-6 max-w-sm w-full mx-4">
+        <h3 id="confirmTitle" class="text-lg font-bold mb-4">确认</h3>
+        <p id="confirmMessage" class="text-sm text-gray-300 mb-6">确定要执行此操作吗？</p>
+        <div class="flex gap-3 justify-end">
+            <button id="confirmCancel"
+                    class="px-4 py-2 border border-[var(--border)] hover:bg-[var(--selection)] transition-colors">
+                取消
+            </button>
+            <button id="confirmOk"
+                    class="px-4 py-2 bg-[var(--accent)] text-[var(--bg)] font-bold hover:opacity-90 transition-opacity">
+                确定
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- JS：无需 jQuery（如你有 PJAX 插件再单独引入） -->
 <script src="/assets/js/main.js" defer></script>
 <script src="/assets/js/user.js" defer></script>

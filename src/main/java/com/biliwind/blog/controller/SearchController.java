@@ -3,19 +3,12 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
-import com.biliwind.blog.model.Category;
-import com.biliwind.blog.model.Post;
-import com.biliwind.blog.model.PostTag;
-import com.biliwind.blog.model.Tag;
+import com.biliwind.blog.model.*;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -105,7 +98,7 @@ public class SearchController {
         List<SearchHit> hits = new ArrayList<>();
 
         if ("all".equals(type) || "post".equals(type)) {
-            List<Post> posts = Post.find("status = ?1 and deletedAt is null", (short) 1).list();
+            List<Post> posts = Post.find("status = ?1 and deletedAt is null", PostStatus.PUBLISHED).list();
             posts.stream()
                     .filter(post -> matchesPost(post, lowerKeyword, lang))
                     .map(post -> toPostHit(post, lang))
@@ -170,7 +163,7 @@ public class SearchController {
             description = "Tag archive.";
         }
 
-        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, (short) 1);
+        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, PostStatus.PUBLISHED);
         return new SearchHit(
                 "tag",
                 "Tag",

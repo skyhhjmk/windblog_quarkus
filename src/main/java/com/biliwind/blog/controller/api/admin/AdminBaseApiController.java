@@ -1,14 +1,14 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.User;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -24,17 +24,20 @@ import java.util.Map;
 @Tag(name = "AdminBase")
 public class AdminBaseApiController {
 
+    @Inject
+    AdminRequestContext adminRequestContext;
+
     @GET
     @Path("/ping")
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "后台连通性检查")
     @APIResponse(responseCode = "200", description = "成功")
-    public Map<String, Object> ping(@Context ContainerRequestContext requestContext) {
+    public Map<String, Object> ping() {
         return Map.of(
                 "success", true,
                 "time", OffsetDateTime.now(),
-                "userId", requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USER_ID_KEY),
-                "username", requestContext.getProperty(AdminJwtAuthFilter.REQUEST_USERNAME_KEY)
+                "userId", adminRequestContext.getUserId(),
+                "username", adminRequestContext.getUsername()
         );
     }
 

@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.context.AdminRequestContext;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -26,6 +27,9 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
 
     @Inject
     AdminTokenVerifier tokenVerifier;
+
+    @Inject
+    AdminRequestContext adminRequestContext;
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
@@ -67,6 +71,10 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
             abort(requestContext, Response.Status.FORBIDDEN, "没有管理员权限");
             return;
         }
+        adminRequestContext.setUserId(verified.uid());
+        adminRequestContext.setUsername(verified.username());
+        adminRequestContext.setRoleName(verified.roleName());
+        adminRequestContext.setIsSuperAdmin(verified.isSuperAdmin());
         requestContext.setProperty(REQUEST_USER_ID_KEY, verified.uid());
         requestContext.setProperty(REQUEST_USERNAME_KEY, verified.username());
         requestContext.setProperty(REQUEST_ROLE_NAME_KEY, verified.roleName());

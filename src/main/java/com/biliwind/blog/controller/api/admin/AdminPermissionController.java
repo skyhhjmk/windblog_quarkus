@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.constant.RoleConstant;
+import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.controller.api.admin.dto.AdminPermissionDtos.PermissionRoleItem;
 import com.biliwind.blog.controller.api.admin.dto.AdminPermissionDtos.RoleCreateRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminPermissionDtos.RoleUpdateRequest;
@@ -9,8 +10,6 @@ import com.biliwind.blog.service.UploadRoleService;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
@@ -25,6 +24,9 @@ public class AdminPermissionController {
 
     @Inject
     UploadRoleService uploadRoleService;
+
+    @Inject
+    AdminRequestContext adminRequestContext;
 
     private static UploadRoleService.UploadRoleUpdateRequest toServiceRequest(RoleCreateRequest request) {
         return new UploadRoleService.UploadRoleUpdateRequest(
@@ -57,9 +59,8 @@ public class AdminPermissionController {
     @POST
     @Transactional
     @Operation(summary = "创建角色")
-    public PermissionRoleItem create(RoleCreateRequest request,
-                                     @Context ContainerRequestContext context) {
-        ensureSuperAdmin(context);
+    public PermissionRoleItem create(RoleCreateRequest request) {
+        ensureSuperAdmin();
         String roleName = validateName(request.name());
         return toItem(uploadRoleService.upsert(roleName, toServiceRequest(request)));
     }
@@ -69,9 +70,8 @@ public class AdminPermissionController {
     @Transactional
     @Operation(summary = "更新角色")
     public PermissionRoleItem update(@PathParam("name") String name,
-                                     RoleUpdateRequest request,
-                                     @Context ContainerRequestContext context) {
-        ensureSuperAdmin(context);
+                                     RoleUpdateRequest request) {
+        ensureSuperAdmin();
         return toItem(uploadRoleService.upsert(validateName(name), toServiceRequest(request)));
     }
 
@@ -79,9 +79,8 @@ public class AdminPermissionController {
     @Path("/{name}")
     @Transactional
     @Operation(summary = "删除角色")
-    public void delete(@PathParam("name") String name,
-                       @Context ContainerRequestContext context) {
-        ensureSuperAdmin(context);
+    public void delete(@PathParam("name") String name) {
+        ensureSuperAdmin();
         String roleName = validateName(name);
         if (RoleConstant.DEFAULT_ROLES.contains(roleName)) {
             throw new BadRequestException("默认角色不可删除");
@@ -89,9 +88,8 @@ public class AdminPermissionController {
         uploadRoleService.delete(roleName);
     }
 
-    private void ensureSuperAdmin(ContainerRequestContext context) {
-        Boolean isSuper = (Boolean) context.getProperty(AdminJwtAuthFilter.REQUEST_IS_SUPER_ADMIN_KEY);
-        if (!Boolean.TRUE.equals(isSuper)) {
+    private void ensureSuperAdmin() {
+        if (!adminRequestContext.isSuperAdmin()) {
             throw new ForbiddenException("仅超级管理员可执行此操作");
         }
     }
