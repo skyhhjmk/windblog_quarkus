@@ -34,5 +34,6 @@
     <include file="migration/029-create-link-tags.sql" relativeToChangelogFile="true"/>
     <include file="migration/030-create-link-tag-relations.sql" relativeToChangelogFile="true"/>
     <include file="migration/031-add-link-tag-foreign-keys.sql" relativeToChangelogFile="true"/>
+    <include file="migration/032-add-link-type.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

@@ -41,19 +41,11 @@ ALTER TABLE comments
 ALTER TABLE comments
     ALTER COLUMN updated_at SET NOT NULL;
 
--- changeset biliwind:1773053102587-18
+-- changeset biliwind:1773053102587-20
 ALTER TABLE media
     ADD updated_at TIMESTAMPTZ DEFAULT now();
 
--- changeset biliwind:1773053102587-19
+-- changeset biliwind:1773053102587-21
 ALTER TABLE media
     ALTER COLUMN updated_at SET NOT NULL;
-
--- changeset biliwind:1773053102587-18
-ALTER TABLE tags
-    ADD created_at TIMESTAMPTZ DEFAULT now();
-
--- changeset biliwind:1773053102587-19
-ALTER TABLE tags
-    ALTER COLUMN created_at SET NOT NULL;
 

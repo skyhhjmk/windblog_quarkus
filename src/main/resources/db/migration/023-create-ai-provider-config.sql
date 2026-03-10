@@ -1,4 +1,6 @@
--- 创建 AI 提供商配置表
+-- liquibase formatted sql
+
+-- changeset biliwind:023-create-ai-provider-config
 CREATE TABLE ai_provider_configs
 (
     id         BIGSERIAL PRIMARY KEY,
