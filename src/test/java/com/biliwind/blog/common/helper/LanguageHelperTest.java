@@ -1,6 +1,7 @@
 package com.biliwind.blog.common.helper;
 
 import com.biliwind.blog.common.constant.LanguageConstant;
+import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -9,6 +10,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+@QuarkusTest
 class LanguageHelperTest {
 
     @Test
