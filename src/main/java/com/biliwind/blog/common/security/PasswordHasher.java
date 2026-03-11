@@ -65,7 +65,11 @@ public class PasswordHasher {
     }
 
     public boolean isHashedFormat(String encodedPassword) {
-        return encodedPassword != null && encodedPassword.startsWith(PREFIX + "$");
+        if (encodedPassword == null || !encodedPassword.startsWith(PREFIX + "$")) {
+            return false;
+        }
+        String[] parts = encodedPassword.split("\\$");
+        return parts.length == 4;
     }
 
     private byte[] pbkdf2(String password, byte[] salt, int rounds, int bits) {

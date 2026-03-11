@@ -24,7 +24,10 @@ public class PostAccessService {
     }
 
     public boolean verifyPassword(Post post, String submittedPassword) {
-        if (submittedPassword == null) {
+        if (submittedPassword == null && post.password == null) {
+            return true;
+        }
+        if (submittedPassword == null || post.password == null) {
             return false;
         }
         return submittedPassword.equals(post.password);

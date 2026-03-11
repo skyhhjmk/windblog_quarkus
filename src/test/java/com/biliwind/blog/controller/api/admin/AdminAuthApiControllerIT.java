@@ -17,7 +17,7 @@ class AdminAuthApiControllerIT {
     void shouldLoginWithValidCredentials() {
         String loginRequest = """
                 {
-                    "username": "admin",
+                    "account": "admin",
                     "password": "admin"
                 }
                 """;
@@ -36,7 +36,7 @@ class AdminAuthApiControllerIT {
     void shouldRejectInvalidCredentials() {
         String loginRequest = """
                 {
-                    "username": "admin",
+                    "account": "admin",
                     "password": "wrongpassword"
                 }
                 """;
