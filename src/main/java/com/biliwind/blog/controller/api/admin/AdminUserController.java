@@ -7,6 +7,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.UserUpdateRequest;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.UploadRoleService;
+import com.biliwind.blog.service.WalletService;
 import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -31,6 +32,9 @@ public class AdminUserController {
 
     @Inject
     AdminRequestContext adminRequestContext;
+
+    @Inject
+    WalletService walletService;
 
     @GET
     @Operation(summary = "用户列表")
@@ -69,6 +73,15 @@ public class AdminUserController {
         if (req.email() != null && !req.email().isBlank()) {
             user.email = req.email().trim();
         }
+        if (req.avatar() != null) {
+            user.avatar = req.avatar().trim();
+        }
+        if (req.nickname() != null) {
+            user.nickname = req.nickname().trim();
+        }
+        if (req.phone() != null) {
+            user.phone = req.phone().trim();
+        }
         if (req.status() != null) {
             user.status = req.status();
         }
@@ -92,15 +105,19 @@ public class AdminUserController {
     }
 
     private AdminUserItem toItem(User user) {
-        String avatar = "https://ui-avatars.com/api/?name=" + user.username;
+        String avatar = user.avatar != null ? user.avatar : "https://ui-avatars.com/api/?name=" + user.username;
+        Long pointsBalance = walletService.getPointsBalance(user.id);
         return new AdminUserItem(
                 user.id,
                 user.username,
                 user.email,
                 avatar,
+                user.nickname,
+                user.phone,
                 user.roleName,
                 user.status,
                 user.createdAt,
-                user.updatedAt);
+                user.updatedAt,
+                pointsBalance);
     }
 }

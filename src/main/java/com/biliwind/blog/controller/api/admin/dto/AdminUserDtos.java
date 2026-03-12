@@ -9,15 +9,21 @@ public class AdminUserDtos {
             String username,
             String email,
             String avatar,
+            String nickname,
+            String phone,
             String roleName,
             short status,
             OffsetDateTime createdAt,
-            OffsetDateTime updatedAt) {
+            OffsetDateTime updatedAt,
+            Long pointsBalance) {
     }
 
     public record UserUpdateRequest(
             String email,
             String password,
+            String avatar,
+            String nickname,
+            String phone,
             Short status,
             String roleName) {
     }
