@@ -12,7 +12,8 @@ public class AdminCategoryDtos {
             Map<String, String> name,
             Map<String, String> description,
             String path,
-            OffsetDateTime createdAt) {
+            OffsetDateTime createdAt,
+            Integer postCount) {
     }
 
     public record CategoryCreateRequest(

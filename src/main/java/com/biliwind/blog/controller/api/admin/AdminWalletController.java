@@ -96,6 +96,7 @@ public class AdminWalletController {
 
     /**
      * 管理员调整积分
+     * @param request AdjustPointsRequest
      */
     @POST
     @Path("/adjust")

@@ -67,7 +67,8 @@ public class AdminPostApiController {
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("pageSize") @DefaultValue("10") int pageSize,
             @QueryParam("status") Short status,
-            @QueryParam("keyword") String keyword) {
+            @QueryParam("keyword") String keyword,
+            @QueryParam("categoryId") Long categoryId) {
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(1, Math.min(pageSize, 100));
 
@@ -81,6 +82,10 @@ public class AdminPostApiController {
         if (keyword != null && !keyword.isBlank()) {
             where.append(" and lower(slug) like :keyword");
             parameters.put("keyword", "%" + keyword.trim().toLowerCase() + "%");
+        }
+        if (categoryId != null) {
+            where.append(" and category.id = :categoryId");
+            parameters.put("categoryId", categoryId);
         }
 
         var query = Post.find(where + " order by updatedAt desc", parameters);

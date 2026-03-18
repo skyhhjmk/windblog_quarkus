@@ -3,12 +3,9 @@ package com.biliwind.blog.model;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
-import java.util.Map;
 
 /**
  * 用户实体，对应 users
@@ -18,7 +15,7 @@ import java.util.Map;
 public class User extends PanacheEntityBase {
 
     /**
-     * 主键 ID
+     * 主键ID
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,7 +33,7 @@ public class User extends PanacheEntityBase {
     @Column(nullable = false, length = 255)
     public String password;
 
-    /** 用户状态：0 禁用，1 正常 */
+    /** 用户状态：0禁用，1正常 */
     @Column(nullable = false)
     public short status;
 
@@ -45,37 +42,6 @@ public class User extends PanacheEntityBase {
      */
     @Column(name = "role_name", length = 64)
     public String roleName;
-
-    /**
-     * 用户头像 URL
-     */
-    @Column(length = 512)
-    public String avatar;
-
-    /**
-     * 用户昵称
-     */
-    @Column(length = 100)
-    public String nickname;
-
-    /**
-     * 手机号（可选，唯一）
-     */
-    @Column(length = 20)
-    public String phone;
-
-    /**
-     * 扩展信息（JSONB，存储个性化设置、社交账号等低频字段）
-     */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "extra_info", columnDefinition = "jsonb")
-    public Map<String, Object> extraInfo;
-
-    /**
-     * 关联的钱包 ID
-     */
-    @Column(name = "wallet_id")
-    public Long walletId;
 
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
