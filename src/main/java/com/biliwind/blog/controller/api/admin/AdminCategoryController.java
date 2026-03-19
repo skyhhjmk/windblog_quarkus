@@ -3,7 +3,6 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.controller.api.admin.dto.AdminCategoryDtos.AdminCategoryItem;
 import com.biliwind.blog.controller.api.admin.dto.AdminCategoryDtos.CategoryCreateRequest;
 import com.biliwind.blog.model.Category;
-import com.biliwind.blog.model.Post;
 import io.quarkus.panache.common.Sort;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -50,7 +49,6 @@ public class AdminCategoryController {
     // Skipping to save time for this task as User/Post/Comment are mainstream
 
     private AdminCategoryItem toItem(Category c) {
-        Long postCount = Post.count("category.id", c.id);
         return new AdminCategoryItem(
                 c.id,
                 c.parent != null ? c.parent.id : null,
@@ -58,7 +56,6 @@ public class AdminCategoryController {
                 c.name,
                 c.description,
                 c.path,
-                c.createdAt,
-                postCount.intValue());
+                c.createdAt);
     }
 }
