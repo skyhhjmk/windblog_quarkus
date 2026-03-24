@@ -1,3 +1,6 @@
 [submodule "admin-flutter"]
 	path = admin-flutter
 	url = https://github.com/skyhhjmk/windblog_admin_flutter.git
+[submodule "mini-web-admin"]
+	path = mini-web-admin
+	url = https://github.com/skyhhjmk/mini-web-admin.git
