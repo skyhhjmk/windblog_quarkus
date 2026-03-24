@@ -132,13 +132,6 @@ public class PostController {
                 .resolveLocalizedValue(revision.contentMarkdown, lang);
     }
 
-    /**
-     * 获取文章体
-     *
-     * @param renderType 对应的前端渲染类型
-     * @param content 文章内容
-     * @return PostBodyView
-     */
     private PostBodyView resolvePostBody(PostRenderType renderType,
                                          String content) {
 
