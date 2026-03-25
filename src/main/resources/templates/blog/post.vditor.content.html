@@ -7,7 +7,8 @@
             <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
                 <h3 class="font-bold mb-2">文章信息</h3>
                 <p class="text-sm">Slug: {postSlug}</p>
-                <p class="text-sm">语言: {language ?: 'zh-CN'}</p>
+                <p class="text-sm">语言：{language ?: 'zh-CN'}</p>
+                <p class="text-sm">渲染类型：Vditor</p>
             </section>
         </div>
     </div>
@@ -20,23 +21,19 @@
 
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
             {#if postBody && !postBody.isEmpty}
-                {#if postRenderType == 'VDITOR'}
-                    <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
-                    <script src="/webjars/vditor/dist/index.min.js"></script>
-                    <div id="vditor-preview" class="vditor-reset"></div>
-                    <script>
-                        document.addEventListener('DOMContentLoaded', function() {
-                            const markdownContent = "{postBodyJson}";
-                            Vditor.preview(document.getElementById('vditor-preview'), markdownContent, {
-                                mode: 'both'
-                            });
+                <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
+                <script src="/webjars/vditor/dist/index.min.js"></script>
+                <div id="vditor-preview" class="vditor-reset"></div>
+                <script>
+                    {#if postBodyJson && !postBodyJson.isEmpty}
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const markdownContent = "{postBodyJson}";
+                        Vditor.preview(document.getElementById('vditor-preview'), markdownContent, {
+                            mode: 'both'
                         });
-                    </script>
-                {#else if postBodyHtml}
-                    <div class="prose max-w-none break-words">{postBody.raw}</div>
-                {#else}
-                    <pre class="whitespace-pre-wrap break-words">{postBody}</pre>
-                {/if}
+                    });
+                    {/if}
+                </script>
             {#else}
                 <p>暂无该语言内容，且默认语言内容也不可用。</p>
             {/if}

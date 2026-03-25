@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>文章管理 - WindBlog 管理后台</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vditor CSS -->
+    <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
 </head>
 <body class="bg-gray-100">
     <div class="flex h-screen overflow-hidden">
@@ -231,9 +233,8 @@
                     <!-- 内容 -->
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">内容（Markdown） <span class="text-red-500">*</span></label>
-                        <textarea id="postContent" required rows="15"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-                            placeholder="# 文章标题&#10;&#10;在这里编写 Markdown 内容..."></textarea>
+                        <div id="vditor-container" class="vditor-container"></div>
+                        <input type="hidden" id="postContent" required>
                     </div>
                     
                     <!-- 状态和可见性 -->
@@ -310,12 +311,17 @@
     </div>
     
     <script src="assets/js/admin.js"></script>
+    <!-- Vditor JS -->
+    <script src="/webjars/vditor/dist/index.min.js"></script>
+    <!-- Vditor Editor Module -->
+    <script src="assets/js/vditor-editor.js"></script>
     <script>
         let currentPage = 1;
         let totalPages = 1;
         let categories = [];
         let tags = [];
         let selectedTags = new Set();
+        let vditorInstance = null; // Vditor 编辑器实例
         
         document.addEventListener('DOMContentLoaded', async function() {
             const isAuth = await AdminUtils.checkAuth();
@@ -529,6 +535,10 @@
             selectedTags.clear();
             renderTagsSelector();
             document.getElementById('publishBtn').style.display = 'flex';
+            
+            // 初始化 Vditor 编辑器
+            initVditorEditor('');
+            
             Modal.open('postModal');
         }
         
@@ -543,7 +553,7 @@
                 document.getElementById('postSlug').value = post.slug;
                 document.getElementById('postCategory').value = post.categoryId || '';
                 document.getElementById('postSummary').value = post.summary && post.summary['zh-CN'] ? post.summary['zh-CN'] : '';
-                document.getElementById('postContent').value = post.contentMarkdown && post.contentMarkdown['zh-CN'] ? post.contentMarkdown['zh-CN'] : '';
+                const content = post.contentMarkdown && post.contentMarkdown['zh-CN'] ? post.contentMarkdown['zh-CN'] : '';
                 document.getElementById('postStatus').value = post.status;
                 document.getElementById('postVisibility').value = post.visibility || 0;
                 document.getElementById('postSeoTitle').value = post.seoTitle || '';
@@ -562,6 +572,9 @@
                     document.getElementById('publishBtn').style.display = 'flex';
                 }
                 
+                // 初始化 Vditor 编辑器并加载内容
+                initVditorEditor(content);
+                
                 Modal.open('postModal');
             } catch (error) {
                 console.error('加载文章详情失败:', error);
@@ -570,60 +583,109 @@
         }
         
         function closePostModal() {
+            // 销毁 Vditor 编辑器
+            if (vditorInstance) {
+                VditorEditor.destroy();
+                vditorInstance = null;
+            }
             Modal.close('postModal');
         }
         
-        async function savePost() {
-            const postId = document.getElementById('postId').value;
-            const title = document.getElementById('postTitle').value.trim();
-            const slug = document.getElementById('postSlug').value.trim();
-            const content = document.getElementById('postContent').value.trim();
+        /**
+         * 初始化 Vditor 编辑器
+         * @param {string} content - 初始内容
+         */
+        function initVditorEditor(content = '') {
+            // 如果已有实例，先销毁
+            if (vditorInstance) {
+                VditorEditor.destroy();
+            }
             
-            if (!title || !slug || !content) {
-                AdminUtils.showToast('请填写标题、别名和内容', 'warning');
+            // 初始化编辑器
+            vditorInstance = VditorEditor.init('vditor-container', content);
+        }
+        
+        async function savePost(publish = false) {
+            const form = document.getElementById('postForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
                 return;
             }
             
-            const data = {
-                slug: slug,
-                title: { 'zh-CN': title },
-                contentMarkdown: { 'zh-CN': content },
-                summary: document.getElementById('postSummary').value.trim() ? { 'zh-CN': document.getElementById('postSummary').value.trim() } : undefined,
-                status: parseInt(document.getElementById('postStatus').value),
-                visibility: parseInt(document.getElementById('postVisibility').value),
-                categoryId: document.getElementById('postCategory').value ? parseInt(document.getElementById('postCategory').value) : null,
-                tagIds: Array.from(selectedTags),
-                seoTitle: document.getElementById('postSeoTitle').value.trim() || undefined,
-                seoKeywords: document.getElementById('postSeoKeywords').value.trim() || undefined,
-                seoDescription: document.getElementById('postSeoDescription').value.trim() || undefined
-            };
+            const id = document.getElementById('postId').value;
+            const version = parseInt(document.getElementById('postVersion').value) || 0;
+            
+            const title = document.getElementById('postTitle').value.trim();
+            const slug = document.getElementById('postSlug').value.trim();
+            const categoryId = document.getElementById('postCategory').value ? parseInt(document.getElementById('postCategory').value) : null;
+            const summary = document.getElementById('postSummary').value.trim();
+            // 从 Vditor 编辑器获取内容
+            const contentMarkdown = VditorEditor.getValue().trim();
+            const status = publish ? 1 : parseInt(document.getElementById('postStatus').value);
+            const visibility = parseInt(document.getElementById('postVisibility').value);
+            const seoTitle = document.getElementById('postSeoTitle').value.trim();
+            const seoKeywords = document.getElementById('postSeoKeywords').value.trim();
+            const seoDescription = document.getElementById('postSeoDescription').value.trim();
+            
+            if (!contentMarkdown) {
+                AdminUtils.showToast('请输入文章内容', 'warning');
+                return;
+            }
             
             try {
-                if (postId) {
-                    data.version = parseInt(document.getElementById('postVersion').value);
-                    await AdminUtils.put(`/posts/${postId}`, data);
-                    AdminUtils.showToast('文章更新成功', 'success');
+                const postData = {
+                    title: { 'zh-CN': title },
+                    slug,
+                    categoryId,
+                    tagIds: Array.from(selectedTags),
+                    summary: { 'zh-CN': summary },
+                    contentMarkdown: { 'zh-CN': contentMarkdown },
+                    status,
+                    visibility,
+                    seoTitle,
+                    seoKeywords,
+                    seoDescription
+                };
+                
+                if (id) {
+                    const newVersion = await AdminUtils.get(`/posts/${id}/version`);
+                    if (newVersion.version > version) {
+                        const confirmed = await Modal.confirm('文章已被其他人修改，确定要覆盖吗？');
+                        if (!confirmed) return;
+                    }
+                    await AdminUtils.put(`/posts/${id}`, postData);
                 } else {
-                    await AdminUtils.post('/posts', data);
-                    AdminUtils.showToast('文章创建成功', 'success');
+                    await AdminUtils.post('/posts', postData);
                 }
                 
+                AdminUtils.showToast(`文章${publish ? '发布' : '保存'}成功`, 'success');
                 closePostModal();
                 await loadPosts();
             } catch (error) {
                 console.error('保存文章失败:', error);
-                AdminUtils.showToast(error.message || '保存文章失败', 'error');
+                AdminUtils.showToast(`保存文章失败：${error.message}`, 'error');
             }
         }
         
         async function publishPost(id) {
+            // 先保存文章（如果未保存）
             if (!id) {
                 const postId = document.getElementById('postId').value;
-                if (!postId) {
-                    AdminUtils.showToast('请先保存文章', 'warning');
-                    return;
+                if (postId) {
+                    // 已有草稿，直接发布
+                    id = parseInt(postId);
+                } else {
+                    // 先保存为草稿再发布
+                    await savePost(false);
+                    // 等待列表刷新后获取最新的文章 ID
+                    const posts = await AdminUtils.get('/posts?page=1&pageSize=1');
+                    if (posts.posts && posts.posts.length > 0) {
+                        id = posts.posts[0].id;
+                    } else {
+                        AdminUtils.showToast('保存文章失败', 'error');
+                        return;
+                    }
                 }
-                id = parseInt(postId);
             }
             
             try {

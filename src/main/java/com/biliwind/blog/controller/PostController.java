@@ -88,7 +88,22 @@ public class PostController {
                 .data("postSlug", slug)
                 .data("postTitle", localizedTitle == null ? slug : localizedTitle)
                 .data("postBody", postBody.body())
-                .data("postBodyHtml", postBody.html());
+                .data("postBodyHtml", postBody.html())
+                .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)
+                .data("postBodyJson", escapeJavaScript(postBody.body()));
+    }
+
+    private String escapeJavaScript(String input) {
+        if (input == null || input.isEmpty()) {
+            return "";
+        }
+        return input
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                .replace("'", "\\'");
     }
 
     private void resolveLanguage(String langCode) {
@@ -136,7 +151,7 @@ public class PostController {
                                          String content) {
 
         if (content == null || content.isBlank()) {
-            return new PostBodyView("", false);
+            return new PostBodyView("", false, null);
         }
 
         PostRenderType effective =
@@ -145,12 +160,14 @@ public class PostController {
                         : renderType;
 
         return switch (effective) {
-            case MARKDOWN, VDITOR, FLUTTER_MARKDOWN_PLUS ->
-                    new PostBodyView(MarkdownHelper.toHtml(content), true);
+            case MARKDOWN, FLUTTER_MARKDOWN_PLUS ->
+                    new PostBodyView(MarkdownHelper.toHtml(content), true, effective);
+            case VDITOR ->
+                    new PostBodyView(content, false, effective);
             case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL ->
-                    new PostBodyView(content, true);
+                    new PostBodyView(content, true, effective);
         };
     }
 
-    private record PostBodyView(String body, boolean html) {}
+    private record PostBodyView(String body, boolean html, PostRenderType renderType) {}
 }
