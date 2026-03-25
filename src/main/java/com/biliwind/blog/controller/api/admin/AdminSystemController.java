@@ -1,10 +1,11 @@
 package com.biliwind.blog.controller.api.admin;
 
-import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
+import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -14,7 +15,8 @@ import java.util.Map;
 
 @Path("/api/admin/system")
 @Produces(MediaType.APPLICATION_JSON)
-@RolesAllowed("admin")
+@Tag(name = "AdminSystem")
+@SecurityRequirement(name = "adminBearerAuth")
 public class AdminSystemController {
 
     @GET

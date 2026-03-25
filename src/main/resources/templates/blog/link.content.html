@@ -26,13 +26,16 @@
             <div class="mt-4 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm">
                 <a href="/link" class="text-[var(--accent)] hover:underline">[Links]</a>
                 <div class="flex items-center gap-2">
-                    <label for="linkSortSelect" class="opacity-80">Sort:</label>
-                    <select id="linkSortSelect" class="bg-[var(--panel-bg)] border border-[var(--border)] px-2 py-1 outline-none">
-                        <option value="default">Default</option>
-                        <option value="protocol">Protocol</option>
-                        <option value="score">Score</option>
+                    <label for="linkGrepSelect" class="opacity-80">Grep:</label>
+                    <select id="linkGrepSelect" class="bg-[var(--panel-bg)] border border-[var(--border)] px-2 py-1 outline-none">
+                        <option value="friend_links">Friend Links</option>
+                        <option value="other_links">Other Links</option>
+                        <option value="All">All</option>
                     </select>
                 </div>
+                <button id="linkFilterApplyBtn" class="bg-[var(--accent)] text-white px-4 py-1 rounded hover:opacity-90">
+                    Apply
+                </button>
             </div>
         </div>
 
@@ -41,8 +44,7 @@
                 {#for link in links}
                     <div class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] flex flex-col"
                          data-index="{link.id ?: 0}"
-                         data-protocol="{link.protocol ?: ''}"
-                         data-score="{link.score ?: 0}">
+                         data-type="{link.type ?: ''}">
                         <div class="flex items-start mb-4">
                             <div class="mr-4 flex-shrink-0">
                                 {#if link.icon}
@@ -59,9 +61,6 @@
                                 </h2>
                                 <div class="text-xs opacity-70 mt-1">
                                     {link.createdAt}
-                                    {#if link.protocol}
-                                        <span class="ml-2 text-purple-400">[{link.protocol}]</span>
-                                    {/if}
                                 </div>
                             </div>
                         </div>

@@ -2,35 +2,22 @@
     'use strict';
 
     function initLinkList() {
-        const sortSelect = document.getElementById('linkSortSelect');
-        const grid = document.querySelector('.link-grid');
-        if (!sortSelect || !grid) return;
+        const grepSelect = document.getElementById('linkGrepSelect');
+        const applyBtn = document.getElementById('linkFilterApplyBtn');
+        if (!grepSelect || !applyBtn) return;
 
-        const protocolRank = { CAT5: 5, CAT4: 4, CAT3: 3, CAT2: 2, CAT1: 1 };
-
-        const getProtocolWeight = (el) => {
-            const value = (el.getAttribute('data-protocol') || '').toUpperCase();
-            const key = value.startsWith('CAT') ? value.slice(0, 4) : value;
-            return protocolRank[key] || 0;
-        };
-
-        const getScore = (el) => Number.parseInt(el.getAttribute('data-score') || '0', 10) || 0;
-        const getIndex = (el) => Number.parseInt(el.getAttribute('data-index') || '0', 10) || 0;
-
-        sortSelect.onchange = function () {
-            const mode = this.value;
-            const items = Array.from(grid.children);
-            const sorted = items.slice();
-
-            if (mode === 'protocol') {
-                sorted.sort((a, b) => getProtocolWeight(b) - getProtocolWeight(a));
-            } else if (mode === 'score') {
-                sorted.sort((a, b) => getScore(b) - getScore(a));
-            } else {
-                sorted.sort((a, b) => getIndex(a) - getIndex(b));
+        applyBtn.onclick = function () {
+            const grepMode = grepSelect.value;
+            const params = new URLSearchParams();
+            if (grepMode && grepMode !== 'All') {
+                params.set('type', grepMode);
             }
-
-            sorted.forEach((el) => grid.appendChild(el));
+            const newUrl = params.toString() ? `/link?${params.toString()}` : '/link';
+            if (window.pjax && window.pjax.loadUrl) {
+                window.pjax.loadUrl(newUrl);
+            } else {
+                window.location.href = newUrl;
+            }
         };
     }
 

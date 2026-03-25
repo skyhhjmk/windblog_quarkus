@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WindBlog 管理后台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen overflow-hidden">
+        <!-- 侧边栏 -->
+        <aside class="w-64 bg-gray-800 text-white flex-shrink-0">
+            <div class="p-4">
+                <h1 class="text-2xl font-bold">WindBlog</h1>
+                <p class="text-gray-400 text-sm mt-1">管理后台</p>
+            </div>
+            
+            <nav class="mt-6">
+                <a href="dashboard.html" id="dashboard-nav" class="nav-item flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white transition">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    概览
+                </a>
+                
+                <a href="posts.html" id="posts-nav" class="nav-item flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white transition">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path>
+                    </svg>
+                    文章管理
+                </a>
+                
+                <a href="categories.html" id="categories-nav" class="nav-item flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white transition">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                    </svg>
+                    分类管理
+                </a>
+                
+                <a href="tags.html" id="tags-nav" class="nav-item flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white transition">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                    </svg>
+                    标签管理
+                </a>
+                
+                <a href="users.html" id="users-nav" class="nav-item flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white transition">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    用户管理
+                </a>
+                
+                <a href="media.html" id="media-nav" class="nav-item flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white transition">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    媒体库
+                </a>
+            </nav>
+        </aside>
+        
+        <!-- 主内容区 -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- 顶部栏 -->
+            <header class="bg-white shadow-sm">
+                <div class="px-6 py-4 flex justify-between items-center">
+                    <h2 id="pageTitle" class="text-xl font-semibold text-gray-800">概览</h2>
+                    
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-3">
+                            <div id="userAvatar" class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
+                            </div>
+                            <span id="userName" class="text-gray-700"></span>
+                        </div>
+                        
+                        <button id="logoutBtn" class="text-gray-600 hover:text-red-600 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- 内容区域 -->
+            <main class="flex-1 overflow-y-auto p-6">
+                <div id="content">
+                    <!-- 动态内容将在这里加载 -->
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script src="assets/js/admin.js"></script>
+    <script>
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', async function() {
+            // 验证登录状态
+            const isAuth = await AdminUtils.checkAuth();
+            if (!isAuth) return;
+            
+            // 加载用户信息
+            try {
+                const user = await AdminUtils.get('/auth/me');
+                if (user.user) {
+                    document.getElementById('userName').textContent = user.user.username;
+                    const firstLetter = user.user.username.charAt(0).toUpperCase();
+                    document.getElementById('userAvatar').textContent = firstLetter;
+                }
+            } catch (error) {
+                console.error('加载用户信息失败:', error);
+            }
+            
+            // 设置当前导航项
+            const currentPage = window.location.pathname.split('/').pop().replace('.html', '') || 'dashboard';
+            PageNavigator.setActiveNav(currentPage);
+            
+            // 设置页面标题
+            const titles = {
+                'dashboard': '概览',
+                'posts': '文章管理',
+                'categories': '分类管理',
+                'tags': '标签管理',
+                'users': '用户管理',
+                'media': '媒体库'
+            };
+            document.getElementById('pageTitle').textContent = titles[currentPage] || '概览';
+            
+            // 登出功能
+            document.getElementById('logoutBtn').addEventListener('click', async function() {
+                const confirmed = await Modal.confirm('确定要退出登录吗？');
+                if (confirmed) {
+                    await AdminUtils.logout();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
