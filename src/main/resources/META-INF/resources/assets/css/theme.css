@@ -102,3 +102,80 @@ a:hover {
 input, textarea, select, button {
     font-family: inherit;
 }
+
+.comment-shell {
+    position: relative;
+    background: var(--panel-bg);
+    box-shadow: inset 0 0 0 1px rgba(97, 175, 239, 0.08);
+}
+
+.comment-item {
+    position: relative;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 1rem;
+}
+
+.comment-item::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-left: 2px solid rgba(97, 175, 239, 0.55);
+    pointer-events: none;
+}
+
+.comment-meta {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.comment-children {
+    margin-top: 1rem;
+    margin-left: 1rem;
+    padding-left: 1rem;
+    border-left: 1px dashed var(--border);
+}
+
+.comment-body {
+    word-break: break-word;
+}
+
+.comment-body p:first-child {
+    margin-top: 0;
+}
+
+.comment-body p:last-child {
+    margin-bottom: 0;
+}
+
+.comment-empty {
+    border: 1px dashed var(--border);
+    padding: 1rem;
+    color: rgba(171, 178, 191, 0.8);
+    background: var(--bg);
+}
+
+.comment-feedback-success {
+    border-color: rgba(152, 195, 121, 0.6);
+    color: var(--success);
+}
+
+.comment-feedback-error {
+    border-color: rgba(224, 108, 117, 0.6);
+    color: var(--error);
+}
+
+@media (max-width: 768px) {
+    .comment-children {
+        margin-left: 0.5rem;
+        padding-left: 0.75rem;
+    }
+
+    .comment-meta {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}

@@ -83,5 +83,67 @@
                 <p>暂无该语言内容，且默认语言内容也不可用。</p>
             {/if}
         </section>
+
+        <section
+                id="comment-section"
+                class="comment-shell border border-[var(--border)] p-4 bg-[var(--panel-bg)]"
+                data-post-slug="{postSlug}">
+            <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold">Comments</h2>
+                    <p class="text-sm opacity-80">
+                        Supports basic Markdown. Links, images, and unsafe HTML are stripped.
+                    </p>
+                </div>
+                <div id="comment-login-hint" class="text-sm opacity-80">
+                    Checking login status...
+                </div>
+            </div>
+
+            <div id="comment-feedback" class="hidden mt-4 rounded-sm border px-3 py-2 text-sm"></div>
+
+            <form id="comment-form" class="mt-4 space-y-3">
+                <div id="comment-replying" class="hidden rounded-sm border border-[var(--accent)]/50 bg-[var(--bg)] px-3 py-2 text-sm">
+                    Replying to <span id="comment-replying-user" class="font-bold"></span>
+                    <button
+                            type="button"
+                            id="comment-cancel-reply"
+                            class="ml-3 text-[var(--warning)] hover:underline">
+                        Cancel
+                    </button>
+                </div>
+
+                <input type="hidden" id="comment-parent-id" name="parentId" value="">
+
+                <label class="block text-sm font-bold" for="comment-content">Comment</label>
+                <textarea
+                        id="comment-content"
+                        name="content"
+                        rows="6"
+                        maxlength="4000"
+                        placeholder="Write a comment with basic Markdown..."
+                        class="w-full resize-y bg-[var(--bg)] border border-[var(--border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"></textarea>
+
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <p class="text-xs opacity-70">
+                        Allowed: paragraphs, lists, blockquotes, bold, italic, code. Links and images are not rendered.
+                    </p>
+                    <button
+                            type="submit"
+                            id="comment-submit"
+                            class="px-4 py-2 border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--selection)] transition-colors">
+                        Submit Comment
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold">Thread</h3>
+                    <span id="comment-count" class="text-sm opacity-80">0 comments</span>
+                </div>
+                <div id="comment-list" class="mt-4 space-y-4"></div>
+            </div>
+        </section>
     </article>
 </div>
