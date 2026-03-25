@@ -644,15 +644,11 @@
                     visibility,
                     seoTitle,
                     seoKeywords,
-                    seoDescription
+                    seoDescription,
+                    version: version
                 };
                 
                 if (id) {
-                    const newVersion = await AdminUtils.get(`/posts/${id}/version`);
-                    if (newVersion.version > version) {
-                        const confirmed = await Modal.confirm('文章已被其他人修改，确定要覆盖吗？');
-                        if (!confirmed) return;
-                    }
                     await AdminUtils.put(`/posts/${id}`, postData);
                 } else {
                     await AdminUtils.post('/posts', postData);
