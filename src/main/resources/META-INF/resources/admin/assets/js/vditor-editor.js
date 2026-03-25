@@ -26,7 +26,42 @@ const VditorEditor = {
             value: initialValue,
             
             // 使用 WebJars 本地资源，避免从 CDN 加载
+            // 所有资源（CSS、JS、图标、数学公式等）都从本地加载
             cdn: '/webjars/vditor',
+            
+            // 指定各个依赖库的 CDN 路径（使用 WebJars）
+            // 这样可以确保所有外部资源都使用本地版本
+            cdnData: {
+                math: {
+                    mathjax: '/webjars/vditor/dist/js/mathjax/tex-mml-chtml.js',
+                    katex: '/webjars/vditor/dist/js/katex/katex.min.js'
+                },
+                mermaid: '/webjars/vditor/dist/js/mermaid/mermaid.min.js',
+                markmap: '/webjars/vditor/dist/js/markmap/index.min.js',
+                plantuml: '/webjars/vditor/dist/js/plantuml/plantuml-encoder.min.js',
+                abcjs: '/webjars/vditor/dist/js/abcjs/abcjs_basic.min.js',
+                render: '/webjars/vditor/dist/js/lute/lute.min.js'
+            },
+            
+            // 数学公式配置（使用 KaTeX）
+            math: {
+                engine: 'KaTeX',
+                inlineDigit: false,
+                macros: {}
+            },
+            
+            // 图表配置
+            chart: {
+                enable: true
+            },
+            
+            // 语音配置
+            speech: {
+                enable: {
+                    speak: false,
+                    recognize: false
+                }
+            },
             
             // 工具栏配置
             toolbar: [

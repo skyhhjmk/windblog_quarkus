@@ -22,12 +22,54 @@
             {#if postBody && !postBody.isEmpty}
                 {#if postRenderType == 'VDITOR'}
                     <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
+                    <style>
+                        .vditor-reset {
+                            color: #e6e6e6 !important;
+                        }
+                        .vditor-reset h1,
+                        .vditor-reset h2,
+                        .vditor-reset h3,
+                        .vditor-reset h4,
+                        .vditor-reset h5,
+                        .vditor-reset h6 {
+                            color: #ffffff !important;
+                        }
+                        .vditor-reset p,
+                        .vditor-reset li,
+                        .vditor-reset td,
+                        .vditor-reset th {
+                            color: #e6e6e6 !important;
+                        }
+                        .vditor-reset a {
+                            color: #58a6ff !important;
+                        }
+                        .vditor-reset code,
+                        .vditor-reset pre {
+                            background: rgba(110, 118, 129, 0.4) !important;
+                            color: #e6e6e6 !important;
+                        }
+                        .vditor-reset blockquote {
+                            border-left-color: #3b434b !important;
+                            color: #8b949e !important;
+                        }
+                        .vditor-reset strong {
+                            color: #ffffff !important;
+                        }
+                        .vditor-reset table tr {
+                            background-color: rgba(110, 118, 129, 0.2) !important;
+                        }
+                        .vditor-reset table td,
+                        .vditor-reset table th {
+                            border-color: #3b434b !important;
+                        }
+                    </style>
                     <script src="/webjars/vditor/dist/index.min.js"></script>
                     <div id="vditor-preview" class="vditor-reset"></div>
                     <script>
                         document.addEventListener('DOMContentLoaded', function() {
                             const markdownContent = "{postBodyJson}";
                             Vditor.preview(document.getElementById('vditor-preview'), markdownContent, {
+                                cdn: '/webjars/vditor',
                                 mode: 'both'
                             });
                         });

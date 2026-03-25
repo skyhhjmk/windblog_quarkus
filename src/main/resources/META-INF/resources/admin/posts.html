@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Vditor CSS -->
     <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
+    <!-- KaTeX CSS (数学公式) -->
+    <link rel="stylesheet" href="/webjars/vditor/dist/js/katex/katex.min.css">
 </head>
 <body class="bg-gray-100">
     <div class="flex h-screen overflow-hidden">
@@ -170,6 +172,36 @@
         </div>
     </div>
     
+    <!-- 文章详细信息模态框 -->
+    <div id="postMetaModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden">
+        <div class="bg-white rounded-lg w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
+            <!-- 模态框头部 -->
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-xl font-semibold text-gray-800">文章详细信息</h3>
+                <button onclick="closePostMetaModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- 模态框内容（可滚动） -->
+            <div class="px-6 py-4 overflow-y-auto flex-1">
+                <div id="postMetaContent" class="space-y-4">
+                    <!-- 动态生成 meta 信息 -->
+                </div>
+            </div>
+            
+            <!-- 模态框底部 -->
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+                <button onclick="closePostMetaModal()" 
+                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <!-- 创建/编辑文章模态框 -->
     <div id="postModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden">
         <div class="bg-white rounded-lg w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
@@ -258,6 +290,32 @@
                         </div>
                     </div>
                     
+                    <!-- 渲染器和编辑器类型 -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">渲染器类型</label>
+                            <select id="postRenderType"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="0">Markdown</option>
+                                <option value="1">HTML</option>
+                                <option value="2" selected>Vditor</option>
+                                <option value="3">V Builder</option>
+                                <option value="4">Gutenberg</option>
+                                <option value="5">Flutter Quill</option>
+                                <option value="6">Flutter Markdown Plus</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">编辑器类型</label>
+                            <select id="postEditorType"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="0" selected>Markdown (Vditor)</option>
+                                <option value="5">Flutter Quill</option>
+                                <option value="6">Flutter Markdown Plus</option>
+                            </select>
+                        </div>
+                    </div>
+                    
                     <!-- SEO 设置 -->
                     <div class="border-t pt-4">
                         <h4 class="text-md font-medium text-gray-800 mb-3">SEO 设置</h4>
@@ -311,10 +369,26 @@
     </div>
     
     <script src="assets/js/admin.js"></script>
-    <!-- Vditor JS -->
+    <!-- Vditor 核心资源（使用 WebJars 本地资源） -->
+    <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
     <script src="/webjars/vditor/dist/index.min.js"></script>
-    <!-- Vditor Editor Module -->
+    <!-- Vditor 编辑器模块 -->
     <script src="assets/js/vditor-editor.js"></script>
+    <!-- 额外资源（可选，用于增强功能） -->
+    <!-- Lute Markdown 解析引擎 -->
+    <script src="/webjars/vditor/dist/js/lute/lute.min.js"></script>
+    <!-- KaTeX 数学公式 -->
+    <script src="/webjars/vditor/dist/js/katex/katex.min.js"></script>
+    <!-- MathJax 数学公式（备选） -->
+    <script src="/webjars/vditor/dist/js/mathjax/tex-mml-chtml.js"></script>
+    <!-- Mermaid 流程图 -->
+    <script src="/webjars/vditor/dist/js/mermaid/mermaid.min.js"></script>
+    <!-- PlantUML UML 图 -->
+    <script src="/webjars/vditor/dist/js/plantuml/plantuml-encoder.min.js"></script>
+    <!-- ABC.js 五线谱 -->
+    <script src="/webjars/vditor/dist/js/abcjs/abcjs_basic.min.js"></script>
+    <!-- Markmap 思维导图 -->
+    <script src="/webjars/vditor/dist/js/markmap/index.min.js"></script>
     <script>
         let currentPage = 1;
         let totalPages = 1;
@@ -322,6 +396,9 @@
         let tags = [];
         let selectedTags = new Set();
         let vditorInstance = null; // Vditor 编辑器实例
+        let currentEditorType = 0; // 当前编辑器类型，0=Vditor
+        let currentRenderType = 2; // 当前渲染器类型，2=Vditor
+        let currentContent = ''; // 当前内容，用于迁移
         
         document.addEventListener('DOMContentLoaded', async function() {
             const isAuth = await AdminUtils.checkAuth();
@@ -496,6 +573,7 @@
                     ${post.status === 0 ? `
                     <button onclick="publishPost(${post.id})" class="text-green-600 hover:text-green-900 mr-3">发布</button>
                     ` : ''}
+                    <button onclick="showPostMeta(${post.id})" class="text-purple-600 hover:text-purple-900 mr-3">详细信息</button>
                     <button onclick="editPost(${post.id})" class="text-blue-600 hover:text-blue-900 mr-3">编辑</button>
                     <button onclick="deletePost(${post.id}, '${escapeHtml(title)}')" class="text-red-600 hover:text-red-900">删除</button>
                 </td>
@@ -533,6 +611,13 @@
             document.getElementById('postId').value = '';
             document.getElementById('postVersion').value = '';
             selectedTags.clear();
+            
+            // 重置渲染器和编辑器类型
+            currentRenderType = 2; // Vditor
+            currentEditorType = 0; // Markdown (Vditor)
+            document.getElementById('postRenderType').value = '2';
+            document.getElementById('postEditorType').value = '0';
+            
             renderTagsSelector();
             document.getElementById('publishBtn').style.display = 'flex';
             
@@ -560,6 +645,12 @@
                 document.getElementById('postSeoKeywords').value = post.seoKeywords || '';
                 document.getElementById('postSeoDescription').value = post.seoDescription || '';
                 
+                // 设置渲染器和编辑器类型
+                currentRenderType = post.renderType ?? 2;
+                currentEditorType = post.editorType ?? 0;
+                document.getElementById('postRenderType').value = currentRenderType.toString();
+                document.getElementById('postEditorType').value = currentEditorType.toString();
+                
                 selectedTags.clear();
                 if (post.tagIds) {
                     post.tagIds.forEach(tagId => selectedTags.add(tagId));
@@ -574,6 +665,9 @@
                 
                 // 初始化 Vditor 编辑器并加载内容
                 initVditorEditor(content);
+                
+                // 添加渲染器和编辑器类型切换监听
+                addRenderTypeChangeListener();
                 
                 Modal.open('postModal');
             } catch (error) {
@@ -591,6 +685,131 @@
             Modal.close('postModal');
         }
         
+        async function showPostMeta(id) {
+            try {
+                const post = await AdminUtils.get(`/posts/${id}`);
+                
+                const metaContent = document.getElementById('postMetaContent');
+                metaContent.innerHTML = `
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">文章 ID</h4>
+                            <p class="text-gray-900 font-mono">${post.id}</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">文章别名</h4>
+                            <p class="text-gray-900">${escapeHtml(post.slug)}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">乐观锁版本号</h4>
+                            <p class="text-gray-900 font-mono text-lg">${post.version}</p>
+                            <p class="text-xs text-gray-400 mt-1">用于并发控制</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">当前修订版本</h4>
+                            <p class="text-gray-900 font-mono text-lg">第 ${post.currentRevisionNumber} 版</p>
+                            <p class="text-xs text-gray-400 mt-1">内容迭代版本</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="text-sm font-medium text-gray-500 mb-3">时间信息</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">创建时间：</span>
+                                <span class="text-gray-900 font-mono text-sm">${AdminUtils.formatDate(post.createdAt)}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">更新时间：</span>
+                                <span class="text-gray-900 font-mono text-sm">${AdminUtils.formatDate(post.updatedAt)}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">发布时间：</span>
+                                <span class="text-gray-900 font-mono text-sm">${post.publishedAt ? AdminUtils.formatDate(post.publishedAt) : '未发布'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">渲染器类型</h4>
+                            <p class="text-gray-900">${getRenderTypeText(post.renderType)}</p>
+                            <p class="text-xs text-gray-400 mt-1">代码：${post.renderType}</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">编辑器类型</h4>
+                            <p class="text-gray-900">${getEditorTypeText(post.editorType)}</p>
+                            <p class="text-xs text-gray-400 mt-1">代码：${post.editorType}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">可见性</h4>
+                            <p class="text-gray-900">${getVisibilityText(post.visibility)}</p>
+                            <p class="text-xs text-gray-400 mt-1">代码：${post.visibility}</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500 mb-1">文章状态</h4>
+                            <p class="text-gray-900">${post.status === 1 ? '已发布' : '草稿'}</p>
+                            <p class="text-xs text-gray-400 mt-1">代码：${post.status}</p>
+                        </div>
+                    </div>
+                    
+                    ${post.password ? `
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="text-sm font-medium text-gray-500 mb-1">访问密码</h4>
+                        <p class="text-gray-900 font-mono">${escapeHtml(post.password)}</p>
+                    </div>
+                    ` : ''}
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="text-sm font-medium text-gray-500 mb-3">SEO 信息</h4>
+                        <div class="space-y-2">
+                            <div>
+                                <span class="text-gray-600 text-sm">SEO 标题：</span>
+                                <span class="text-gray-900 text-sm">${post.seoTitle || '未设置'}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-600 text-sm">SEO 关键词：</span>
+                                <span class="text-gray-900 text-sm">${post.seoKeywords || '未设置'}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-600 text-sm">SEO 描述：</span>
+                                <span class="text-gray-900 text-sm">${post.seoDescription || '未设置'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="text-sm font-medium text-gray-500 mb-1">作者 ID</h4>
+                        <p class="text-gray-900 font-mono">${post.userId}</p>
+                    </div>
+                `;
+                
+                Modal.open('postMetaModal');
+            } catch (error) {
+                console.error('加载文章详情失败:', error);
+                AdminUtils.showToast('加载文章详情失败', 'error');
+            }
+        }
+        
+        function closePostMetaModal() {
+            Modal.close('postMetaModal');
+        }
+        
+        function getVisibilityText(code) {
+            const visibility = {
+                0: '公开',
+                1: '密码保护',
+                2: '私密'
+            };
+            return visibility[code] || `未知 (${code})`;
+        }
+        
         /**
          * 初始化 Vditor 编辑器
          * @param {string} content - 初始内容
@@ -603,6 +822,94 @@
             
             // 初始化编辑器
             vditorInstance = VditorEditor.init('vditor-container', content);
+        }
+        
+        /**
+         * 添加渲染器类型切换监听
+         */
+        function addRenderTypeChangeListener() {
+            const renderTypeSelect = document.getElementById('postRenderType');
+            const editorTypeSelect = document.getElementById('postEditorType');
+            
+            // 渲染器类型切换
+            renderTypeSelect.addEventListener('change', function() {
+                const newRenderType = parseInt(this.value);
+                currentRenderType = newRenderType;
+                
+                // 如果切换到 Vditor (2)，自动设置编辑器为 Vditor
+                if (newRenderType === 2) {
+                    currentEditorType = 0;
+                    editorTypeSelect.value = '0';
+                }
+                
+                console.log(`渲染器类型已切换：${getRenderTypeText(newRenderType)}`);
+            });
+            
+            // 编辑器类型切换
+            editorTypeSelect.addEventListener('change', function() {
+                const newEditorType = parseInt(this.value);
+                const oldEditorType = currentEditorType;
+                
+                // 保存当前内容
+                if (oldEditorType === 0 && vditorInstance) {
+                    currentContent = VditorEditor.getValue();
+                }
+                
+                currentEditorType = newEditorType;
+                
+                // 如果切换到 Vditor 编辑器，自动设置渲染器为 Vditor
+                if (newEditorType === 0) {
+                    currentRenderType = 2;
+                    renderTypeSelect.value = '2';
+                    
+                    // 迁移内容到 Vditor
+                    setTimeout(() => {
+                        if (vditorInstance) {
+                            VditorEditor.setValue(currentContent);
+                        } else {
+                            initVditorEditor(currentContent);
+                        }
+                    }, 100);
+                } else {
+                    // 其他编辑器类型（目前不支持，显示提示）
+                    AdminUtils.showToast('该编辑器类型尚未支持，仅支持 Vditor 编辑器', 'warning');
+                    // 切换回 Vditor
+                    setTimeout(() => {
+                        editorTypeSelect.value = '0';
+                        currentEditorType = 0;
+                    }, 500);
+                }
+                
+                console.log(`编辑器类型已切换：${getEditorTypeText(newEditorType)}`);
+            });
+        }
+        
+        /**
+         * 获取渲染器类型文本
+         */
+        function getRenderTypeText(code) {
+            const types = {
+                0: 'Markdown',
+                1: 'HTML',
+                2: 'Vditor',
+                3: 'V Builder',
+                4: 'Gutenberg',
+                5: 'Flutter Quill',
+                6: 'Flutter Markdown Plus'
+            };
+            return types[code] || `未知 (${code})`;
+        }
+        
+        /**
+         * 获取编辑器类型文本
+         */
+        function getEditorTypeText(code) {
+            const types = {
+                0: 'Markdown (Vditor)',
+                5: 'Flutter Quill',
+                6: 'Flutter Markdown Plus'
+            };
+            return types[code] || `未知 (${code})`;
         }
         
         async function savePost(publish = false) {
@@ -645,6 +952,8 @@
                     seoTitle,
                     seoKeywords,
                     seoDescription,
+                    renderType: currentRenderType,
+                    editorType: currentEditorType,
                     version: version
                 };
                 
