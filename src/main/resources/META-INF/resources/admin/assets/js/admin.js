@@ -156,7 +156,7 @@ const AdminUtils = {
 // 页面导航管理
 const PageNavigator = {
     navigate(page) {
-        const pages = ['dashboard', 'posts', 'categories', 'tags', 'users', 'media'];
+        const pages = ['dashboard', 'posts', 'categories', 'tags', 'comments', 'users', 'media'];
         if (pages.includes(page)) {
             window.location.href = `/admin/${page}.html`;
         }
