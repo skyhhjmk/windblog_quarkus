@@ -1,6 +1,9 @@
 volumes:
   postgres-data:
   redis-data:
+  rabbitmq_data:
+  elasticsearch-data:
+  kibana-data:
 
 services:
   db:
@@ -10,7 +13,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +35,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -42,6 +45,112 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --appendonly yes # 开启 AOF 持久化
+
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:4.2.5-management-alpine
+    restart: unless-stopped
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+      # RABBITMQ_ERLANG_COOKIE: "my_secret_cookie"
+    ports:
+      # AMQP 协议端口
+      - "5672:5672"
+      # HTTP 管理界面端口
+      - "15672:15672"
+    networks:
+      - app-network
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      # - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "check_running" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # Elasticsearch 9.2 - 日志存储和搜索
+  elasticsearch:
+    container_name: elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
+    restart: unless-stopped
+    environment:
+      # 单节点模式
+      discovery.type: single-node
+      # JVM 内存配置
+      ES_JAVA_OPTS: "-Xms1g -Xmx2g"
+      # 启用 xpack 安全
+      xpack.security.enabled: "true"
+      # 集群名称
+      cluster.name: windblog-cluster
+      # 节点名称
+      node.name: windblog-node-1
+      # 认证密钥（从环境变量读取，默认值仅用于开发）
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-elastic123456}
+    ports:
+      # HTTP API 端口
+      - "9200:9200"
+      # Transport 端口
+      - "9300:9300"
+    networks:
+      - app-network
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kf -u elastic:$${ELASTIC_PASSWORD:-elastic123456} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # Kibana 9.2 - 日志可视化
+  kibana:
+    container_name: kibana
+    image: docker.elastic.co/kibana/kibana:9.2.0
+    restart: unless-stopped
+    environment:
+      # 连接 Elasticsearch（使用 HTTPS）
+      ELASTICSEARCH_HOSTS: "http://elasticsearch:9200"
+      # Elasticsearch 认证（使用 kibana_system 服务账户）
+      ELASTICSEARCH_SERVICEACCOUNTTOKEN: ${KIBANA_SERVICE_ACCOUNT_TOKEN:-}
+      # 或者使用专用用户（如果没有服务账户令牌）
+      # ELASTICSEARCH_USERNAME: kibana_system
+      # ELASTICSEARCH_PASSWORD: ${KIBANA_PASSWORD:-kibana123456}
+      # 启用 xpack 安全
+      xpack.security.enabled: "true"
+      # 语言设置
+      I18N_LOCALE: zh-CN
+      # Kibana 加密密钥（用于加密 session 等敏感数据）
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY:-a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6}
+      # Kibana 服务器密钥（用于生成和验证 JWT）
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_KEY:-p6o5n4m3l2k1j0i9h8g7f6e5d4c3b2a1}
+      # 启用 SSL（可选，开发环境可禁用）
+      # SERVER_SSL_ENABLED: "true"
+      # SERVER_SSL_CERTIFICATE: /usr/share/kibana/config/certs/kibana.crt
+      # SERVER_SSL_KEY: /usr/share/kibana/config/certs/kibana.key
+    ports:
+      # HTTP 端口
+      - "5601:5601"
+    networks:
+      - app-network
+    volumes:
+      - kibana-data:/usr/share/kibana/data
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
 
 networks:
   app-network:

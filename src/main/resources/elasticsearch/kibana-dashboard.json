@@ -1,0 +1,493 @@
+[
+  {
+    "_id": "dashboard_windblog_logs",
+    "_type": "dashboard",
+    "_source": {
+      "title": "Windblog 日志分析仪表板",
+      "description": "应用日志综合分析仪表板，包含日志级别分布、时间趋势和关键指标",
+      "panelsJSON": [
+        {
+          "gridData": {
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 6,
+            "i": "1"
+          },
+          "panelIndex": "1",
+          "version": "9.2.0",
+          "embeddableConfig": {},
+          "id": "visualization_log_level_distribution",
+          "type": "visualization"
+        },
+        {
+          "gridData": {
+            "x": 8,
+            "y": 0,
+            "w": 16,
+            "h": 6,
+            "i": "2"
+          },
+          "panelIndex": "2",
+          "version": "9.2.0",
+          "embeddableConfig": {},
+          "id": "visualization_log_timeline",
+          "type": "visualization"
+        },
+        {
+          "gridData": {
+            "x": 0,
+            "y": 6,
+            "w": 6,
+            "h": 6,
+            "i": "3"
+          },
+          "panelIndex": "3",
+          "version": "9.2.0",
+          "embeddableConfig": {},
+          "id": "visualization_top_loggers",
+          "type": "visualization"
+        },
+        {
+          "gridData": {
+            "x": 6,
+            "y": 6,
+            "w": 9,
+            "h": 6,
+            "i": "4"
+          },
+          "panelIndex": "4",
+          "version": "9.2.0",
+          "embeddableConfig": {},
+          "id": "visualization_error_trend",
+          "type": "visualization"
+        },
+        {
+          "gridData": {
+            "x": 15,
+            "y": 6,
+            "w": 9,
+            "h": 6,
+            "i": "5"
+          },
+          "panelIndex": "5",
+          "version": "9.2.0",
+          "embeddableConfig": {},
+          "id": "visualization_recent_logs",
+          "type": "visualization"
+        }
+      ],
+      "timeRestore": true,
+      "timeTo": "now",
+      "timeFrom": "now-7d",
+      "refreshInterval": {
+        "display": "5 seconds",
+        "pause": false,
+        "value": 5000
+      },
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "query": {
+            "query": "",
+            "language": "kuery"
+          },
+          "filter": []
+        }
+      },
+      "version": "9.2.0"
+    },
+    "_version": 1,
+    "_meta": {
+      "description": "Windblog 应用日志综合分析仪表板"
+    }
+  },
+  {
+    "_id": "visualization_log_level_distribution",
+    "_type": "visualization",
+    "_source": {
+      "title": "日志级别分布",
+      "description": "按日志级别统计的日志数量分布",
+      "visualizationType": "pie",
+      "params": {
+        "type": "pie",
+        "addTooltip": true,
+        "addLegend": true,
+        "legendPosition": "right",
+        "isDonut": false,
+        "labels": {
+          "show": true,
+          "values": true,
+          "last_level": true,
+          "truncate": 100
+        }
+      },
+      "aggs": [
+        {
+          "id": "1",
+          "enabled": true,
+          "type": "count",
+          "schema": "metric",
+          "params": {}
+        },
+        {
+          "id": "2",
+          "enabled": true,
+          "type": "terms",
+          "schema": "segment",
+          "params": {
+            "field": "level",
+            "orderBy": "1",
+            "order": "desc",
+            "size": 10,
+            "otherBucket": false,
+            "otherBucketLabel": "Other",
+            "missingBucket": false,
+            "missingBucketLabel": "Missing"
+          }
+        }
+      ],
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "query": {
+            "query": "",
+            "language": "kuery"
+          },
+          "filter": []
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1
+  },
+  {
+    "_id": "visualization_log_timeline",
+    "_type": "visualization",
+    "_source": {
+      "title": "日志时间线趋势",
+      "description": "日志数量随时间变化的趋势图",
+      "visualizationType": "line",
+      "params": {
+        "type": "line",
+        "addTooltip": true,
+        "addLegend": true,
+        "legendPosition": "right",
+        "showCircles": true,
+        "interpolate": "linear",
+        "scale": "linear",
+        "mode": "stacked",
+        "times": [],
+        "addTimeMarker": false,
+        "defaultYExtents": false,
+        "yScaleMode": "normal"
+      },
+      "aggs": [
+        {
+          "id": "1",
+          "enabled": true,
+          "type": "count",
+          "schema": "metric",
+          "params": {}
+        },
+        {
+          "id": "2",
+          "enabled": true,
+          "type": "date_histogram",
+          "schema": "segment",
+          "params": {
+            "field": "@timestamp",
+            "timeRange": {
+              "from": "now-7d",
+              "to": "now"
+            },
+            "useNormalizedEsInterval": true,
+            "interval": "auto",
+            "min_doc_count": 1,
+            "drop_partials": false,
+            "customLabel": "时间",
+            "extended_bounds": {}
+          }
+        },
+        {
+          "id": "3",
+          "enabled": true,
+          "type": "terms",
+          "schema": "group",
+          "params": {
+            "field": "level",
+            "orderBy": "1",
+            "order": "desc",
+            "size": 10
+          }
+        }
+      ],
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "query": {
+            "query": "",
+            "language": "kuery"
+          },
+          "filter": []
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1
+  },
+  {
+    "_id": "visualization_top_loggers",
+    "_type": "visualization",
+    "_source": {
+      "title": "Top 10 日志源",
+      "description": "产生日志最多的前 10 个 logger",
+      "visualizationType": "bar",
+      "params": {
+        "type": "histogram",
+        "addTooltip": true,
+        "addLegend": false,
+        "legendPosition": "right",
+        "scale": "linear",
+        "mode": "stacked",
+        "times": [],
+        "defaultYExtents": false,
+        "yScaleMode": "normal",
+        "categoryAxes": [
+          {
+            "id": "CategoryAxis-1",
+            "type": "category",
+            "position": "left",
+            "show": true,
+            "style": {},
+            "labels": {
+              "show": true,
+              "filter": true,
+              "truncate": 100
+            },
+            "title": {}
+          }
+        ]
+      },
+      "aggs": [
+        {
+          "id": "1",
+          "enabled": true,
+          "type": "count",
+          "schema": "metric",
+          "params": {}
+        },
+        {
+          "id": "2",
+          "enabled": true,
+          "type": "terms",
+          "schema": "segment",
+          "params": {
+            "field": "logger",
+            "orderBy": "1",
+            "order": "desc",
+            "size": 10
+          }
+        }
+      ],
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "query": {
+            "query": "",
+            "language": "kuery"
+          },
+          "filter": []
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1
+  },
+  {
+    "_id": "visualization_error_trend",
+    "_type": "visualization",
+    "_source": {
+      "title": "错误日志趋势",
+      "description": "ERROR 级别日志的时间趋势",
+      "visualizationType": "area",
+      "params": {
+        "type": "area",
+        "addTooltip": true,
+        "addLegend": true,
+        "legendPosition": "right",
+        "showCircles": true,
+        "interpolate": "linear",
+        "scale": "linear",
+        "mode": "stacked",
+        "times": [],
+        "addTimeMarker": false,
+        "defaultYExtents": false,
+        "yScaleMode": "normal"
+      },
+      "aggs": [
+        {
+          "id": "1",
+          "enabled": true,
+          "type": "count",
+          "schema": "metric",
+          "params": {}
+        },
+        {
+          "id": "2",
+          "enabled": true,
+          "type": "date_histogram",
+          "schema": "segment",
+          "params": {
+            "field": "@timestamp",
+            "timeRange": {
+              "from": "now-7d",
+              "to": "now"
+            },
+            "useNormalizedEsInterval": true,
+            "interval": "auto",
+            "min_doc_count": 1,
+            "drop_partials": false,
+            "customLabel": "时间"
+          }
+        }
+      ],
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "query": {
+            "query": "level: ERROR",
+            "language": "kuery"
+          },
+          "filter": []
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1
+  },
+  {
+    "_id": "visualization_recent_logs",
+    "_type": "visualization",
+    "_source": {
+      "title": "最近日志列表",
+      "description": "显示最近的日志条目",
+      "visualizationType": "data_table",
+      "params": {
+        "perPage": 10,
+        "showPartialRows": false,
+        "showMeticsAtAllLevels": false,
+        "sort": {
+          "columnIndex": null,
+          "direction": null
+        },
+        "showTotal": false,
+        "showToolbar": true,
+        "type": "table",
+        "metricsAtAllLevels": false
+      },
+      "aggs": [
+        {
+          "id": "1",
+          "enabled": true,
+          "type": "count",
+          "schema": "metric",
+          "params": {}
+        },
+        {
+          "id": "2",
+          "enabled": true,
+          "type": "terms",
+          "schema": "bucket",
+          "params": {
+            "field": "@timestamp",
+            "orderBy": "1",
+            "order": "desc",
+            "size": 10,
+            "customLabel": "时间"
+          }
+        },
+        {
+          "id": "3",
+          "enabled": true,
+          "type": "terms",
+          "schema": "bucket",
+          "params": {
+            "field": "level",
+            "orderBy": "1",
+            "order": "desc",
+            "size": 5,
+            "customLabel": "级别"
+          }
+        },
+        {
+          "id": "4",
+          "enabled": true,
+          "type": "terms",
+          "schema": "bucket",
+          "params": {
+            "field": "logger",
+            "orderBy": "1",
+            "order": "desc",
+            "size": 5,
+            "customLabel": "日志源"
+          }
+        },
+        {
+          "id": "5",
+          "enabled": true,
+          "type": "top_hits",
+          "schema": "metric",
+          "params": {
+            "field": "message",
+            "size": 1,
+            "sortField": "@timestamp",
+            "sortOrder": "desc",
+            "customLabel": "消息"
+          }
+        }
+      ],
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "query": {
+            "query": "",
+            "language": "kuery"
+          },
+          "filter": []
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1
+  }
+]

@@ -4,6 +4,7 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -12,6 +13,7 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.jboss.logging.Logger;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +27,7 @@ import java.util.Locale;
 @Path("/search")
 public class SearchController {
 
+    private static final Logger log = Logger.getLogger(SearchController.class);
     private static final int PAGE_SIZE = 10;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -38,6 +41,13 @@ public class SearchController {
 
     @Inject
     LanguageContext languageContext;
+
+    @Inject
+    ElasticsearchPostSearchService postSearchService;
+
+    @QueryParam("use-es")
+    @DefaultValue("true")
+    boolean useElasticsearch;
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -54,7 +64,13 @@ public class SearchController {
         String searchDate = normalizeDate(date);
         String lang = languageContext.getLang();
 
-        List<SearchHit> allHits = buildHits(searchKeyword, searchType, searchSort, searchDate, lang);
+        // 使用 Elasticsearch 搜索文章，其他类型仍然使用数据库搜索
+        List<SearchHit> allHits;
+        if (useElasticsearch && !searchKeyword.isBlank() && ("all".equals(searchType) || "post".equals(searchType))) {
+            allHits = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang);
+        } else {
+            allHits = buildHits(searchKeyword, searchType, searchSort, searchDate, lang);
+        }
 
         long totalCount = allHits.size();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
@@ -126,6 +142,60 @@ public class SearchController {
 
         hits.sort(hitComparator(sort));
         return hits;
+    }
+
+    /**
+     * 使用 Elasticsearch 搜索文章
+     */
+    private List<SearchHit> searchWithElasticsearch(String keyword, String type, String sort, String date, String lang) {
+        try {
+            log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s", keyword, type);
+            
+            // 调用 Elasticsearch 搜索服务
+            var searchResult = postSearchService.searchPosts(keyword, 1, 100, "PUBLISHED", null, null);
+            
+            OffsetDateTime threshold = dateThreshold(date);
+            List<SearchHit> hits = new ArrayList<>();
+            
+            for (var post : searchResult.posts()) {
+                // 应用日期过滤
+                if (threshold != null && post.publishedAt() != null) {
+                    try {
+                        OffsetDateTime postDate = OffsetDateTime.parse(post.publishedAt());
+                        if (postDate.isBefore(threshold)) {
+                            continue;
+                        }
+                    } catch (Exception e) {
+                        log.debugf("解析日期失败：%s", post.publishedAt());
+                    }
+                }
+                
+                // 转换为 SearchHit
+                SearchHit hit = new SearchHit(
+                    "post",
+                    "Post",
+                    post.title(),
+                    post.summary(),
+                    "/post/" + post.slug(),
+                    post.publishedAt() != null ? OffsetDateTime.parse(post.publishedAt()) : null,
+                    post.publishedAt() != null ? formatDate(OffsetDateTime.parse(post.publishedAt())) : "unknown",
+                    "author: " + post.authorName() + " | views: " + post.viewCount(),
+                    "[Read More]"
+                );
+                hits.add(hit);
+            }
+            
+            // 应用排序
+            hits.sort(hitComparator(sort));
+            
+            log.infof("Elasticsearch 搜索结果：%d 篇文章", hits.size());
+            return hits;
+            
+        } catch (Exception e) {
+            log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);
+            // 回退到数据库搜索
+            return buildHits(keyword, type, sort, date, lang);
+        }
     }
 
     private SearchHit toPostHit(Post post, String lang) {

@@ -1,0 +1,57 @@
+{
+  "index_patterns": ["windblog-logs-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "windblog-logs-policy",
+      "index.lifecycle.rollover_alias": "windblog-logs",
+      "index.codec": "lz4",
+      "index.refresh_interval": "5s"
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "timestamp": {
+          "type": "date"
+        },
+        "level": {
+          "type": "keyword"
+        },
+        "logger": {
+          "type": "keyword"
+        },
+        "message": {
+          "type": "text",
+          "analyzer": "standard"
+        },
+        "thread": {
+          "type": "keyword"
+        },
+        "class": {
+          "type": "keyword"
+        },
+        "method": {
+          "type": "keyword"
+        },
+        "line": {
+          "type": "keyword"
+        },
+        "stack_trace": {
+          "type": "text"
+        },
+        "mdc": {
+          "type": "object",
+          "dynamic": true
+        }
+      }
+    }
+  },
+  "priority": 100,
+  "version": 1,
+  "_meta": {
+    "description": "Template for windblog application logs with ILM policy"
+  }
+}

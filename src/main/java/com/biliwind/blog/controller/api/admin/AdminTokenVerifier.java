@@ -133,4 +133,22 @@ public class AdminTokenVerifier {
 
     public record VerifiedToken(Long uid, String username, boolean isAdmin, boolean isSuperAdmin, String roleName) {
     }
+    
+    /**
+     * 验证 token 并获取用户信息
+     * @param authHeader Authorization header
+     * @return 用户信息，验证失败时返回 null
+     */
+    public VerifiedToken verifyTokenAndGetProfile(String authHeader) {
+        if (authHeader == null || authHeader.isBlank()) {
+            return null;
+        }
+        
+        String token = authHeader;
+        if (token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
+        
+        return verify(token);
+    }
 }

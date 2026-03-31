@@ -31,12 +31,18 @@ import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * 媒体文件管理服务
+ * 负责媒体文件的上传、存储、引用管理和图像预览生成
+ */
 @ApplicationScoped
 public class MediaManagementService {
 
+    // 禁止上传的文件扩展名列表，防止上传可执行文件
     private static final Set<String> BANNED_EXTENSIONS = Set.of(
             ".exe", ".dll", ".cmd", ".bat", ".ps1", ".com", ".class", ".sh", ".jar", ".py"
     );
+    // 需要手动加载原图的大小阈值（5MB）
     private static final long MANUAL_LOAD_THRESHOLD_BYTES = 5L * 1024L * 1024L;
 
     @ConfigProperty(name = "media.upload.dir")
@@ -51,22 +57,36 @@ public class MediaManagementService {
     private Path uploadRoot;
     private String normalizedPublicPath;
 
+    /**
+     * 初始化媒体存储目录和公共访问路径
+     */
     @PostConstruct
     void init() {
+        // 使用绝对路径并规范化，防止路径遍历攻击
         uploadRoot = Paths.get(mediaUploadDir).toAbsolutePath().normalize();
         try {
             Files.createDirectories(uploadRoot);
         } catch (IOException e) {
             throw new IllegalStateException("无法创建媒体存储目录：" + uploadRoot, e);
         }
+        // 规范化公共路径，移除末尾斜杠
         normalizedPublicPath = normalizePublicPath(mediaUploadPath);
     }
 
+    /**
+     * 获取媒体文件列表
+     * @param page 页码（从 1 开始）
+     * @param pageSize 每页数量
+     * @param unreferencedOnly 是否仅返回未引用的媒体
+     * @return 媒体列表结果
+     */
     @Transactional
     public AdminMediaDtos.MediaListResult listMedia(int page, int pageSize, boolean unreferencedOnly) {
+        // 确保页码和每页数量在有效范围内
         int safePage = Math.max(page, 1);
         int safeSize = Math.max(1, Math.min(pageSize, 100));
         String where = "deletedAt is null";
+        // 构建查询条件，筛选未引用的媒体
         if (unreferencedOnly) {
             where += " and id not in (select pm.media.id from PostMedia pm)";
         }
@@ -75,6 +95,7 @@ public class MediaManagementService {
         List<Media> medias = query.page(Page.of(safePage - 1, safeSize)).list();
         List<Long> ids = medias.stream().map(m -> m.id).collect(Collectors.toList());
         Map<Long, List<PostMedia>> referencesByMedia;
+        // 批量查询引用关系，避免 N+1 查询
         if (!ids.isEmpty()) {
             List<PostMedia> references = PostMedia.list("media.id in ?1", ids);
             referencesByMedia = references.stream()
@@ -82,20 +103,28 @@ public class MediaManagementService {
         } else {
             referencesByMedia = new HashMap<>();
         }
+        // 转换为 DTO 对象
         List<AdminMediaDtos.MediaItem> items = medias.stream()
                 .map(media -> toDto(media, referencesByMedia.getOrDefault(media.id, Collections.emptyList())))
                 .collect(Collectors.toList());
         return new AdminMediaDtos.MediaListResult(items, total, safePage, safeSize);
     }
 
+    /**
+     * 重建媒体引用关系
+     * 扫描所有文章，重新建立媒体与文章的引用关系
+     * @return 扫描结果统计信息
+     */
     @Transactional
     public AdminMediaDtos.MediaScanResult rebuildReferences() {
+        // 删除所有现有引用关系
         PostMedia.deleteAll();
         List<Post> posts = Post.list("deletedAt is null");
         List<Media> medias = Media.list("deletedAt is null");
         long postsScanned = 0;
         long referencesCreated = 0;
         Set<Long> referenced = new HashSet<>();
+        // 遍历所有文章，检查内容中是否引用了媒体
         for (Post post : posts) {
             PostRevision revision = post.currentRevision;
             if (revision == null || revision.contentMarkdown == null || revision.contentMarkdown.isEmpty()) {
@@ -103,6 +132,7 @@ public class MediaManagementService {
             }
             postsScanned++;
             String normalizedContent = normalizeContent(revision.contentMarkdown);
+            // 检查每个媒体是否在文章中被引用
             for (Media media : medias) {
                 if (containsReference(normalizedContent, media)) {
                     persistReference(post, media);
@@ -111,15 +141,23 @@ public class MediaManagementService {
                 }
             }
         }
+        // 计算未引用的媒体数量
         long unreferenced = medias.size() - referenced.size();
         return new AdminMediaDtos.MediaScanResult(postsScanned, referencesCreated, Math.max(0, unreferenced));
     }
 
+    /**
+     * 同步文章的媒体引用关系
+     * 当文章内容更新时，重新建立媒体与文章的引用关系
+     * @param post 文章对象
+     * @param contentMap 文章内容映射
+     */
     @Transactional
     public void syncPostReferences(Post post, Map<String, String> contentMap) {
         if (post == null || post.id == null) {
             return;
         }
+        // 删除旧的引用关系
         PostMedia.delete("post.id = ?1", post.id);
         if (contentMap == null || contentMap.isEmpty()) {
             return;
@@ -128,6 +166,7 @@ public class MediaManagementService {
         if (medias.isEmpty()) {
             return;
         }
+        // 标准化内容并检查引用
         String normalizedContent = normalizeContent(contentMap);
         for (Media media : medias) {
             if (containsReference(normalizedContent, media)) {
@@ -136,17 +175,30 @@ public class MediaManagementService {
         }
     }
 
+    /**
+     * 存储上传的媒体文件
+     * @param operator 操作用户
+     * @param source 文件输入流
+     * @param fileName 文件名
+     * @param mimeType MIME 类型
+     * @param declaredSize 声明的文件大小
+     * @return 媒体对象
+     */
     @Transactional
     public Media storeUploadedMedia(User operator, InputStream source, String fileName, String mimeType, long declaredSize) {
+        // 验证用户身份
         if (operator == null || operator.id == null) {
             throw new ForbiddenException("上传操作需要有效的用户身份");
         }
+        // 清理文件名，防止路径遍历攻击
         String sanitizedFileName = sanitizeFileName(fileName);
+        // 检查文件扩展名是否被禁止
         validateExtension(sanitizedFileName);
         String roleName = operator.roleName;
         if (roleName == null || roleName.isBlank()) {
             roleName = RoleConstant.USER;
         }
+        // 获取用户的上传角色权限
         UploadRole role = uploadRoleService.findByName(roleName);
         if (role == null) {
             role = uploadRoleService.findByName(RoleConstant.USER);
@@ -154,15 +206,20 @@ public class MediaManagementService {
         if (role == null || !role.canUpload) {
             throw new ForbiddenException("当前角色不允许上传媒体");
         }
+        // 规范化 MIME 类型
         String normalizedMime = (mimeType == null || mimeType.isBlank()) ? "" : mimeType.trim().toLowerCase();
+        // 检查 MIME 类型是否在允许列表中
         if (!role.allowedMimeTypes.isEmpty() && !role.allowedMimeTypes.contains(normalizedMime)) {
             throw new ForbiddenException("当前角色不允许上传该类型文件");
         }
+        // 计算当前用户已使用的存储空间
         long currentUsage = sumUsage(operator.id);
 
         String extension = extractExtension(sanitizedFileName);
+        // 使用 UUID 生成唯一的存储键，防止文件名冲突
         String storageKey = UUID.randomUUID().toString() + extension;
         Path target = uploadRoot.resolve(storageKey);
+        // 写入文件到磁盘
         try (OutputStream output = Files.newOutputStream(target, StandardOpenOption.CREATE_NEW)) {
             source.transferTo(output);
         } catch (IOException e) {
@@ -178,16 +235,19 @@ public class MediaManagementService {
             throw new IllegalStateException("无法获取文件大小", e);
         }
 
+        // 验证单文件大小限制
         if (role.maxSingleUploadBytes != null && role.maxSingleUploadBytes > 0 && size > role.maxSingleUploadBytes) {
             deleteTarget(target);
             throw new BadRequestException("单文件大小超出限制");
         }
+        // 验证总上传大小限制
         if (role.maxTotalUploadBytes != null && role.maxTotalUploadBytes > 0
                 && currentUsage + size > role.maxTotalUploadBytes) {
             deleteTarget(target);
             throw new BadRequestException("总上传大小超出限制");
         }
 
+        // 创建媒体对象并保存到数据库
         Media media = new Media();
         media.storageKey = storageKey;
         media.url = buildPublicUrl(storageKey);
@@ -203,6 +263,7 @@ public class MediaManagementService {
         media.metadata = metadata;
         media.createdAt = OffsetDateTime.now();
         media.deletedAt = null;
+        // 如果是图片，提取尺寸信息并生成预览图
         if (normalizedMime.startsWith("image/")) {
             try {
                 BufferedImage image = ImageIO.read(target.toFile());
@@ -218,6 +279,11 @@ public class MediaManagementService {
         return media;
     }
 
+    /**
+     * 构建公共访问 URL
+     * @param storageKey 存储键
+     * @return 公共访问 URL
+     */
     private String buildPublicUrl(String storageKey) {
         if (normalizedPublicPath.endsWith("/")) {
             return normalizedPublicPath + storageKey;
@@ -225,6 +291,11 @@ public class MediaManagementService {
         return normalizedPublicPath + "/" + storageKey;
     }
 
+    /**
+     * 计算用户已使用的存储空间
+     * @param userId 用户 ID
+     * @return 已使用的字节数
+     */
     private long sumUsage(Long userId) {
         if (userId == null) {
             return 0;
@@ -237,6 +308,11 @@ public class MediaManagementService {
         return result == null ? 0L : result;
     }
 
+    /**
+     * 标准化内容以便引用检查
+     * @param content 内容映射
+     * @return 标准化后的内容字符串
+     */
     private String normalizeContent(Map<String, String> content) {
         return content.values().stream()
                 .filter(Objects::nonNull)
@@ -244,10 +320,17 @@ public class MediaManagementService {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * 检查内容中是否包含对指定媒体的引用
+     * @param normalizedContent 标准化后的内容
+     * @param media 媒体对象
+     * @return 是否包含引用
+     */
     private boolean containsReference(String normalizedContent, Media media) {
         if (media == null || normalizedContent.isBlank()) {
             return false;
         }
+        // 检查 URL、存储键和文件名是否出现在内容中
         if (media.url != null && !media.url.isBlank() && normalizedContent.contains(media.url.toLowerCase())) {
             return true;
         }
@@ -261,6 +344,11 @@ public class MediaManagementService {
         return false;
     }
 
+    /**
+     * 持久化媒体引用关系
+     * @param post 文章对象
+     * @param media 媒体对象
+     */
     private void persistReference(Post post, Media media) {
         PostMedia entry = new PostMedia();
         entry.id = new PostMediaId(post.id, media.id);
@@ -272,6 +360,12 @@ public class MediaManagementService {
         entry.persist();
     }
 
+    /**
+     * 将媒体对象转换为 DTO
+     * @param media 媒体对象
+     * @param references 引用列表
+     * @return 媒体 DTO 对象
+     */
     public AdminMediaDtos.MediaItem toDto(Media media, List<PostMedia> references) {
         long referencedBy = references == null ? 0 : references.size();
         return new AdminMediaDtos.MediaItem(
@@ -298,6 +392,11 @@ public class MediaManagementService {
         );
     }
 
+    /**
+     * 将引用对象转换为 DTO
+     * @param pm 引用对象
+     * @return 引用 DTO 对象
+     */
     private AdminMediaDtos.MediaReferenceItem toReferenceDto(PostMedia pm) {
         String title = pickTitle(pm.post.title);
         return new AdminMediaDtos.MediaReferenceItem(
@@ -309,6 +408,12 @@ public class MediaManagementService {
         );
     }
 
+    /**
+     * 从标题映射中选择标题
+     * 优先选择简体中文标题
+     * @param titles 标题映射
+     * @return 选中的标题
+     */
     private String pickTitle(Map<String, String> titles) {
         if (titles == null || titles.isEmpty()) {
             return "";
@@ -322,6 +427,11 @@ public class MediaManagementService {
                 .orElse("");
     }
 
+    /**
+     * 查找上传者的用户名
+     * @param userId 用户 ID
+     * @return 用户名
+     */
     private String findUploaderName(Long userId) {
         if (userId == null) {
             return null;
@@ -330,6 +440,12 @@ public class MediaManagementService {
         return user == null ? null : user.username;
     }
 
+    /**
+     * 生成图像变体（预览图和缩略图）
+     * @param source 原始图像
+     * @param storageKey 存储键
+     * @param metadata 元数据映射
+     */
     private void generateImageVariants(BufferedImage source, String storageKey, Map<String, Object> metadata) {
         String baseName = storageKey;
         int idx = storageKey.lastIndexOf('.');
@@ -342,29 +458,42 @@ public class MediaManagementService {
         Path previewPath = uploadRoot.resolve(previewKey);
         Path thumbPath = uploadRoot.resolve(thumbKey);
         try {
+            // 生成预览图（最大 48px，质量 0.35）和缩略图（最大 360px，质量 0.82）
             writeJpegVariant(source, previewPath, 48, 0.35f);
             writeJpegVariant(source, thumbPath, 360, 0.82f);
             metadata.put("previewUrl", buildPublicUrl(previewKey));
             metadata.put("thumbnailUrl", buildPublicUrl(thumbKey));
         } catch (IOException e) {
+            // 生成失败时清理临时文件
             deleteTarget(previewPath);
             deleteTarget(thumbPath);
         }
     }
 
+    /**
+     * 写入 JPEG 格式的变体图像
+     * @param source 源图像
+     * @param target 目标路径
+     * @param maxEdge 最大边长
+     * @param quality 压缩质量（0.0-1.0）
+     * @throws IOException IO 异常
+     */
     private void writeJpegVariant(BufferedImage source, Path target, int maxEdge, float quality) throws IOException {
         int srcWidth = source.getWidth();
         int srcHeight = source.getHeight();
         if (srcWidth <= 0 || srcHeight <= 0) {
             throw new IOException("invalid image dimensions");
         }
+        // 计算缩放比例，保持宽高比
         double scale = Math.min(1.0d, Math.min((double) maxEdge / srcWidth, (double) maxEdge / srcHeight));
         int dstWidth = Math.max(1, (int) Math.round(srcWidth * scale));
         int dstHeight = Math.max(1, (int) Math.round(srcHeight * scale));
 
+        // 创建 RGB 图像，白色背景
         BufferedImage output = new BufferedImage(dstWidth, dstHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = output.createGraphics();
         try {
+            // 设置高质量渲染提示
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -375,6 +504,7 @@ public class MediaManagementService {
             g.dispose();
         }
 
+        // 使用 ImageWriter 写入 JPEG，控制压缩质量
         ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").hasNext()
                 ? ImageIO.getImageWritersByFormatName("jpg").next()
                 : null;
@@ -395,6 +525,12 @@ public class MediaManagementService {
         }
     }
 
+    /**
+     * 从元数据中获取字符串值
+     * @param media 媒体对象
+     * @param key 元数据键
+     * @return 元数据字符串值
+     */
     private String metadataString(Media media, String key) {
         if (media.metadata == null || key == null) {
             return null;
@@ -407,6 +543,12 @@ public class MediaManagementService {
         return text.isEmpty() ? null : text;
     }
 
+    /**
+     * 判断是否需要手动加载原图
+     * 当文件大小超过阈值且为常见媒体类型时，需要手动加载
+     * @param media 媒体对象
+     * @return 是否需要手动加载
+     */
     private boolean requiresManualOriginal(Media media) {
         if (media == null || media.size == null || media.size <= MANUAL_LOAD_THRESHOLD_BYTES) {
             return false;
@@ -418,6 +560,11 @@ public class MediaManagementService {
         return mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/");
     }
 
+    /**
+     * 验证文件扩展名是否被允许
+     * @param fileName 文件名
+     * @throws BadRequestException 如果扩展名被禁止
+     */
     private void validateExtension(String fileName) {
         String extension = extractExtension(fileName);
         if (!extension.isBlank() && BANNED_EXTENSIONS.contains(extension.toLowerCase())) {
@@ -425,6 +572,11 @@ public class MediaManagementService {
         }
     }
 
+    /**
+     * 提取文件扩展名
+     * @param fileName 文件名
+     * @return 文件扩展名（包含点号）
+     */
     private String extractExtension(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return "";
@@ -436,16 +588,24 @@ public class MediaManagementService {
         return fileName.substring(idx).toLowerCase();
     }
 
+    /**
+     * 清理文件名，移除路径信息和特殊字符
+     * 防止路径遍历攻击和文件名注入
+     * @param name 原始文件名
+     * @return 清理后的文件名
+     */
     private String sanitizeFileName(String name) {
         if (name == null || name.isBlank()) {
             return "file";
         }
         String candidate = name.trim();
         int len = candidate.length();
+        // 移除末尾的引号字符
         while (len > 0 && (candidate.charAt(len - 1) == '"' || candidate.charAt(len - 1) == '\'')) {
             len--;
         }
         candidate = candidate.substring(0, len);
+        // 移除路径分隔符，只保留文件名
         int idx = candidate.lastIndexOf('/');
         if (idx >= 0) {
             candidate = candidate.substring(idx + 1);
@@ -460,6 +620,11 @@ public class MediaManagementService {
         return candidate;
     }
 
+    /**
+     * 解析媒体类型
+     * @param mimeType MIME 类型
+     * @return 媒体类型代码（0=图片，1=视频，2=其他）
+     */
     private short parseMediaType(String mimeType) {
         if (mimeType == null) {
             return 2;
@@ -473,6 +638,11 @@ public class MediaManagementService {
         return 2;
     }
 
+    /**
+     * 规范化公共路径，移除末尾斜杠
+     * @param path 原始路径
+     * @return 规范化后的路径
+     */
     private String normalizePublicPath(String path) {
         if (path == null || path.isBlank()) {
             return "/uploads";
@@ -483,6 +653,10 @@ public class MediaManagementService {
         return path;
     }
 
+    /**
+     * 删除目标文件（如果存在）
+     * @param target 文件路径
+     */
     private void deleteTarget(Path target) {
         try {
             Files.deleteIfExists(target);

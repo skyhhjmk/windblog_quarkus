@@ -1,0 +1,236 @@
+[
+  {
+    "_id": "data_view_windblog_logs",
+    "_type": "data-view",
+    "_source": {
+      "title": "windblog-logs-*",
+      "timeFieldName": "@timestamp",
+      "sortField": "@timestamp",
+      "order": "desc",
+      "timeFormat": "YYYY-MM-DD HH:mm:ss.SSSZ",
+      "fieldAttrs": "{}",
+      "fields": [
+        {
+          "name": "@timestamp",
+          "type": "date",
+          "esTypes": ["date"],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "level",
+          "type": "string",
+          "esTypes": ["keyword"],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "logger",
+          "type": "string",
+          "esTypes": ["keyword"],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "esTypes": ["text"],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "thread",
+          "type": "string",
+          "esTypes": ["keyword"],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "class",
+          "type": "string",
+          "esTypes": ["keyword"],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        }
+      ],
+      "allowHidden": false,
+      "allowWildcard": false,
+      "fieldFormatMap": "{}",
+      "runtimeFieldMap": "{}"
+    },
+    "_version": 1,
+    "_meta": {
+      "description": "Windblog 应用日志数据视图"
+    }
+  },
+  {
+    "_id": "search_all_logs",
+    "_type": "search",
+    "_source": {
+      "title": "所有日志",
+      "description": "查看所有应用日志，按时间倒序",
+      "sort": [
+        [
+          "@timestamp",
+          "desc"
+        ]
+      ],
+      "version": true,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "filter": [],
+          "query": {
+            "query": "",
+            "language": "kuery"
+          }
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1,
+    "_meta": {
+      "description": "查看所有日志的快捷搜索"
+    }
+  },
+  {
+    "_id": "search_error_logs",
+    "_type": "search",
+    "_source": {
+      "title": "错误日志",
+      "description": "查看所有 ERROR 级别的日志",
+      "sort": [
+        [
+          "@timestamp",
+          "desc"
+        ]
+      ],
+      "version": true,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "filter": [
+            {
+              "$state": {
+                "store": "appState"
+              },
+              "meta": {
+                "alias": null,
+                "disabled": false,
+                "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+                "key": "level",
+                "negate": false,
+                "params": {
+                  "query": "ERROR"
+                },
+                "type": "phrase"
+              },
+              "query": {
+                "match": {
+                  "level": {
+                    "query": "ERROR",
+                    "type": "phrase"
+                  }
+                }
+              }
+            }
+          ],
+          "query": {
+            "query": "",
+            "language": "kuery"
+          }
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1,
+    "_meta": {
+      "description": "快速查看错误日志"
+    }
+  },
+  {
+    "_id": "search_warn_logs",
+    "_type": "search",
+    "_source": {
+      "title": "警告日志",
+      "description": "查看所有 WARN 级别的日志",
+      "sort": [
+        [
+          "@timestamp",
+          "desc"
+        ]
+      ],
+      "version": true,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": {
+          "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+          "filter": [
+            {
+              "$state": {
+                "store": "appState"
+              },
+              "meta": {
+                "alias": null,
+                "disabled": false,
+                "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index",
+                "key": "level",
+                "negate": false,
+                "params": {
+                  "query": "WARN"
+                },
+                "type": "phrase"
+              },
+              "query": {
+                "match": {
+                  "level": {
+                    "query": "WARN",
+                    "type": "phrase"
+                  }
+                }
+              }
+            }
+          ],
+          "query": {
+            "query": "",
+            "language": "kuery"
+          }
+        }
+      }
+    },
+    "_references": [
+      {
+        "id": "data_view_windblog_logs",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "_version": 1,
+    "_meta": {
+      "description": "快速查看警告日志"
+    }
+  }
+]

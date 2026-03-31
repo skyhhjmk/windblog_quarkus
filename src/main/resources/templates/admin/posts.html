@@ -1,0 +1,154 @@
+{#include admin/base.html}
+    {#title}文章管理 - WindBlog 管理后台{/title}
+    {#pageTitle}文章管理{/pageTitle}
+    {#activePage}posts{/activePage}
+    
+    {#content}
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-800">文章列表</h3>
+                <button onclick="createNewPost()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                    新建文章
+                </button>
+            </div>
+            
+            <!-- 搜索和筛选 -->
+            <div class="flex gap-4 mb-4">
+                <input type="text" id="searchInput" placeholder="搜索文章..." class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select id="statusFilter" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">全部状态</option>
+                    <option value="published">已发布</option>
+                    <option value="draft">草稿</option>
+                </select>
+                <button onclick="loadPosts()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition">
+                    搜索
+                </button>
+            </div>
+            
+            <!-- 文章表格 -->
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">标题</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">作者</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">发布时间</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="postsTableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- 动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 分页 -->
+            <div class="flex justify-between items-center mt-4">
+                <span id="totalCount" class="text-sm text-gray-600">共 0 篇文章</span>
+                <div class="flex gap-2">
+                    <button onclick="prevPage()" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">上一页</button>
+                    <span id="currentPage" class="px-3 py-1">1</span>
+                    <button onclick="nextPage()" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">下一页</button>
+                </div>
+            </div>
+        </div>
+    {/content}
+    
+    {#scripts}
+    <script>
+        let currentPage = 1;
+        const pageSize = 10;
+        
+        async function initPage() {
+            await loadPosts();
+        }
+        
+        async function loadPosts() {
+            try {
+                const search = document.getElementById('searchInput').value;
+                const status = document.getElementById('statusFilter').value;
+                
+                let url = `/posts?page=${currentPage}&pageSize=${pageSize}`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+                if (status) url += `&status=${status}`;
+                
+                const result = await AdminUtils.get(url);
+                
+                const tbody = document.getElementById('postsTableBody');
+                tbody.innerHTML = '';
+                
+                if (result.data && result.data.length > 0) {
+                    result.data.forEach(post => {
+                        const row = createPostRow(post);
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无文章</td></tr>';
+                }
+                
+                document.getElementById('totalCount').textContent = `共 ${result.total || 0} 篇文章`;
+                document.getElementById('currentPage').textContent = currentPage;
+            } catch (error) {
+                console.error('加载文章失败:', error);
+                AdminUtils.showToast('加载文章失败', 'error');
+            }
+        }
+        
+        function createPostRow(post) {
+            const row = document.createElement('tr');
+            const statusClass = post.status === 'published' ? 'text-green-600' : 'text-gray-600';
+            const statusText = post.status === 'published' ? '已发布' : '草稿';
+            
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${post.id}</td>
+                <td class="px-6 py-4 text-sm text-gray-900">${post.title || '无标题'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${post.authorName || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${post.publishedAt ? AdminUtils.formatDate(post.publishedAt) : '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button onclick="editPost(${post.id})" class="text-blue-600 hover:text-blue-900 mr-3">编辑</button>
+                    <button onclick="deletePost(${post.id})" class="text-red-600 hover:text-red-900">删除</button>
+                </td>
+            `;
+            
+            return row;
+        }
+        
+        function createNewPost() {
+            window.location.href = '/admin/posts/new';
+        }
+        
+        function editPost(id) {
+            window.location.href = `/admin/posts/${id}`;
+        }
+        
+        async function deletePost(id) {
+            const confirmed = await Modal.confirm('确定要删除这篇文章吗？');
+            if (!confirmed) return;
+            
+            try {
+                await AdminUtils.delete(`/posts/${id}`);
+                AdminUtils.showToast('删除成功', 'success');
+                await loadPosts();
+            } catch (error) {
+                console.error('删除失败:', error);
+                AdminUtils.showToast('删除失败', 'error');
+            }
+        }
+        
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                loadPosts();
+            }
+        }
+        
+        function nextPage() {
+            currentPage++;
+            loadPosts();
+        }
+    </script>
+    {/scripts}
+{/include}

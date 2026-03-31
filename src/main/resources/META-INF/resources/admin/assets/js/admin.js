@@ -26,7 +26,7 @@ const AdminUtils = {
     async checkAuth() {
         const token = this.getToken();
         if (!token) {
-            window.location.href = '/admin/login.html';
+            window.location.href = '/admin/login';
             return false;
         }
         
@@ -39,14 +39,14 @@ const AdminUtils = {
             
             if (!response.ok) {
                 this.removeToken();
-                window.location.href = '/admin/login.html';
+                window.location.href = '/admin/login';
                 return false;
             }
             
             return true;
         } catch (error) {
             this.removeToken();
-            window.location.href = '/admin/login.html';
+            window.location.href = '/admin/login';
             return false;
         }
     },
@@ -71,7 +71,7 @@ const AdminUtils = {
         if (response.status === 401) {
             if (handle401) {
                 this.removeToken();
-                window.location.href = '/admin/login.html';
+                window.location.href = '/admin/login';
                 throw new Error('未授权，请重新登录');
             } else {
                 throw new Error('未授权');
@@ -149,16 +149,68 @@ const AdminUtils = {
     // 退出登录
     async logout() {
         this.removeToken();
-        window.location.href = '/admin/login.html';
+        window.location.href = '/admin/login';
+    }
+};
+
+// 队列管理 API
+const QueueAPI = {
+    // 获取所有队列信息
+    async getQueues() {
+        return AdminUtils.get('/queues');
+    },
+
+    // 获取单个队列详情
+    async getQueueDetail(queueName) {
+        return AdminUtils.get(`/queues/${queueName}`);
+    },
+
+    // 推送测试消息
+    async publishMessage(queueName, postData) {
+        return AdminUtils.post(`/queues/${queueName}/publish`, postData);
+    },
+
+    // 生成消息示例
+    async generateExample() {
+        return AdminUtils.get('/queues/generate-example');
+    },
+
+    // 死信消息相关
+    async getDeadLetters(processed = null, limit = 50) {
+        let url = `/dead-letters?limit=${limit}`;
+        if (processed !== null) {
+            url += `&processed=${processed}`;
+        }
+        return AdminUtils.get(url);
+    },
+
+    async getDeadLetterStats() {
+        return AdminUtils.get('/dead-letters/stats');
+    },
+
+    async retryDeadLetter(id) {
+        return AdminUtils.post(`/dead-letters/${id}/retry`);
+    },
+
+    async retryBatch(limit = 10) {
+        return AdminUtils.post(`/dead-letters/retry-batch?limit=${limit}`);
+    },
+
+    async dismissDeadLetter(id, note) {
+        return AdminUtils.post(`/dead-letters/${id}/dismiss?note=${encodeURIComponent(note || '')}`);
+    },
+
+    async deleteDeadLetter(id) {
+        return AdminUtils.delete(`/dead-letters/${id}`);
     }
 };
 
 // 页面导航管理
 const PageNavigator = {
     navigate(page) {
-        const pages = ['dashboard', 'posts', 'categories', 'tags', 'comments', 'users', 'media'];
+        const pages = ['dashboard', 'posts', 'categories', 'tags', 'comments', 'users', 'media', 'queues'];
         if (pages.includes(page)) {
-            window.location.href = `/admin/${page}.html`;
+            window.location.href = `/admin/${page}`;
         }
     },
     
