@@ -107,6 +107,24 @@ public class Post extends PanacheEntityBase {
     @Column(name = "deleted_at")
     public OffsetDateTime deletedAt;
 
+    /**
+     * 阅读数量
+     */
+    @Column(name = "view_count", nullable = false)
+    public Long viewCount = 0L;
+
+    /**
+     * 是否为特色文章
+     */
+    @Column(nullable = false)
+    public Boolean featured = false;
+
+    /**
+     * 是否允许评论
+     */
+    @Column(name = "allow_comment", nullable = false)
+    public Boolean allowComment = true;
+
     /** 乐观锁版本号 */
     @Version
     @Column(nullable = false)

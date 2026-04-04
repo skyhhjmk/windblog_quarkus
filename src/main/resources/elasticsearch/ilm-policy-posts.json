@@ -1,0 +1,56 @@
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "min_age": "0ms",
+        "actions": {
+          "set_priority": {
+            "priority": 100
+          },
+          "codec": {
+            "name": "lz4"
+          },
+          "rollover": {
+            "max_age": "30d",
+            "max_primary_shard_size": "50gb"
+          }
+        }
+      },
+      "warm": {
+        "min_age": "7d",
+        "actions": {
+          "set_priority": {
+            "priority": 50
+          },
+          "codec": {
+            "name": "zstd"
+          },
+          "forcemerge": {
+            "max_num_segments": 1
+          },
+          "shrink": {
+            "number_of_shards": 1
+          }
+        }
+      },
+      "cold": {
+        "min_age": "30d",
+        "actions": {
+          "set_priority": {
+            "priority": 0
+          },
+          "codec": {
+            "name": "best_compression"
+          },
+          "freeze": {}
+        }
+      },
+      "delete": {
+        "min_age": "365d",
+        "actions": {
+          "delete": {}
+        }
+      }
+    }
+  }
+}

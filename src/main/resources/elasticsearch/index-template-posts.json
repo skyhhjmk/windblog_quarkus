@@ -1,0 +1,131 @@
+{
+  "index_patterns": [
+    "windblog-posts-*"
+  ],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.refresh_interval": "5s",
+      "index.lifecycle.name": "windblog-posts-policy",
+      "index.lifecycle.rollover_alias": "windblog-posts",
+      "analysis": {
+        "analyzer": {
+          "ik_smart_analyzer": {
+            "type": "custom",
+            "tokenizer": "ik_smart",
+            "filter": [
+              "lowercase"
+            ]
+          },
+          "ik_max_word_analyzer": {
+            "type": "custom",
+            "tokenizer": "ik_max_word",
+            "filter": [
+              "lowercase"
+            ]
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "id": {
+          "type": "long"
+        },
+        "title": {
+          "type": "text",
+          "analyzer": "ik_max_word_analyzer",
+          "search_analyzer": "ik_smart_analyzer",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "content": {
+          "type": "text",
+          "analyzer": "ik_max_word_analyzer",
+          "search_analyzer": "ik_smart_analyzer"
+        },
+        "contentHtml": {
+          "type": "text",
+          "analyzer": "ik_max_word_analyzer",
+          "search_analyzer": "ik_smart_analyzer"
+        },
+        "summary": {
+          "type": "text",
+          "analyzer": "ik_max_word_analyzer",
+          "search_analyzer": "ik_smart_analyzer"
+        },
+        "slug": {
+          "type": "keyword"
+        },
+        "status": {
+          "type": "keyword"
+        },
+        "visibility": {
+          "type": "keyword"
+        },
+        "authorId": {
+          "type": "long"
+        },
+        "authorName": {
+          "type": "keyword"
+        },
+        "categoryId": {
+          "type": "long"
+        },
+        "categoryName": {
+          "type": "keyword"
+        },
+        "categoryPath": {
+          "type": "keyword"
+        },
+        "tags": {
+          "type": "keyword"
+        },
+        "viewCount": {
+          "type": "long"
+        },
+        "featured": {
+          "type": "boolean"
+        },
+        "allowComment": {
+          "type": "boolean"
+        },
+        "seoTitle": {
+          "type": "text",
+          "analyzer": "ik_max_word_analyzer",
+          "search_analyzer": "ik_smart_analyzer"
+        },
+        "seoKeywords": {
+          "type": "keyword"
+        },
+        "seoDescription": {
+          "type": "text",
+          "analyzer": "ik_max_word_analyzer",
+          "search_analyzer": "ik_smart_analyzer"
+        },
+        "publishedAt": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
+        "createdAt": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
+        "updatedAt": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        }
+      }
+    }
+  },
+  "priority": 200,
+  "version": 2,
+  "_meta": {
+    "description": "Template for windblog posts index with IK Chinese tokenizer"
+  }
+}

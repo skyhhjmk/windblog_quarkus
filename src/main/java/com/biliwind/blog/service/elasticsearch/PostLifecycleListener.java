@@ -2,15 +2,15 @@ package com.biliwind.blog.service.elasticsearch;
 
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
-import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.enterprise.event.TransactionPhase;
 import jakarta.enterprise.event.ObservesAsync;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import org.jboss.logging.Logger;
 
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -26,10 +26,12 @@ public class PostLifecycleListener {
     @Inject
     ElasticsearchPostSearchService postSearchService;
 
+    @Inject
+    EntityManager entityManager;
+
     private ExecutorService executorService;
 
     void onStart(@Observes StartupEvent event) {
-        // Create thread pool for asynchronous processing
         executorService = Executors.newFixedThreadPool(2);
         log.info("PostLifecycleListener started");
     }
@@ -42,22 +44,29 @@ public class PostLifecycleListener {
         if (post == null) {
             return;
         }
+
+        final Long postId = post.id;
         
         executorService.submit(() -> {
             try {
-                log.infof("Detected article update event: %d", post.id);
-                
-                // If article is published, index to Elasticsearch
-                if (post.status == PostStatus.PUBLISHED) {
-                    postSearchService.indexPost(post);
-                    log.infof("Article synchronized to Elasticsearch: %d", post.id);
+                log.infof("Detected article update event: %d", postId);
+
+                Post refreshedPost = entityManager.find(Post.class, postId);
+                if (refreshedPost == null) {
+                    log.warnf("Article not found: %d, skipping index", postId);
+                    return;
+                }
+
+                if (refreshedPost.status == PostStatus.PUBLISHED) {
+                    List<String> tags = postSearchService.getPostTags(postId);
+                    postSearchService.indexPost(refreshedPost, tags);
+                    log.infof("Article synchronized to Elasticsearch: %d (with %d tags)", postId, tags.size());
                 } else {
-                    // If article is not published, delete index
-                    postSearchService.deletePostIndex(post.id);
-                    log.infof("Article index deleted: %d", post.id);
+                    postSearchService.deletePostIndex(postId);
+                    log.infof("Article index deleted: %d", postId);
                 }
             } catch (Exception e) {
-                log.errorf("Failed to sync article to Elasticsearch: %d", post.id, e);
+                log.errorf("Failed to sync article to Elasticsearch: %d", postId, e);
             }
         });
     }
@@ -69,14 +78,16 @@ public class PostLifecycleListener {
         if (post == null) {
             return;
         }
+
+        final Long postId = post.id;
         
         executorService.submit(() -> {
             try {
-                log.infof("Detected article deletion event: %d", post.id);
-                postSearchService.deletePostIndex(post.id);
-                log.infof("Article index deleted: %d", post.id);
+                log.infof("Detected article deletion event: %d", postId);
+                postSearchService.deletePostIndex(postId);
+                log.infof("Article index deleted: %d", postId);
             } catch (Exception e) {
-                log.errorf("Failed to delete article index: %d", post.id, e);
+                log.errorf("Failed to delete article index: %d", postId, e);
             }
         });
     }

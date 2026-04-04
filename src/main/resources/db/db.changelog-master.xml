@@ -38,4 +38,5 @@
     <include file="migration/033-add-tags-updated-at.sql" relativeToChangelogFile="true"/>
     <include file="migration/034-add-post-category.sql" relativeToChangelogFile="true"/>
     <include file="migration/036-create-dead-letter-messages.sql" relativeToChangelogFile="true"/>
+    <include file="migration/037-add-post-stats-fields.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

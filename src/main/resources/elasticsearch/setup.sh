@@ -130,14 +130,86 @@ fi
 
 # 验证配置
 echo ""
-echo "步骤 5: 验证配置..."
+echo "步骤 5: 创建文章搜索索引..."
 echo ""
-echo "ILM 策略:"
+
+# 创建文章 ILM 策略
+POSTS_ILM_FILE="${SCRIPT_DIR}/ilm-policy-posts.json"
+if [ -f "$POSTS_ILM_FILE" ]; then
+    response=$(curl -s -w "\n%{http_code}" $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/_ilm/policy/windblog-posts-policy" \
+        -H "Content-Type: application/json" \
+        -d @"$POSTS_ILM_FILE")
+    
+    http_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" = "200" ]; then
+        echo "✓ 文章 ILM 策略创建成功"
+    else
+        echo "⚠ 文章 ILM 策略可能已存在 (HTTP $http_code)"
+    fi
+else
+    echo "⚠ 找不到文章 ILM 策略文件：$POSTS_ILM_FILE"
+fi
+
+# 创建文章索引模板
+POSTS_TEMPLATE_FILE="${SCRIPT_DIR}/index-template-posts.json"
+if [ -f "$POSTS_TEMPLATE_FILE" ]; then
+    response=$(curl -s -w "\n%{http_code}" $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/_index_template/windblog-posts-template" \
+        -H "Content-Type: application/json" \
+        -d @"$POSTS_TEMPLATE_FILE")
+    
+    http_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" = "200" ]; then
+        echo "✓ 文章索引模板创建成功"
+    else
+        echo "⚠ 文章索引模板创建失败 (HTTP $http_code)"
+        echo "$body"
+    fi
+else
+    echo "⚠ 找不到文章索引模板文件：$POSTS_TEMPLATE_FILE"
+fi
+
+# 创建初始文章索引
+response=$(curl -s -w "\n%{http_code}" $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/windblog-posts-000001" \
+    -H "Content-Type: application/json" \
+    -d '{
+          "aliases": {
+            "windblog-posts": {
+              "is_write_index": true
+            }
+          }
+        }')
+
+http_code=$(echo "$response" | tail -n1)
+body=$(echo "$response" | sed '$d')
+
+if [ "$http_code" = "200" ]; then
+    echo "✓ 初始文章索引创建成功"
+else
+    echo "⚠ 初始文章索引可能已存在 (HTTP $http_code)"
+fi
+
+# 验证配置
+echo ""
+echo "步骤 6: 验证配置..."
+echo ""
+echo "ILM 策略 (日志):"
 curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_ilm/policy/windblog-logs-policy" | python3 -m json.tool 2>/dev/null || curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_ilm/policy/windblog-logs-policy"
 
 echo ""
-echo "索引模板:"
+echo "ILM 策略 (文章):"
+curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_ilm/policy/windblog-posts-policy" | python3 -m json.tool 2>/dev/null || curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_ilm/policy/windblog-posts-policy"
+
+echo ""
+echo "索引模板 (日志):"
 curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/windblog-logs-template" | python3 -m json.tool 2>/dev/null || curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/windblog-logs-template"
+
+echo ""
+echo "索引模板 (文章):"
+curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/windblog-posts-template" | python3 -m json.tool 2>/dev/null || curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/windblog-posts-template"
 
 echo ""
 echo "========================================"

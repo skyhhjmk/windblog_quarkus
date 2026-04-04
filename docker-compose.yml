@@ -72,10 +72,13 @@ services:
       retries: 5
       start_period: 10s
 
-  # Elasticsearch 9.2 - 日志存储和搜索
+  # Elasticsearch 9.3.2 - 日志存储和搜索（包含 IK 中文分词插件）
   elasticsearch:
     container_name: elasticsearch
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
+    build:
+      context: ./docker/elasticsearch
+      dockerfile: Dockerfile
+    image: windblog-elasticsearch:9.3.2-ik
     restart: unless-stopped
     environment:
       # 单节点模式
@@ -88,8 +91,8 @@ services:
       cluster.name: windblog-cluster
       # 节点名称
       node.name: windblog-node-1
-      # 认证密钥（从环境变量读取，默认值仅用于开发）
-      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-elastic123456}
+      # 认证密钥（从环境变量读取）
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
     ports:
       # HTTP API 端口
       - "9200:9200"
@@ -100,37 +103,30 @@ services:
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -kf -u elastic:$${ELASTIC_PASSWORD:-elastic123456} http://localhost:9200/_cluster/health || exit 1"]
+      test: [ "CMD-SHELL", "curl -kf -u elastic:${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 90s
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
 
-  # Kibana 9.2 - 日志可视化
+  # Kibana 9.3.2 - 日志可视化
   kibana:
     container_name: kibana
-    image: docker.elastic.co/kibana/kibana:9.2.0
+    image: elastic.1ms.run/kibana/kibana:9.3.2
     restart: unless-stopped
     environment:
       # 连接 Elasticsearch（使用 HTTPS）
       ELASTICSEARCH_HOSTS: "http://elasticsearch:9200"
       # Elasticsearch 认证（使用 kibana_system 服务账户）
-      ELASTICSEARCH_SERVICEACCOUNTTOKEN: ${KIBANA_SERVICE_ACCOUNT_TOKEN:-}
-      # 或者使用专用用户（如果没有服务账户令牌）
-      # ELASTICSEARCH_USERNAME: kibana_system
-      # ELASTICSEARCH_PASSWORD: ${KIBANA_PASSWORD:-kibana123456}
+      ELASTICSEARCH_SERVICEACCOUNTTOKEN: ${KIBANA_SERVICE_ACCOUNT_TOKEN}
       # 启用 xpack 安全
       xpack.security.enabled: "true"
       # 语言设置
       I18N_LOCALE: zh-CN
       # Kibana 加密密钥（用于加密 session 等敏感数据）
-      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY:-a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY}
       # Kibana 服务器密钥（用于生成和验证 JWT）
-      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_KEY:-p6o5n4m3l2k1j0i9h8g7f6e5d4c3b2a1}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_KEY}
       # 启用 SSL（可选，开发环境可禁用）
       # SERVER_SSL_ENABLED: "true"
       # SERVER_SSL_CERTIFICATE: /usr/share/kibana/config/certs/kibana.crt

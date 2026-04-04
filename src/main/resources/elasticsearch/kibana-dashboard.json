@@ -15,7 +15,7 @@
             "i": "1"
           },
           "panelIndex": "1",
-          "version": "9.2.0",
+          "version": "9.3.2",
           "embeddableConfig": {},
           "id": "visualization_log_level_distribution",
           "type": "visualization"
@@ -29,7 +29,7 @@
             "i": "2"
           },
           "panelIndex": "2",
-          "version": "9.2.0",
+          "version": "9.3.2",
           "embeddableConfig": {},
           "id": "visualization_log_timeline",
           "type": "visualization"
@@ -43,7 +43,7 @@
             "i": "3"
           },
           "panelIndex": "3",
-          "version": "9.2.0",
+          "version": "9.3.2",
           "embeddableConfig": {},
           "id": "visualization_top_loggers",
           "type": "visualization"
@@ -57,7 +57,7 @@
             "i": "4"
           },
           "panelIndex": "4",
-          "version": "9.2.0",
+          "version": "9.3.2",
           "embeddableConfig": {},
           "id": "visualization_error_trend",
           "type": "visualization"
@@ -71,7 +71,7 @@
             "i": "5"
           },
           "panelIndex": "5",
-          "version": "9.2.0",
+          "version": "9.3.2",
           "embeddableConfig": {},
           "id": "visualization_recent_logs",
           "type": "visualization"
@@ -94,7 +94,7 @@
           "filter": []
         }
       },
-      "version": "9.2.0"
+      "version": "9.3.2"
     },
     "_version": 1,
     "_meta": {

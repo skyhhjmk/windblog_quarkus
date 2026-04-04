@@ -76,6 +76,260 @@
     }
   },
   {
+    "_id": "data_view_windblog_posts",
+    "_type": "data-view",
+    "_source": {
+      "title": "windblog-posts-*",
+      "timeFieldName": "publishedAt",
+      "sortField": "publishedAt",
+      "order": "desc",
+      "timeFormat": "YYYY-MM-DDTHH:mm:ss.SSSZ",
+      "fieldAttrs": "{}",
+      "fields": [
+        {
+          "name": "id",
+          "type": "long",
+          "esTypes": [
+            "long"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "esTypes": [
+            "text"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "esTypes": [
+            "text"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "slug",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "visibility",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "authorId",
+          "type": "long",
+          "esTypes": [
+            "long"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "authorName",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "categoryId",
+          "type": "long",
+          "esTypes": [
+            "long"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "categoryName",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "tags",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "viewCount",
+          "type": "long",
+          "esTypes": [
+            "long"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "featured",
+          "type": "boolean",
+          "esTypes": [
+            "boolean"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "allowComment",
+          "type": "boolean",
+          "esTypes": [
+            "boolean"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "seoTitle",
+          "type": "string",
+          "esTypes": [
+            "text"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "seoKeywords",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "seoDescription",
+          "type": "string",
+          "esTypes": [
+            "text"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "publishedAt",
+          "type": "date",
+          "esTypes": [
+            "date"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "createdAt",
+          "type": "date",
+          "esTypes": [
+            "date"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "updatedAt",
+          "type": "date",
+          "esTypes": [
+            "date"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        }
+      ],
+      "allowHidden": false,
+      "allowWildcard": false,
+      "fieldFormatMap": "{}",
+      "runtimeFieldMap": "{}"
+    },
+    "_version": 1,
+    "_meta": {
+      "description": "Windblog 文章搜索数据视图（支持 IK 中文分词）"
+    }
+  },
+  {
     "_id": "search_all_logs",
     "_type": "search",
     "_source": {

@@ -67,7 +67,7 @@ public class SearchController {
         // 使用 Elasticsearch 搜索文章，其他类型仍然使用数据库搜索
         List<SearchHit> allHits;
         if (useElasticsearch && !searchKeyword.isBlank() && ("all".equals(searchType) || "post".equals(searchType))) {
-            allHits = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang);
+            allHits = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
         } else {
             allHits = buildHits(searchKeyword, searchType, searchSort, searchDate, lang);
         }
@@ -147,18 +147,16 @@ public class SearchController {
     /**
      * 使用 Elasticsearch 搜索文章
      */
-    private List<SearchHit> searchWithElasticsearch(String keyword, String type, String sort, String date, String lang) {
+    private List<SearchHit> searchWithElasticsearch(String keyword, String type, String sort, String date, String lang, int page) {
         try {
-            log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s", keyword, type);
-            
-            // 调用 Elasticsearch 搜索服务
-            var searchResult = postSearchService.searchPosts(keyword, 1, 100, "PUBLISHED", null, null);
+            log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s, page=%d", keyword, type, page);
+
+            var searchResult = postSearchService.searchPosts(keyword, page, PAGE_SIZE, "PUBLISHED", null, null);
             
             OffsetDateTime threshold = dateThreshold(date);
             List<SearchHit> hits = new ArrayList<>();
             
             for (var post : searchResult.posts()) {
-                // 应用日期过滤
                 if (threshold != null && post.publishedAt() != null) {
                     try {
                         OffsetDateTime postDate = OffsetDateTime.parse(post.publishedAt());
@@ -170,7 +168,6 @@ public class SearchController {
                     }
                 }
                 
-                // 转换为 SearchHit
                 SearchHit hit = new SearchHit(
                     "post",
                     "Post",
@@ -185,15 +182,13 @@ public class SearchController {
                 hits.add(hit);
             }
             
-            // 应用排序
             hits.sort(hitComparator(sort));
-            
-            log.infof("Elasticsearch 搜索结果：%d 篇文章", hits.size());
+
+            log.infof("Elasticsearch 搜索结果：%d 篇文章（共 %d 条）", hits.size(), searchResult.total());
             return hits;
             
         } catch (Exception e) {
             log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);
-            // 回退到数据库搜索
             return buildHits(keyword, type, sort, date, lang);
         }
     }

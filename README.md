@@ -384,7 +384,7 @@ docker-compose --env-file .env up -d
 #### Docker Compose 配置
 ```yaml
 elasticsearch:
-  image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
+  image: docker.elastic.co/elasticsearch/elasticsearch:9.3.2
   ports:
     - "9200:9200"
   environment:
@@ -392,7 +392,7 @@ elasticsearch:
     - xpack.security.enabled=false
 
 kibana:
-  image: docker.elastic.co/kibana/kibana:9.2.0
+  image: docker.elastic.co/kibana/kibana:9.3.2
   ports:
     - "5601:5601"
   depends_on:
