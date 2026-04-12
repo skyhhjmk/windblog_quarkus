@@ -163,11 +163,117 @@ try {
     Write-Host $_.Exception.Message
 }
 
+# 创建文章搜索索引
+Write-Host ""
+Write-Host "步骤 5: 创建文章搜索索引..."
+
+# 创建文章 ILM 策略
+$POSTS_ILM_FILE = Join-Path $SCRIPT_DIR "ilm-policy-posts.json"
+
+if (Test-Path $POSTS_ILM_FILE)
+{
+    try
+    {
+        $policyContent = Get-Content $POSTS_ILM_FILE -Raw
+        $params = @{
+            Uri = "${ES_URL}/_ilm/policy/windblog-posts-policy"
+            Method = PUT
+            Body = $policyContent
+            ContentType = "application/json; charset=utf-8"
+            UseBasicParsing = $true
+            Headers = $AUTH_HEADER
+        }
+        if ($USE_HTTPS)
+        {
+            $params.SkipCertificateCheck = $true
+        }
+        $response = Invoke-WebRequest @params
+
+        Write-Host "✓ 文章 ILM 策略创建成功"
+    }
+    catch
+    {
+        Write-Host "⚠ 文章 ILM 策略可能已存在"
+    }
+}
+else
+{
+    Write-Host "⚠ 找不到文章 ILM 策略文件：$POSTS_ILM_FILE"
+}
+
+# 创建文章索引模板
+$POSTS_TEMPLATE_FILE = Join-Path $SCRIPT_DIR "index-template-posts.json"
+
+if (Test-Path $POSTS_TEMPLATE_FILE)
+{
+    try
+    {
+        $templateContent = Get-Content $POSTS_TEMPLATE_FILE -Raw
+        $params = @{
+            Uri = "${ES_URL}/_index_template/windblog-posts-template"
+            Method = PUT
+            Body = $templateContent
+            ContentType = "application/json; charset=utf-8"
+            UseBasicParsing = $true
+            Headers = $AUTH_HEADER
+        }
+        if ($USE_HTTPS)
+        {
+            $params.SkipCertificateCheck = $true
+        }
+        $response = Invoke-WebRequest @params
+
+        Write-Host "✓ 文章索引模板创建成功"
+    }
+    catch
+    {
+        Write-Host "⚠ 文章索引模板创建失败"
+    }
+}
+else
+{
+    Write-Host "⚠ 找不到文章索引模板文件：$POSTS_TEMPLATE_FILE"
+}
+
+# 创建初始文章索引
+$initialPostsIndexBody = @"
+{
+  "aliases": {
+    "windblog-posts": {
+      "is_write_index": true
+    }
+  }
+}
+"@
+
+try
+{
+    $params = @{
+        Uri = "${ES_URL}/windblog-posts-000001"
+        Method = PUT
+        Body = $initialPostsIndexBody
+        ContentType = "application/json; charset=utf-8"
+        UseBasicParsing = $true
+        Headers = $AUTH_HEADER
+    }
+    if ($USE_HTTPS)
+    {
+        $params.SkipCertificateCheck = $true
+    }
+    $response = Invoke-WebRequest @params
+
+    Write-Host "✓ 初始文章索引创建成功"
+}
+catch
+{
+    Write-Host "⚠ 初始文章索引可能已存在"
+}
+
 # 验证配置
 Write-Host ""
-Write-Host "步骤 5: 验证配置..."
+Write-Host "步骤 6: 验证配置..."
 Write-Host ""
-Write-Host "ILM 策略:"
+Write-Host "ILM 策略 (日志):"
 try {
     $params = @{
         Uri = "${ES_URL}/_ilm/policy/windblog-logs-policy"
@@ -180,11 +286,32 @@ try {
     $response = Invoke-WebRequest @params
     Write-Host $response.Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
 } catch {
-    Write-Host "无法获取 ILM 策略"
+    Write-Host "无法获取日志 ILM 策略"
 }
 
 Write-Host ""
-Write-Host "索引模板:"
+Write-Host "ILM 策略 (文章):"
+try
+{
+    $params = @{
+        Uri = "${ES_URL}/_ilm/policy/windblog-posts-policy"
+        UseBasicParsing = $true
+        Headers = $AUTH_HEADER
+    }
+    if ($USE_HTTPS)
+    {
+        $params.SkipCertificateCheck = $true
+    }
+    $response = Invoke-WebRequest @params
+    Write-Host $response.Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
+}
+catch
+{
+    Write-Host "无法获取文章 ILM 策略"
+}
+
+Write-Host ""
+Write-Host "索引模板 (日志):"
 try {
     $params = @{
         Uri = "${ES_URL}/_index_template/windblog-logs-template"
@@ -197,12 +324,33 @@ try {
     $response = Invoke-WebRequest @params
     Write-Host $response.Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
 } catch {
-    Write-Host "无法获取索引模板"
+    Write-Host "无法获取日志索引模板"
+}
+
+Write-Host ""
+Write-Host "索引模板 (文章):"
+try
+{
+    $params = @{
+        Uri = "${ES_URL}/_index_template/windblog-posts-template"
+        UseBasicParsing = $true
+        Headers = $AUTH_HEADER
+    }
+    if ($USE_HTTPS)
+    {
+        $params.SkipCertificateCheck = $true
+    }
+    $response = Invoke-WebRequest @params
+    Write-Host $response.Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
+}
+catch
+{
+    Write-Host "无法获取文章索引模板"
 }
 
 # 导入 Kibana 视图和仪表板
 Write-Host ""
-Write-Host "步骤 6: 导入 Kibana 视图和仪表板..."
+Write-Host "步骤 7: 导入 Kibana 视图和仪表板..."
 $KIBANA_SAVED_OBJECTS_FILE = Join-Path $SCRIPT_DIR "kibana-saved-objects.json"
 
 if (Test-Path $KIBANA_SAVED_OBJECTS_FILE) {
@@ -226,7 +374,7 @@ if (Test-Path $KIBANA_SAVED_OBJECTS_FILE) {
 
 # 导入 Kibana 仪表板
 Write-Host ""
-Write-Host "步骤 7: 导入 Kibana 仪表板..."
+Write-Host "步骤 8: 导入 Kibana 仪表板..."
 $KIBANA_DASHBOARD_FILE = Join-Path $SCRIPT_DIR "kibana-dashboard.json"
 
 if (Test-Path $KIBANA_DASHBOARD_FILE) {

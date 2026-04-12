@@ -211,6 +211,54 @@ echo ""
 echo "索引模板 (文章):"
 curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/windblog-posts-template" | python3 -m json.tool 2>/dev/null || curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/windblog-posts-template"
 
+# 导入 Kibana 视图和仪表板
+echo ""
+echo "步骤 7: 导入 Kibana 视图和仪表板..."
+KIBANA_SAVED_OBJECTS_FILE="${SCRIPT_DIR}/kibana-saved-objects.json"
+
+if [ -f "$KIBANA_SAVED_OBJECTS_FILE" ]; then
+    response=$(curl -s -w "\n%{http_code}" -X POST "${KIBANA_URL}/api/saved_objects/_import?overwrite=true" \
+        -H "Content-Type: application/json" \
+        --data-binary @"$KIBANA_SAVED_OBJECTS_FILE")
+    
+    http_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" = "200" ]; then
+        echo "✓ Kibana 视图导入成功"
+        echo "$body"
+    else
+        echo "⚠ Kibana 视图导入失败，可以稍后手动导入 (HTTP $http_code)"
+        echo "$body"
+    fi
+else
+    echo "⚠ 找不到 Kibana saved objects 文件"
+fi
+
+# 导入 Kibana 仪表板
+echo ""
+echo "步骤 8: 导入 Kibana 仪表板..."
+KIBANA_DASHBOARD_FILE="${SCRIPT_DIR}/kibana-dashboard.json"
+
+if [ -f "$KIBANA_DASHBOARD_FILE" ]; then
+    response=$(curl -s -w "\n%{http_code}" -X POST "${KIBANA_URL}/api/saved_objects/_import?overwrite=true" \
+        -H "Content-Type: application/json" \
+        --data-binary @"$KIBANA_DASHBOARD_FILE")
+    
+    http_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" = "200" ]; then
+        echo "✓ Kibana 仪表板导入成功"
+        echo "$body"
+    else
+        echo "⚠ Kibana 仪表板导入失败，可以稍后手动导入 (HTTP $http_code)"
+        echo "$body"
+    fi
+else
+    echo "⚠ 找不到 Kibana 仪表板文件"
+fi
+
 echo ""
 echo "========================================"
 echo "✓ Elasticsearch 和 Kibana 初始化完成"
@@ -218,8 +266,8 @@ echo "========================================"
 echo ""
 echo "下一步:"
 echo "1. 启动应用，日志将自动推送到 Elasticsearch"
-echo "2. 访问 Kibana (http://localhost:5601) 查看日志"
+echo "2. 访问 Kibana (http://localhost:5601) 查看日志和仪表板"
 echo "   - 用户名：elastic"
 echo "   - 密码：\$ELASTIC_PASSWORD"
-echo "3. 在 Kibana 中创建 Data View: windblog-logs-*"
+echo "3. 预配置的视图和仪表板已自动导入"
 echo ""

@@ -7,7 +7,8 @@ filebeat.inputs:
     enabled: true
     id: windblog-app-logs
     paths:
-      - /var/log/windblog/application.log*
+      - /var/log/windblog/application.log       # 当前日志文件
+      - /var/log/windblog/application.log.*     # 仅匹配重命名文件（不匹配其他.log文件）
     
     # 解析器配置，直接解析JSON
     parsers:
@@ -26,11 +27,27 @@ filebeat.inputs:
 # processors 配置
 processors:
   # 添加主机元数据
-  - add_host_metadata:
-      when.not.contains.tags: forwarded
+  #  - add_host_metadata:
+  #      when.not.contains.tags: forwarded
   
   # 添加云元数据（如果在云上运行）
-  - add_cloud_metadata: ~
+  #  - add_cloud_metadata: ~
+
+  - timestamp:
+      field: timestamp
+      layouts:
+        # DO NOT CHANGE
+        - '2006-01-02T15:04:05.9999999Z07:00'  # ISO8601 以及显式时区偏移+8 6位微秒精度
+      ignore_missing: true
+      remove_field: true
+
+  - drop_fields:
+      fields: [ "@timestamp" ]
+      ignore_missing: true
+
+  - drop_fields:
+      fields: [ "agent", "ecs", "host.architecture", "host.containerized", "host.id", "host.ip", "host.mac", "input", "log.file", "ndc", "hostName" ]
+      ignore_missing: true
   
   # 将 timestamp 字段重命名为 @timestamp（Elasticsearch 标准字段）
   - rename:
