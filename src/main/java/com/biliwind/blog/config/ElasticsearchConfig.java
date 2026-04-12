@@ -20,7 +20,7 @@ import java.security.cert.X509Certificate;
 @Singleton
 public class ElasticsearchConfig {
 
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.ssl-trust-all", defaultValue = "false")
+    @ConfigProperty(name = "elasticsearch.ssl-trust-all", defaultValue = "false")
     boolean sslTrustAll;
 
     /**

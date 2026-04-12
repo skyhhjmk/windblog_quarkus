@@ -29,7 +29,7 @@ public class ElasticsearchIndexService {
     @Inject
     ElasticsearchConnectionManager connectionManager;
 
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.hosts")
+    @ConfigProperty(name = "elasticsearch.hosts")
     String elasticsearchHosts;
 
     private static final String ILM_POLICY_NAME = "windblog-logs-policy";

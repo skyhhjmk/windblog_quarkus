@@ -33,11 +33,11 @@ public class ElasticsearchConnectionManager {
     private final CopyOnWriteArrayList<Runnable> onAvailableCallbacks = new CopyOnWriteArrayList<>();
     @Inject
     HttpClient httpClient;
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.hosts")
+    @ConfigProperty(name = "elasticsearch.hosts")
     String elasticsearchHosts;
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.username", defaultValue = "")
+    @ConfigProperty(name = "elasticsearch.username", defaultValue = "")
     String username;
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.password", defaultValue = "")
+    @ConfigProperty(name = "elasticsearch.password", defaultValue = "")
     String password;
     @ConfigProperty(name = "elasticsearch.health-check.interval-seconds", defaultValue = "30")
     int healthCheckIntervalSeconds;

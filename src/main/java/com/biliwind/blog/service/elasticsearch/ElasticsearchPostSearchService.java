@@ -30,7 +30,7 @@ public class ElasticsearchPostSearchService {
 
     private final AtomicBoolean indexInitialized = new AtomicBoolean(false);
 
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.hosts")
+    @ConfigProperty(name = "elasticsearch.hosts")
     String elasticsearchHosts;
 
     private static final String POST_INDEX_TEMPLATE = "windblog-posts-template";

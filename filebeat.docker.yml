@@ -2,19 +2,19 @@
 # 参考官方文档：https://www.elastic.co/docs/reference/beats/filebeat/running-on-docker
 
 filebeat.inputs:
-  # 应用日志输入（使用 filestream）
+  # 应用日志输入（使用 filestream，Filebeat 9.x 强制要求）
   - type: filestream
     enabled: true
-    id: windblog-app-logs  # 每个输入需要唯一 ID
+    id: windblog-app-logs
     paths:
       - /var/log/windblog/application.log*
-      - /var/log/windblog/application.log.*
     
-    # 日志格式为 JSON
-    json.keys_under_root: true
-    json.overwrite_keys: true
-    json.add_error_key: true
-    json.message_key: message
+    # 解析器配置，直接解析JSON
+    parsers:
+      - ndjson:
+          keys_under_root: true
+          overwrite_keys: true
+          add_error_key: true
     
     # 日志标签
     fields:
@@ -22,14 +22,6 @@ filebeat.inputs:
       service_name: windblog
       log_type: application
       environment: ${ENVIRONMENT:-development}
-    
-    # 多行日志合并（用于堆栈跟踪）
-    multiline.type: pattern
-    multiline.pattern: '^\{'
-    multiline.negate: true
-    multiline.match: after
-    multiline.max_lines: 500
-    multiline.timeout: 5s
 
 # processors 配置
 processors:
@@ -40,16 +32,13 @@ processors:
   # 添加云元数据（如果在云上运行）
   - add_cloud_metadata: ~
   
-  # 解析时间戳
-  - timestamp:
-      field: timestamp
-      layouts:
-        - '2006-01-02T15:04:05.000Z'
-        - '2006-01-02T15:04:05.000-0700'
-        - '2006-01-02 15:04:05.000'
-      test:
-        - '2026-04-08T23:09:52.328Z'
-        - '2026-04-08 23:09:52.328'
+  # 将 timestamp 字段重命名为 @timestamp（Elasticsearch 标准字段）
+  - rename:
+      fields:
+        - from: "timestamp"
+          to: "@timestamp"
+      ignore_missing: true
+      fail_on_error: false
 
 # Elasticsearch 输出配置
 output.elasticsearch:
@@ -63,8 +52,8 @@ output.elasticsearch:
   # SSL/TLS 配置
   ssl.verification_mode: "${ELASTICSEARCH_SSL_VERIFY:-none}"
   
-  # 索引配置
-  index: "windblog-logs-%{+yyyy.MM.dd}"
+  # 使用 ILM 别名
+  index: "windblog-logs"
   
   # 批量推送配置
   bulk_max_size: 100

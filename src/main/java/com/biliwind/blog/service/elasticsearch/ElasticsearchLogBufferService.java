@@ -54,7 +54,7 @@ public class ElasticsearchLogBufferService {
     int maxQueueSize;
     @ConfigProperty(name = "elasticsearch.log.flush.interval-seconds", defaultValue = "10")
     int flushIntervalSeconds;
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.hosts")
+    @ConfigProperty(name = "elasticsearch.hosts")
     String elasticsearchHosts;
     private BlockingQueue<LogEntry> logQueue;
     private ExecutorService flushExecutor;
