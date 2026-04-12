@@ -52,7 +52,7 @@ output.elasticsearch:
   # SSL/TLS 配置
   ssl.verification_mode: "${ELASTICSEARCH_SSL_VERIFY:-none}"
   
-  # 使用 ILM 别名
+  # 直接写入项目初始化脚本创建的写别名
   index: "windblog-logs"
   
   # 批量推送配置
@@ -68,16 +68,12 @@ logging.level: info
 logging.to_stderr: true
 
 # ILM (Index Lifecycle Management) 配置
-setup.ilm.enabled: true
-setup.ilm.policy_name: "windblog-logs-policy"
-setup.ilm.rollover_alias: "windblog-logs"
-setup.ilm.pattern: "000001"
+# 该项目已经通过 src/main/resources/elasticsearch 下的初始化脚本管理
+# windblog-logs 的 ILM、模板和写别名，Filebeat 只负责发送日志。
+setup.ilm.enabled: false
 
 # 模板配置
-setup.template.enabled: true
-setup.template.name: "windblog-logs"
-setup.template.pattern: "windblog-logs-*"
-setup.template.overwrite: true
+setup.template.enabled: false
 
 # 队列配置
 queue.mem:

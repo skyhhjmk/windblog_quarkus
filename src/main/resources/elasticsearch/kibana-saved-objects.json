@@ -3,6 +3,7 @@
     "_id": "data_view_windblog_logs",
     "_type": "data-view",
     "_source": {
+      "name": "Windblog 应用日志",
       "title": "windblog-logs-*",
       "timeFieldName": "@timestamp",
       "sortField": "@timestamp",
@@ -29,9 +30,12 @@
           "aggregatable": true
         },
         {
-          "name": "logger",
+          "name": "loggerName",
           "type": "string",
-          "esTypes": ["keyword"],
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
           "count": 0,
           "scripted": false,
           "searchable": true,
@@ -47,9 +51,72 @@
           "aggregatable": false
         },
         {
-          "name": "thread",
+          "name": "threadName",
           "type": "string",
-          "esTypes": ["keyword"],
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "processName",
+          "type": "string",
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "hostName",
+          "type": "string",
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "fields.service_name",
+          "type": "string",
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "log.file.path",
+          "type": "string",
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "loggerClassName",
+          "type": "string",
+          "esTypes": [
+            "text",
+            "keyword"
+          ],
           "count": 0,
           "scripted": false,
           "searchable": true,

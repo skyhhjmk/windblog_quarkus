@@ -95,8 +95,9 @@ services:
       # 认证密钥（从环境变量读取）
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
     ports:
-      # HTTP API 端口
-      - "9200:9200"
+      # HTTP API 端口（供宿主机上的 Quarkus 应用访问）
+      # Windows 当前环境中 9200 位于 excluded port range，改用 19200 避免宿主机无法绑定
+      - "19200:9200"
       # Transport 端口
       - "9300:9300"
     networks:
