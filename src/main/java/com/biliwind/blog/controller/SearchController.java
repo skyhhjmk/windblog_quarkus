@@ -64,10 +64,15 @@ public class SearchController {
         String searchDate = normalizeDate(date);
         String lang = languageContext.getLang();
 
-        // 使用 Elasticsearch 搜索文章，其他类型仍然使用数据库搜索
         List<SearchHit> allHits;
+        boolean usedElasticsearch = false;
+        boolean esDegraded = false;
+
         if (useElasticsearch && !searchKeyword.isBlank() && ("all".equals(searchType) || "post".equals(searchType))) {
-            allHits = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
+            ElasticsearchResult esResult = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
+            allHits = esResult.hits();
+            usedElasticsearch = esResult.usedElasticsearch();
+            esDegraded = esResult.degraded();
         } else {
             allHits = buildHits(searchKeyword, searchType, searchSort, searchDate, lang);
         }
@@ -101,7 +106,9 @@ public class SearchController {
                 .data("typeLinks", buildTypeLinks(searchKeyword, searchType, searchSort, searchDate))
                 .data("sortLinks", buildSortLinks(searchKeyword, searchType, searchSort, searchDate))
                 .data("dateLinks", buildDateLinks(searchKeyword, searchType, searchSort, searchDate))
-                .data("hits", pageItems);
+                .data("hits", pageItems)
+                .data("usedElasticsearch", usedElasticsearch)
+                .data("esDegraded", esDegraded);
     }
 
     private List<SearchHit> buildHits(String keyword, String type, String sort, String date, String lang) {
@@ -145,17 +152,22 @@ public class SearchController {
     }
 
     /**
-     * 使用 Elasticsearch 搜索文章
+     * 使用 Elasticsearch 搜索文章，失败时回退到数据库搜索
      */
-    private List<SearchHit> searchWithElasticsearch(String keyword, String type, String sort, String date, String lang, int page) {
+    private ElasticsearchResult searchWithElasticsearch(String keyword, String type, String sort, String date, String lang, int page) {
         try {
+            if (!postSearchService.isAvailable()) {
+                log.debug("Elasticsearch 不可用，使用数据库搜索");
+                return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+            }
+
             log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s, page=%d", keyword, type, page);
 
             var searchResult = postSearchService.searchPosts(keyword, page, PAGE_SIZE, "PUBLISHED", null, null);
-            
+
             OffsetDateTime threshold = dateThreshold(date);
             List<SearchHit> hits = new ArrayList<>();
-            
+
             for (var post : searchResult.posts()) {
                 if (threshold != null && post.publishedAt() != null) {
                     try {
@@ -167,7 +179,7 @@ public class SearchController {
                         log.debugf("解析日期失败：%s", post.publishedAt());
                     }
                 }
-                
+
                 SearchHit hit = new SearchHit(
                     "post",
                     "Post",
@@ -181,15 +193,18 @@ public class SearchController {
                 );
                 hits.add(hit);
             }
-            
+
             hits.sort(hitComparator(sort));
 
             log.infof("Elasticsearch 搜索结果：%d 篇文章（共 %d 条）", hits.size(), searchResult.total());
-            return hits;
-            
+            return new ElasticsearchResult(hits, true, false);
+
+        } catch (ElasticsearchPostSearchService.ElasticsearchUnavailableException e) {
+            log.warnf("Elasticsearch 服务不可用，回退到数据库搜索: %s", e.getMessage());
+            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
         } catch (Exception e) {
             log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);
-            return buildHits(keyword, type, sort, date, lang);
+            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
         }
     }
 
@@ -422,5 +437,15 @@ public class SearchController {
     }
 
     public record FilterLink(String label, String url, String cssClass) {
+    }
+
+    /**
+     * Elasticsearch 搜索结果包装类
+     */
+    private record ElasticsearchResult(
+            List<SearchHit> hits,
+            boolean usedElasticsearch,
+            boolean degraded
+    ) {
     }
 }

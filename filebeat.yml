@@ -1,0 +1,136 @@
+# Filebeat 配置文件 for WindBlog Quarkus
+# 用于收集应用日志并推送到 Elasticsearch
+
+filebeat.inputs:
+  # 应用日志输入
+  - type: log
+    enabled: true
+    paths:
+      - logs/application.log*
+      - logs/application.log.*
+    
+    # 日志格式为 JSON
+    json.keys_under_root: true
+    json.overwrite_keys: true
+    json.add_error_key: true
+    
+    # 日志标签
+    fields:
+      service: windblog-quarkus
+      service_name: windblog
+      log_type: application
+    
+    # 多行日志合并（用于堆栈跟踪）
+    multiline.pattern: '^\{'
+    multiline.negate: true
+    multiline.match: after
+    multiline.max_lines: 500
+    multiline.timeout: 5s
+
+  # 可选：收集 Quarkus 的轮转日志
+  - type: log
+    enabled: true
+    paths:
+      - logs/application.log.20*.log
+    
+    json.keys_under_root: true
+    json.overwrite_keys: true
+    fields:
+      service: windblog-quarkus
+      service_name: windblog
+      log_type: application
+
+# Elasticsearch 输出配置
+output.elasticsearch:
+  # Elasticsearch 地址
+  hosts: [ "${ELASTICSEARCH_HOSTS:http://localhost:9200}" ]
+  
+  # 认证配置（如果需要）
+  # username: "${ELASTICSEARCH_USERNAME:}"
+  # password: "${ELASTICSEARCH_PASSWORD:}"
+  
+  # SSL/TLS 配置
+  ssl.verification_mode: "${ELASTICSEARCH_SSL_VERIFY:none}"
+  ssl.certificate_authorities: [ "${ELASTICSEARCH_CA:}" ]
+  
+  # 索引配置
+  index: "windblog-logs-%{+yyyy.MM.dd}"
+  
+  # 批量推送配置
+  bulk_max_size: 100
+  flush_interval: 5s
+  
+  # 重试配置
+  max_retries: 5
+  max_retries_window: 30s
+
+# 日志输出配置（Filebeat 自身的日志）
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: logs/filebeat
+  name: filebeat.log
+  keepfiles: 7
+  permissions: 0644
+
+# 处理配置
+processors:
+  # 添加主机元数据
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  
+  # 添加云元数据（如果在云上运行）
+  - add_cloud_metadata: ~
+  
+  # 添加 Kubernetes 元数据（如果在 K8s 上运行）
+  # - add_kubernetes_metadata: ~
+  
+  # 解析时间戳
+  - timestamp:
+      field: timestamp
+      layouts:
+        - '2006-01-02T15:04:05.000Z'
+        - '2006-01-02T15:04:05.000-0700'
+        - '2006-01-02 15:04:05.000'
+      test:
+        - '2026-04-08T23:09:52.328Z'
+        - '2026-04-08 23:09:52.328'
+
+# ILM (Index Lifecycle Management) 配置
+setup.ilm.enabled: true
+setup.ilm.policy_name: "windblog-logs-policy"
+setup.ilm.policy_file: ""
+setup.ilm.rollover_alias: "windblog-logs"
+setup.ilm.pattern: "000001"
+
+# 模板配置
+setup.template.enabled: true
+setup.template.name: "windblog-logs"
+setup.template.pattern: "windblog-logs-*"
+setup.template.overwrite: true
+setup.template.json.enabled: true
+setup.template.json.path: "elasticsearch/index-template.json"
+setup.template.json.name: "windblog-logs-template"
+
+# 仪表盘配置（可选）
+# setup.dashboards.enabled: true
+# setup.dashboards.directory: ./dashboards
+# setup.dashboards.always_kibana: true
+
+# Kibana 配置（用于设置仪表盘）
+# kibana.host: "http://localhost:5601"
+# kibana.username: "${KIBANA_USERNAME:}"
+# kibana.password: "${KIBANA_PASSWORD:}"
+
+# 队列配置
+queue.mem:
+  events: 4096
+  flush.min_events: 512
+  flush.timeout: 5s
+
+# 内部监控
+monitoring.enabled: true
+monitoring.elasticsearch:
+  hosts: [ "${ELASTICSEARCH_HOSTS:http://localhost:9200}" ]
+  # username: "${ELASTICSEARCH_USERNAME:}"
+  # password: "${ELASTICSEARCH_PASSWORD:}"

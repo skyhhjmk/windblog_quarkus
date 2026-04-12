@@ -1,0 +1,104 @@
+# Filebeat 配置文件（Docker 版本）
+# 参考官方文档：https://www.elastic.co/docs/reference/beats/filebeat/running-on-docker
+
+filebeat.inputs:
+  # 应用日志输入（使用 filestream）
+  - type: filestream
+    enabled: true
+    id: windblog-app-logs  # 每个输入需要唯一 ID
+    paths:
+      - /var/log/windblog/application.log*
+      - /var/log/windblog/application.log.*
+    
+    # 日志格式为 JSON
+    json.keys_under_root: true
+    json.overwrite_keys: true
+    json.add_error_key: true
+    json.message_key: message
+    
+    # 日志标签
+    fields:
+      service: windblog-quarkus
+      service_name: windblog
+      log_type: application
+      environment: ${ENVIRONMENT:-development}
+    
+    # 多行日志合并（用于堆栈跟踪）
+    multiline.type: pattern
+    multiline.pattern: '^\{'
+    multiline.negate: true
+    multiline.match: after
+    multiline.max_lines: 500
+    multiline.timeout: 5s
+
+# processors 配置
+processors:
+  # 添加主机元数据
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  
+  # 添加云元数据（如果在云上运行）
+  - add_cloud_metadata: ~
+  
+  # 解析时间戳
+  - timestamp:
+      field: timestamp
+      layouts:
+        - '2006-01-02T15:04:05.000Z'
+        - '2006-01-02T15:04:05.000-0700'
+        - '2006-01-02 15:04:05.000'
+      test:
+        - '2026-04-08T23:09:52.328Z'
+        - '2026-04-08 23:09:52.328'
+
+# Elasticsearch 输出配置
+output.elasticsearch:
+  # Elasticsearch 地址
+  hosts: [ "${ELASTICSEARCH_HOSTS:-http://elasticsearch:9200}" ]
+  
+  # 认证配置
+  username: "${ELASTICSEARCH_USERNAME:-elastic}"
+  password: "${ELASTICSEARCH_PASSWORD:-}"
+  
+  # SSL/TLS 配置
+  ssl.verification_mode: "${ELASTICSEARCH_SSL_VERIFY:-none}"
+  
+  # 索引配置
+  index: "windblog-logs-%{+yyyy.MM.dd}"
+  
+  # 批量推送配置
+  bulk_max_size: 100
+  flush_interval: 5s
+  
+  # 重试配置
+  max_retries: 5
+  max_retries_window: 30s
+
+# 日志输出配置（Filebeat 自身的日志）
+logging.level: info
+logging.to_stderr: true
+
+# ILM (Index Lifecycle Management) 配置
+setup.ilm.enabled: true
+setup.ilm.policy_name: "windblog-logs-policy"
+setup.ilm.rollover_alias: "windblog-logs"
+setup.ilm.pattern: "000001"
+
+# 模板配置
+setup.template.enabled: true
+setup.template.name: "windblog-logs"
+setup.template.pattern: "windblog-logs-*"
+setup.template.overwrite: true
+
+# 队列配置
+queue.mem:
+  events: 4096
+  flush.min_events: 512
+  flush.timeout: 5s
+
+# 内部监控
+monitoring.enabled: true
+monitoring.elasticsearch:
+  hosts: [ "${ELASTICSEARCH_HOSTS:-http://elasticsearch:9200}" ]
+  username: "${ELASTICSEARCH_USERNAME:-elastic}"
+  password: "${ELASTICSEARCH_PASSWORD:-}"

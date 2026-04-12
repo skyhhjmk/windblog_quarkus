@@ -142,7 +142,7 @@
             <artifactId>vditor</artifactId>
             <version>3.11.2</version>
         </dependency>
-        <!-- Elasticsearch 日志推送 -->
+        <!-- Elasticsearch 日志推送使用 Quarkus 内置支持 -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-logging-json</artifactId>

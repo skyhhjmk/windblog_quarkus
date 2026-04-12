@@ -4,6 +4,7 @@ volumes:
   rabbitmq_data:
   elasticsearch-data:
   kibana-data:
+  filebeat-config:  # Filebeat 配置文件卷（可选）
 
 services:
   db:
@@ -147,6 +148,36 @@ services:
       timeout: 10s
       retries: 5
       start_period: 90s
+
+  # Filebeat - 日志收集器
+  filebeat:
+    container_name: filebeat
+    image: elastic.1ms.run/beats/filebeat:9.3.2
+    restart: unless-stopped
+    user: root  # 需要 root 权限读取日志文件
+    networks:
+      - app-network
+    volumes:
+      # 挂载应用日志目录
+      - ./logs:/var/log/windblog:ro
+      # 挂载 Filebeat 配置文件
+      - ./filebeat.docker.yml:/usr/share/filebeat/filebeat.yml:ro
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD}
+      - ELASTICSEARCH_SSL_VERIFY=none
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "filebeat", "test", "output" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # 使用 --strict.perms=false 跳过权限检查（Windows Docker 挂载文件权限问题）
+    command: [ "filebeat", "-e", "--strict.perms=false" ]
 
 networks:
   app-network:

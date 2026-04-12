@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.elasticsearch;
 
 import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -8,127 +9,127 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Elasticsearch 索引管理服务
- * 负责初始化 ILM 策略、索引模板和索引
+ * Elasticsearch index management service
+ * Responsible for initializing ILM policies, index templates and indices, supports async initialization and service degradation
  */
 @ApplicationScoped
 public class ElasticsearchIndexService {
 
     private static final Logger log = Logger.getLogger(ElasticsearchIndexService.class);
 
+    private final AtomicBoolean indexInitialized = new AtomicBoolean(false);
     @Inject
-    HttpClient httpClient;
+    ElasticsearchConnectionManager connectionManager;
 
     @ConfigProperty(name = "quarkus.log.handler.elasticsearch.hosts")
     String elasticsearchHosts;
-
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.username", defaultValue = "")
-    String username;
-
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.password", defaultValue = "")
-    String password;
-
-    @ConfigProperty(name = "quarkus.log.handler.elasticsearch.ssl-trust-all", defaultValue = "false")
-    boolean sslTrustAll;
 
     private static final String ILM_POLICY_NAME = "windblog-logs-policy";
     private static final String INDEX_TEMPLATE_NAME = "windblog-logs-template";
     private static final String INDEX_PATTERN = "windblog-logs-*";
     private static final String WRITE_ALIAS = "windblog-logs";
 
-    /**
-     * Initialize Elasticsearch index on application startup
-     */
+    @PostConstruct
+    void postConstruct() {
+        log.info(">>> [LOG INDEX] ElasticsearchIndexService @PostConstruct called - bean is being initialized");
+    }
+
     void onStart(@Observes StartupEvent event) {
-        log.info("Starting Elasticsearch index initialization...");
-
+        log.info(">>> ElasticsearchIndexService startup initiated");
+        log.info(">>> connectionManager status: " + (connectionManager != null ? "injected" : "NULL"));
+        log.info(">>> Registering log index initialization callback...");
         try {
-            waitForElasticsearch();
-            createIlmPolicy();
-            createIndexTemplate();
-            createInitialIndex();
-
-            log.info("Elasticsearch index initialization completed");
+            connectionManager.onAvailable(() -> {
+                log.info(">>> [LOG INDEX] Received Elasticsearch available notification, starting log index initialization...");
+                try {
+                    initializeIndex();
+                } catch (Exception e) {
+                    log.error(">>> [LOG INDEX] Exception during initializeIndex()", e);
+                }
+            });
+            log.info(">>> Callback registration completed");
         } catch (Exception e) {
-            log.error("Elasticsearch index initialization failed", e);
+            log.error(">>> Exception during callback registration", e);
         }
     }
 
     /**
-     * Wait for Elasticsearch service to be ready
+     * Initialize index (called when connection is available)
      */
-    private void waitForElasticsearch() throws InterruptedException {
-        log.info("Waiting for Elasticsearch to start...");
-        log.infof("Elasticsearch host: %s", elasticsearchHosts);
-        log.infof("SSL certificate verification: %s", sslTrustAll ? "disabled" : "enabled");
-        
-        if (username != null && !username.isEmpty()) {
-            log.infof("Authentication user: %s", username);
-        } else {
-            log.info("Authentication: none");
-        }
-        
-        if (elasticsearchHosts == null || elasticsearchHosts.trim().isEmpty()) {
-            log.error("Elasticsearch host is empty! Please check configuration quarkus.log.handler.elasticsearch.hosts");
-            throw new RuntimeException("Elasticsearch host not configured");
-        }
-        
-        int maxAttempts = 30;
+    private void initializeIndex() {
+        log.info(">>> [LOG INDEX] ====== initializeIndex() CALLED ======");
+        log.info(">>> [LOG INDEX] Starting log index initialization...");
+        log.info(">>> [LOG INDEX] elasticsearchHosts config: " + (elasticsearchHosts != null ? elasticsearchHosts : "NULL"));
+        log.info(">>> [LOG INDEX] connectionManager injected: " + (connectionManager != null ? "YES" : "NO"));
+
+        int maxRetries = 3;
         int attempt = 0;
-        
-        while (attempt < maxAttempts) {
+
+        while (attempt < maxRetries) {
             try {
-                var uriString = elasticsearchHosts + "/_cluster/health";
-                log.debugf("Building URI: %s", uriString);
-                
-                var request = HttpRequest.newBuilder()
-                        .uri(URI.create(uriString))
-                        .timeout(java.time.Duration.ofSeconds(5))
-                        .GET()
-                        .build();
-                
-                log.debug("Sending health check request...");
-                var response = sendRequest(request);
-                log.debugf("Response status code: %d", response.statusCode());
-                
-                if (response.statusCode() == 200) {
-                    log.info("Elasticsearch is ready");
-                    return;
-                } else {
-                    log.warnf("Elasticsearch returned non-200 status code: %d", response.statusCode());
-                }
-            } catch (java.net.ConnectException e) {
-                log.debugf("Connection failed: %s", e.getMessage());
+                log.info(">>> [LOG INDEX] Attempt " + (attempt + 1) + "/" + maxRetries);
+                log.info(">>> [LOG INDEX] Calling createIlmPolicy()...");
+                createIlmPolicy();
+                log.info(">>> [LOG INDEX] ILM policy created");
+                log.info(">>> [LOG INDEX] Calling createIndexTemplate()...");
+                createIndexTemplate();
+                log.info(">>> [LOG INDEX] Index template created");
+                log.info(">>> [LOG INDEX] Calling createInitialIndex()...");
+                createInitialIndex();
+                log.info(">>> [LOG INDEX] Initial index created");
+                indexInitialized.set(true);
+                log.info(">>> [LOG INDEX] ====== initializeIndex() COMPLETED ======");
+                log.info(">>> [LOG INDEX] Elasticsearch log index initialization completed");
+                return;
             } catch (Exception e) {
-                log.debugf("Health check failed: %s", e.getMessage());
-            }
-            
-            attempt++;
-            if (attempt < maxAttempts) {
-                log.infof("Waiting for Elasticsearch... (attempt %d/%d)", attempt, maxAttempts);
-                TimeUnit.SECONDS.sleep(5);
+                attempt++;
+                log.error(">>> [LOG INDEX] Failed to initialize log index (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage(), e);
+                log.error(">>> [LOG INDEX] Exception type: " + e.getClass().getName());
+                if (attempt < maxRetries) {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn(">>> [LOG INDEX] Interrupted during retry sleep");
+                        break;
+                    }
+                }
             }
         }
-        
-        throw new RuntimeException("Elasticsearch startup timeout, attempted " + maxAttempts + " times");
+
+        log.warn(">>> [LOG INDEX] Elasticsearch log index initialization failed after all retries, logs will be cached to local file");
+    }
+
+    /**
+     * Check if service is available
+     */
+    public boolean isAvailable() {
+        return connectionManager.isAvailable() && indexInitialized.get();
+    }
+
+    /**
+     * Get service status
+     */
+    public ServiceStatus getServiceStatus() {
+        return new ServiceStatus(
+                connectionManager.isAvailable(),
+                indexInitialized.get(),
+                connectionManager.getHealthStatus().name()
+        );
     }
 
     /**
      * Create ILM (Index Lifecycle Management) policy
      */
-    private void createIlmPolicy() throws IOException, InterruptedException {
+    private void createIlmPolicy() throws Exception {
         log.info("Creating ILM policy: " + ILM_POLICY_NAME);
 
         String policyJson = readResourceFile("elasticsearch/ilm-policy.json");
@@ -139,7 +140,7 @@ public class ElasticsearchIndexService {
                 .header("Content-Type", "application/json")
                 .build();
 
-        var response = sendRequest(request);
+        var response = connectionManager.sendRequest(request);
 
         if (response.statusCode() == 200) {
             log.info("ILM policy created successfully");
@@ -152,7 +153,7 @@ public class ElasticsearchIndexService {
     /**
      * Create index template
      */
-    private void createIndexTemplate() throws IOException, InterruptedException {
+    private void createIndexTemplate() throws Exception {
         log.info("Creating index template: " + INDEX_TEMPLATE_NAME);
 
         String templateJson = readResourceFile("elasticsearch/index-template.json");
@@ -163,7 +164,7 @@ public class ElasticsearchIndexService {
                 .header("Content-Type", "application/json")
                 .build();
 
-        var response = sendRequest(request);
+        var response = connectionManager.sendRequest(request);
 
         if (response.statusCode() == 200) {
             log.info("Index template created successfully");
@@ -176,7 +177,7 @@ public class ElasticsearchIndexService {
     /**
      * Create initial index and write alias
      */
-    private void createInitialIndex() throws IOException, InterruptedException {
+    private void createInitialIndex() throws Exception {
         log.info("Creating initial index: " + INDEX_PATTERN);
 
         String indexBody = """
@@ -195,7 +196,7 @@ public class ElasticsearchIndexService {
                 .header("Content-Type", "application/json")
                 .build();
 
-        var response = sendRequest(request);
+        var response = connectionManager.sendRequest(request);
 
         if (response.statusCode() == 200) {
             log.info("Initial index created successfully");
@@ -208,13 +209,36 @@ public class ElasticsearchIndexService {
     }
 
     /**
-     * 从资源文件读取 JSON 配置
+     * Read JSON configuration from resource file
      */
-    private String readResourceFile(String resourceName) throws IOException {
-        try (InputStream inputStream = Thread.currentThread()
+    private String readResourceFile(String resourceName) throws Exception {
+        log.info(">>> [LOG INDEX] Reading resource file: " + resourceName);
+
+        // Try different classloader approaches
+        InputStream inputStream = null;
+
+        // First try: current thread's context class loader
+        inputStream = Thread.currentThread()
                 .getContextClassLoader()
                 .getResourceAsStream(resourceName);
-             BufferedReader reader = new BufferedReader(
+
+        // Second try: use class's class loader
+        if (inputStream == null) {
+            inputStream = getClass().getClassLoader().getResourceAsStream(resourceName);
+        }
+
+        // Third try: use class's resource path (with leading slash)
+        if (inputStream == null) {
+            inputStream = getClass().getResourceAsStream("/" + resourceName);
+        }
+
+        if (inputStream == null) {
+            log.error(">>> [LOG INDEX] Resource file not found: " + resourceName);
+            log.error(">>> [LOG INDEX] Tried multiple classloader approaches but all failed");
+            throw new Exception("Resource file not found: " + resourceName + ". Please ensure the file exists in src/main/resources/" + resourceName);
+        }
+
+        try (BufferedReader reader = new BufferedReader(
                      new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
 
             StringBuilder content = new StringBuilder();
@@ -222,123 +246,88 @@ public class ElasticsearchIndexService {
             while ((line = reader.readLine()) != null) {
                 content.append(line).append("\n");
             }
+            log.info(">>> [LOG INDEX] Resource file read successfully: " + resourceName);
             return content.toString();
         }
     }
 
     /**
-     * 发送 HTTP 请求到 Elasticsearch
-     * 注意：需要重新构建请求以添加认证头，同时保留原始请求体
+     * Verify if ILM policy exists
      */
-    private HttpResponse<String> sendRequest(HttpRequest request) throws IOException, InterruptedException {
-        var requestUri = request.uri();
-        log.debugf("Preparing to send request to: %s", requestUri);
-        
-        // Rebuild request to add authentication header while preserving original body
-        var builder = HttpRequest.newBuilder()
-                .uri(request.uri())
-                .timeout(request.timeout().orElse(java.time.Duration.ofSeconds(30)));
-        
-        // Copy original headers
-        request.headers().map().forEach((name, values) -> {
-            for (String value : values) {
-                builder.header(name, value);
-            }
-        });
-        
-        // 添加认证头
-        if (username != null && !username.isEmpty() && password != null) {
-            String auth = username + ":" + password;
-            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
-            builder.header("Authorization", "Basic " + encodedAuth);
-            log.debugf("Adding authentication header, user: %s", username);
-        } else {
-            log.debug("No authentication configured, using anonymous connection");
+    public boolean verifyIlmPolicy() throws Exception {
+        if (!connectionManager.isAvailable()) {
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
         }
-        
-        // Copy request method and body
-        String method = request.method();
-        if (method.equals("GET")) {
-            builder.GET();
-        } else if (method.equals("PUT")) {
-            request.bodyPublisher().ifPresentOrElse(
-                    bodyPublisher -> builder.PUT(bodyPublisher),
-                    () -> builder.PUT(HttpRequest.BodyPublishers.noBody())
-            );
-        } else if (method.equals("POST")) {
-            request.bodyPublisher().ifPresentOrElse(
-                    bodyPublisher -> builder.POST(bodyPublisher),
-                    () -> builder.POST(HttpRequest.BodyPublishers.noBody())
-            );
-        } else if (method.equals("DELETE")) {
-            builder.DELETE();
-        } else {
-            // Other methods, use generic method setting
-            request.bodyPublisher().ifPresentOrElse(
-                    bodyPublisher -> builder.method(method, bodyPublisher),
-                    () -> builder.method(method, HttpRequest.BodyPublishers.noBody())
-            );
-        }
-        
-        try {
-            var httpRequest = builder.build();
-            log.debugf("Sending HTTP request: %s %s", httpRequest.method(), httpRequest.uri());
-            return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            log.errorf(e, "Request failed: %s", requestUri);
-            throw e;
-        }
-    }
 
-    /**
-     * 验证 ILM 策略是否存在
-     */
-    public boolean verifyIlmPolicy() throws IOException, InterruptedException {
         var request = HttpRequest.newBuilder()
                 .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
                 .GET()
                 .build();
 
-        var response = sendRequest(request);
+        var response = connectionManager.sendRequest(request);
         return response.statusCode() == 200;
     }
 
     /**
-     * 验证索引模板是否存在
+     * Verify if index template exists
      */
-    public boolean verifyIndexTemplate() throws IOException, InterruptedException {
+    public boolean verifyIndexTemplate() throws Exception {
+        if (!connectionManager.isAvailable()) {
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
+        }
+
         var request = HttpRequest.newBuilder()
                 .uri(URI.create(elasticsearchHosts + "/_index_template/" + INDEX_TEMPLATE_NAME))
                 .GET()
                 .build();
 
-        var response = sendRequest(request);
+        var response = connectionManager.sendRequest(request);
         return response.statusCode() == 200;
     }
 
     /**
-     * 获取 ILM 策略信息
+     * Get ILM policy information
      */
-    public String getIlmPolicyInfo() throws IOException, InterruptedException {
+    public String getIlmPolicyInfo() throws Exception {
+        if (!connectionManager.isAvailable()) {
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
+        }
+
         var request = HttpRequest.newBuilder()
                 .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
                 .GET()
                 .build();
 
-        var response = sendRequest(request);
+        var response = connectionManager.sendRequest(request);
         return response.body();
     }
 
     /**
-     * 获取索引模板信息
+     * Get index template information
      */
-    public String getIndexTemplateInfo() throws IOException, InterruptedException {
+    public String getIndexTemplateInfo() throws Exception {
+        if (!connectionManager.isAvailable()) {
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
+        }
+
         var request = HttpRequest.newBuilder()
                 .uri(URI.create(elasticsearchHosts + "/_index_template/" + INDEX_TEMPLATE_NAME))
                 .GET()
                 .build();
 
-        var response = sendRequest(request);
+        var response = connectionManager.sendRequest(request);
         return response.body();
+    }
+
+    public record ServiceStatus(boolean connectionAvailable, boolean indexInitialized, String healthStatus) {
+    }
+
+    /**
+     * Elasticsearch unavailable exception
+     */
+    public static class ElasticsearchUnavailableException extends Exception {
+        public ElasticsearchUnavailableException(String message) {
+            super(message);
+        }
     }
 }
