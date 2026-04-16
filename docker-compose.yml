@@ -30,7 +30,7 @@ services:
 
   # 新增 Redis 服务
   redis:
-    container_name: redisdev
+    container_name: redis
     image: redis:8-alpine
     restart: unless-stopped
     networks:
@@ -45,7 +45,7 @@ services:
       - redis-data:/data
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes # 开启 AOF 持久化
+    command: redis-server --appendonly yes --bind 0.0.0.0
 
   rabbitmq:
     container_name: rabbitmq
