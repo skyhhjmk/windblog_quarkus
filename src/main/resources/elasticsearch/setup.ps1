@@ -279,23 +279,12 @@ else
     Write-Host "⚠ 找不到文章索引模板文件：$POSTS_TEMPLATE_FILE"
 }
 
-# 创建初始文章索引
-$initialPostsIndexBody = @"
-{
-  "aliases": {
-    "windblog-posts": {
-      "is_write_index": true
-    }
-  }
-}
-"@
-
+# 创建初始文章索引（静态索引）
 try
 {
     $params = @{
-        Uri = "${ES_URL}/windblog-posts-000001"
+        Uri = "${ES_URL}/windblog-posts"
         Method = PUT
-        Body = $initialPostsIndexBody
         ContentType = "application/json; charset=utf-8"
         UseBasicParsing = $true
         Headers = $AUTH_HEADER

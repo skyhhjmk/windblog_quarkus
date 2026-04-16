@@ -130,20 +130,8 @@ public class ElasticsearchPostSearchService {
                         "min_age": "7d",
                         "actions": {
                           "set_priority": { "priority": 50 },
-                          "forcemerge": { "max_num_segments": 1 },
-                          "shrink": { "number_of_shards": 1 }
+                          "forcemerge": { "max_num_segments": 1 }
                         }
-                      },
-                      "cold": {
-                        "min_age": "30d",
-                        "actions": {
-                          "set_priority": { "priority": 0 },
-                          "freeze": {}
-                        }
-                      },
-                      "delete": {
-                        "min_age": "365d",
-                        "actions": { "delete": {} }
                       }
                     }
                   }

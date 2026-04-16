@@ -188,16 +188,9 @@ else
     echo "⚠ 找不到文章索引模板文件：$POSTS_TEMPLATE_FILE"
 fi
 
-# 创建初始文章索引
-response=$(curl -s -w "\n%{http_code}" $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/windblog-posts-000001" \
-    -H "Content-Type: application/json" \
-    -d '{
-          "aliases": {
-            "windblog-posts": {
-              "is_write_index": true
-            }
-          }
-        }')
+# 创建初始文章索引（静态索引）
+response=$(curl -s -w "\n%{http_code}" $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/windblog-posts" \
+    -H "Content-Type: application/json")
 
 http_code=$(echo "$response" | tail -n1)
 body=$(echo "$response" | sed '$d')
