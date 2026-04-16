@@ -2,6 +2,7 @@ package com.biliwind.blog.service.elasticsearch;
 
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import io.quarkus.runtime.StartupEvent;
@@ -341,9 +342,10 @@ public class ElasticsearchPostSearchService {
             document.put("updatedAt", post.updatedAt.toString());
         }
 
-        if (post.currentRevision != null) {
-            String content = post.currentRevision.contentMarkdown != null ?
-                    LanguageHelper.resolveLocalizedValue(post.currentRevision.contentMarkdown, lang) : "";
+        PostRevision latestRevision = PostRevision.find("post.id = ?1 order by revisionNumber desc", post.id).firstResult();
+        if (latestRevision != null) {
+            String content = latestRevision.contentMarkdown != null ?
+                    LanguageHelper.resolveLocalizedValue(latestRevision.contentMarkdown, lang) : "";
             document.put("content", content);
             document.put("contentHtml", content);
             document.put("summary", defaultSummary != null ? defaultSummary : "");

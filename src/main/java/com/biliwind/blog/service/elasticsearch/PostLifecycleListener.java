@@ -6,7 +6,7 @@ import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.control.RequestContextController;
 import jakarta.enterprise.event.Observes;
-import jakarta.enterprise.event.ObservesAsync;
+import jakarta.enterprise.event.TransactionPhase;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import org.jboss.logging.Logger;
@@ -83,36 +83,22 @@ public class PostLifecycleListener {
         }
     }
 
-    public void onPostUpdate(@ObservesAsync Post post) {
-        log.info(">>>>>>>>>> onPostUpdate 事件接收到了! postId=" + (post != null ? post.id : "null"));
-        if (post == null) {
-            log.warn(">>>>>>>>>> post 是 null，直接返回");
-            return;
-        }
-
-        final Long postId = post.id;
-        log.info(">>>>>>>>>> 处理文章更新事件: " + postId);
-
-        log.debugf("收到文章更新事件，准备同步: %d", postId);
+    public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
+        log.info(">>>>>>>>>> [onPostSynced] 收到同步事件: " + event.postId());
 
         if (!connectionManager.isAvailable()) {
-            log.debugf("Elasticsearch 不可用，缓存文章更新事件: %d", postId);
-            cacheEvent(new PostEvent(postId, EventType.UPDATE));
+            log.debugf("Elasticsearch 不可用，缓存文章同步事件: %d", event.postId());
+            cacheEvent(new PostEvent(event.postId(), EventType.UPDATE));
             return;
         }
 
-        executorService.submit(() -> {
-            requestContextController.activate();
-            try {
-                processPostUpdate(postId);
-            } catch (Exception e) {
-                log.errorf("同步文章到 Elasticsearch 失败: %d, 错误: %s", postId, e.getMessage());
-                log.debugf("同步异常详细: ", e);
-                cacheEvent(new PostEvent(postId, EventType.UPDATE));
-            } finally {
-                requestContextController.deactivate();
-            }
-        });
+        try {
+            processPostUpdate(event.postId());
+        } catch (Exception e) {
+            log.errorf("同步文章到 Elasticsearch 失败: %d, 错误: %s", event.postId(), e.getMessage());
+            log.debugf("同步异常详细: ", e);
+            cacheEvent(new PostEvent(event.postId(), EventType.UPDATE));
+        }
     }
 
     private void processPostUpdate(Long postId) throws Exception {
@@ -137,16 +123,7 @@ public class PostLifecycleListener {
             return;
         }
 
-        org.hibernate.Session session = entityManager.unwrap(org.hibernate.Session.class);
-        session.evict(refreshedPost);
-        refreshedPost = entityManager.find(Post.class, postId);
-        log.info(">>>>>>>>>> [processPostUpdate] 强制清除缓存后重新加载");
-
-        log.info(">>>>>>>>>> [processPostUpdate] 文章已加载, id=" + postId + ", status=" + refreshedPost.status + ", deletedAt=" + refreshedPost.deletedAt + ", title=" + refreshedPost.title + ", currentRevision=" + (refreshedPost.currentRevision != null ? refreshedPost.currentRevision.revisionNumber : "NULL"));
-
-        if (refreshedPost.currentRevision != null) {
-            log.info(">>>>>>>>>> [processPostUpdate] currentRevision.title=" + refreshedPost.currentRevision.title);
-        }
+        log.info(">>>>>>>>>> [processPostUpdate] 文章已加载, id=" + postId + ", status=" + refreshedPost.status + ", deletedAt=" + refreshedPost.deletedAt + ", title=" + refreshedPost.title);
 
         if (refreshedPost.deletedAt != null) {
             log.debugf("文章已软删除，删除索引: %d", postId);
@@ -167,35 +144,6 @@ public class PostLifecycleListener {
             postSearchService.deletePostIndex(postId);
             log.infof("文章索引已删除: %d", postId);
         }
-    }
-
-    public void onPostDelete(@Observes Post post) {
-        if (post == null) {
-            return;
-        }
-
-        final Long postId = post.id;
-
-        log.debugf("收到文章删除事件: %d", postId);
-
-        if (!connectionManager.isAvailable()) {
-            log.debugf("Elasticsearch 不可用，缓存文章删除事件: %d", postId);
-            cacheEvent(new PostEvent(postId, EventType.DELETE));
-            return;
-        }
-
-        executorService.submit(() -> {
-            requestContextController.activate();
-            try {
-                processPostDelete(postId);
-            } catch (Exception e) {
-                log.errorf("删除文章索引失败: %d, 错误: %s", postId, e.getMessage());
-                log.debugf("删除文章索引异常详情: ", e);
-                cacheEvent(new PostEvent(postId, EventType.DELETE));
-            } finally {
-                requestContextController.deactivate();
-            }
-        });
     }
 
     private void processPostDelete(Long postId) throws Exception {

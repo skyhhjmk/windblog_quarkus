@@ -4,6 +4,7 @@ import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.MediaManagementService;
+import com.biliwind.blog.service.elasticsearch.PostSyncedEvent;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.event.Event;
@@ -41,6 +42,9 @@ public class AdminPostApiController {
 
     @Inject
     Event<Post> postEvent;
+
+    @Inject
+    jakarta.enterprise.event.Event<PostSyncedEvent> esSyncEvent;
 
     @POST
     @Path("/{id}/ai-summary")
@@ -172,7 +176,7 @@ public class AdminPostApiController {
             post.publishedAt = now;
         }
 
-        postEvent.fireAsync(post);
+        esSyncEvent.fire(new PostSyncedEvent(post.id));
 
         return toDetail(post);
     }
@@ -208,7 +212,7 @@ public class AdminPostApiController {
 
         post.updatedAt = OffsetDateTime.now();
         org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [UPDATE] 准备触发事件, postId=%d, title=%s", post.id, post.title);
-        postEvent.fireAsync(post);
+        esSyncEvent.fire(new PostSyncedEvent(post.id));
         org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [UPDATE] 事件已触发, postId=%d", post.id);
         return toDetail(post);
     }
@@ -231,7 +235,7 @@ public class AdminPostApiController {
         }
         post.updatedAt = OffsetDateTime.now();
         org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [PUBLISH] 准备触发事件, postId=%d, status=%s", post.id, post.status);
-        postEvent.fireAsync(post);
+        esSyncEvent.fire(new PostSyncedEvent(post.id));
         org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [PUBLISH] 事件已触发, postId=%d", post.id);
         return toDetail(post);
     }
@@ -247,7 +251,7 @@ public class AdminPostApiController {
         OffsetDateTime now = OffsetDateTime.now();
         post.deletedAt = now;
         post.updatedAt = now;
-        postEvent.fireAsync(post);
+        esSyncEvent.fire(new PostSyncedEvent(post.id));
         return Response.ok(Map.of("success", true, "id", id)).build();
     }
 
@@ -601,7 +605,7 @@ public class AdminPostApiController {
         post.updatedAt = now;
 
         mediaService.syncPostReferences(post, newRevision.contentMarkdown);
-        postEvent.fireAsync(post);
+        esSyncEvent.fire(new PostSyncedEvent(post.id));
 
         return toDetail(post);
     }
