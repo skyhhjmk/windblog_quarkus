@@ -79,9 +79,25 @@ else
     exit 1
 fi
 
+# 删除可能冲突的遗留模板
+echo ""
+echo "步骤 3: 清理遗留模板..."
+legacy_templates=("windblog-logs" "windblog-posts")
+for template_name in "${legacy_templates[@]}"; do
+    echo "  检查遗留模板: $template_name"
+    if curl -s -f $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/${template_name}" > /dev/null 2>&1; then
+        echo "  发现遗留模板 $template_name，正在删除..."
+        if curl -s -f $CURL_OPTS $AUTH_HEADER -X DELETE "${ES_URL}/_index_template/${template_name}" > /dev/null 2>&1; then
+            echo "  ✓ 遗留模板 $template_name 已删除"
+        else
+            echo "  ⚠ 删除遗留模板 $template_name 失败"
+        fi
+    fi
+done
+
 # 创建索引模板
 echo ""
-echo "步骤 3: 创建索引模板..."
+echo "步骤 4: 创建索引模板..."
 TEMPLATE_FILE="${SCRIPT_DIR}/index-template.json"
 
 if [ ! -f "$TEMPLATE_FILE" ]; then
@@ -107,7 +123,7 @@ fi
 
 # 创建初始索引
 echo ""
-echo "步骤 4: 创建初始索引..."
+echo "步骤 5: 创建初始索引..."
 response=$(curl -s -w "\n%{http_code}" $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/windblog-logs-000001" \
     -H "Content-Type: application/json" \
     -d '{
@@ -130,7 +146,7 @@ fi
 
 # 验证配置
 echo ""
-echo "步骤 5: 创建文章搜索索引..."
+echo "步骤 6: 创建文章搜索索引..."
 echo ""
 
 # 创建文章 ILM 策略
@@ -194,7 +210,7 @@ fi
 
 # 验证配置
 echo ""
-echo "步骤 6: 验证配置..."
+echo "步骤 7: 验证配置..."
 echo ""
 echo "ILM 策略 (日志):"
 curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_ilm/policy/windblog-logs-policy" | python3 -m json.tool 2>/dev/null || curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_ilm/policy/windblog-logs-policy"
@@ -213,7 +229,7 @@ curl -s $CURL_OPTS $AUTH_HEADER "${ES_URL}/_index_template/windblog-posts-templa
 
 # 导入 Kibana 视图和仪表板
 echo ""
-echo "步骤 7: 导入 Kibana 视图和仪表板..."
+echo "步骤 8: 导入 Kibana 视图和仪表板..."
 KIBANA_SAVED_OBJECTS_FILE="${SCRIPT_DIR}/kibana-saved-objects.json"
 
 if [ -f "$KIBANA_SAVED_OBJECTS_FILE" ]; then
@@ -237,7 +253,7 @@ fi
 
 # 导入 Kibana 仪表板
 echo ""
-echo "步骤 8: 导入 Kibana 仪表板..."
+echo "步骤 9: 导入 Kibana 仪表板..."
 KIBANA_DASHBOARD_FILE="${SCRIPT_DIR}/kibana-dashboard.json"
 
 if [ -f "$KIBANA_DASHBOARD_FILE" ]; then

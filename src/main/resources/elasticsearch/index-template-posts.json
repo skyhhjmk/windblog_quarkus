@@ -123,7 +123,7 @@
       }
     }
   },
-  "priority": 200,
+  "priority": 400,
   "version": 2,
   "_meta": {
     "description": "Template for windblog posts index with IK Chinese tokenizer"

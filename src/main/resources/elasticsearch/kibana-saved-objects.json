@@ -30,10 +30,9 @@
           "aggregatable": true
         },
         {
-          "name": "loggerName",
+          "name": "logger",
           "type": "string",
           "esTypes": [
-            "text",
             "keyword"
           ],
           "count": 0,
@@ -51,70 +50,9 @@
           "aggregatable": false
         },
         {
-          "name": "threadName",
+          "name": "thread",
           "type": "string",
           "esTypes": [
-            "text",
-            "keyword"
-          ],
-          "count": 0,
-          "scripted": false,
-          "searchable": true,
-          "aggregatable": true
-        },
-        {
-          "name": "processName",
-          "type": "string",
-          "esTypes": [
-            "text",
-            "keyword"
-          ],
-          "count": 0,
-          "scripted": false,
-          "searchable": true,
-          "aggregatable": true
-        },
-        {
-          "name": "hostName",
-          "type": "string",
-          "esTypes": [
-            "text",
-            "keyword"
-          ],
-          "count": 0,
-          "scripted": false,
-          "searchable": true,
-          "aggregatable": true
-        },
-        {
-          "name": "fields.service_name",
-          "type": "string",
-          "esTypes": [
-            "text",
-            "keyword"
-          ],
-          "count": 0,
-          "scripted": false,
-          "searchable": true,
-          "aggregatable": true
-        },
-        {
-          "name": "log.file.path",
-          "type": "string",
-          "esTypes": [
-            "text",
-            "keyword"
-          ],
-          "count": 0,
-          "scripted": false,
-          "searchable": true,
-          "aggregatable": true
-        },
-        {
-          "name": "loggerClassName",
-          "type": "string",
-          "esTypes": [
-            "text",
             "keyword"
           ],
           "count": 0,
@@ -124,6 +62,94 @@
         },
         {
           "name": "class",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "line",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "stack_trace",
+          "type": "string",
+          "esTypes": [
+            "text"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "mdc",
+          "type": "object",
+          "esTypes": [
+            "object"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": false
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "service_name",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "log_type",
+          "type": "string",
+          "esTypes": [
+            "keyword"
+          ],
+          "count": 0,
+          "scripted": false,
+          "searchable": true,
+          "aggregatable": true
+        },
+        {
+          "name": "environment",
           "type": "string",
           "esTypes": ["keyword"],
           "count": 0,

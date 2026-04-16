@@ -45,8 +45,21 @@ processors:
       fields: [ "@timestamp" ]
       ignore_missing: true
 
+  # 将 fields 下的自定义字段复制到根级别
+  - copy_fields:
+      fields:
+        - from: fields.service
+          to: service
+        - from: fields.service_name
+          to: service_name
+        - from: fields.log_type
+          to: log_type
+        - from: fields.environment
+          to: environment
+      fail_on_error: false
+
   - drop_fields:
-      fields: [ "agent", "ecs", "host.architecture", "host.containerized", "host.id", "host.ip", "host.mac", "input", "log.file", "ndc", "hostName" ]
+      fields: [ "agent", "ecs", "host.architecture", "host.containerized", "host.id", "host.ip", "host.mac", "input", "log.file", "ndc", "hostName", "fields" ]
       ignore_missing: true
   
   # 将 timestamp 字段重命名为 @timestamp（Elasticsearch 标准字段）

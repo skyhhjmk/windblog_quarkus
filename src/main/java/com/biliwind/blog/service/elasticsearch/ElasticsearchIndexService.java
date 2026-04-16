@@ -76,6 +76,9 @@ public class ElasticsearchIndexService {
         while (attempt < maxRetries) {
             try {
                 log.info(">>> [LOG INDEX] Attempt " + (attempt + 1) + "/" + maxRetries);
+                log.info(">>> [LOG INDEX] Calling deleteLegacyTemplates()...");
+                deleteLegacyTemplates();
+                log.info(">>> [LOG INDEX] Legacy templates cleaned up");
                 log.info(">>> [LOG INDEX] Calling createIlmPolicy()...");
                 createIlmPolicy();
                 log.info(">>> [LOG INDEX] ILM policy created");
@@ -106,6 +109,48 @@ public class ElasticsearchIndexService {
         }
 
         log.warn(">>> [LOG INDEX] Elasticsearch log index initialization failed after all retries, logs will be cached to local file");
+    }
+
+    /**
+     * Delete legacy templates that might conflict with our configuration
+     */
+    private void deleteLegacyTemplates() throws Exception {
+        log.info("Checking for legacy templates that might conflict...");
+
+        String[] legacyTemplates = {
+                "windblog-logs",
+                "windblog-posts"
+        };
+
+        for (String templateName : legacyTemplates) {
+            try {
+                log.info("Checking legacy template: " + templateName);
+
+                var checkRequest = HttpRequest.newBuilder()
+                        .uri(URI.create(elasticsearchHosts + "/_index_template/" + templateName))
+                        .GET()
+                        .build();
+
+                var checkResponse = connectionManager.sendRequest(checkRequest);
+
+                if (checkResponse.statusCode() == 200) {
+                    log.info("Found legacy template " + templateName + ", deleting it...");
+
+                    var deleteRequest = HttpRequest.newBuilder()
+                            .uri(URI.create(elasticsearchHosts + "/_index_template/" + templateName))
+                            .DELETE()
+                            .build();
+
+                    var deleteResponse = connectionManager.sendRequest(deleteRequest);
+
+                    if (deleteResponse.statusCode() == 200) {
+                        log.info("Legacy template " + templateName + " deleted successfully");
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Error checking/deleting legacy template " + templateName + ": " + e.getMessage());
+            }
+        }
     }
 
     /**

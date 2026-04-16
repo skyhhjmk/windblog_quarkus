@@ -95,9 +95,53 @@ try {
     exit 1
 }
 
+# 删除可能冲突的遗留模板
+Write-Host ""
+Write-Host "步骤 3: 清理遗留模板..."
+$legacyTemplates = @("windblog-logs", "windblog-posts")
+foreach ($templateName in $legacyTemplates)
+{
+    try
+    {
+        Write-Host "  检查遗留模板: $templateName"
+        $params = @{
+            Uri = "${ES_URL}/_index_template/${templateName}"
+            Method = GET
+            UseBasicParsing = $true
+            Headers = $AUTH_HEADER
+        }
+        if ($USE_HTTPS)
+        {
+            $params.SkipCertificateCheck = $true
+        }
+        $response = Invoke-WebRequest @params -ErrorAction SilentlyContinue
+
+        if ($response.StatusCode -eq 200)
+        {
+            Write-Host "  发现遗留模板 $templateName，正在删除..."
+            $deleteParams = @{
+                Uri = "${ES_URL}/_index_template/${templateName}"
+                Method = DELETE
+                UseBasicParsing = $true
+                Headers = $AUTH_HEADER
+            }
+            if ($USE_HTTPS)
+            {
+                $deleteParams.SkipCertificateCheck = $true
+            }
+            Invoke-WebRequest @deleteParams | Out-Null
+            Write-Host "  ✓ 遗留模板 $templateName 已删除"
+        }
+    }
+    catch
+    {
+        Write-Host "  检查/删除遗留模板 $templateName 时出错: $( $_.Exception.Message )"
+    }
+}
+
 # 创建索引模板
 Write-Host ""
-Write-Host "步骤 3: 创建索引模板..."
+Write-Host "步骤 4: 创建索引模板..."
 $TEMPLATE_FILE = Join-Path $SCRIPT_DIR "index-template.json"
 
 if (-not (Test-Path $TEMPLATE_FILE)) {
@@ -130,7 +174,7 @@ try {
 
 # 创建初始索引
 Write-Host ""
-Write-Host "步骤 4: 创建初始索引..."
+Write-Host "步骤 5: 创建初始索引..."
 
 $initialIndexBody = @"
 {
@@ -165,7 +209,7 @@ try {
 
 # 创建文章搜索索引
 Write-Host ""
-Write-Host "步骤 5: 创建文章搜索索引..."
+Write-Host "步骤 6: 创建文章搜索索引..."
 
 # 创建文章 ILM 策略
 $POSTS_ILM_FILE = Join-Path $SCRIPT_DIR "ilm-policy-posts.json"
@@ -271,7 +315,7 @@ catch
 
 # 验证配置
 Write-Host ""
-Write-Host "步骤 6: 验证配置..."
+Write-Host "步骤 7: 验证配置..."
 Write-Host ""
 Write-Host "ILM 策略 (日志):"
 try {
@@ -350,7 +394,7 @@ catch
 
 # 导入 Kibana 视图和仪表板
 Write-Host ""
-Write-Host "步骤 7: 导入 Kibana 视图和仪表板..."
+Write-Host "步骤 8: 导入 Kibana 视图和仪表板..."
 $KIBANA_SAVED_OBJECTS_FILE = Join-Path $SCRIPT_DIR "kibana-saved-objects.json"
 
 if (Test-Path $KIBANA_SAVED_OBJECTS_FILE) {
@@ -374,7 +418,7 @@ if (Test-Path $KIBANA_SAVED_OBJECTS_FILE) {
 
 # 导入 Kibana 仪表板
 Write-Host ""
-Write-Host "步骤 8: 导入 Kibana 仪表板..."
+Write-Host "步骤 9: 导入 Kibana 仪表板..."
 $KIBANA_DASHBOARD_FILE = Join-Path $SCRIPT_DIR "kibana-dashboard.json"
 
 if (Test-Path $KIBANA_DASHBOARD_FILE) {

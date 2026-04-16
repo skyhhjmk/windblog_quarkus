@@ -44,11 +44,23 @@
         "mdc": {
           "type": "object",
           "dynamic": true
+        },
+        "service": {
+          "type": "keyword"
+        },
+        "service_name": {
+          "type": "keyword"
+        },
+        "log_type": {
+          "type": "keyword"
+        },
+        "environment": {
+          "type": "keyword"
         }
       }
     }
   },
-  "priority": 100,
+  "priority": 500,
   "version": 1,
   "_meta": {
     "description": "Template for windblog application logs with ILM policy"

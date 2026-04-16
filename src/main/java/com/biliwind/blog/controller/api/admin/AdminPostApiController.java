@@ -18,10 +18,8 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 
 import java.time.OffsetDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
+import java.util.function.Consumer;
 
 @Path("/api/admin/posts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -188,137 +186,14 @@ public class AdminPostApiController {
 
         boolean changed = false;
 
-        if (request.slug() != null && !request.slug().isBlank()) {
-            String nextSlug = request.slug().trim();
-            if (!nextSlug.equals(post.slug) && Post.count("slug = ?1", nextSlug) > 0) {
-                throw conflict("slug 已存在");
-            }
-            if (!nextSlug.equals(post.slug)) {
-                changed = true;
-            }
-            post.slug = nextSlug;
-        }
+        changed |= updateBasicFields(post, request);
+        changed |= updateCategory(post, request);
 
-        if (request.summary() != null) {
-            if (!Objects.equals(post.summary, request.summary())) {
-                changed = true;
-            }
-            post.summary = request.summary();
-        }
-        if (request.aiSummary() != null) {
-            if (!Objects.equals(post.aiSummary, request.aiSummary())) {
-                changed = true;
-            }
-            post.aiSummary = request.aiSummary();
-        }
-        if (request.visibility() != null) {
-            if (post.visibility != request.visibility()) {
-                changed = true;
-            }
-            post.visibility = request.visibility();
-        }
-        if (request.password() != null) {
-            if (!Objects.equals(post.password, request.password())) {
-                changed = true;
-            }
-            post.password = request.password();
-        }
-        if (request.seoTitle() != null) {
-            if (!Objects.equals(post.seoTitle, request.seoTitle())) {
-                changed = true;
-            }
-            post.seoTitle = request.seoTitle();
-        }
-        if (request.seoKeywords() != null) {
-            if (!Objects.equals(post.seoKeywords, request.seoKeywords())) {
-                changed = true;
-            }
-            post.seoKeywords = request.seoKeywords();
-        }
-        if (request.seoDescription() != null) {
-            if (!Objects.equals(post.seoDescription, request.seoDescription())) {
-                changed = true;
-            }
-            post.seoDescription = request.seoDescription();
-        }
-        if (request.renderType() != null) {
-            PostRenderType nextRenderType = requireRenderType(request.renderType());
-            if (post.renderType != nextRenderType) {
-                changed = true;
-            }
-            post.renderType = nextRenderType;
-        }
-        if (request.status() != null) {
-            PostStatus nextStatus = PostStatus.fromCode(request.status());
-            if (nextStatus == null) {
-                throw conflict("未知文章状态: " + request.status());
-            }
-            if (!post.status.equals(nextStatus)) {
-                changed = true;
-            }
-            post.status = nextStatus;
-            if (nextStatus == PostStatus.PUBLISHED && post.publishedAt == null) {
-                post.publishedAt = OffsetDateTime.now();
-            }
-        }
-
-        // 更新分类
-        if (request.categoryId() != null) {
-            Category newCategory = Category.findById(request.categoryId());
-            if (newCategory != null && !newCategory.equals(post.category)) {
-                post.category = newCategory;
-                changed = true;
-            }
-        }
-
-        // 更新标签
         if (request.tagIds() != null) {
-            // 删除现有标签关联
-            PostTag.delete("post.id = ?1", post.id);
-            // 添加新标签关联
-            for (Long tagId : request.tagIds()) {
-                com.biliwind.blog.model.Tag tag = com.biliwind.blog.model.Tag.findById(tagId);
-                if (tag != null) {
-                    PostTag postTag = new PostTag();
-                    postTag.id = new PostTagId(post.id, tag.id);
-                    postTag.post = post;
-                    postTag.tag = tag;
-                    postTag.persist();
-                }
-            }
-            changed = true;
+            changed |= updatePostTags(post, request.tagIds());
         }
 
-        if (request.title() != null || request.contentMarkdown() != null || request.editorType() != null) {
-            Map<String, String> nextTitle = request.title() == null ? post.title : request.title();
-            Map<String, String> currentContent = post.currentRevision == null ? Map.of()
-                    : post.currentRevision.contentMarkdown;
-            Map<String, String> nextContent = request.contentMarkdown() == null ? currentContent
-                    : request.contentMarkdown();
-            short currentEditorType = post.currentRevision == null ? 0 : post.currentRevision.editorType;
-            short nextEditorType = request.editorType() == null ? currentEditorType : request.editorType();
-
-            boolean revisionChanged = !Objects.equals(nextTitle, post.title)
-                    || !Objects.equals(nextContent, currentContent)
-                    || nextEditorType != currentEditorType;
-            if (revisionChanged) {
-                User operator = mustFindOperator();
-                PostRevision nextRevision = new PostRevision();
-                nextRevision.post = post;
-                nextRevision.title = nextTitle;
-                nextRevision.contentMarkdown = nextContent;
-                nextRevision.editorType = nextEditorType;
-                nextRevision.revisionNumber = nextRevisionNumber(post.id);
-                nextRevision.createdBy = operator;
-                nextRevision.createdAt = OffsetDateTime.now();
-                nextRevision.persist();
-
-                post.currentRevision = nextRevision;
-                mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
-                post.title = nextRevision.title;
-                changed = true;
-            }
-        }
+        changed |= updateContent(post, request);
 
         if (!changed) {
             throw conflict("内容相同");
@@ -483,5 +358,136 @@ public class AdminPostApiController {
 
     private short statusCode(PostStatus status) {
         return status == null ? PostStatus.DRAFT.getCode() : status.getCode();
+    }
+
+    private <T> boolean updateField(T currentValue, T newValue, Consumer<T> setter) {
+        if (newValue != null && !Objects.equals(currentValue, newValue)) {
+            setter.accept(newValue);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean updatePostTags(Post post, List<Long> newTagIds) {
+        List<Long> currentTagIds = PostTag.find("post.id = ?1", post.id).stream()
+                .map(pt -> ((PostTag) pt).tag.id)
+                .toList();
+
+        Set<Long> currentSet = new HashSet<>(currentTagIds);
+        Set<Long> newSet = new HashSet<>(newTagIds != null ? newTagIds : List.of());
+
+        boolean changed = false;
+
+        Set<Long> toRemove = new HashSet<>(currentSet);
+        toRemove.removeAll(newSet);
+        if (!toRemove.isEmpty()) {
+            PostTag.delete("post.id = ?1 and tag.id in ?2", post.id, toRemove);
+            changed = true;
+        }
+
+        Set<Long> toAdd = new HashSet<>(newSet);
+        toAdd.removeAll(currentSet);
+        for (Long tagId : toAdd) {
+            Tag tag = Tag.findById(tagId);
+            if (tag != null) {
+                PostTag postTag = new PostTag();
+                postTag.id = new PostTagId(post.id, tag.id);
+                postTag.post = post;
+                postTag.tag = tag;
+                postTag.persist();
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private boolean updateBasicFields(Post post, PostUpdateRequest request) {
+        boolean changed = false;
+
+        if (request.slug() != null && !request.slug().isBlank()) {
+            String nextSlug = request.slug().trim();
+            if (!nextSlug.equals(post.slug) && Post.count("slug = ?1", nextSlug) > 0) {
+                throw conflict("slug 已存在");
+            }
+            if (!nextSlug.equals(post.slug)) {
+                changed = true;
+            }
+            post.slug = nextSlug;
+        }
+
+        changed |= updateField(post.summary, request.summary(), v -> post.summary = v);
+        changed |= updateField(post.aiSummary, request.aiSummary(), v -> post.aiSummary = v);
+        changed |= updateField(post.visibility, request.visibility(), v -> post.visibility = v);
+        changed |= updateField(post.password, request.password(), v -> post.password = v);
+        changed |= updateField(post.seoTitle, request.seoTitle(), v -> post.seoTitle = v);
+        changed |= updateField(post.seoKeywords, request.seoKeywords(), v -> post.seoKeywords = v);
+        changed |= updateField(post.seoDescription, request.seoDescription(), v -> post.seoDescription = v);
+
+        if (request.renderType() != null) {
+            PostRenderType nextRenderType = requireRenderType(request.renderType());
+            changed |= updateField(post.renderType, nextRenderType, v -> post.renderType = v);
+        }
+
+        if (request.status() != null) {
+            PostStatus nextStatus = PostStatus.fromCode(request.status());
+            if (nextStatus == null) {
+                throw conflict("未知文章状态: " + request.status());
+            }
+            if (!Objects.equals(post.status, nextStatus)) {
+                post.status = nextStatus;
+                changed = true;
+                if (nextStatus == PostStatus.PUBLISHED && post.publishedAt == null) {
+                    post.publishedAt = OffsetDateTime.now();
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    private boolean updateCategory(Post post, PostUpdateRequest request) {
+        if (request.categoryId() != null) {
+            Category newCategory = Category.findById(request.categoryId());
+            if (newCategory != null && !newCategory.equals(post.category)) {
+                post.category = newCategory;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean updateContent(Post post, PostUpdateRequest request) {
+        if (request.title() != null || request.contentMarkdown() != null || request.editorType() != null) {
+            Map<String, String> nextTitle = request.title() == null ? post.title : request.title();
+            Map<String, String> currentContent = post.currentRevision == null ? Map.of()
+                    : post.currentRevision.contentMarkdown;
+            Map<String, String> nextContent = request.contentMarkdown() == null ? currentContent
+                    : request.contentMarkdown();
+            short currentEditorType = post.currentRevision == null ? 0 : post.currentRevision.editorType;
+            short nextEditorType = request.editorType() == null ? currentEditorType : request.editorType();
+
+            boolean revisionChanged = !Objects.equals(nextTitle, post.title)
+                    || !Objects.equals(nextContent, currentContent)
+                    || nextEditorType != currentEditorType;
+            if (revisionChanged) {
+                User operator = mustFindOperator();
+                PostRevision nextRevision = new PostRevision();
+                nextRevision.post = post;
+                nextRevision.title = nextTitle;
+                nextRevision.contentMarkdown = nextContent;
+                nextRevision.editorType = nextEditorType;
+                nextRevision.revisionNumber = nextRevisionNumber(post.id);
+                nextRevision.createdBy = operator;
+                nextRevision.createdAt = OffsetDateTime.now();
+                nextRevision.persist();
+
+                post.currentRevision = nextRevision;
+                mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
+                post.title = nextRevision.title;
+                return true;
+            }
+        }
+        return false;
     }
 }
