@@ -116,7 +116,7 @@ public class PostLifecycleListener {
     }
 
     private void processPostUpdate(Long postId) throws Exception {
-        log.infof("检测到文章更新事件: %d", postId);
+        log.info(">>>>>>>>>> [processPostUpdate] 开始处理, postId=" + postId);
 
         if (!connectionManager.isAvailable()) {
             log.warnf("Elasticsearch 不可用，跳过文章索引: %d", postId);
@@ -130,14 +130,23 @@ public class PostLifecycleListener {
             return;
         }
 
-        log.debugf("准备从数据库加载文章: %d", postId);
+        log.info(">>>>>>>>>> [processPostUpdate] 准备从数据库加载文章: " + postId);
         Post refreshedPost = entityManager.find(Post.class, postId);
         if (refreshedPost == null) {
             log.warnf("文章不存在: %d，跳过索引", postId);
             return;
         }
 
-        log.debugf("文章已加载: id=%d, status=%s, deletedAt=%s", postId, refreshedPost.status, refreshedPost.deletedAt);
+        org.hibernate.Session session = entityManager.unwrap(org.hibernate.Session.class);
+        session.evict(refreshedPost);
+        refreshedPost = entityManager.find(Post.class, postId);
+        log.info(">>>>>>>>>> [processPostUpdate] 强制清除缓存后重新加载");
+
+        log.info(">>>>>>>>>> [processPostUpdate] 文章已加载, id=" + postId + ", status=" + refreshedPost.status + ", deletedAt=" + refreshedPost.deletedAt + ", title=" + refreshedPost.title + ", currentRevision=" + (refreshedPost.currentRevision != null ? refreshedPost.currentRevision.revisionNumber : "NULL"));
+
+        if (refreshedPost.currentRevision != null) {
+            log.info(">>>>>>>>>> [processPostUpdate] currentRevision.title=" + refreshedPost.currentRevision.title);
+        }
 
         if (refreshedPost.deletedAt != null) {
             log.debugf("文章已软删除，删除索引: %d", postId);
@@ -147,13 +156,14 @@ public class PostLifecycleListener {
         }
 
         if (refreshedPost.status == PostStatus.PUBLISHED) {
-            log.debugf("文章状态为 PUBLISHED，准备索引: %d", postId);
+            log.info(">>>>>>>>>> [processPostUpdate] 文章状态为 PUBLISHED，准备索引: " + postId);
             List<String> tags = postSearchService.getPostTags(postId);
-            log.debugf("文章标签获取完成: %d -> %s", postId, tags);
+            log.info(">>>>>>>>>> [processPostUpdate] 标签获取完成: " + tags);
+            log.info(">>>>>>>>>> [processPostUpdate] 调用 indexPost, post.title=" + refreshedPost.title);
             postSearchService.indexPost(refreshedPost, tags);
             log.infof("文章已同步到 Elasticsearch: %d (包含 %d 个标签)", postId, tags.size());
         } else {
-            log.debugf("文章状态不是 PUBLISHED，删除索引: %d, status=%s", postId, refreshedPost.status);
+            log.info(">>>>>>>>>> [processPostUpdate] 文章状态不是 PUBLISHED: " + refreshedPost.status + "，删除索引");
             postSearchService.deletePostIndex(postId);
             log.infof("文章索引已删除: %d", postId);
         }

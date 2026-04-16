@@ -91,6 +91,16 @@ public final class AdminPostDtos {
                         OffsetDateTime updatedAt) {
         }
 
+    public record PostRevisionItem(
+            Long id,
+            int revisionNumber,
+            Map<String, String> title,
+            short editorType,
+            Long createdBy,
+            String createdByName,
+            OffsetDateTime createdAt) {
+    }
+
         public record PageResult<T>(
                         List<T> items,
                         long total,

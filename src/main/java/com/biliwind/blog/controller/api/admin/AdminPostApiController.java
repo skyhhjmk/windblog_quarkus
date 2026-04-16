@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.MediaManagementService;
 import io.quarkus.panache.common.Page;
+import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -206,7 +207,9 @@ public class AdminPostApiController {
         }
 
         post.updatedAt = OffsetDateTime.now();
+        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [UPDATE] 准备触发事件, postId=%d, title=%s", post.id, post.title);
         postEvent.fireAsync(post);
+        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [UPDATE] 事件已触发, postId=%d", post.id);
         return toDetail(post);
     }
 
@@ -500,5 +503,118 @@ public class AdminPostApiController {
             }
         }
         return false;
+    }
+
+    @GET
+    @Path("/{id}/revisions")
+    @Transactional
+    @Operation(summary = "获取文章版本列表")
+    @APIResponse(responseCode = "200", description = "成功")
+    @APIResponse(responseCode = "404", description = "文章不存在")
+    public List<PostRevisionItem> listRevisions(@PathParam("id") Long id) {
+        Post post = mustFindPost(id);
+        List<PostRevision> revisions = PostRevision.list(
+                "post.id = ?1",
+                Sort.by("revisionNumber").descending(),
+                id
+        );
+        return revisions.stream().map(this::toRevisionItem).toList();
+    }
+
+    @GET
+    @Path("/{id}/revisions/{revisionNumber}")
+    @Transactional
+    @Operation(summary = "获取文章特定版本详情")
+    @APIResponse(responseCode = "200", description = "成功")
+    @APIResponse(responseCode = "404", description = "文章或版本不存在")
+    public AdminPostDetail getRevision(@PathParam("id") Long id, @PathParam("revisionNumber") int revisionNumber) {
+        Post post = mustFindPost(id);
+        PostRevision revision = PostRevision.find(
+                "post.id = ?1 and revisionNumber = ?2",
+                id,
+                revisionNumber
+        ).firstResult();
+        if (revision == null) {
+            throw new NotFoundException("版本不存在");
+        }
+
+        return new AdminPostDetail(
+                post.id,
+                post.slug,
+                revision.title,
+                post.summary,
+                post.aiSummary,
+                revision.contentMarkdown,
+                statusCode(post.status),
+                post.visibility,
+                post.password,
+                post.seoTitle,
+                post.seoKeywords,
+                post.seoDescription,
+                post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
+                revision.editorType,
+                revision.revisionNumber,
+                post.version,
+                post.user == null ? null : post.user.id,
+                post.category == null ? null : post.category.id,
+                PostTag.find("post.id = ?1", post.id).stream()
+                        .map(pt -> ((PostTag) pt).tag.id)
+                        .toList(),
+                post.publishedAt,
+                post.createdAt,
+                post.updatedAt
+        );
+    }
+
+    @POST
+    @Path("/{id}/revisions/{revisionNumber}/activate")
+    @Transactional
+    @Operation(summary = "激活特定版本为当前版本")
+    @APIResponse(responseCode = "200", description = "成功")
+    @APIResponse(responseCode = "404", description = "文章或版本不存在")
+    public AdminPostDetail activateRevision(@PathParam("id") Long id, @PathParam("revisionNumber") int revisionNumber) {
+        Post post = mustFindPost(id);
+        PostRevision revision = PostRevision.find(
+                "post.id = ?1 and revisionNumber = ?2",
+                id,
+                revisionNumber
+        ).firstResult();
+        if (revision == null) {
+            throw new NotFoundException("版本不存在");
+        }
+
+        User operator = mustFindOperator();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        PostRevision newRevision = new PostRevision();
+        newRevision.post = post;
+        newRevision.title = revision.title;
+        newRevision.contentMarkdown = revision.contentMarkdown;
+        newRevision.editorType = revision.editorType;
+        newRevision.revisionNumber = nextRevisionNumber(post.id);
+        newRevision.createdBy = operator;
+        newRevision.createdAt = now;
+        newRevision.persist();
+
+        post.currentRevision = newRevision;
+        post.title = newRevision.title;
+        post.updatedAt = now;
+
+        mediaService.syncPostReferences(post, newRevision.contentMarkdown);
+        postEvent.fireAsync(post);
+
+        return toDetail(post);
+    }
+
+    private PostRevisionItem toRevisionItem(PostRevision revision) {
+        return new PostRevisionItem(
+                revision.id,
+                revision.revisionNumber,
+                revision.title,
+                revision.editorType,
+                revision.createdBy == null ? null : revision.createdBy.id,
+                revision.createdBy == null ? "" : revision.createdBy.username,
+                revision.createdAt
+        );
     }
 }
