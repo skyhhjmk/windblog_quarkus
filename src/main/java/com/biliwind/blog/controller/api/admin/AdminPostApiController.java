@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.MediaManagementService;
 import io.quarkus.panache.common.Page;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -36,6 +37,9 @@ public class AdminPostApiController {
 
     @Inject
     AdminRequestContext adminRequestContext;
+
+    @Inject
+    Event<Post> postEvent;
 
     @POST
     @Path("/{id}/ai-summary")
@@ -167,6 +171,8 @@ public class AdminPostApiController {
             post.publishedAt = now;
         }
 
+        postEvent.fireAsync(post);
+
         return toDetail(post);
     }
 
@@ -200,6 +206,7 @@ public class AdminPostApiController {
         }
 
         post.updatedAt = OffsetDateTime.now();
+        postEvent.fireAsync(post);
         return toDetail(post);
     }
 
@@ -220,6 +227,9 @@ public class AdminPostApiController {
             post.publishedAt = OffsetDateTime.now();
         }
         post.updatedAt = OffsetDateTime.now();
+        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [PUBLISH] 准备触发事件, postId=%d, status=%s", post.id, post.status);
+        postEvent.fireAsync(post);
+        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [PUBLISH] 事件已触发, postId=%d", post.id);
         return toDetail(post);
     }
 
@@ -234,6 +244,7 @@ public class AdminPostApiController {
         OffsetDateTime now = OffsetDateTime.now();
         post.deletedAt = now;
         post.updatedAt = now;
+        postEvent.fireAsync(post);
         return Response.ok(Map.of("success", true, "id", id)).build();
     }
 

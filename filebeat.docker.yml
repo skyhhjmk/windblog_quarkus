@@ -86,15 +86,15 @@ output.elasticsearch:
   index: "windblog-logs"
   
   # 批量推送配置
-  bulk_max_size: 100
-  flush_interval: 5s
+  bulk_max_size: 50
+  flush_interval: 2s
   
   # 重试配置
   max_retries: 5
   max_retries_window: 30s
 
 # 日志输出配置（Filebeat 自身的日志）
-logging.level: info
+logging.level: debug
 logging.to_stderr: true
 
 # ILM (Index Lifecycle Management) 配置
@@ -107,9 +107,9 @@ setup.template.enabled: false
 
 # 队列配置
 queue.mem:
-  events: 4096
-  flush.min_events: 512
-  flush.timeout: 5s
+  events: 2048
+  flush.min_events: 10
+  flush.timeout: 2s
 
 # 内部监控
 monitoring.enabled: true
