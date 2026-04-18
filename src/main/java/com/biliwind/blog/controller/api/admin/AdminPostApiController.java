@@ -211,9 +211,7 @@ public class AdminPostApiController {
         }
 
         post.updatedAt = OffsetDateTime.now();
-        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [UPDATE] 准备触发事件, postId=%d, title=%s", post.id, post.title);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
-        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [UPDATE] 事件已触发, postId=%d", post.id);
         return toDetail(post);
     }
 
@@ -234,9 +232,7 @@ public class AdminPostApiController {
             post.publishedAt = OffsetDateTime.now();
         }
         post.updatedAt = OffsetDateTime.now();
-        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [PUBLISH] 准备触发事件, postId=%d, status=%s", post.id, post.status);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
-        org.jboss.logging.Logger.getLogger(AdminPostApiController.class).infof(">>>>>>>>>>>>> [PUBLISH] 事件已触发, postId=%d", post.id);
         return toDetail(post);
     }
 
