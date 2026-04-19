@@ -59,6 +59,22 @@ public class AdminController {
     Template queues;
 
     @Inject
+    @Location("admin/permissions.html")
+    Template permissions;
+
+    @Inject
+    @Location("admin/ai-providers.html")
+    Template aiProviders;
+
+    @Inject
+    @Location("admin/database.html")
+    Template database;
+
+    @Inject
+    @Location("admin/wallet.html")
+    Template wallet;
+
+    @Inject
     @Location("admin/login.html")
     Template login;
 
@@ -202,11 +218,79 @@ public class AdminController {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance queues(@Context HttpHeaders httpHeaders) {
         var userInfo = verifyLogin(httpHeaders);
-        
+
         return queues
                 .data("title", "队列管理 - WindBlog 管理后台")
                 .data("activePage", "queues")
                 .data("pageTitle", "队列管理")
+                .data("userName", userInfo.username())
+                .data("userAvatar", userInfo.avatar());
+    }
+
+    /**
+     * 权限管理页面
+     */
+    @GET
+    @Path("/permissions")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance permissions(@Context HttpHeaders httpHeaders) {
+        var userInfo = verifyLogin(httpHeaders);
+
+        return permissions
+                .data("title", "权限管理 - WindBlog 管理后台")
+                .data("activePage", "permissions")
+                .data("pageTitle", "权限管理")
+                .data("userName", userInfo.username())
+                .data("userAvatar", userInfo.avatar());
+    }
+
+    /**
+     * AI 配置页面
+     */
+    @GET
+    @Path("/ai-providers")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance aiProviders(@Context HttpHeaders httpHeaders) {
+        var userInfo = verifyLogin(httpHeaders);
+
+        return aiProviders
+                .data("title", "AI 配置 - WindBlog 管理后台")
+                .data("activePage", "ai-providers")
+                .data("pageTitle", "AI 配置")
+                .data("userName", userInfo.username())
+                .data("userAvatar", userInfo.avatar());
+    }
+
+    /**
+     * 数据库管理页面
+     */
+    @GET
+    @Path("/database")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance database(@Context HttpHeaders httpHeaders) {
+        var userInfo = verifyLogin(httpHeaders);
+
+        return database
+                .data("title", "数据库管理 - WindBlog 管理后台")
+                .data("activePage", "database")
+                .data("pageTitle", "数据库管理")
+                .data("userName", userInfo.username())
+                .data("userAvatar", userInfo.avatar());
+    }
+
+    /**
+     * 钱包管理页面
+     */
+    @GET
+    @Path("/wallet")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance wallet(@Context HttpHeaders httpHeaders) {
+        var userInfo = verifyLogin(httpHeaders);
+
+        return wallet
+                .data("title", "钱包管理 - WindBlog 管理后台")
+                .data("activePage", "wallet")
+                .data("pageTitle", "钱包管理")
                 .data("userName", userInfo.username())
                 .data("userAvatar", userInfo.avatar());
     }
