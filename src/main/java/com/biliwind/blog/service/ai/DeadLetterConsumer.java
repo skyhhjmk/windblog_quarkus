@@ -18,27 +18,39 @@ import java.util.concurrent.CompletionStage;
 public class DeadLetterConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(DeadLetterConsumer.class);
+    private static final String MQ_TAG = "[MQ]";
+    private static final String ERROR_MARK = "!!!!";
+    private static final String WARN_MARK = "----";
+
+    private void logMqWarn(String marker, String message, Object... args) {
+        log.warn("{} {} {}", MQ_TAG, marker, String.format(message, args));
+    }
+
+    private void logMqError(String marker, String message, Object... args) {
+        log.error("{} {} {}", MQ_TAG, marker, String.format(message, args));
+    }
 
     @Incoming("ai-summary-dead-letter-in")
     @Transactional
     public CompletionStage<Void> consume(Message<AiSummaryTask> message) {
         AiSummaryTask task = message.getPayload();
 
-        log.warn("收到死信消息：postId={}, priority={}, retryCount={}",
+        logMqWarn(WARN_MARK, "收到死信消息，postId=%d, priority=%d, retryCount=%d",
                 task.postId(), task.priority(), task.retryCount());
 
         try {
             saveDeadLetterMessage(task);
 
-            log.error("死信消息详情 - postId={}, priority={}, 重试次数={}, 任务内容={}",
-                    task.postId(), task.priority(), task.retryCount(), task.content());
+            logMqWarn(WARN_MARK, "死信消息详情，postId=%d, priority=%d, 重试次数=%d, 任务内容语言数=%d",
+                    task.postId(), task.priority(), task.retryCount(),
+                    task.content() != null ? task.content().size() : 0);
 
             message.ack().toCompletableFuture().join();
 
-            log.info("死信消息已处理，postId={}", task.postId());
+            logMqWarn(WARN_MARK, "死信消息已处理，postId=%d", task.postId());
 
         } catch (Exception e) {
-            log.error("处理死信消息时发生异常", e);
+            logMqError(ERROR_MARK, "处理死信消息时发生异常，postId=%d, error=%s", task.postId(), e.getMessage(), e);
             try {
                 message.ack().toCompletableFuture().join();
             } catch (Exception ignored) {
@@ -69,9 +81,9 @@ public class DeadLetterConsumer {
             dlm.deadLetteredAt = Instant.now();
             dlm.persist();
 
-            log.info("已保存死信消息记录，id={}, postId={}", dlm.id, task.postId());
+            logMqWarn(WARN_MARK, "已保存死信消息记录，id=%d, postId=%d", dlm.id, task.postId());
         } catch (Exception e) {
-            log.error("保存死信消息记录失败，postId={}", task.postId(), e);
+            logMqError(ERROR_MARK, "保存死信消息记录失败，postId=%d, error=%s", task.postId(), e.getMessage(), e);
         }
     }
 }

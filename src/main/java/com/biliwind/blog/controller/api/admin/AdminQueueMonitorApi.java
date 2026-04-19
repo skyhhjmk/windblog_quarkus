@@ -1,12 +1,11 @@
 package com.biliwind.blog.controller.api.admin;
 
-import com.biliwind.blog.config.RabbitMQConfig;
 import com.biliwind.blog.service.ai.AiSummaryTask;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -34,8 +33,7 @@ public class AdminQueueMonitorApi {
 
     private static final Logger log = LoggerFactory.getLogger(AdminQueueMonitorApi.class);
 
-    @Inject
-    RabbitMQConfig rabbitMQConfig;
+
 
     @Inject
     ObjectMapper objectMapper;
@@ -181,10 +179,15 @@ public class AdminQueueMonitorApi {
                     case 1 -> 5;
                     default -> 0;
                 };
+
+                // 解决缺少类型导致的消费者反序列化崩溃问题
+                Map<String, Object> headers = new HashMap<>();
+                headers.put("__TypeId__", AiSummaryTask.class.getName());
                 
                 AMQP.BasicProperties props = new AMQP.BasicProperties.Builder()
                         .priority(rabbitPriority)
                         .contentType("application/json")
+                        .headers(headers)
                         .timestamp(Date.from(Instant.now()))
                         .build();
                 
