@@ -93,7 +93,7 @@ public class PostController {
                 .data("postSlug", slug)
                 .data("postTitle", localizedTitle == null ? slug : localizedTitle)
                 .data("aiSummary", localizedAiSummary)
-                .data("aiSummaryStatus", postEntity.aiSummaryStatus)
+                .data("aiSummaryStatus", postEntity.aiSummaryStatus != null ? postEntity.aiSummaryStatus.intValue() : 0)
                 .data("postBody", postBody.body())
                 .data("postBodyHtml", postBody.html())
                 .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)

@@ -111,7 +111,7 @@ public class IndexController {
                 title,
                 summary,
                 post.aiSummary,
-                post.aiSummaryStatus,
+                post.aiSummaryStatus != null ? post.aiSummaryStatus.intValue() : 0,
                 post.publishedAt,
                 post.createdAt
         );
@@ -123,7 +123,7 @@ public class IndexController {
             String title,
             String summary,
             Map<String, String> aiSummary,
-            Short aiSummaryStatus,
+            Integer aiSummaryStatus,
             OffsetDateTime publishedAt,
             OffsetDateTime createdAt
     ) {

@@ -13,11 +13,12 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
-import org.jboss.resteasy.plugins.providers.multipart.InputPart;
-import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
+import org.jboss.resteasy.reactive.RestForm;
+import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
@@ -47,13 +48,15 @@ public class AdminMediaController {
     @Transactional
     @Operation(summary = "上传媒体文件")
     public AdminMediaDtos.MediaItem upload(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization,
-                                           MultipartFormDataInput input) {
+                                           @RestForm("file") FileUpload filePart) {
         User operator = mustFindOperator(authorization);
-        InputPart filePart = extractFilePart(input);
-        String fileName = extractFileName(filePart);
-        String mimeType = filePart.getMediaType() != null ? filePart.getMediaType().toString() : null;
-        long declaredSize = extractContentLength(filePart);
-        try (InputStream stream = filePart.getBody(InputStream.class, null)) {
+        if (filePart == null) {
+            throw new BadRequestException("缺少 file 字段");
+        }
+        String fileName = filePart.fileName();
+        String mimeType = filePart.contentType();
+        long declaredSize = filePart.size();
+        try (InputStream stream = Files.newInputStream(filePart.filePath())) {
             Media media = mediaService.storeUploadedMedia(operator, stream, fileName, mimeType, declaredSize);
             return mediaService.toDto(media, List.of());
         } catch (IOException e) {
@@ -70,44 +73,6 @@ public class AdminMediaController {
         return mediaService.rebuildReferences();
     }
 
-    private InputPart extractFilePart(MultipartFormDataInput input) {
-        Map<String, List<InputPart>> parts = input.getFormDataMap();
-        List<InputPart> files = parts.get("file");
-        if (files == null || files.isEmpty()) {
-            throw new BadRequestException("缺少 file 字段");
-        }
-        return files.get(0);
-    }
-
-    private String extractFileName(InputPart part) {
-        String header = part.getHeaders().getFirst("Content-Disposition");
-        if (header == null) {
-            return "file";
-        }
-        for (String item : header.split(";")) {
-            String trimmed = item.trim();
-            if (trimmed.startsWith("filename=")) {
-                String name = trimmed.substring("filename=".length()).trim();
-                if (name.startsWith("\"") && name.endsWith("\"")) {
-                    name = name.substring(1, name.length() - 1);
-                }
-                return name;
-            }
-        }
-        return "file";
-    }
-
-    private long extractContentLength(InputPart part) {
-        String header = part.getHeaders().getFirst("Content-Length");
-        if (header == null) {
-            return -1;
-        }
-        try {
-            return Long.parseLong(header);
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-    }
 
     private User mustFindOperator(String authorization) {
         Long userId = extractUserId(authorization);
