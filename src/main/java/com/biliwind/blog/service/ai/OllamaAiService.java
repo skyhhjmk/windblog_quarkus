@@ -41,36 +41,41 @@ public class OllamaAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<Map<String, String>> summarize(AiProviderConfig config, Map<String, String> content) {
+    public CompletionStage<AiResult> summarize(AiProviderConfig config, Map<String, String> content) {
         if (!isConfigReady(config)) {
             return CompletableFuture.failedFuture(new RuntimeException("Ollama 配置不可用"));
         }
 
-        List<CompletableFuture<Map.Entry<String, String>>> futures = new ArrayList<>();
+        List<CompletableFuture<AiResult>> futures = new ArrayList<>();
 
         for (Map.Entry<String, String> entry : content.entrySet()) {
             String lang = entry.getKey();
             String text = entry.getValue();
-            CompletableFuture<Map.Entry<String, String>> future = callApiAsync(config, lang, text)
-                    .thenApply(summary -> Map.entry(lang, summary));
-            futures.add(future);
+            futures.add(callApiAsync(config, lang, text));
         }
 
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .thenApply(ignored -> {
-                    Map<String, String> summaries = new HashMap<>();
-                    for (CompletableFuture<Map.Entry<String, String>> future : futures) {
-                        Map.Entry<String, String> entry = future.join();
-                        summaries.put(entry.getKey(), entry.getValue());
+                    AiResult finalResult = new AiResult();
+                    for (CompletableFuture<AiResult> future : futures) {
+                        try {
+                            AiResult res = future.join();
+                            for (Map.Entry<String, String> entry : res.contents.entrySet()) {
+                                finalResult.contents.put(entry.getKey(), entry.getValue());
+                            }
+                            finalResult.addUsage(res.inputTokens, res.outputTokens, res.totalTokens);
+                        } catch (Exception e) {
+                            // 忽略单个失败
+                        }
                     }
-                    return summaries;
+                    return finalResult;
                 });
     }
 
     /**
      * 异步调用 Ollama generate API，不阻塞当前线程
      */
-    private CompletableFuture<String> callApiAsync(AiProviderConfig config, String lang, String text) {
+    private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String lang, String text) {
         try {
             String prompt = buildPrompt(lang, text);
             URI uri = resolveUri(config, "/api/generate");
@@ -96,8 +101,16 @@ public class OllamaAiService implements AiService {
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
+                            AiResult res = new AiResult();
                             String extracted = extractTextFromResponse(root);
-                            return extracted.isBlank() ? text : extracted;
+                            res.contents.put(lang, extracted.isBlank() ? text : extracted);
+
+                            // Ollama token usage
+                            int promptTokens = root.has("prompt_eval_count") ? root.get("prompt_eval_count").asInt() : 0;
+                            int evalCount = root.has("eval_count") ? root.get("eval_count").asInt() : 0;
+                            res.addUsage(promptTokens, evalCount, promptTokens + evalCount);
+
+                            return res;
                         } catch (Exception parseEx) {
                             throw new RuntimeException("解析 Ollama 响应失败", parseEx);
                         }
@@ -163,8 +176,10 @@ public class OllamaAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<Boolean> moderate(AiProviderConfig config, String content) {
-        return CompletableFuture.completedFuture(true);
+    public CompletionStage<AiResult> moderate(AiProviderConfig config, String content) {
+        AiResult res = new AiResult();
+        res.isSafe = true;
+        return CompletableFuture.completedFuture(res);
     }
 
     @Override

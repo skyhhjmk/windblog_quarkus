@@ -35,8 +35,8 @@ public class AiTaskProducer {
         taskEmitter.send(msg);
     }
 
-    public void sendSummaryTask(Long postId, Map<String, String> content, int priority, int retryCount) {
-        AiSummaryTask task = new AiSummaryTask(postId, content, priority, retryCount);
+    public void sendSummaryTask(Long postId, Map<String, String> content, int priority, int retryCount, Long performedBy) {
+        AiSummaryTask task = new AiSummaryTask(postId, content, priority, retryCount, performedBy);
         sendSummaryTask(task);
     }
 

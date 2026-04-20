@@ -67,10 +67,12 @@ public class AdminPostApiController {
                     .build();
         }
 
+        Long userId = adminRequestContext.getUserId();
         aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
                 post.id,
                 rev.contentMarkdown,
-                1 // Medium priority
+                1, // Medium priority
+                userId
         ));
 
         return Response.ok(java.util.Map.of("success", true, "message", "摘要任务已触发")).build();
@@ -161,7 +163,8 @@ public class AdminPostApiController {
             aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
                     post.id,
                     request.contentMarkdown(),
-                    1
+                    1,
+                    operator.id
             ));
         }
 
@@ -236,10 +239,12 @@ public class AdminPostApiController {
         if (post.aiSummaryStatus == 0) {
             PostRevision rev = post.currentRevision;
             if (rev != null && rev.contentMarkdown != null && !rev.contentMarkdown.isEmpty()) {
+                Long userId = adminRequestContext.getUserId();
                 aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
                         post.id,
                         rev.contentMarkdown,
-                        1
+                        1,
+                        userId
                 ));
             }
         }

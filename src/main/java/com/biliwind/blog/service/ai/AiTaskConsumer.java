@@ -1,7 +1,6 @@
 package com.biliwind.blog.service.ai;
 
 import com.biliwind.blog.model.Post;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.smallrye.reactive.messaging.annotations.Blocking;
 import io.smallrye.reactive.messaging.rabbitmq.IncomingRabbitMQMetadata;
 import io.vertx.core.json.JsonObject;
@@ -86,15 +85,19 @@ public class AiTaskConsumer {
         log.info("{} 处理任务，postId={}, priority={}, retry={}/{}", MQ_TAG,
                 task.postId(), task.priority(), currentRetryCount, allowedMaxRetries);
 
+        long startTime = System.currentTimeMillis();
         try {
             // 阻塞等待 AI 结果（在 @Blocking 工作线程上安全）
-            Map<String, String> summaries = aiManager.summarize(task.content())
+            AiResult aiResult = aiManager.summarize(task.content())
                     .toCompletableFuture()
                     .get(TASK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
+            long endTime = System.currentTimeMillis();
+            long durationMs = endTime - startTime;
+
             // 在新事务中保存结果和审计日志（Worker 线程可以使用 Panache 阻塞 API）
-            saveAiSummaryAndAuditLog(task.postId(), summaries);
-            log.info("{} AI 处理成功，postId={}", MQ_TAG, task.postId());
+            saveAiSummaryAndAuditLog(task.postId(), aiResult, durationMs, task.performedBy());
+            log.info("{} AI 处理成功，postId={}，耗时={}ms", MQ_TAG, task.postId(), durationMs);
             return safeAck(message);
 
         } catch (Exception ex) {
@@ -130,7 +133,7 @@ public class AiTaskConsumer {
             int nextRetryCount = currentRetryCount + 1;
             log.warn("{} 重试 {}/{}，postId={}", MQ_TAG, nextRetryCount, allowedMaxRetries, task.postId());
             try {
-                taskProducer.sendSummaryTask(task.postId(), task.content(), task.priority(), nextRetryCount);
+                taskProducer.sendSummaryTask(task.postId(), task.content(), task.priority(), nextRetryCount, task.performedBy());
                 return safeAck(message);
             } catch (Exception sendEx) {
                 log.error("{} 重新发布任务失败，进行 NACK，postId={}", MQ_TAG, task.postId(), sendEx);
@@ -146,42 +149,63 @@ public class AiTaskConsumer {
      * 在新事务中保存摘要结果和审计日志。
      * 在 @Blocking 工作线程中调用，允许使用 Panache 阻塞 API。
      */
-    private void saveAiSummaryAndAuditLog(Long postId, Map<String, String> summaries) {
-        if (summaries == null || summaries.isEmpty()) {
+    private void saveAiSummaryAndAuditLog(Long postId, AiResult aiResult, long durationMs, Long userId) {
+        if (aiResult == null || aiResult.contents.isEmpty()) {
             log.warn("{} AI 返回摘要为空，跳过保存，postId={}", MQ_TAG, postId);
             return;
         }
 
-        QuarkusTransaction.requiringNew().run(() -> {
-            Post post = Post.findById(postId);
-            if (post == null) {
-                log.warn("{} 文章不存在，跳过，postId={}", MQ_TAG, postId);
-                return;
-            }
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
+            @Override
+            public void run() {
+                Post post = Post.findById(postId);
+                if (post == null) {
+                    log.warn("{} 文章不存在，跳过，postId={}", MQ_TAG, postId);
+                    return;
+                }
 
-            // 如果状态为锁定(1)或禁用(2)，不覆盖
-            if (post.aiSummaryStatus != null && post.aiSummaryStatus > 0) {
-                log.info("{} AI 摘要已锁定/禁用（status={}），跳过，postId={}", MQ_TAG, post.aiSummaryStatus, postId);
-                return;
-            }
+                // 如果状态为锁定(1)或禁用(2)，不覆盖
+                if (post.aiSummaryStatus != null && post.aiSummaryStatus > 0) {
+                    log.info("{} AI 摘要已锁定/禁用（status={}），跳过，postId={}", MQ_TAG, post.aiSummaryStatus, postId);
+                    return;
+                }
 
-            // 写审计日志
-            com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
-            auditLog.entityType = "post";
-            auditLog.entityId = postId;
-            auditLog.action = "ai_summary_generated";
-            Map<String, Object> oldVal = new HashMap<>();
-            if (post.aiSummary != null) {
-                oldVal.putAll(post.aiSummary);
-            }
-            auditLog.oldValue = oldVal;
-            auditLog.newValue = new HashMap<>(summaries);
-            auditLog.persist();
+                // 写审计日志
+                com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
+                auditLog.entityType = "post";
+                auditLog.entityId = postId;
+                auditLog.action = "ai_summary_generated";
+                Map<String, Object> oldVal = new HashMap<>();
+                if (post.aiSummary != null) {
+                    for (Map.Entry<String, String> entry : post.aiSummary.entrySet()) {
+                        oldVal.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                auditLog.oldValue = oldVal;
 
-            // 更新文章摘要
-            post.aiSummary = summaries;
-            post.persist();
-            log.info("{} 已保存 AI 摘要并写入审计日志，postId={}", MQ_TAG, postId);
+                Map<String, Object> newVal = new HashMap<>();
+                for (Map.Entry<String, String> entry : aiResult.contents.entrySet()) {
+                    newVal.put(entry.getKey(), entry.getValue());
+                }
+                auditLog.newValue = newVal;
+
+                // 记录 AI 消耗详情
+                auditLog.durationMs = durationMs;
+                auditLog.inputTokens = aiResult.inputTokens;
+                auditLog.outputTokens = aiResult.outputTokens;
+                auditLog.totalTokens = aiResult.totalTokens;
+
+                if (userId != null) {
+                    auditLog.performedBy = com.biliwind.blog.model.User.findById(userId);
+                }
+
+                auditLog.persist();
+
+                // 更新文章摘要
+                post.aiSummary = aiResult.contents;
+                post.persist();
+                log.info("{} 已保存 AI 摘要并写入审计日志，postId={}", MQ_TAG, postId);
+            }
         });
     }
 

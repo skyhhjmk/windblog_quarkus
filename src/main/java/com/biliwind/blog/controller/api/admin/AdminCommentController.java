@@ -7,17 +7,7 @@ import com.biliwind.blog.model.Comment;
 import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DELETE;
-import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.PUT;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
@@ -37,6 +27,9 @@ public class AdminCommentController {
 
     @Inject
     com.biliwind.blog.service.ai.AiManager aiManager;
+
+    @Inject
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     @GET
     @Transactional
@@ -112,9 +105,50 @@ public class AdminCommentController {
             throw new NotFoundException();
         }
 
-        return aiManager.moderate(comment.content).thenApply(safe -> {
-            comment.status = safe ? (short) 1 : (short) 2;
-            return toItem(comment);
+        long startTime = System.currentTimeMillis();
+        Long commentId = comment.id;
+        // 在异步调用前捕获用户ID，因为 RequestContext 无法传递到异步线程
+        Long performingUserId = adminRequestContext.getUserId();
+
+        return aiManager.moderate(comment.content).thenApply(new java.util.function.Function<com.biliwind.blog.service.ai.AiResult, AdminCommentItem>() {
+            @Override
+            public AdminCommentItem apply(com.biliwind.blog.service.ai.AiResult aiResult) {
+                long endTime = System.currentTimeMillis();
+                long durationMs = endTime - startTime;
+
+                io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
+                    @Override
+                    public void run() {
+                        Comment c = Comment.findById(commentId);
+                        if (c == null) {
+                            return;
+                        }
+
+                        short oldStatus = c.status;
+                        c.status = aiResult.isSafe ? (short) 1 : (short) 2;
+
+                        // 写入审计日志
+                        com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
+                        auditLog.entityType = "comment";
+                        auditLog.entityId = c.id;
+                        auditLog.action = "ai_moderation";
+                        auditLog.oldValue = java.util.Map.of("status", oldStatus);
+                        auditLog.newValue = java.util.Map.of("status", c.status, "isSafe", aiResult.isSafe);
+                        auditLog.durationMs = durationMs;
+                        auditLog.inputTokens = aiResult.inputTokens;
+                        auditLog.outputTokens = aiResult.outputTokens;
+                        auditLog.totalTokens = aiResult.totalTokens;
+
+                        if (performingUserId != null) {
+                            auditLog.performedBy = com.biliwind.blog.model.User.findById(performingUserId);
+                        }
+                        auditLog.persist();
+                    }
+                });
+
+                Comment finalComment = Comment.findById(commentId);
+                return toItem(finalComment);
+            }
         });
     }
 

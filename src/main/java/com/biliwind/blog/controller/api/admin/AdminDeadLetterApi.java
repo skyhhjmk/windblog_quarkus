@@ -1,9 +1,8 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.model.DeadLetterMessage;
-import com.biliwind.blog.service.ai.AiTaskProducer;
 import com.biliwind.blog.service.ai.AiSummaryTask;
-import io.quarkus.hibernate.orm.panache.PanacheQuery;
+import com.biliwind.blog.service.ai.AiTaskProducer;
 import io.quarkus.panache.common.Sort;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -34,6 +33,9 @@ public class AdminDeadLetterApi {
 
     @Inject
     AiTaskProducer aiTaskProducer;
+
+    @Inject
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     /**
      * 获取所有死信消息
@@ -127,7 +129,8 @@ public class AdminDeadLetterApi {
             Map<String, String> postContent = (Map<String, String>) content.get("content");
             
             // 创建新任务并发送
-            AiSummaryTask task = new AiSummaryTask(postId, postContent, priority);
+            Long userId = adminRequestContext.getUserId();
+            AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
             aiTaskProducer.sendSummaryTask(task);
             
             // 标记为已处理
@@ -172,8 +175,9 @@ public class AdminDeadLetterApi {
                             ((Number) content.get("priority")).intValue() : 1;
                     @SuppressWarnings("unchecked")
                     Map<String, String> postContent = (Map<String, String>) content.get("content");
-                    
-                    AiSummaryTask task = new AiSummaryTask(postId, postContent, priority);
+
+                    Long userId = adminRequestContext.getUserId();
+                    AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
                     aiTaskProducer.sendSummaryTask(task);
                     
                     message.markAsProcessed("批量重试 - 已重新发送到任务队列");

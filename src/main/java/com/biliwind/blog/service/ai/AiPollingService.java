@@ -65,13 +65,13 @@ public class AiPollingService {
         return AiPollingAlgorithm.ROUND_ROBIN;
     }
 
-    public CompletionStage<Map<String, String>> summarize(AiProviderConfig groupConfig, Map<String, String> content) {
+    public CompletionStage<AiResult> summarize(AiProviderConfig groupConfig, Map<String, String> content) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
         return tryNodesForSummarize(nodes, alg, groupConfig.id, 0, content);
     }
 
-    public CompletionStage<Boolean> moderate(AiProviderConfig groupConfig, String content) {
+    public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String content) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
         return tryNodesForModerate(nodes, alg, groupConfig.id, 0, content);
@@ -119,7 +119,7 @@ public class AiPollingService {
         }
     }
 
-    private CompletionStage<Map<String, String>> tryNodesForSummarize(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, Map<String, String> content) {
+    private CompletionStage<AiResult> tryNodesForSummarize(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, Map<String, String> content) {
         if (nodes.isEmpty() || retryCount >= nodes.size()) {
             return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点调用失败或无节点"));
         }
@@ -140,9 +140,11 @@ public class AiPollingService {
                 }).thenCompose(s -> s);
     }
 
-    private CompletionStage<Boolean> tryNodesForModerate(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, String content) {
+    private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, String content) {
         if (nodes.isEmpty() || retryCount >= nodes.size()) {
-            return CompletableFuture.completedFuture(true); // 默认放行
+            AiResult defaultResult = new AiResult();
+            defaultResult.isSafe = true;
+            return CompletableFuture.completedFuture(defaultResult); // 默认放行
         }
 
         NodeInfo selected = pickNext(nodes, alg, groupId);

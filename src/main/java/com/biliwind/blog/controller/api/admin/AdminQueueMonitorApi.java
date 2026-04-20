@@ -166,11 +166,18 @@ public class AdminQueueMonitorApi {
                 // 构建测试任务
                 Map<String, String> content = new HashMap<>();
                 content.put("zh-cn", request.content != null ? request.content : "测试文章内容");
+
+                int priorityValue = 1;
+                if (request.priority != null) {
+                    priorityValue = request.priority;
+                }
                 
                 AiSummaryTask task = new AiSummaryTask(
                         request.postId,
                         content,
-                        request.priority != null ? request.priority : 1
+                        priorityValue,
+                        0,
+                        null
                 );
                 
                 // 设置 RabbitMQ 优先级

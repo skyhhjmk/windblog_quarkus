@@ -52,4 +52,28 @@ public class AuditLog extends PanacheEntityBase {
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp
     public OffsetDateTime createdAt;
+
+    /**
+     * 消耗时长 (毫秒)
+     */
+    @Column(name = "duration_ms")
+    public Long durationMs;
+
+    /**
+     * 输入 Token 数
+     */
+    @Column(name = "input_tokens")
+    public Integer inputTokens;
+
+    /**
+     * 输出 Token 数
+     */
+    @Column(name = "output_tokens")
+    public Integer outputTokens;
+
+    /**
+     * 总 Token 数
+     */
+    @Column(name = "total_tokens")
+    public Integer totalTokens;
 }

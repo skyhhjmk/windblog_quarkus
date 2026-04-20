@@ -42,4 +42,5 @@
     <include file="migration/037-add-post-stats-fields.sql" relativeToChangelogFile="true"/>
     <include file="migration/038-add-post-ai-summary-status.sql" relativeToChangelogFile="true"/>
     <include file="migration/040-refactor-ai-provider-configs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/041-add-audit-log-ai-fields.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

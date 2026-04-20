@@ -7,12 +7,12 @@ public interface AiService {
     /**
      * Generate content summary using AI.
      */
-    CompletionStage<Map<String, String>> summarize(com.biliwind.blog.model.AiProviderConfig config, Map<String, String> content);
+    CompletionStage<AiResult> summarize(com.biliwind.blog.model.AiProviderConfig config, Map<String, String> content);
 
     /**
      * Moderate content using AI (e.g. for spam or toxic content).
      */
-    CompletionStage<Boolean> moderate(com.biliwind.blog.model.AiProviderConfig config, String content);
+    CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String content);
 
     /**
      * 流式交互测试接口

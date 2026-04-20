@@ -2,7 +2,6 @@ package com.biliwind.blog.service.ai;
 
 import jakarta.enterprise.context.ApplicationScoped;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -16,21 +15,31 @@ public class MockAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<Map<String, String>> summarize(com.biliwind.blog.model.AiProviderConfig config, Map<String, String> contentByLanguage) {
-        Map<String, String> summaries = new HashMap<>();
-        contentByLanguage.forEach((lang, text) -> {
+    public CompletionStage<AiResult> summarize(com.biliwind.blog.model.AiProviderConfig config, Map<String, String> contentByLanguage) {
+        AiResult result = new AiResult();
+        for (Map.Entry<String, String> entry : contentByLanguage.entrySet()) {
+            String lang = entry.getKey();
+            String text = entry.getValue();
             String summary = "AI Summary (" + lang + "): "
                     + (text.length() > 50 ? text.substring(0, 50) + "..." : text);
-            summaries.put(lang, summary);
-        });
-        return CompletableFuture.completedStage(summaries);
+            result.contents.put(lang, summary);
+            result.addUsage(10, 20, 30);
+        }
+        return CompletableFuture.completedStage(result);
     }
 
     @Override
-    public CompletionStage<Boolean> moderate(com.biliwind.blog.model.AiProviderConfig config, String content) {
+    public CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String content) {
         // Simple mock moderation: if content contains "spam", it's not safe
-        boolean safe = !content.toLowerCase().contains("spam");
-        return CompletableFuture.completedStage(safe);
+        boolean safe = true;
+        if (content.toLowerCase().contains("spam")) {
+            safe = false;
+        }
+
+        AiResult res = new AiResult();
+        res.isSafe = safe;
+        res.addUsage(5, 5, 10);
+        return CompletableFuture.completedStage(res);
     }
 
     @Override

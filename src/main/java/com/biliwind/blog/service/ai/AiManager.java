@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -39,28 +40,65 @@ public class AiManager {
         return null;
     }
 
-    public CompletionStage<Map<String, String>> summarize(Map<String, String> content) {
-        List<AiProviderConfig> configs = configService.listAll().stream().filter(c -> c.enabled).toList();
+    public CompletionStage<AiResult> summarize(Map<String, String> content) {
+        List<AiProviderConfig> allConfigs = configService.listAll();
+        List<AiProviderConfig> configs = new ArrayList<>();
+        for (AiProviderConfig c : allConfigs) {
+            if (c.enabled) {
+                configs.add(c);
+            }
+        }
+        
         if (configs.isEmpty()) {
             return CompletableFuture.failedFuture(new RuntimeException("当前没有任何已启用的 AI 配置"));
         }
-        // Prefer polling group if exists
-        AiProviderConfig best = configs.stream().filter(c -> c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP).findFirst().orElse(configs.get(0));
+
+        AiProviderConfig best = null;
+        for (AiProviderConfig c : configs) {
+            if (c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                best = c;
+                break;
+            }
+        }
+        if (best == null) {
+            best = configs.get(0);
+        }
+        
         log.info("[AI] 开始生成摘要，接管配置={}", best.name);
         return executeSummarize(best, content);
     }
 
-    public CompletionStage<Boolean> moderate(String content) {
-        List<AiProviderConfig> configs = configService.listAll().stream().filter(c -> c.enabled).toList();
-        if (configs.isEmpty()) {
-            return CompletableFuture.completedFuture(true);
+    public CompletionStage<AiResult> moderate(String content) {
+        List<AiProviderConfig> allConfigs = configService.listAll();
+        List<AiProviderConfig> configs = new ArrayList<>();
+        for (AiProviderConfig c : allConfigs) {
+            if (c.enabled) {
+                configs.add(c);
+            }
         }
-        AiProviderConfig best = configs.stream().filter(c -> c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP).findFirst().orElse(configs.get(0));
+        
+        if (configs.isEmpty()) {
+            AiResult defaultRes = new AiResult();
+            defaultRes.isSafe = true;
+            return CompletableFuture.completedFuture(defaultRes);
+        }
+
+        AiProviderConfig best = null;
+        for (AiProviderConfig c : configs) {
+            if (c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                best = c;
+                break;
+            }
+        }
+        if (best == null) {
+            best = configs.get(0);
+        }
+        
         log.info("[AI] 开始审核内容，接管配置={}", best.name);
         return executeModerate(best, content);
     }
 
-    public CompletionStage<Map<String, String>> executeSummarize(AiProviderConfig config, Map<String, String> content) {
+    public CompletionStage<AiResult> executeSummarize(AiProviderConfig config, Map<String, String> content) {
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
             return pollingService.get().summarize(config, content);
         } else {
@@ -71,12 +109,16 @@ public class AiManager {
         }
     }
 
-    public CompletionStage<Boolean> executeModerate(AiProviderConfig config, String content) {
+    public CompletionStage<AiResult> executeModerate(AiProviderConfig config, String content) {
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
             return pollingService.get().moderate(config, content);
         } else {
             AiService svc = findService(config);
-            if (svc == null) return CompletableFuture.completedFuture(true);
+            if (svc == null) {
+                AiResult defaultRes = new AiResult();
+                defaultRes.isSafe = true;
+                return CompletableFuture.completedFuture(defaultRes);
+            }
             return svc.moderate(config, content);
         }
     }

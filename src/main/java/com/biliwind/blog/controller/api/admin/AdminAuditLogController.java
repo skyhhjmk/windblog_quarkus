@@ -57,7 +57,16 @@ public class AdminAuditLogController {
 
         List<AuditLog> logs = panacheQuery.page(Page.of(safePage - 1, safePageSize)).list();
 
-        List<AuditLogItem> items = logs.stream().map(log -> new AuditLogItem(
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH时mm分ss秒SSS毫秒");
+        List<AuditLogItem> items = new java.util.ArrayList<>();
+        for (AuditLog log : logs) {
+            String formattedTime = "";
+            if (log.createdAt != null) {
+                // 转换为系统默认时区（或特定时区，此处按用户习惯可能需要本地时间）
+                formattedTime = log.createdAt.atZoneSameInstant(java.time.ZoneId.systemDefault()).format(formatter);
+            }
+
+            items.add(new AuditLogItem(
                 log.id,
                 log.entityType,
                 log.entityId,
@@ -66,8 +75,14 @@ public class AdminAuditLogController {
                 log.newValue,
                 log.performedBy != null ? log.performedBy.id : null,
                 log.performedBy != null ? log.performedBy.username : null,
-                log.createdAt
-        )).toList();
+                    log.createdAt,
+                    formattedTime,
+                    log.durationMs,
+                    log.inputTokens,
+                    log.outputTokens,
+                    log.totalTokens
+            ));
+        }
 
         return new PageResult<>(items, panacheQuery.count(), safePage, safePageSize);
     }
@@ -81,7 +96,12 @@ public class AdminAuditLogController {
             Map<String, Object> newValue,
             Long performedById,
             String performedByUsername,
-            OffsetDateTime createdAt
+            OffsetDateTime createdAt,
+            String createdAtFormatted,
+            Long durationMs,
+            Integer inputTokens,
+            Integer outputTokens,
+            Integer totalTokens
     ) {
     }
 }

@@ -17,7 +17,6 @@ import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
@@ -34,6 +33,9 @@ public class AdminLinkController {
 
     @Inject
     AiManager aiManager;
+
+    @Inject
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     @GET
     @Operation(summary = "所有友链")
@@ -63,21 +65,61 @@ public class AdminLinkController {
         if (link == null)
             throw new NotFoundException();
 
-        return aiManager.moderate(link.name + " " + link.description + " " + link.url).thenApply(safe -> {
-            LinkAudit audit = new LinkAudit();
-            audit.link = link;
-            audit.status = safe ? (short) 1 : (short) 2; // 1=approved, 2=rejected
-            audit.reason = safe ? "AI verified safe" : "AI flagged as unsafe/spam";
-            audit.score = safe ? BigDecimal.valueOf(100) : BigDecimal.ZERO;
-            audit.createdAt = OffsetDateTime.now();
-            audit.persist();
+        long startTime = System.currentTimeMillis();
+        Long linkId = link.id;
+        // 在异步调用前捕获用户ID
+        Long performingUserId = adminRequestContext.getUserId();
 
-            // Auto update link status? Let's say we just log it for now or update if safe
-            if (!safe && link.status == 1) {
-                link.status = 2; // Auto hide if flagged
+        return aiManager.moderate(link.name + " " + link.description + " " + link.url).thenApply(new java.util.function.Function<com.biliwind.blog.service.ai.AiResult, AdminLinkAuditItem>() {
+            @Override
+            public AdminLinkAuditItem apply(com.biliwind.blog.service.ai.AiResult aiResult) {
+                long endTime = System.currentTimeMillis();
+                long durationMs = endTime - startTime;
+
+                io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
+                    @Override
+                    public void run() {
+                        Link l = Link.findById(linkId);
+                        if (l == null) {
+                            return;
+                        }
+
+                        boolean safe = aiResult.isSafe;
+                        LinkAudit audit = new LinkAudit();
+                        audit.link = l;
+                        audit.status = safe ? (short) 1 : (short) 2; // 1=approved, 2=rejected
+                        audit.reason = safe ? "AI verified safe" : "AI flagged as unsafe/spam";
+                        audit.score = safe ? java.math.BigDecimal.valueOf(100) : java.math.BigDecimal.ZERO;
+                        audit.createdAt = java.time.OffsetDateTime.now();
+                        audit.persist();
+
+                        // Auto update link status
+                        if (!safe && l.status == 1) {
+                            l.status = 2; // Auto hide if flagged
+                        }
+
+                        // 写入审计日志
+                        com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
+                        auditLog.entityType = "link";
+                        auditLog.entityId = l.id;
+                        auditLog.action = "ai_moderation";
+                        auditLog.oldValue = java.util.Map.of("status", l.status == 2 ? 1 : l.status);
+                        auditLog.newValue = java.util.Map.of("status", l.status, "isSafe", safe);
+                        auditLog.durationMs = durationMs;
+                        auditLog.inputTokens = aiResult.inputTokens;
+                        auditLog.outputTokens = aiResult.outputTokens;
+                        auditLog.totalTokens = aiResult.totalTokens;
+
+                        if (performingUserId != null) {
+                            auditLog.performedBy = com.biliwind.blog.model.User.findById(performingUserId);
+                        }
+                        auditLog.persist();
+                    }
+                });
+
+                LinkAudit latestAudit = LinkAudit.find("link.id = ?1 order by createdAt desc", linkId).firstResult();
+                return toAuditItem(latestAudit);
             }
-
-            return toAuditItem(audit);
         });
     }
 

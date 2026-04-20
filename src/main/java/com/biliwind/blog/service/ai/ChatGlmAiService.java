@@ -45,30 +45,37 @@ public class ChatGlmAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<Map<String, String>> summarize(AiProviderConfig config, Map<String, String> contentByLanguage) {
+    public CompletionStage<AiResult> summarize(AiProviderConfig config, Map<String, String> contentByLanguage) {
         if (!isConfigReady(config)) {
             return CompletableFuture.failedFuture(new RuntimeException("ChatGLM 配置未就绪"));
         }
 
-        List<CompletableFuture<Map.Entry<String, String>>> futures = new ArrayList<>();
+        List<CompletableFuture<AiResult>> futures = new ArrayList<>();
         for (Map.Entry<String, String> entry : contentByLanguage.entrySet()) {
             String lang = entry.getKey();
             String text = entry.getValue();
-            futures.add(callApiAsync(config, lang, text).thenApply(res -> Map.entry(lang, res)));
+            futures.add(callApiAsync(config, lang, text));
         }
 
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .thenApply(v -> {
-                    Map<String, String> result = new HashMap<>();
-                    for (var f : futures) {
-                        var entry = f.join();
-                        result.put(entry.getKey(), entry.getValue());
+                    AiResult finalResult = new AiResult();
+                    for (CompletableFuture<AiResult> f : futures) {
+                        try {
+                            AiResult res = f.join();
+                            for (Map.Entry<String, String> entry : res.contents.entrySet()) {
+                                finalResult.contents.put(entry.getKey(), entry.getValue());
+                            }
+                            finalResult.addUsage(res.inputTokens, res.outputTokens, res.totalTokens);
+                        } catch (Exception e) {
+                            LOG.error("获取 ChatGLM 结果失败", e);
+                        }
                     }
-                    return result;
+                    return finalResult;
                 });
     }
 
-    private CompletableFuture<String> callApiAsync(AiProviderConfig config, String lang, String text) {
+    private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String lang, String text) {
         try {
             Map<String, Object> payload = buildPayload(config, buildPrompt(lang, text), false);
             HttpRequest request = buildRequest(config, payload);
@@ -80,7 +87,19 @@ public class ChatGlmAiService implements AiService {
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
-                            return extractTextFromResponse(root);
+                            AiResult res = new AiResult();
+                            res.contents.put(lang, extractTextFromResponse(root));
+
+                            // 提取 Token 消耗
+                            if (root.has("usage")) {
+                                JsonNode usage = root.get("usage");
+                                int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
+                                int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
+                                int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
+                                res.addUsage(promptTokens, completionTokens, totalTokens);
+                            }
+
+                            return res;
                         } catch (Exception e) {
                             throw new RuntimeException("解析 ChatGLM 响应失败", e);
                         }
@@ -138,8 +157,10 @@ public class ChatGlmAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<Boolean> moderate(AiProviderConfig config, String content) {
-        return CompletableFuture.completedFuture(true);
+    public CompletionStage<AiResult> moderate(AiProviderConfig config, String content) {
+        AiResult res = new AiResult();
+        res.isSafe = true;
+        return CompletableFuture.completedFuture(res);
     }
 
     @Override
