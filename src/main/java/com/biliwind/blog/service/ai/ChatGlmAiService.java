@@ -1,178 +1,197 @@
 package com.biliwind.blog.service.ai;
 
+import ai.z.openapi.ZhipuAiClient;
+import ai.z.openapi.service.model.ChatCompletionCreateParams;
+import ai.z.openapi.service.model.ChatCompletionResponse;
+import ai.z.openapi.service.model.ChatMessage;
+import ai.z.openapi.service.model.ChatMessageRole;
 import com.biliwind.blog.model.AiProvider;
 import com.biliwind.blog.model.AiProviderConfig;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * ChatGLM AI 摘要服务
- * 使用 sendAsync 全程异步，不会阻塞 RabbitMQ 消费者线程
+ * 使用智谱AI官方 zai-sdk，不再手写 HTTP 请求
  */
 @ApplicationScoped
 public class ChatGlmAiService implements AiService {
 
-    private static final Duration TIMEOUT = Duration.ofSeconds(30);
+    private static final Logger LOG = Logger.getLogger(ChatGlmAiService.class);
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .build();
+    /**
+     * 官方 SDK 的同步调用会阻塞线程，因此用独立线程池执行，不占用 RabbitMQ 消费者线程
+     */
+    private static final ExecutorService AI_THREAD_POOL = Executors.newCachedThreadPool();
+
+    /**
+     * ChatGLM 文本摘要场景默认模型，免费额度可用
+     */
+    private static final String DEFAULT_MODEL = "glm-4-flash-250414";
 
     @Inject
     AiProviderConfigService configService;
 
-    @Inject
-    ObjectMapper objectMapper;
-
     @Override
-    public CompletionStage<Map<String, String>> summarize(Map<String, String> content) {
-        AiProviderConfig config = configService.getByProvider(AiProvider.CHATGLM)
-                .filter(this::isConfigReady)
-                .orElse(null);
-
+    public CompletionStage<Map<String, String>> summarize(Map<String, String> contentByLanguage) {
+        AiProviderConfig config = loadEnabledConfig();
         if (config == null) {
             return CompletableFuture.failedFuture(new RuntimeException("ChatGLM 配置不可用"));
         }
 
-        // 逐语言分别异步调用，最后合并结果
+        ZhipuAiClient client = buildClient(config);
+
         List<CompletableFuture<Map.Entry<String, String>>> futures = new ArrayList<>();
 
-        for (Map.Entry<String, String> entry : content.entrySet()) {
-            String lang = entry.getKey();
+        for (Map.Entry<String, String> entry : contentByLanguage.entrySet()) {
+            String language = entry.getKey();
             String text = entry.getValue();
-            CompletableFuture<Map.Entry<String, String>> future = callApiAsync(config, lang, text)
-                    .thenApply(summary -> Map.entry(lang, summary));
+
+            CompletableFuture<Map.Entry<String, String>> future = callApiInBackground(client, config, language, text);
             futures.add(future);
         }
 
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(ignored -> {
-                    Map<String, String> summaries = new HashMap<>();
-                    for (CompletableFuture<Map.Entry<String, String>> future : futures) {
-                        Map.Entry<String, String> entry = future.join();
-                        summaries.put(entry.getKey(), entry.getValue());
-                    }
-                    return summaries;
-                });
+        CompletableFuture<Void> allDone = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+
+        return allDone.thenApply(ignored -> collectResults(futures));
     }
 
     /**
-     * 异步调用 ChatGLM API，不阻塞当前线程
+     * 用背景线程调用 SDK 同步接口，返回 CompletableFuture 让调用方异步等待
      */
-    private CompletableFuture<String> callApiAsync(AiProviderConfig config, String lang, String text) {
-        try {
-            String prompt = buildPrompt(lang, text);
-            URI uri = resolveUri(config);
+    private CompletableFuture<Map.Entry<String, String>> callApiInBackground(
+            ZhipuAiClient client,
+            AiProviderConfig config,
+            String language,
+            String text) {
 
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("model", chooseModel(config, "chatglm2"));
-
-            Map<String, String> message = new HashMap<>();
-            message.put("role", "user");
-            message.put("content", prompt);
-            payload.put("messages", List.of(message));
-            payload.put("temperature", 0.2);
-            payload.put("max_tokens", 256);
-
-            String bodyJson = objectMapper.writeValueAsString(payload);
-
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(TIMEOUT)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-
-            attachApiKeyHeader(builder, config);
-
-            return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-                    .thenApply(response -> {
-                        if (response.statusCode() >= 400) {
-                            throw new RuntimeException("ChatGLM 调用失败，code=" + response.statusCode());
-                        }
-                        try {
-                            JsonNode root = objectMapper.readTree(response.body());
-                            String extracted = extractTextFromResponse(root);
-                            return extracted.isBlank() ? text : extracted;
-                        } catch (Exception parseEx) {
-                            throw new RuntimeException("解析 ChatGLM 响应失败", parseEx);
-                        }
-                    });
-        } catch (Exception buildEx) {
-            return CompletableFuture.failedFuture(new RuntimeException("构建 ChatGLM 请求失败", buildEx));
-        }
+        return CompletableFuture.supplyAsync(() -> {
+            String summary = callSdkSync(client, config, language, text);
+            return Map.entry(language, summary);
+        }, AI_THREAD_POOL);
     }
 
-    private void attachApiKeyHeader(HttpRequest.Builder builder, AiProviderConfig config) {
-        if (config.apiKey != null && !config.apiKey.isBlank()) {
-            builder.header("Authorization", "Bearer " + config.apiKey.trim());
+    /**
+     * 同步调用 SDK，这个方法本身会阻塞，务必在背景线程中调用
+     */
+    private String callSdkSync(ZhipuAiClient client, AiProviderConfig config, String language, String text) {
+        String modelName = chooseModel(config);
+        String prompt = buildPrompt(language, text);
+
+        ChatMessage userMessage = ChatMessage.builder()
+                .role(ChatMessageRole.USER.value())
+                .content(prompt)
+                .build();
+
+        List<ChatMessage> messages = Arrays.asList(userMessage);
+
+        ChatCompletionCreateParams request = ChatCompletionCreateParams.builder()
+                .model(modelName)
+                .messages(messages)
+                .temperature(0.2f)
+                .maxTokens(256)
+                .build();
+
+        ChatCompletionResponse response = client.chat().createChatCompletion(request);
+
+        if (!response.isSuccess()) {
+            String errorMessage = "ChatGLM 调用失败，code=" + response.getCode() + "，msg=" + response.getMsg();
+            LOG.warn(errorMessage);
+            throw new RuntimeException(errorMessage);
         }
+
+        Object rawContent = response.getData().getChoices().get(0).getMessage().getContent();
+        if (rawContent == null) {
+            return text;
+        }
+
+        String summary = rawContent.toString().trim();
+        if (summary.isBlank()) {
+            return text;
+        }
+
+        return summary;
     }
 
-    private URI resolveUri(AiProviderConfig config) {
-        String base = config.endpoint.trim();
-        if (base.endsWith("/api/chat/completions") || base.endsWith("/v1/chat/completions")) {
-            return URI.create(base);
+    /**
+     * 将所有 Future 的结果汇总到 Map，已在 allOf 之后调用，所以 join() 不会再阻塞
+     */
+    private Map<String, String> collectResults(List<CompletableFuture<Map.Entry<String, String>>> futures) {
+        Map<String, String> summaries = new HashMap<>();
+        for (CompletableFuture<Map.Entry<String, String>> future : futures) {
+            Map.Entry<String, String> entry = future.join();
+            summaries.put(entry.getKey(), entry.getValue());
         }
-        if (base.endsWith("/")) {
-            base = base.substring(0, base.length() - 1);
+        return summaries;
+    }
+
+    /**
+     * 构建 SDK 客户端
+     * 没配置 endpoint 就走官方线路（ZhipuAiClient.ofZHIPU）
+     * 配置了自定义 endpoint 则用通用 ZaiClient.baseUrl，适用于私有化部署
+     */
+    private ZhipuAiClient buildClient(AiProviderConfig config) {
+        boolean hasCustomEndpoint = config.endpoint != null && !config.endpoint.isBlank();
+
+        if (hasCustomEndpoint) {
+            return ZhipuAiClient.builder()
+                    .baseUrl(config.endpoint.trim())
+                    .apiKey(config.apiKey.trim())
+                    .build();
         }
-        return URI.create(base + "/v1/chat/completions");
+
+        return ZhipuAiClient.builder()
+                .ofZHIPU()
+                .apiKey(config.apiKey.trim())
+                .build();
+    }
+
+    private AiProviderConfig loadEnabledConfig() {
+        return configService.getByProvider(AiProvider.CHATGLM)
+                .filter(this::isConfigReady)
+                .orElse(null);
     }
 
     private boolean isConfigReady(AiProviderConfig config) {
-        return config.enabled && config.endpoint != null && !config.endpoint.isBlank();
+        if (!config.enabled) {
+            return false;
+        }
+        if (config.apiKey == null || config.apiKey.isBlank()) {
+            return false;
+        }
+        return true;
     }
 
-    private String chooseModel(AiProviderConfig config, String fallback) {
+    private String chooseModel(AiProviderConfig config) {
         if (config.model == null || config.model.isBlank()) {
-            return fallback;
+            return DEFAULT_MODEL;
         }
         return config.model;
     }
 
-    private String buildPrompt(String lang, String text) {
-        String languageHint = (lang == null || lang.isBlank()) ? "中文" : lang;
-        return "请用" + languageHint + "简洁地总结以下内容，控制在 120 字以内：\n" + (text == null ? "" : text);
-    }
-
-    private String extractTextFromResponse(JsonNode node) {
-        if (node == null || node.isNull()) {
-            return "";
+    private String buildPrompt(String language, String text) {
+        String languageHint;
+        if (language == null || language.isBlank()) {
+            languageHint = "中文";
+        } else {
+            languageHint = language;
         }
 
-        if (node.has("choices") && node.get("choices").isArray()) {
-            for (JsonNode choice : node.get("choices")) {
-                JsonNode message = choice.get("message");
-                if (message != null && message.has("content")) {
-                    return message.get("content").asText("");
-                }
-            }
+        String safeText;
+        if (text == null) {
+            safeText = "";
+        } else {
+            safeText = text;
         }
 
-        if (node.has("message") && node.get("message").has("content")) {
-            return node.get("message").get("content").asText("");
-        }
-
-        if (node.has("content") && node.get("content").isTextual()) {
-            return node.get("content").asText("");
-        }
-
-        return "";
+        return "请用" + languageHint + "简洁地总结以下内容，控制在 120 字以内：\n" + safeText;
     }
 
     @Override

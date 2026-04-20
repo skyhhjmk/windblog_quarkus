@@ -32,9 +32,14 @@ public class ElasticsearchSyncHealthCheck implements HealthCheck {
         if (allOk) {
             return builder.up().build();
         } else {
-            String reason = !connectionOk ? "ES connection unavailable"
-                    : !indexOk ? "ES index not initialized"
-                    : "Unknown issue";
+            String reason;
+            if (!connectionOk) {
+                reason = "ES connection unavailable";
+            } else if (!indexOk) {
+                reason = "ES index not initialized";
+            } else {
+                reason = "Unknown issue";
+            }
             return builder.down()
                     .withData("reason", reason)
                     .build();
