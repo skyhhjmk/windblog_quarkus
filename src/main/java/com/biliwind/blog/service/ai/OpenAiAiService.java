@@ -1,6 +1,5 @@
 package com.biliwind.blog.service.ai;
 
-import com.biliwind.blog.model.AiProvider;
 import com.biliwind.blog.model.AiProviderConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,19 +33,17 @@ public class OpenAiAiService implements AiService {
             .build();
 
     @Inject
-    AiProviderConfigService configService;
-
-    @Inject
     ObjectMapper objectMapper;
 
     @Override
-    public CompletionStage<Map<String, String>> summarize(Map<String, String> content) {
-        AiProviderConfig config = configService.getByProvider(AiProvider.OPENAI)
-                .filter(this::isConfigReady)
-                .orElse(null);
+    public boolean supports(AiProviderConfig config) {
+        return config != null && "OPENAI".equalsIgnoreCase(config.provider);
+    }
 
-        if (config == null) {
-            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置不可用"));
+    @Override
+    public CompletionStage<Map<String, String>> summarize(AiProviderConfig config, Map<String, String> content) {
+        if (!isConfigReady(config)) {
+            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置不可用: " + config.name));
         }
 
         List<CompletableFuture<Map.Entry<String, String>>> futures = new ArrayList<>();
@@ -139,7 +136,7 @@ public class OpenAiAiService implements AiService {
     }
 
     private boolean isConfigReady(AiProviderConfig config) {
-        return config.enabled && config.endpoint != null && !config.endpoint.isBlank();
+        return config != null && config.enabled && config.endpoint != null && !config.endpoint.isBlank();
     }
 
     private String chooseModel(AiProviderConfig config, String fallback) {
@@ -175,19 +172,91 @@ public class OpenAiAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<Boolean> moderate(String content) {
+    public CompletionStage<Boolean> moderate(AiProviderConfig config, String content) {
         return CompletableFuture.completedFuture(true);
     }
 
     @Override
-    public boolean isAvailable() {
-        return configService.getByProvider(AiProvider.OPENAI)
-                .filter(this::isConfigReady)
-                .isPresent();
-    }
+    public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest request) {
+        return io.smallrye.mutiny.Multi.createFrom().emitter(emitter -> {
+            try {
+                URI uri = resolveUri(config);
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
+                payload.put("stream", true);
 
-    @Override
-    public int getPriority() {
-        return 2;
+                List<Map<String, Object>> messages = new ArrayList<>();
+                if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+                    messages.add(Map.of("role", "system", "content", request.systemPrompt()));
+                }
+
+                if (request.imageUrls() != null && !request.imageUrls().isEmpty()) {
+                    List<Map<String, Object>> contentList = new ArrayList<>();
+                    contentList.add(Map.of("type", "text", "text", request.prompt()));
+                    for (String imgUrl : request.imageUrls()) {
+                        contentList.add(Map.of("type", "image_url", "image_url", Map.of("url", imgUrl)));
+                    }
+                    messages.add(Map.of("role", "user", "content", contentList));
+                } else {
+                    messages.add(Map.of("role", "user", "content", request.prompt()));
+                }
+                payload.put("messages", messages);
+
+                String bodyJson = objectMapper.writeValueAsString(payload);
+                HttpRequest.Builder builder = HttpRequest.newBuilder()
+                        .uri(uri)
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+                attachApiKeyHeader(builder, config);
+
+                httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofLines())
+                        .whenComplete((res, err) -> {
+                            if (err != null) {
+                                emitter.fail(err);
+                                return;
+                            }
+                            if (res.statusCode() >= 400) {
+                                emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode()));
+                                return;
+                            }
+                            try (java.util.stream.Stream<String> lines = res.body()) {
+                                lines.forEach(line -> {
+                                    if (line.startsWith("data: ")) {
+                                        String data = line.substring(6).trim();
+                                        if ("[DONE]".equals(data)) {
+                                            return; // Emitter complete will be called after loop
+                                        }
+                                        try {
+                                            JsonNode root = objectMapper.readTree(data);
+                                            if (root.has("choices") && root.get("choices").isArray() && root.get("choices").size() > 0) {
+                                                JsonNode delta = root.get("choices").get(0).get("delta");
+                                                if (delta != null) {
+                                                    // R1 deep thinking "reasoning_content"
+                                                    if (delta.has("reasoning_content")) {
+                                                        String reasoning = delta.get("reasoning_content").asText("");
+                                                        if (!reasoning.isEmpty()) {
+                                                            emitter.emit("{\"type\":\"reasoning\",\"content\":" + objectMapper.writeValueAsString(reasoning) + "}");
+                                                        }
+                                                    }
+                                                    if (delta.has("content")) {
+                                                        String content = delta.get("content").asText("");
+                                                        if (!content.isEmpty()) {
+                                                            emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(content) + "}");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } catch (Exception ex) {
+                                            // Handle incomplete json but don't crash
+                                        }
+                                    }
+                                });
+                            }
+                            emitter.complete();
+                        });
+            } catch (Exception e) {
+                emitter.fail(e);
+            }
+        });
     }
 }

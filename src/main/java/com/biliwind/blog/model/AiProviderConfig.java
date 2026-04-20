@@ -15,7 +15,14 @@ public class AiProviderConfig extends PanacheEntityBase {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    public AiConfigType type = AiConfigType.PROVIDER;
+
     @Column(nullable = false, unique = true, length = 64)
+    public String name;
+
+    @Column(nullable = false, length = 64)
     public String provider;
 
     @Column(nullable = false)
@@ -29,6 +36,10 @@ public class AiProviderConfig extends PanacheEntityBase {
 
     @Column(length = 128)
     public String model;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    public String config;
 
     @Column(name = "updated_at", nullable = false)
     @UpdateTimestamp

@@ -138,12 +138,6 @@
             <artifactId>vditor</artifactId>
             <version>3.11.2</version>
         </dependency>
-        <!-- 智谱AI官方 Java SDK -->
-        <dependency>
-            <groupId>ai.z.openapi</groupId>
-            <artifactId>zai-sdk</artifactId>
-            <version>0.3.3</version>
-        </dependency>
         <!-- Elasticsearch 日志推送使用 Quarkus 内置支持 -->
         <dependency>
             <groupId>io.quarkus</groupId>

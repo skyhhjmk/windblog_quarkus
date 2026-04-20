@@ -6,32 +6,21 @@ import java.util.concurrent.CompletionStage;
 public interface AiService {
     /**
      * Generate content summary using AI.
-     * 
-     * @param content The content to summarize (key is language, value is content)
-     * @return A map where key is language and value is the summary
      */
-    CompletionStage<Map<String, String>> summarize(Map<String, String> content);
-
-    /**
-     * Check if the service is available.
-     * 
-     * @return true if available
-     */
-    boolean isAvailable();
-
-    /**
-     * Service priority (lower is higher priority for failover)
-     * 
-     * @return priority level
-     */
-    int getPriority();
+    CompletionStage<Map<String, String>> summarize(com.biliwind.blog.model.AiProviderConfig config, Map<String, String> content);
 
     /**
      * Moderate content using AI (e.g. for spam or toxic content).
-     * 
-     * @param content The content to moderate
-     * @return A completion stage that returns true if the content is safe, false
-     *         otherwise
      */
-    CompletionStage<Boolean> moderate(String content);
+    CompletionStage<Boolean> moderate(com.biliwind.blog.model.AiProviderConfig config, String content);
+
+    /**
+     * 流式交互测试接口
+     */
+    io.smallrye.mutiny.Multi<String> testStream(com.biliwind.blog.model.AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest request);
+
+    /**
+     * Returns true if this service implementation supports this provider vendor type from config.
+     */
+    boolean supports(com.biliwind.blog.model.AiProviderConfig config);
 }

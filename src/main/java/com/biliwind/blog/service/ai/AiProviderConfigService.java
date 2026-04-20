@@ -1,6 +1,5 @@
 package com.biliwind.blog.service.ai;
 
-import com.biliwind.blog.model.AiProvider;
 import com.biliwind.blog.model.AiProviderConfig;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -14,30 +13,36 @@ import java.util.Optional;
 public class AiProviderConfigService {
 
     public List<AiProviderConfig> listAll() {
-        return AiProviderConfig.listAll(Sort.by("provider"));
+        return AiProviderConfig.listAll(Sort.by("type", "name"));
     }
 
-    public Optional<AiProviderConfig> getByProvider(AiProvider provider) {
-        if (provider == null) {
-            return Optional.empty();
-        }
-        return AiProviderConfig.find("provider", provider.getKey())
-                .firstResultOptional();
+    public Optional<AiProviderConfig> getById(Long id) {
+        if (id == null) return Optional.empty();
+        return AiProviderConfig.findByIdOptional(id);
+    }
+
+    public Optional<AiProviderConfig> getByName(String name) {
+        if (name == null || name.isBlank()) return Optional.empty();
+        return AiProviderConfig.find("name", name).firstResultOptional();
     }
 
     @Transactional
-    public AiProviderConfig upsert(String providerKey, ConfigUpdate update) {
-        AiProvider provider = AiProvider.from(providerKey);
-        if (provider == null) {
-            throw new IllegalArgumentException("未知的 AI 提供商: " + providerKey);
-        }
-
-        AiProviderConfig config = AiProviderConfig.find("provider", provider.getKey())
-                .firstResult();
-        if (config == null) {
+    public AiProviderConfig upsert(Long id, ConfigUpdate update) {
+        AiProviderConfig config;
+        if (id != null && id > 0) {
+            config = AiProviderConfig.findById(id);
+            if (config == null) {
+                throw new IllegalArgumentException("未找到该 AI 配置 ID: " + id);
+            }
+        } else {
             config = new AiProviderConfig();
-            config.provider = provider.getKey();
-            config.enabled = update.enabled() != null && update.enabled();
+            config.type = update.type() != null ? update.type() : com.biliwind.blog.model.AiConfigType.PROVIDER;
+            if (update.name() == null || update.name().isBlank()) {
+                throw new IllegalArgumentException("AI 配置名称不能为空");
+            }
+            config.name = update.name().trim();
+            // Provider vendor
+            config.provider = update.provider() != null ? update.provider() : "UNKNOWN";
         }
 
         if (update.enabled() != null) {
@@ -52,17 +57,31 @@ public class AiProviderConfigService {
         if (update.model() != null) {
             config.model = update.model().trim();
         }
+        if (update.config() != null) {
+            config.config = update.config();
+        }
 
         config.updatedAt = OffsetDateTime.now();
-        config.persist();
+        if (config.id == null) {
+            config.persist();
+        }
         return config;
     }
 
+    @Transactional
+    public void delete(Long id) {
+        AiProviderConfig.deleteById(id);
+    }
+
     public record ConfigUpdate(
+            com.biliwind.blog.model.AiConfigType type,
+            String name,
+            String provider,
             Boolean enabled,
             String endpoint,
             String apiKey,
-            String model
+            String model,
+            String config
     ) {
     }
 }

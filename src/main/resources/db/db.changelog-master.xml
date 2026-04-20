@@ -37,7 +37,9 @@
     <include file="migration/032-add-link-type.sql" relativeToChangelogFile="true"/>
     <include file="migration/033-add-tags-updated-at.sql" relativeToChangelogFile="true"/>
     <include file="migration/034-add-post-category.sql" relativeToChangelogFile="true"/>
+    <include file="migration/035-extend-users-and-create-wallet.sql" relativeToChangelogFile="true"/>
     <include file="migration/036-create-dead-letter-messages.sql" relativeToChangelogFile="true"/>
     <include file="migration/037-add-post-stats-fields.sql" relativeToChangelogFile="true"/>
     <include file="migration/038-add-post-ai-summary-status.sql" relativeToChangelogFile="true"/>
+    <include file="migration/040-refactor-ai-provider-configs.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -1,13 +1,12 @@
 package com.biliwind.blog.service.ai;
 
+import com.biliwind.blog.model.AiProviderConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -24,94 +23,73 @@ public class AiManager {
     @Inject
     Instance<AiService> providers;
 
-    /**
-     * 按优先级过滤出所有可用的 AI 提供商
-     */
-    private List<AiService> getAvailableProviders() {
-        List<AiService> available = new ArrayList<>();
+    @Inject
+    AiProviderConfigService configService;
+
+    @Inject
+    jakarta.enterprise.inject.Instance<AiPollingService> pollingService;
+
+    private AiService findService(AiProviderConfig config) {
+        if (config == null) return null;
         for (AiService service : providers) {
-            if (service.isAvailable()) {
-                available.add(service);
+            if (service.supports(config)) {
+                return service;
             }
         }
-        available.sort(Comparator.comparingInt(AiService::getPriority));
-        return available;
+        return null;
     }
 
-    /**
-     * 使用可用提供商生成摘要，失败自动降级到下一个
-     */
     public CompletionStage<Map<String, String>> summarize(Map<String, String> content) {
-        List<AiService> available = getAvailableProviders();
-
-        if (available.isEmpty()) {
-            return CompletableFuture.failedFuture(new RuntimeException("当前没有可用的 AI 提供商"));
+        List<AiProviderConfig> configs = configService.listAll().stream().filter(c -> c.enabled).toList();
+        if (configs.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("当前没有任何已启用的 AI 配置"));
         }
-
-        log.info("[AI] 开始生成摘要，可用提供商数量={}", available.size());
-        return tryNextProvider(available, 0, content);
+        // Prefer polling group if exists
+        AiProviderConfig best = configs.stream().filter(c -> c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP).findFirst().orElse(configs.get(0));
+        log.info("[AI] 开始生成摘要，接管配置={}", best.name);
+        return executeSummarize(best, content);
     }
 
-    /**
-     * 递归尝试每个提供商，失败自动降级
-     */
-    private CompletionStage<Map<String, String>> tryNextProvider(
-            List<AiService> available, int index, Map<String, String> content) {
-
-        if (index >= available.size()) {
-            return CompletableFuture.failedFuture(new RuntimeException("所有 AI 提供商均调用失败"));
-        }
-
-        AiService current = available.get(index);
-        log.info("[AI] 尝试提供商 {}，priority={}", current.getClass().getSimpleName(), current.getPriority());
-
-        return current.summarize(content).handle((result, ex) -> {
-            if (ex != null) {
-                log.warn("[AI] 提供商 {} 失败：{}，尝试降级", current.getClass().getSimpleName(), ex.getMessage());
-                return tryNextProvider(available, index + 1, content);
-            }
-            log.info("[AI] 提供商 {} 成功", current.getClass().getSimpleName());
-            return CompletableFuture.completedStage(result);
-        }).thenCompose(stage -> stage);
-    }
-
-    /**
-     * 使用可用提供商审核内容，失败自动降级到下一个
-     */
     public CompletionStage<Boolean> moderate(String content) {
-        List<AiService> available = getAvailableProviders();
-
-        if (available.isEmpty()) {
-            log.warn("[AI] 当前没有可用的 AI 提供商用于内容审核，默认通过");
+        List<AiProviderConfig> configs = configService.listAll().stream().filter(c -> c.enabled).toList();
+        if (configs.isEmpty()) {
             return CompletableFuture.completedFuture(true);
         }
-
-        log.info("[AI] 开始审核内容，可用提供商数量={}", available.size());
-        return tryNextModerateProvider(available, 0, content);
+        AiProviderConfig best = configs.stream().filter(c -> c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP).findFirst().orElse(configs.get(0));
+        log.info("[AI] 开始审核内容，接管配置={}", best.name);
+        return executeModerate(best, content);
     }
 
-    /**
-     * 递归尝试每个提供商进行审核，失败自动降级
-     */
-    private CompletionStage<Boolean> tryNextModerateProvider(
-            List<AiService> available, int index, String content) {
-
-        if (index >= available.size()) {
-            log.warn("[AI] 所有 AI 提供商审核均调用失败，默认通过");
-            return CompletableFuture.completedFuture(true);
+    public CompletionStage<Map<String, String>> executeSummarize(AiProviderConfig config, Map<String, String> content) {
+        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+            return pollingService.get().summarize(config, content);
+        } else {
+            AiService svc = findService(config);
+            if (svc == null)
+                return CompletableFuture.failedFuture(new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+            return svc.summarize(config, content);
         }
+    }
 
-        AiService current = available.get(index);
-        log.info("[AI] 尝试提供商用于审核 {}，priority={}", current.getClass().getSimpleName(), current.getPriority());
+    public CompletionStage<Boolean> executeModerate(AiProviderConfig config, String content) {
+        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+            return pollingService.get().moderate(config, content);
+        } else {
+            AiService svc = findService(config);
+            if (svc == null) return CompletableFuture.completedFuture(true);
+            return svc.moderate(config, content);
+        }
+    }
 
-        return current.moderate(content).handle((result, ex) -> {
-            if (ex != null) {
-                log.warn("[AI] 提供商 {} 审核失败：{}，尝试降级", current.getClass().getSimpleName(), ex.getMessage());
-                return tryNextModerateProvider(available, index + 1, content);
-            }
-            log.info("[AI] 提供商 {} 审核成功", current.getClass().getSimpleName());
-            return CompletableFuture.completedStage(result);
-        }).thenCompose(stage -> stage);
+    public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest req) {
+        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+            return pollingService.get().testStream(config, req);
+        } else {
+            AiService svc = findService(config);
+            if (svc == null)
+                return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+            return svc.testStream(config, req);
+        }
     }
 }
 
