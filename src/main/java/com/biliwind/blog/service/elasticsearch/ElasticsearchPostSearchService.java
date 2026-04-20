@@ -206,6 +206,11 @@ public class ElasticsearchPostSearchService {
                           "analyzer": "ik_max_word_analyzer",
                           "search_analyzer": "ik_smart_analyzer"
                     },
+                        "aiSummary": {
+                          "type": "text",
+                              "analyzer": "ik_max_word_analyzer",
+                              "search_analyzer": "ik_smart_analyzer"
+                        },
                         "slug": { "type": "keyword" },
                         "status": { "type": "keyword" },
                         "visibility": { "type": "keyword" },
@@ -349,10 +354,15 @@ public class ElasticsearchPostSearchService {
             document.put("content", content);
             document.put("contentHtml", content);
             document.put("summary", defaultSummary != null ? defaultSummary : "");
+
+            String localizedAiSummary = post.aiSummary != null ?
+                    LanguageHelper.resolveLocalizedValue(post.aiSummary, lang) : "";
+            document.put("aiSummary", localizedAiSummary != null ? localizedAiSummary : "");
         } else {
             document.put("content", "");
             document.put("contentHtml", "");
             document.put("summary", defaultSummary != null ? defaultSummary : "");
+            document.put("aiSummary", "");
         }
 
         if (tags != null && !tags.isEmpty()) {
@@ -523,6 +533,7 @@ public class ElasticsearchPostSearchService {
                 source.path("id").asLong(),
                     highlightTitle,
                 source.path("summary").asText(""),
+                    source.path("aiSummary").asText(""),
                 source.path("slug").asText(""),
                 source.path("authorName").asText(""),
                 source.path("categoryName").asText(""),
@@ -656,6 +667,7 @@ public class ElasticsearchPostSearchService {
         Long id,
         String title,
         String summary,
+        String aiSummary,
         String slug,
         String authorName,
         String categoryName,

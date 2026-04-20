@@ -5,11 +5,11 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
+import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Parameters;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
-import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -21,6 +21,7 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Index controller
@@ -109,6 +110,8 @@ public class IndexController {
                 post.slug,
                 title,
                 summary,
+                post.aiSummary,
+                post.aiSummaryStatus,
                 post.publishedAt,
                 post.createdAt
         );
@@ -119,6 +122,8 @@ public class IndexController {
             String slug,
             String title,
             String summary,
+            Map<String, String> aiSummary,
+            Short aiSummaryStatus,
             OffsetDateTime publishedAt,
             OffsetDateTime createdAt
     ) {

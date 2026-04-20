@@ -70,10 +70,24 @@
             <div class="space-y-4">
                 {#for hit in hits}
                     <article class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] space-y-2">
-                        <div class="text-xs opacity-70">[{hit.typeLabel}]</div>
-                        <h2 class="text-xl font-bold">
-                            <a href="{hit.url}" class="hover:underline">{hit.title}</a>
-                        </h2>
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="space-y-1">
+                                <div class="text-xs opacity-70">[{hit.typeLabel}]</div>
+                                <h2 class="text-xl font-bold">
+                                    <a href="{hit.url}" class="hover:underline">{hit.title}</a>
+                                </h2>
+                            </div>
+                            {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
+                                <span class="bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] px-1.5 py-0.5 border border-[var(--accent)]/20 font-bold mt-1">
+                                    AI
+                                </span>
+                            {/if}
+                        </div>
+                        {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
+                            <div class="text-sm border-l-2 border-[var(--accent)] pl-3 py-1 my-2 bg-[var(--accent)]/5 italic opacity-90">
+                                {hit.aiSummary}
+                            </div>
+                        {/if}
                         <p class="text-sm opacity-90">{hit.summary}</p>
                         <p class="text-xs opacity-70">Date: {hit.dateText} | {hit.meta}</p>
                         <a href="{hit.url}" class="text-[var(--accent)] hover:underline">{hit.actionLabel}</a>

@@ -27,6 +27,7 @@ public final class AdminPostDtos {
                         String seoDescription,
                         Short renderType,
                         Short editorType,
+                        Short aiSummaryStatus,
                         Long categoryId,
                         List<Long> tagIds) {
         }
@@ -45,6 +46,7 @@ public final class AdminPostDtos {
                         String seoDescription,
                         Short renderType,
                         Short editorType,
+                        Short aiSummaryStatus,
                         @NotNull(message = "version 不能为空") Integer version,
                         Long categoryId,
                         List<Long> tagIds) {
@@ -57,6 +59,7 @@ public final class AdminPostDtos {
                         Short status,
                         Short visibility,
                         Short renderType,
+                        Short aiSummaryStatus,
                         Integer version,
                         Long userId,
                         Long categoryId,
@@ -81,6 +84,7 @@ public final class AdminPostDtos {
                         String seoDescription,
                         Short renderType,
                         Short editorType,
+                        Short aiSummaryStatus,
                         Integer currentRevisionNumber,
                         Integer version,
                         Long userId,

@@ -2,7 +2,8 @@ package com.biliwind.blog.model;
 
 public enum AiProvider {
     OLLAMA("OLLAMA"),
-    CHATGLM("CHATGLM");
+    CHATGLM("CHATGLM"),
+    OPENAI("OPENAI");
 
     private final String key;
 

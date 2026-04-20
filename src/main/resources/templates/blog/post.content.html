@@ -18,6 +18,23 @@
             <p class="text-sm opacity-80">Slug: {postSlug}</p>
         </header>
 
+        {#if aiSummaryStatus != 2 && aiSummary && ! aiSummary.isEmpty}
+            <section class="border border-[var(--accent)]/30 p-4 bg-[var(--accent)]/5 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 p-2 opacity-20 pointer-events-none group-hover:opacity-40 transition-opacity">
+                    <svg class="w-12 h-12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10Z"/>
+                    </svg>
+                </div>
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="bg-[var(--accent)] text-white text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider">AI Summary</span>
+                    <div class="h-[1px] flex-1 bg-[var(--accent)]/20"></div>
+                </div>
+                <div class="text-[var(--foreground)] opacity-90 leading-relaxed italic">
+                    {aiSummary}
+                </div>
+            </section>
+        {/if}
+
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
             {#if postBody && !postBody.isEmpty}
                 {#if postRenderType == 'VDITOR'}

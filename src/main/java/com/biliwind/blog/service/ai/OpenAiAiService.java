@@ -21,11 +21,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /**
- * Ollama AI 摘要服务
+ * OpenAI 兼容接口 AI 摘要服务（支持 OpenAI、Azure OpenAI、通义千问等 OpenAI 兼容端点）
  * 使用 sendAsync 全程异步，不会阻塞 RabbitMQ 消费者线程
  */
 @ApplicationScoped
-public class OllamaAiService implements AiService {
+public class OpenAiAiService implements AiService {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
 
@@ -41,12 +41,12 @@ public class OllamaAiService implements AiService {
 
     @Override
     public CompletionStage<Map<String, String>> summarize(Map<String, String> content) {
-        AiProviderConfig config = configService.getByProvider(AiProvider.OLLAMA)
+        AiProviderConfig config = configService.getByProvider(AiProvider.OPENAI)
                 .filter(this::isConfigReady)
                 .orElse(null);
 
         if (config == null) {
-            return CompletableFuture.failedFuture(new RuntimeException("Ollama 配置不可用"));
+            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置不可用"));
         }
 
         List<CompletableFuture<Map.Entry<String, String>>> futures = new ArrayList<>();
@@ -71,7 +71,7 @@ public class OllamaAiService implements AiService {
     }
 
     /**
-     * 异步调用 Ollama generate API，不阻塞当前线程
+     * 异步调用 OpenAI Chat Completions API，不阻塞当前线程
      */
     private CompletableFuture<String> callApiAsync(AiProviderConfig config, String lang, String text) {
         try {
@@ -79,46 +79,63 @@ public class OllamaAiService implements AiService {
             URI uri = resolveUri(config);
 
             Map<String, Object> payload = new HashMap<>();
-            payload.put("model", chooseModel(config, "llama3"));
-            payload.put("prompt", prompt);
-            payload.put("stream", false);
+            payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
+
+            Map<String, String> systemMessage = new HashMap<>();
+            systemMessage.put("role", "system");
+            systemMessage.put("content", "你是一个专业的文章摘要助手，请用简洁清晰的语言生成摘要。");
+
+            Map<String, String> userMessage = new HashMap<>();
+            userMessage.put("role", "user");
+            userMessage.put("content", prompt);
+
+            payload.put("messages", List.of(systemMessage, userMessage));
+            payload.put("temperature", 0.3);
+            payload.put("max_tokens", 256);
 
             String bodyJson = objectMapper.writeValueAsString(payload);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(uri)
                     .timeout(TIMEOUT)
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
 
-            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            attachApiKeyHeader(builder, config);
+
+            return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
-                            throw new RuntimeException("Ollama 调用失败，code=" + response.statusCode());
+                            throw new RuntimeException("OpenAI 调用失败，code=" + response.statusCode() + "，body=" + response.body());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
                             String extracted = extractTextFromResponse(root);
                             return extracted.isBlank() ? text : extracted;
                         } catch (Exception parseEx) {
-                            throw new RuntimeException("解析 Ollama 响应失败", parseEx);
+                            throw new RuntimeException("解析 OpenAI 响应失败", parseEx);
                         }
                     });
         } catch (Exception buildEx) {
-            return CompletableFuture.failedFuture(new RuntimeException("构建 Ollama 请求失败", buildEx));
+            return CompletableFuture.failedFuture(new RuntimeException("构建 OpenAI 请求失败", buildEx));
+        }
+    }
+
+    private void attachApiKeyHeader(HttpRequest.Builder builder, AiProviderConfig config) {
+        if (config.apiKey != null && !config.apiKey.isBlank()) {
+            builder.header("Authorization", "Bearer " + config.apiKey.trim());
         }
     }
 
     private URI resolveUri(AiProviderConfig config) {
         String base = config.endpoint.trim();
-        if (base.endsWith("/api/generate")) {
+        if (base.endsWith("/chat/completions")) {
             return URI.create(base);
         }
         if (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);
         }
-        return URI.create(base + "/api/generate");
+        return URI.create(base + "/chat/completions");
     }
 
     private boolean isConfigReady(AiProviderConfig config) {
@@ -142,22 +159,14 @@ public class OllamaAiService implements AiService {
             return "";
         }
 
-        // Ollama /api/generate 返回 {"response": "..."}
-        if (node.has("response")) {
-            return node.get("response").asText("");
-        }
-
-        // 兼容 /api/chat 格式
-        if (node.has("message") && node.get("message").has("content")) {
-            return node.get("message").get("content").asText("");
-        }
-
-        // 兼容 OpenAI 格式
         if (node.has("choices") && node.get("choices").isArray()) {
             for (JsonNode choice : node.get("choices")) {
                 JsonNode message = choice.get("message");
                 if (message != null && message.has("content")) {
-                    return message.get("content").asText("");
+                    String content = message.get("content").asText("");
+                    if (!content.isBlank()) {
+                        return content;
+                    }
                 }
             }
         }
@@ -172,13 +181,13 @@ public class OllamaAiService implements AiService {
 
     @Override
     public boolean isAvailable() {
-        return configService.getByProvider(AiProvider.OLLAMA)
+        return configService.getByProvider(AiProvider.OPENAI)
                 .filter(this::isConfigReady)
                 .isPresent();
     }
 
     @Override
     public int getPriority() {
-        return 0;
+        return 2;
     }
 }

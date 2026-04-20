@@ -47,23 +47,33 @@ public class AdminPostApiController {
     jakarta.enterprise.event.Event<PostSyncedEvent> esSyncEvent;
 
     @POST
-    @Path("/{id}/ai-summary")
+    @Path("/{id}/ai-summary/trigger")
     @Transactional
-    @Operation(summary = "触发 AI 总结")
-    @APIResponse(responseCode = "200", description = "任务已提交")
+    @Operation(summary = "手动触发 AI 摘要生成")
+    @APIResponse(responseCode = "200", description = "触发成功")
+    @APIResponse(responseCode = "400", description = "当前状态不允许或无内容")
     public Response triggerAiSummary(@PathParam("id") Long id) {
         Post post = mustFindPost(id);
-        if (post.currentRevision == null) {
-            throw badRequest("文章没有内容，无法生成总结");
+        if (post.aiSummaryStatus != null && post.aiSummaryStatus > 0) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(java.util.Map.of("success", false, "message", "当前文章 AI 摘要已被锁定或禁用，无法手动触发"))
+                    .build();
+        }
+
+        PostRevision rev = post.currentRevision;
+        if (rev == null || rev.contentMarkdown == null || rev.contentMarkdown.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(java.util.Map.of("success", false, "message", "文章暂无内容"))
+                    .build();
         }
 
         aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
                 post.id,
-                post.currentRevision.contentMarkdown,
+                rev.contentMarkdown,
                 1 // Medium priority
         ));
 
-        return Response.ok(Map.of("success", true, "message", "AI summary task submitted")).build();
+        return Response.ok(java.util.Map.of("success", true, "message", "摘要任务已触发")).build();
     }
 
     @GET
@@ -134,6 +144,7 @@ public class AdminPostApiController {
         post.seoKeywords = request.seoKeywords();
         post.seoDescription = request.seoDescription();
         post.renderType = resolveRenderType(request.renderType());
+        post.aiSummaryStatus = request.aiSummaryStatus() == null ? 0 : request.aiSummaryStatus();
         post.user = operator;
         post.createdAt = now;
         post.updatedAt = now;
@@ -144,6 +155,15 @@ public class AdminPostApiController {
         }
 
         post.persist();
+
+        // 如果状态为自动(0)，则触发 AI 摘要任务
+        if (post.aiSummaryStatus == 0 && request.contentMarkdown() != null && !request.contentMarkdown().isEmpty()) {
+            aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
+                    post.id,
+                    request.contentMarkdown(),
+                    1
+            ));
+        }
 
         PostRevision revision = new PostRevision();
         revision.post = post;
@@ -211,6 +231,19 @@ public class AdminPostApiController {
         }
 
         post.updatedAt = OffsetDateTime.now();
+
+        // 如果状态为自动(0)且内容已更变，则触发 AI 摘要任务
+        if (post.aiSummaryStatus == 0) {
+            PostRevision rev = post.currentRevision;
+            if (rev != null && rev.contentMarkdown != null && !rev.contentMarkdown.isEmpty()) {
+                aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
+                        post.id,
+                        rev.contentMarkdown,
+                        1
+                ));
+            }
+        }
+
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         return toDetail(post);
     }
@@ -319,6 +352,7 @@ public class AdminPostApiController {
                 statusCode(post.status),
                 post.visibility,
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
+                post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 post.version,
                 post.user == null ? null : post.user.id,
                 post.category == null ? null : post.category.id,
@@ -349,6 +383,7 @@ public class AdminPostApiController {
                 post.seoDescription,
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 post.currentRevision == null ? 0 : post.currentRevision.editorType,
+                post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 post.currentRevision == null ? 0 : post.currentRevision.revisionNumber,
                 post.version,
                 post.user == null ? null : post.user.id,
@@ -432,6 +467,7 @@ public class AdminPostApiController {
 
         changed |= updateField(post.summary, request.summary(), v -> post.summary = v);
         changed |= updateField(post.aiSummary, request.aiSummary(), v -> post.aiSummary = v);
+        changed |= updateField(post.aiSummaryStatus, request.aiSummaryStatus(), v -> post.aiSummaryStatus = v);
         changed |= updateField(post.visibility, request.visibility(), v -> post.visibility = v);
         changed |= updateField(post.password, request.password(), v -> post.password = v);
         changed |= updateField(post.seoTitle, request.seoTitle(), v -> post.seoTitle = v);
@@ -553,6 +589,7 @@ public class AdminPostApiController {
                 post.seoDescription,
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 revision.editorType,
+                post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 revision.revisionNumber,
                 post.version,
                 post.user == null ? null : post.user.id,
@@ -605,6 +642,7 @@ public class AdminPostApiController {
 
         return toDetail(post);
     }
+
 
     private PostRevisionItem toRevisionItem(PostRevision revision) {
         return new PostRevisionItem(

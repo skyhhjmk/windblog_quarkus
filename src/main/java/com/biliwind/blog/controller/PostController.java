@@ -14,7 +14,9 @@ import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 
 @Path("/")
 public class PostController {
@@ -78,6 +80,9 @@ public class PostController {
         PostBodyView postBody =
                 resolvePostBody(postEntity.renderType, localizedContent);
 
+        String localizedAiSummary =
+                LanguageHelper.resolveLocalizedValue(postEntity.aiSummary, resolvedLang);
+
         Template template =
                 PjaxHelper.isPjaxRequest(httpHeaders)
                         ? postContentTemplate
@@ -87,6 +92,8 @@ public class PostController {
                 .data("language", resolvedLang)
                 .data("postSlug", slug)
                 .data("postTitle", localizedTitle == null ? slug : localizedTitle)
+                .data("aiSummary", localizedAiSummary)
+                .data("aiSummaryStatus", postEntity.aiSummaryStatus)
                 .data("postBody", postBody.body())
                 .data("postBodyHtml", postBody.html())
                 .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)

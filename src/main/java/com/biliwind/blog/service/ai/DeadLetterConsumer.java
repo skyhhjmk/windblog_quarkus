@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.ai;
 
 import com.biliwind.blog.model.DeadLetterMessage;
+import io.vertx.core.json.JsonObject;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
@@ -11,7 +12,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 @ApplicationScoped
@@ -30,10 +30,17 @@ public class DeadLetterConsumer {
         log.error("{} {} {}", MQ_TAG, marker, String.format(message, args));
     }
 
+
     @Incoming("ai-summary-dead-letter-in")
     @Transactional
-    public CompletionStage<Void> consume(Message<AiSummaryTask> message) {
-        AiSummaryTask task = message.getPayload();
+    public CompletionStage<Void> consume(Message<JsonObject> message) {
+        AiSummaryTask task;
+        try {
+            task = message.getPayload().mapTo(AiSummaryTask.class);
+        } catch (Exception e) {
+            logMqError(ERROR_MARK, "死信JsonObject反序列化失败: %s", e.getMessage());
+            return message.ack().toCompletableFuture().exceptionally(ex -> null);
+        }
 
         logMqWarn(WARN_MARK, "收到死信消息，postId=%d, priority=%d, retryCount=%d",
                 task.postId(), task.priority(), task.retryCount());
@@ -45,19 +52,12 @@ public class DeadLetterConsumer {
                     task.postId(), task.priority(), task.retryCount(),
                     task.content() != null ? task.content().size() : 0);
 
-            message.ack().toCompletableFuture().join();
-
             logMqWarn(WARN_MARK, "死信消息已处理，postId=%d", task.postId());
-
+            return message.ack().toCompletableFuture();
         } catch (Exception e) {
             logMqError(ERROR_MARK, "处理死信消息时发生异常，postId=%d, error=%s", task.postId(), e.getMessage(), e);
-            try {
-                message.ack().toCompletableFuture().join();
-            } catch (Exception ignored) {
-            }
+            return message.ack().toCompletableFuture().exceptionally(ex -> null);
         }
-
-        return CompletableFuture.completedFuture(null);
     }
 
     private void saveDeadLetterMessage(AiSummaryTask task) {

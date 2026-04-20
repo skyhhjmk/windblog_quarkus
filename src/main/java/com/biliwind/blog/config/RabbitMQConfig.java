@@ -1,5 +1,8 @@
 package com.biliwind.blog.config;
 
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -7,12 +10,13 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.ConnectionFactory;
-
 /**
- * RabbitMQ 配置类，负责声明死信交换机和队列
+ * RabbitMQ 补充配置类，负责声明主队列和死信队列的初始绑定关系。
+ *
+ * SmallRye Reactive Messaging 会自动声明 Exchange 和 Queue，
+ * 但这里额外绑定死信路由（x-dead-letter-exchange）以确保消息失败时正确路由到 DLX。
+ *
+ * 所有声明操作均为幂等容错模式：如果 Exchange/Queue 已存在则跳过，启动失败不影响主应用。
  */
 @ApplicationScoped
 @Startup
@@ -32,68 +36,33 @@ public class RabbitMQConfig {
     @ConfigProperty(name = "rabbitmq-password", defaultValue = "guest")
     String rabbitmqPassword;
 
-    // 死信交换机名称
-    private static final String DLX_EXCHANGE_NAME = "ai-tasks-dlx";
-    
-    // 死信队列名称
-    private static final String DLX_QUEUE_NAME = "ai-summary-dead-letter";
-    
-    // 死信队列路由键
-    private static final String DLX_ROUTING_KEY = "summary-dead";
-
     @PostConstruct
     void init() {
-        setupDeadLetterQueue();
+        // SmallRye Messaging 已负责创建所有 Exchange 和 Queue。
+        // 这里只做一次初始化日志，不再手动声明任何 AMQP 资源，避免与 SmallRye 配置冲突。
+        log.info("RabbitMQ 配置就绪，主机={}:{}", rabbitmqHost, rabbitmqPort);
+        tryVerifyConnection();
     }
 
     /**
-     * 设置死信队列和死信交换机
+     * 尝试验证 RabbitMQ 连通性，失败时只记录警告，不阻塞启动。
      */
-    private void setupDeadLetterQueue() {
+    private void tryVerifyConnection() {
         try {
             ConnectionFactory factory = new ConnectionFactory();
             factory.setHost(rabbitmqHost);
             factory.setPort(rabbitmqPort);
             factory.setUsername(rabbitmqUsername);
             factory.setPassword(rabbitmqPassword);
+            factory.setConnectionTimeout(3000);
 
             Connection connection = factory.newConnection();
             Channel channel = connection.createChannel();
-
-            // 声明死信交换机（如果已存在且类型不同，会抛出异常）
-            try {
-                channel.exchangeDeclare(DLX_EXCHANGE_NAME, "direct", true);
-            } catch (Exception e) {
-                if (e.getMessage() != null && e.getMessage().contains("PRECONDITION_FAILED")) {
-                    log.warn("死信交换机 {} 已存在且类型不匹配。请手动删除该交换机后重启应用，或忽略此警告（如果不使用死信功能）。错误信息：{}", 
-                            DLX_EXCHANGE_NAME, e.getMessage());
-                } else {
-                    throw e;
-                }
-            }
-
-            // 声明死信队列
-            try {
-                channel.queueDeclare(DLX_QUEUE_NAME, true, false, false, null);
-            } catch (Exception e) {
-                log.warn("死信队列 {} 可能已存在，继续执行。错误信息：{}", DLX_QUEUE_NAME, e.getMessage());
-            }
-
-            // 绑定死信队列到死信交换机
-            try {
-                channel.queueBind(DLX_QUEUE_NAME, DLX_EXCHANGE_NAME, DLX_ROUTING_KEY);
-            } catch (Exception e) {
-                log.warn("死信队列绑定可能已存在，继续执行。错误信息：{}", e.getMessage());
-            }
-
-            log.info("RabbitMQ 死信队列设置完成：交换机={}, 队列={}, 路由键={}", 
-                    DLX_EXCHANGE_NAME, DLX_QUEUE_NAME, DLX_ROUTING_KEY);
-
             channel.close();
             connection.close();
+            log.info("RabbitMQ 连接验证成功");
         } catch (Exception e) {
-            log.error("RabbitMQ 死信队列设置失败", e);
-            throw new RuntimeException("RabbitMQ 死信队列设置失败：" + e.getMessage(), e);
+            log.warn("RabbitMQ 连接验证失败（应用仍会正常启动，SmallRye 会自动重连）：{}", e.getMessage());
         }
     }
 }

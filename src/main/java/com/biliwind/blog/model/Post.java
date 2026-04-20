@@ -41,6 +41,12 @@ public class Post extends PanacheEntityBase {
     @Column(name = "ai_summary", columnDefinition = "jsonb")
     public Map<String, String> aiSummary;
 
+    /**
+     * AI摘要状态：0-自动，1-冻结，2-关闭
+     */
+    @Column(name = "ai_summary_status", nullable = false)
+    public Short aiSummaryStatus = 0;
+
     /** 当前生效版本 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "current_revision_id")
