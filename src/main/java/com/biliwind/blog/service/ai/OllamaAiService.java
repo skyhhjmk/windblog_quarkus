@@ -174,16 +174,14 @@ public class OllamaAiService implements AiService {
                 URI uri = resolveUri(config, "/api/chat");
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("model", chooseModel(config, "llama3"));
-                payload.put("stream", true);
-
+                payload.put("stream", request.stream());
+                
                 List<Map<String, Object>> messages = new ArrayList<>();
                 if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
                     messages.add(Map.of("role", "system", "content", request.systemPrompt()));
                 }
 
                 if (request.imageUrls() != null && !request.imageUrls().isEmpty()) {
-                    // Ollama image support in chat API (images: base64 list). But here we just pass the URL and hope the user knows ollama text UI.
-                    // For simplicity, we just pass text as user.
                     messages.add(Map.of("role", "user", "content", request.prompt() + "\n[Images: " + String.join(", ", request.imageUrls()) + "]"));
                 } else {
                     messages.add(Map.of("role", "user", "content", request.prompt()));
@@ -197,7 +195,8 @@ public class OllamaAiService implements AiService {
                         .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
                         .build();
 
-                httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofLines())
+                if (request.stream()) {
+                    httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofLines())
                         .whenComplete((res, err) -> {
                             if (err != null) {
                                 emitter.fail(err);
@@ -225,6 +224,27 @@ public class OllamaAiService implements AiService {
                             }
                             emitter.complete();
                         });
+                } else {
+                    httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                            .whenComplete((res, err) -> {
+                                if (err != null) {
+                                    emitter.fail(err);
+                                    return;
+                                }
+                                if (res.statusCode() >= 400) {
+                                    emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode() + ", body=" + res.body()));
+                                    return;
+                                }
+                                try {
+                                    JsonNode root = objectMapper.readTree(res.body());
+                                    String text = extractTextFromResponse(root);
+                                    emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(text) + "}");
+                                    emitter.complete();
+                                } catch (Exception e) {
+                                    emitter.fail(e);
+                                }
+                            });
+                }
             } catch (Exception e) {
                 emitter.fail(e);
             }

@@ -36,15 +36,17 @@ public class AiProviderConfigService {
             }
         } else {
             config = new AiProviderConfig();
-            config.type = update.type() != null ? update.type() : com.biliwind.blog.model.AiConfigType.PROVIDER;
-            if (update.name() == null || update.name().isBlank()) {
-                throw new IllegalArgumentException("AI 配置名称不能为空");
-            }
-            config.name = update.name().trim();
-            // Provider vendor
-            config.provider = update.provider() != null ? update.provider() : "UNKNOWN";
         }
 
+        if (update.type() != null) {
+            config.type = update.type();
+        }
+        if (update.name() != null && !update.name().isBlank()) {
+            config.name = update.name().trim();
+        }
+        if (update.provider() != null) {
+            config.provider = update.provider();
+        }
         if (update.enabled() != null) {
             config.enabled = update.enabled();
         }
@@ -58,7 +60,12 @@ public class AiProviderConfigService {
             config.model = update.model().trim();
         }
         if (update.config() != null) {
-            config.config = update.config();
+            String c = update.config().trim();
+            if (c.isEmpty()) {
+                config.config = null;
+            } else {
+                config.config = c;
+            }
         }
 
         config.updatedAt = OffsetDateTime.now();

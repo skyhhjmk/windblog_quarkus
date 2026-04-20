@@ -148,8 +148,8 @@ public class ChatGlmAiService implements AiService {
             try {
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("model", (config.model == null || config.model.isBlank()) ? DEFAULT_MODEL : config.model);
-                payload.put("stream", true);
-
+                payload.put("stream", request.stream());
+                
                 List<Map<String, Object>> messages = new ArrayList<>();
                 if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
                     messages.add(Map.of("role", "system", "content", request.systemPrompt()));
@@ -158,12 +158,17 @@ public class ChatGlmAiService implements AiService {
                 payload.put("messages", messages);
 
                 HttpRequest httpRequest = buildRequest(config, payload);
-                httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines())
+                LOG.infof("开始 ChatGLM 连通性测试, stream: %b, endpoint: %s", request.stream(), httpRequest.uri());
+
+                if (request.stream()) {
+                    httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines())
                         .whenComplete((res, err) -> {
                             if (err != null) {
+                                LOG.error("ChatGLM 测试流请求失败", err);
                                 emitter.fail(err);
                                 return;
                             }
+                            LOG.infof("ChatGLM 响应状态码: %d", res.statusCode());
                             if (res.statusCode() >= 400) {
                                 emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode()));
                                 return;
@@ -172,34 +177,62 @@ public class ChatGlmAiService implements AiService {
                                 lines.forEach(line -> {
                                     if (line.startsWith("data: ")) {
                                         String data = line.substring(6).trim();
-                                        if ("[DONE]".equals(data)) return;
+                                        if ("[DONE]".equals(data)) {
+                                            LOG.info("ChatGLM 接收到 [DONE] 标记");
+                                            return;
+                                        }
                                         try {
                                             JsonNode root = objectMapper.readTree(data);
-                                            if (root.has("choices") && root.get("choices").size() > 0) {
+                                            if (root.has("choices") && root.get("choices").isArray() && root.get("choices").size() > 0) {
                                                 JsonNode delta = root.get("choices").get(0).get("delta");
                                                 if (delta != null) {
                                                     if (delta.has("reasoning_content")) {
                                                         String reasoning = delta.get("reasoning_content").asText("");
                                                         if (!reasoning.isEmpty()) {
-                                                            emitter.emit("{\"type\":\"reasoning\",\"content\":" + objectMapper.valueToTree(reasoning) + "}");
+                                                            emitter.emit("{\"type\":\"reasoning\",\"content\":" + objectMapper.writeValueAsString(reasoning) + "}");
                                                         }
                                                     }
                                                     if (delta.has("content")) {
                                                         String content = delta.get("content").asText("");
                                                         if (!content.isEmpty()) {
-                                                            emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.valueToTree(content) + "}");
+                                                            emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(content) + "}");
                                                         }
                                                     }
                                                 }
                                             }
                                         } catch (Exception ex) {
-                                            // Handle partial json 
+                                            LOG.warnf("解析 ChatGLM 行失败: %s, 错误: %s", data, ex.getMessage());
                                         }
                                     }
                                 });
+                            } catch (Exception e) {
+                                LOG.error("流处理异常", e);
+                            } finally {
+                                LOG.info("ChatGLM 测试流结束");
+                                emitter.complete();
                             }
-                            emitter.complete();
                         });
+                } else {
+                    httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                            .whenComplete((res, err) -> {
+                                if (err != null) {
+                                    emitter.fail(err);
+                                    return;
+                                }
+                                if (res.statusCode() >= 400) {
+                                    emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode() + ", body=" + res.body()));
+                                    return;
+                                }
+                                try {
+                                    JsonNode root = objectMapper.readTree(res.body());
+                                    String text = extractTextFromResponse(root);
+                                    emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(text) + "}");
+                                    emitter.complete();
+                                } catch (Exception e) {
+                                    emitter.fail(e);
+                                }
+                            });
+                }
             } catch (Exception e) {
                 emitter.fail(e);
             }
