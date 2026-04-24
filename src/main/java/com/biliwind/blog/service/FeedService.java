@@ -1,0 +1,91 @@
+package com.biliwind.blog.service;
+
+import com.biliwind.blog.common.constant.LanguageConstant;
+import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.MarkdownHelper;
+import com.biliwind.blog.model.Post;
+import com.biliwind.blog.repository.PostRepository;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jsoup.Jsoup;
+
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@ApplicationScoped
+public class FeedService {
+
+    @Inject
+    PostRepository postRepository;
+
+    @ConfigProperty(name = "blog.url")
+    String baseUrl;
+
+    private static final DateTimeFormatter RFC_822_FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
+    private static final DateTimeFormatter ISO_8601_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+
+    public List<FeedPostView> getPublishedPosts() {
+        return postRepository.findAllPublished().stream()
+                .map(this::toView)
+                .collect(Collectors.toList());
+    }
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public String getCurrentRfc822Date() {
+        return OffsetDateTime.now().format(RFC_822_FORMATTER);
+    }
+
+    private FeedPostView toView(Post post) {
+        String lang = LanguageConstant.DEFAULT_LANG;
+        String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
+        if (title == null) title = post.slug;
+
+        String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
+        if (summary == null || summary.isBlank()) {
+            // Try AI summary
+            summary = LanguageHelper.resolveLocalizedValue(post.aiSummary, lang);
+        }
+        if (summary == null || summary.isBlank()) {
+            // Extract from content
+            String content = LanguageHelper.resolveLocalizedValue(post.currentRevision.contentMarkdown, lang);
+            summary = extractSummary(content);
+        }
+
+        return new FeedPostView(
+                post.slug,
+                title,
+                summary,
+                post.publishedAt != null ? post.publishedAt.format(RFC_822_FORMATTER) : "",
+                post.updatedAt != null ? post.updatedAt.format(ISO_8601_FORMATTER) : "",
+                post.user != null ? post.user.username : "Admin"
+        );
+    }
+
+    private String extractSummary(String content) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+        // Convert to HTML and strip tags
+        String html = MarkdownHelper.toHtml(content);
+        String text = Jsoup.parse(html).text();
+        if (text.length() > 200) {
+            text = text.substring(0, 200) + "...";
+        }
+        return text;
+    }
+
+    public record FeedPostView(
+            String slug,
+            String title,
+            String summary,
+            String pubDate,
+            String lastModified,
+            String author
+    ) {}
+}
