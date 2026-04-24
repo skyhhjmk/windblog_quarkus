@@ -32,6 +32,14 @@ public class FeedController {
     Template sitemapPostsTemplate;
 
     @Inject
+    @Location("feeds/sitemap-categories.xml")
+    Template sitemapCategoriesTemplate;
+
+    @Inject
+    @Location("feeds/sitemap-tags.xml")
+    Template sitemapTagsTemplate;
+
+    @Inject
     @Location("feeds/rss.xml")
     Template rssTemplate;
 
@@ -50,6 +58,24 @@ public class FeedController {
         return sitemapPostsTemplate
                 .data("baseUrl", feedService.getBaseUrl())
                 .data("posts", feedService.getPublishedPosts());
+    }
+
+    @GET
+    @Path("/sitemap-categories.xml")
+    @Produces(MediaType.APPLICATION_XML)
+    public TemplateInstance sitemapCategories() {
+        return sitemapCategoriesTemplate
+                .data("baseUrl", feedService.getBaseUrl())
+                .data("items", feedService.getCategorySitemapUrls());
+    }
+
+    @GET
+    @Path("/sitemap-tags.xml")
+    @Produces(MediaType.APPLICATION_XML)
+    public TemplateInstance sitemapTags() {
+        return sitemapTagsTemplate
+                .data("baseUrl", feedService.getBaseUrl())
+                .data("items", feedService.getTagSitemapUrls());
     }
 
     @GET

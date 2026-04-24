@@ -80,6 +80,26 @@ public class FeedService {
         return text;
     }
 
+    public List<SitemapUrlView> getCategorySitemapUrls() {
+        return com.biliwind.blog.model.Category.listAll().stream()
+                .map(c -> (com.biliwind.blog.model.Category) c)
+                .map(c -> new SitemapUrlView(
+                        baseUrl + "/category/" + c.slug,
+                        c.updatedAt != null ? c.updatedAt.format(ISO_8601_FORMATTER) : c.createdAt.format(ISO_8601_FORMATTER)
+                ))
+                .collect(Collectors.toList());
+    }
+
+    public List<SitemapUrlView> getTagSitemapUrls() {
+        return com.biliwind.blog.model.Tag.listAll().stream()
+                .map(t -> (com.biliwind.blog.model.Tag) t)
+                .map(t -> new SitemapUrlView(
+                        baseUrl + "/tag/" + t.slug,
+                        t.updatedAt != null ? t.updatedAt.format(ISO_8601_FORMATTER) : t.createdAt.format(ISO_8601_FORMATTER)
+                ))
+                .collect(Collectors.toList());
+    }
+
     public record FeedPostView(
             String slug,
             String title,
@@ -87,5 +107,10 @@ public class FeedService {
             String pubDate,
             String lastModified,
             String author
+    ) {}
+
+    public record SitemapUrlView(
+            String loc,
+            String lastmod
     ) {}
 }

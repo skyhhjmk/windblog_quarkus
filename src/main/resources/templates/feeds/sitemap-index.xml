@@ -3,4 +3,10 @@
    <sitemap>
       <loc>{baseUrl}/sitemap-posts.xml</loc>
    </sitemap>
+   <sitemap>
+      <loc>{baseUrl}/sitemap-categories.xml</loc>
+   </sitemap>
+   <sitemap>
+      <loc>{baseUrl}/sitemap-tags.xml</loc>
+   </sitemap>
 </sitemapindex>
