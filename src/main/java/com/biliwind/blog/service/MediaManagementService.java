@@ -3,6 +3,7 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.panache.common.Page;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -127,11 +128,24 @@ public class MediaManagementService {
         // 遍历所有文章，检查内容中是否引用了媒体
         for (Post post : posts) {
             PostRevision revision = post.currentRevision;
-            if (revision == null || revision.contentMarkdown == null || revision.contentMarkdown.isEmpty()) {
+            if (revision == null || ((revision.contentMarkdown == null || revision.contentMarkdown.isEmpty()) && (revision.contentBlocks == null || revision.contentBlocks.isEmpty()))) {
                 continue;
             }
             postsScanned++;
-            String normalizedContent = normalizeContent(revision.contentMarkdown);
+            
+            StringBuilder sb = new StringBuilder();
+            if (revision.contentMarkdown != null) {
+                sb.append(normalizeContent(revision.contentMarkdown)).append("\n");
+            }
+            if (revision.contentBlocks != null) {
+                try {
+                    ObjectMapper mapper = new ObjectMapper();
+                    sb.append(mapper.writeValueAsString(revision.contentBlocks).toLowerCase());
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+            String normalizedContent = sb.toString();
             // 检查每个媒体是否在文章中被引用
             for (Media media : medias) {
                 if (containsReference(normalizedContent, media)) {
@@ -153,21 +167,38 @@ public class MediaManagementService {
      * @param contentMap 文章内容映射
      */
     @Transactional
-    public void syncPostReferences(Post post, Map<String, String> contentMap) {
+    public void syncPostReferences(Post post, Map<String, String> contentMap, Map<String, List<TutorialBlock>> contentBlocks) {
         if (post == null || post.id == null) {
             return;
         }
         // 删除旧的引用关系
         PostMedia.delete("post.id = ?1", post.id);
-        if (contentMap == null || contentMap.isEmpty()) {
+        
+        boolean hasMarkdown = contentMap != null && !contentMap.isEmpty();
+        boolean hasBlocks = contentBlocks != null && !contentBlocks.isEmpty();
+        if (!hasMarkdown && !hasBlocks) {
             return;
         }
+        
         List<Media> medias = Media.list("deletedAt is null");
         if (medias.isEmpty()) {
             return;
         }
+        
         // 标准化内容并检查引用
-        String normalizedContent = normalizeContent(contentMap);
+        StringBuilder sb = new StringBuilder();
+        if (hasMarkdown) {
+            sb.append(normalizeContent(contentMap)).append("\n");
+        }
+        if (hasBlocks) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                sb.append(mapper.writeValueAsString(contentBlocks).toLowerCase());
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+        String normalizedContent = sb.toString();
         for (Media media : medias) {
             if (containsReference(normalizedContent, media)) {
                 persistReference(post, media);

@@ -8,6 +8,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -75,6 +76,11 @@ public class Post extends PanacheEntityBase {
     /** SEO 描述 */
     @Column(name = "seo_description", columnDefinition = "text")
     public String seoDescription;
+
+    /** 单篇文章的教程级别自定义配置（JSONB），用于浏览和导出时自由选择内容分级 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "tutorial_level_defs", columnDefinition = "jsonb")
+    public List<TutorialLevelDef> tutorialLevelDefs;
 
     /**
      * 前端渲染器类型

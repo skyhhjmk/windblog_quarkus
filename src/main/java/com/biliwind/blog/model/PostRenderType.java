@@ -36,7 +36,11 @@ public enum PostRenderType {
     /**
      * Flutter Markdown Plus 渲染器
      */
-    FLUTTER_MARKDOWN_PLUS((short) 6);
+    FLUTTER_MARKDOWN_PLUS((short) 6),
+    /**
+     * 教程块结构渲染器
+     */
+    TUTORIAL_BLOCK((short) 7);
 
     private static final Map<Short, PostRenderType> CODE_MAP = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(PostRenderType::code, item -> item));

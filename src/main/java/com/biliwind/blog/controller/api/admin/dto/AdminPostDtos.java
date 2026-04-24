@@ -4,6 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
+import com.biliwind.blog.model.TutorialBlock;
+import com.biliwind.blog.model.TutorialLevelDef;
+
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +21,9 @@ public final class AdminPostDtos {
                         @NotEmpty(message = "title 不能为空") Map<String, String> title,
                         Map<String, String> summary,
                         Map<String, String> aiSummary,
-                        @NotEmpty(message = "contentMarkdown 不能为空") Map<String, String> contentMarkdown,
+                        Map<String, String> contentMarkdown,
+                        Map<String, List<TutorialBlock>> contentBlocks,
+                        List<TutorialLevelDef> tutorialLevelDefs,
                         Short status,
                         Short visibility,
                         String password,
@@ -38,6 +43,8 @@ public final class AdminPostDtos {
                         Map<String, String> summary,
                         Map<String, String> aiSummary,
                         Map<String, String> contentMarkdown,
+                        Map<String, List<TutorialBlock>> contentBlocks,
+                        List<TutorialLevelDef> tutorialLevelDefs,
                         Short status,
                         Short visibility,
                         String password,
@@ -76,6 +83,8 @@ public final class AdminPostDtos {
                         Map<String, String> summary,
                         Map<String, String> aiSummary,
                         Map<String, String> contentMarkdown,
+                        Map<String, List<TutorialBlock>> contentBlocks,
+                        List<TutorialLevelDef> tutorialLevelDefs,
                         Short status,
                         Short visibility,
                         String password,

@@ -9,6 +9,8 @@ import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
+import com.biliwind.blog.model.TutorialBlock;
+import com.biliwind.blog.model.TutorialLevelDef;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -17,6 +19,8 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Path("/")
 public class PostController {
@@ -30,6 +34,10 @@ public class PostController {
     Template postContentTemplate;
 
     @Inject
+    @Location("blog/tutorial-block.html")
+    Template tutorialBlockTemplate;
+
+    @Inject
     LanguageContext languageContext;
 
     @GET
@@ -37,8 +45,9 @@ public class PostController {
     @Produces(MediaType.TEXT_HTML)
     @PasswordProtected
     public TemplateInstance post(@PathParam("slug") String slug,
+                                 @QueryParam("levels") List<Short> levels,
                                  @Context HttpHeaders httpHeaders) {
-        return render(slug, null, httpHeaders);
+        return render(slug, null, levels, httpHeaders);
     }
 
     @GET
@@ -47,12 +56,14 @@ public class PostController {
     @PasswordProtected
     public TemplateInstance postWithLang(@PathParam("langCode") String langCode,
                                          @PathParam("slug") String slug,
+                                         @QueryParam("levels") List<Short> levels,
                                          @Context HttpHeaders httpHeaders) {
-        return render(slug, langCode, httpHeaders);
+        return render(slug, langCode, levels, httpHeaders);
     }
 
     private TemplateInstance render(String slug,
                                     String langCode,
+                                    List<Short> levels,
                                     HttpHeaders httpHeaders) {
 
         resolveLanguage(langCode);
@@ -77,8 +88,27 @@ public class PostController {
         String localizedContent =
                 resolveContent(postEntity.currentRevision, resolvedLang);
 
-        PostBodyView postBody =
-                resolvePostBody(postEntity.renderType, localizedContent);
+        PostBodyView postBody;
+        if (postEntity.renderType == PostRenderType.TUTORIAL_BLOCK && postEntity.currentRevision != null && postEntity.currentRevision.contentBlocks != null) {
+            List<TutorialBlock> blocks = postEntity.currentRevision.contentBlocks.get(resolvedLang);
+            if (blocks == null) {
+                blocks = postEntity.currentRevision.contentBlocks.get("zh");
+            }
+            if (blocks != null) {
+                // Filter blocks based on requested levels, if levels parameter is provided
+                List<TutorialBlock> filteredBlocks = filterBlocksByLevels(blocks, levels);
+                
+                String renderedBlocksHtml = tutorialBlockTemplate
+                        .data("blocks", filteredBlocks)
+                        .data("lang", resolvedLang)
+                        .render();
+                postBody = new PostBodyView(renderedBlocksHtml, true, PostRenderType.TUTORIAL_BLOCK);
+            } else {
+                postBody = new PostBodyView("", true, PostRenderType.TUTORIAL_BLOCK);
+            }
+        } else {
+            postBody = resolvePostBody(postEntity.renderType, localizedContent);
+        }
 
         String localizedAiSummary =
                 LanguageHelper.resolveLocalizedValue(postEntity.aiSummary, resolvedLang);
@@ -172,10 +202,33 @@ public class PostController {
                     new PostBodyView(MarkdownHelper.toHtml(content), true, effective);
             case VDITOR ->
                     new PostBodyView(content, false, effective);
-            case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL ->
+            case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL, TUTORIAL_BLOCK ->
                     new PostBodyView(content, true, effective);
         };
     }
 
     private record PostBodyView(String body, boolean html, PostRenderType renderType) {}
+
+    private List<TutorialBlock> filterBlocksByLevels(List<TutorialBlock> blocks, List<Short> levels) {
+        if (blocks == null || blocks.isEmpty()) {
+            return blocks;
+        }
+        if (levels == null || levels.isEmpty()) {
+            return blocks; // Return all if no specific levels requested
+        }
+        return blocks.stream()
+                .filter(b -> b.level == null || levels.contains(b.level))
+                .map(b -> {
+                    if (b.children != null && !b.children.isEmpty()) {
+                        TutorialBlock copy = new TutorialBlock();
+                        copy.type = b.type;
+                        copy.level = b.level;
+                        copy.data = b.data;
+                        copy.children = filterBlocksByLevels(b.children, levels);
+                        return copy;
+                    }
+                    return b;
+                })
+                .collect(Collectors.toList());
+    }
 }
