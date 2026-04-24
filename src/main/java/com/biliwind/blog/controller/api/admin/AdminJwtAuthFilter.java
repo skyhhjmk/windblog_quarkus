@@ -33,6 +33,11 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
+        // Bypass all OPTIONS requests for CORS preflight
+        if (requestContext.getMethod().equalsIgnoreCase("OPTIONS")) {
+            return;
+        }
+
         String path = normalizePath(requestContext.getUriInfo().getPath());
         if (!path.startsWith("/api/admin")) {
             return;

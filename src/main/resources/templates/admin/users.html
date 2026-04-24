@@ -98,8 +98,8 @@
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">` + formatDate(user.createdAt) + `</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="changeRole(` + user.id + `)" class="text-blue-600 hover:text-blue-900 mr-3">修改角色</button>
-                        <button onclick="deleteUser(` + user.id + `)" class="text-red-600 hover:text-red-900">删除</button>
+                        <button onclick="changeRole(` + user.id + `, this)" class="text-blue-600 hover:text-blue-900 mr-3">修改角色</button>
+                        <button onclick="deleteUser(` + user.id + `, this)" class="text-red-600 hover:text-red-900">删除</button>
                     </td>
                 </tr>
             `).join('');
@@ -121,7 +121,7 @@
             return status === 1 ? '正常' : '禁用';
         }
 
-        async function changeRole(userId) {
+        async function changeRole(userId, btn) {
             const user = allUsers.find(u => u.id === userId);
             if (!user) return;
 
@@ -136,7 +136,7 @@
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ role: newRole.toUpperCase() })
-                });
+                }, true, btn);
                 alert('用户角色更新成功');
                 loadUsers();
             } catch (error) {
@@ -144,11 +144,11 @@
             }
         }
 
-        async function deleteUser(id) {
+        async function deleteUser(id, btn) {
             if (!confirm('确定要删除此用户吗？此操作不可恢复！')) return;
 
             try {
-                await AdminUtils.request('/users/' + id, { method: 'DELETE' });
+                await AdminUtils.request('/users/' + id, { method: 'DELETE' }, true, btn);
                 alert('用户删除成功');
                 loadUsers();
             } catch (error) {

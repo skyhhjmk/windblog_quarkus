@@ -88,7 +88,9 @@
 
         const doLogout = (e) => {
             if (e) e.preventDefault();
+            const targetBtn = e.currentTarget;
             showConfirm('退出登录', '确定要退出登录吗？', () => {
+                window.setLoading(targetBtn, true);
                 fetch('/user/api/logout', {
                     method: 'POST'
                 }).then(() => {
@@ -111,6 +113,7 @@
     function bindLoginForm() {
         const form = document.getElementById('loginForm');
         const errorDiv = document.getElementById('errorMessage');
+        const submitBtn = form?.querySelector('button[type="submit"]');
 
         if (!form) return;
 
@@ -119,6 +122,9 @@
             e.stopPropagation();
 
             if (errorDiv) errorDiv.classList.add('hidden');
+            
+            // Loading state
+            window.setLoading(submitBtn, true);
 
             // 将表单数据转换为 URLSearchParams
             const formData = new URLSearchParams();
@@ -129,6 +135,7 @@
                 }
             });
 
+            let isRedirecting = false;
             try {
                 const response = await fetch('/user/api/login', {
                     method: 'POST',
@@ -141,18 +148,27 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    window.location.href = result.redirect || '/';
+                    isRedirecting = true;
+                    window.showToast(result.message || '登录成功', 'success');
+                    setTimeout(() => {
+                        window.location.href = result.redirect || '/';
+                    }, 1000);
                 } else {
+                    window.showToast(result.message || '登录失败', 'error');
                     if (errorDiv) {
                         errorDiv.textContent = result.message || '登录失败';
                         errorDiv.classList.remove('hidden');
                     }
                 }
             } catch (err) {
+                window.showToast('网络错误，请稍后重试', 'error');
                 if (errorDiv) {
                     errorDiv.textContent = '网络错误，请稍后重试';
                     errorDiv.classList.remove('hidden');
                 }
+            } finally {
+                // Reset loading state ONLY if NOT redirecting
+                window.setLoading(submitBtn, false, { stayDisabled: isRedirecting });
             }
 
             return false;
@@ -164,6 +180,7 @@
         const errorDiv = document.getElementById('errorMessage');
         const password = document.getElementById('password');
         const confirmPassword = document.getElementById('confirmPassword');
+        const submitBtn = document.getElementById('registerSubmit');
 
         if (!form) return;
 
@@ -174,10 +191,17 @@
             if (errorDiv) errorDiv.classList.add('hidden');
 
             if (password && confirmPassword && password.value !== confirmPassword.value) {
-                errorDiv.textContent = '两次输入的密码不一致';
-                errorDiv.classList.remove('hidden');
+                const msg = '两次输入的密码不一致';
+                window.showToast(msg, 'error');
+                if (errorDiv) {
+                    errorDiv.textContent = msg;
+                    errorDiv.classList.remove('hidden');
+                }
                 return false;
             }
+
+            // Loading state
+            window.setLoading(submitBtn, true);
 
             // 将表单数据转换为 URLSearchParams
             const formData = new URLSearchParams();
@@ -188,6 +212,7 @@
                 }
             });
 
+            let isRedirecting = false;
             try {
                 const response = await fetch('/user/api/register', {
                     method: 'POST',
@@ -200,18 +225,28 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    window.location.href = result.redirect || '/';
+                    isRedirecting = true;
+                    window.showToast(result.message || '注册成功', 'success');
+                    // 延迟跳转，让用户看到成功提示
+                    setTimeout(() => {
+                        window.location.href = result.redirect || '/';
+                    }, 1500);
                 } else {
+                    window.showToast(result.message || '注册失败', 'error');
                     if (errorDiv) {
                         errorDiv.textContent = result.message || '注册失败';
                         errorDiv.classList.remove('hidden');
                     }
                 }
             } catch (err) {
+                window.showToast('网络错误，请稍后重试', 'error');
                 if (errorDiv) {
                     errorDiv.textContent = '网络错误，请稍后重试';
                     errorDiv.classList.remove('hidden');
                 }
+            } finally {
+                // Reset loading state if not redirecting (failed)
+                window.setLoading(submitBtn, false, { stayDisabled: isRedirecting });
             }
 
             return false;

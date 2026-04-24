@@ -138,7 +138,8 @@
                     console.error('登录失败:', error);
                     errorMessage.querySelector('p').textContent = error.message || '登录失败，请重试';
                     errorMessage.classList.remove('hidden');
-                } finally {
+                    
+                    // Only re-enable on error
                     submitBtn.disabled = false;
                     submitBtn.textContent = '登录';
                 }

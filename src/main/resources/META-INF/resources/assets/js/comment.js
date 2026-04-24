@@ -196,11 +196,13 @@
 
             const content = textarea ? textarea.value.trim() : '';
             if (!content) {
+                window.showToast('Comment content is required.', 'error');
                 setFeedback(root, 'Comment content is required.', 'error');
                 return;
             }
 
             if (!isLoggedIn(root)) {
+                window.showToast('Please log in before submitting a comment.', 'error');
                 setFeedback(root, 'Please log in before submitting a comment.', 'error');
                 if (textarea) textarea.focus();
                 return;
@@ -212,7 +214,7 @@
                 content: content
             };
 
-            if (submit) submit.disabled = true;
+            window.setLoading(submit, true);
             setFeedback(root, '', 'success');
 
             try {
@@ -231,12 +233,19 @@
                 form.reset();
                 currentReply = null;
                 updateReplyUi(root);
+                window.showToast('Comment submitted and is waiting for review.', 'success');
                 setFeedback(root, 'Comment submitted and is waiting for review.', 'success');
+                
+                // Keep disabled for a short duration to show success
+                setTimeout(() => {
+                    window.setLoading(submit, false);
+                    syncLoginState(root);
+                }, 2000);
             } catch (error) {
+                window.showToast(error.message || 'Failed to submit comment.', 'error');
                 setFeedback(root, error.message || 'Failed to submit comment.', 'error');
-            } finally {
-                await syncLoginState(root);
-                if (submit && !submit.disabled) submit.disabled = false;
+                window.setLoading(submit, false);
+                syncLoginState(root);
             }
         };
     }

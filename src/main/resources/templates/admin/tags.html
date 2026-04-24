@@ -6,7 +6,7 @@
     {#content}
         <div class="space-y-6">
             <div class="flex justify-between items-center">
-                <button onclick="createTag()" class="btn-primary px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-2">
+                <button onclick="createTag(this)" class="btn-primary px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
@@ -68,14 +68,14 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">` + (tag.postCount || 0) + `</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">` + formatDate(tag.createTime) + `</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="editTag(` + tag.id + `)" class="text-blue-600 hover:text-blue-900 mr-3">编辑</button>
-                        <button onclick="deleteTag(` + tag.id + `)" class="text-red-600 hover:text-red-900">删除</button>
+                        <button onclick="editTag(` + tag.id + `, this)" class="text-blue-600 hover:text-blue-900 mr-3">编辑</button>
+                        <button onclick="deleteTag(` + tag.id + `, this)" class="text-red-600 hover:text-red-900">删除</button>
                     </td>
                 </tr>
             `).join('');
         }
 
-        async function createTag() {
+        async function createTag(btn) {
             const name = prompt('请输入标签名称:');
             if (!name || !name.trim()) return;
 
@@ -84,7 +84,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: name.trim() })
-                });
+                }, true, btn);
                 alert('标签创建成功');
                 loadTags();
             } catch (error) {
@@ -92,7 +92,7 @@
             }
         }
 
-        async function editTag(id) {
+        async function editTag(id, btn) {
             const tag = allTags.find(t => t.id === id);
             if (!tag) return;
 
@@ -104,7 +104,7 @@
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: name.trim() })
-                });
+                }, true, btn);
                 alert('标签更新成功');
                 loadTags();
             } catch (error) {
@@ -112,11 +112,11 @@
             }
         }
 
-        async function deleteTag(id) {
+        async function deleteTag(id, btn) {
             if (!confirm('确定要删除此标签吗？')) return;
 
             try {
-                await AdminUtils.request('/tags/' + id, { method: 'DELETE' });
+                await AdminUtils.request('/tags/' + id, { method: 'DELETE' }, true, btn);
                 alert('标签删除成功');
                 loadTags();
             } catch (error) {

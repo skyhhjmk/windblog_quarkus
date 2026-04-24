@@ -13,6 +13,9 @@
                 params.set('type', grepMode);
             }
             const newUrl = params.toString() ? `/link?${params.toString()}` : '/link';
+            
+            window.setLoading(applyBtn, true);
+            
             if (window.pjax && window.pjax.loadUrl) {
                 window.pjax.loadUrl(newUrl);
             } else {

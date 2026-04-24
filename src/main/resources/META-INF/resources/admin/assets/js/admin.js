@@ -52,39 +52,53 @@ const AdminUtils = {
     },
     
     // API 请求封装
-    async request(url, options = {}, handle401 = true) {
-        const token = this.getToken();
-        const headers = {
-            'Content-Type': 'application/json',
-            ...options.headers
-        };
+    async request(url, options = {}, handle401 = true, btn = null) {
+        if (btn) this.setLoading(btn, true);
         
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch(`${this.API_BASE}${url}`, {
-            ...options,
-            headers
-        });
-        
-        if (response.status === 401) {
-            if (handle401) {
-                this.removeToken();
-                window.location.href = '/admin/login';
-                throw new Error('未授权，请重新登录');
-            } else {
-                throw new Error('未授权');
+        try {
+            const token = this.getToken();
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            const response = await fetch(`${this.API_BASE}${url}`, {
+                ...options,
+                headers
+            });
+            
+            if (response.status === 401) {
+                if (handle401) {
+                    this.removeToken();
+                    window.location.href = '/admin/login';
+                    throw new Error('未授权，请重新登录');
+                } else {
+                    throw new Error('未授权');
+                }
+            }
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || '请求失败');
+            }
+            
+            return data;
+        } finally {
+            if (btn) {
+                // If the response is successful and we might be redirecting, 
+                // we might want to stay disabled. But here we don't know if a redirect is coming.
+                // However, most admin actions just reload data.
+                // If the user wants to stay disabled on SUCCESS, we can check a flag.
+                if (!options.stayDisabledOnSuccess) {
+                    this.setLoading(btn, false);
+                }
             }
         }
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.message || '请求失败');
-        }
-        
-        return data;
     },
     
     // GET 请求
@@ -150,6 +164,26 @@ const AdminUtils = {
     async logout() {
         this.removeToken();
         window.location.href = '/admin/login';
+    },
+
+    // 设置加载状态
+    setLoading(button, isLoading, text = '处理中...') {
+        const btn = typeof button === 'string' ? document.querySelector(button) : button;
+        if (!btn) return;
+
+        if (isLoading) {
+            btn.disabled = true;
+            btn.dataset.originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="inline-block animate-spin mr-2">↻</span>${text}`;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            btn.disabled = false;
+            if (btn.dataset.originalText) {
+                btn.innerHTML = btn.dataset.originalText;
+                delete btn.dataset.originalText;
+            }
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
     }
 };
 
