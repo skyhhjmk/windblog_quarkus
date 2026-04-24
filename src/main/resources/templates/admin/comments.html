@@ -60,7 +60,7 @@
                 }
                 
                 const response = await AdminUtils.get(url);
-                allComments = response.data || [];
+                allComments = response.items || [];
                 filteredComments = allComments;
                 renderComments();
                 renderPagination(response.total || 0);

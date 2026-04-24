@@ -60,16 +60,15 @@
         
         function createCategoryRow(cat) {
             const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${cat.id}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${cat.name}</td>
-                <td class="px-6 py-4 text-sm text-gray-500">${cat.description || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${cat.postCount || 0}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button onclick="editCategory(${cat.id})" class="text-blue-600 hover:text-blue-900 mr-3">编辑</button>
-                    <button onclick="deleteCategory(${cat.id})" class="text-red-600 hover:text-red-900">删除</button>
-                </td>
-            `;
+            row.innerHTML = 
+                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">' + cat.id + '</td>' +
+                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">' + cat.name + '</td>' +
+                '<td class="px-6 py-4 text-sm text-gray-500">' + (cat.description || '-') + '</td>' +
+                '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + (cat.postCount || 0) + '</td>' +
+                '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium">' +
+                    '<button onclick="editCategory(' + cat.id + ')" class="text-blue-600 hover:text-blue-900 mr-3">编辑</button>' +
+                    '<button onclick="deleteCategory(' + cat.id + ')" class="text-red-600 hover:text-red-900">删除</button>' +
+                '</td>';
             return row;
         }
         
@@ -88,7 +87,7 @@
         }
         
         function editCategory(id) {
-            window.location.href = `/admin/categories/${id}`;
+            AdminUtils.showToast('分类编辑功能正在开发中', 'info');
         }
         
         async function deleteCategory(id) {
@@ -96,7 +95,7 @@
             if (!confirmed) return;
             
             try {
-                await AdminUtils.delete(`/categories/${id}`);
+                await AdminUtils.delete('/categories/' + id);
                 AdminUtils.showToast('删除成功', 'success');
                 await loadCategories();
             } catch (error) {

@@ -79,6 +79,18 @@ public class AdminController {
     Template login;
 
     /**
+     * 管理后台根路径，重定向到仪表盘
+     */
+    @GET
+    @Produces(MediaType.TEXT_HTML)
+    public jakarta.ws.rs.core.Response root(@Context HttpHeaders httpHeaders) {
+        return jakarta.ws.rs.core.Response
+                .status(302)
+                .location(jakarta.ws.rs.core.UriBuilder.fromPath("/admin/dashboard").build())
+                .build();
+    }
+
+    /**
      * 登录页面
      */
     @GET

@@ -56,7 +56,7 @@
                 }
                 
                 const response = await AdminUtils.get(url);
-                allMedia = response.data || [];
+                allMedia = response.items || [];
                 renderMedia();
                 renderPagination(response.total || 0);
             } catch (error) {

@@ -44,7 +44,7 @@
         async function loadTags() {
             try {
                 const response = await AdminUtils.get('/tags');
-                allTags = response.data || [];
+                allTags = response.items || response || [];
                 renderTags();
             } catch (error) {
                 console.error('加载标签失败:', error);
