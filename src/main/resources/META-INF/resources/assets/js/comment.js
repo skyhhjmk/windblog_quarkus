@@ -92,7 +92,7 @@
                         type="button"
                         class="comment-reply-btn text-sm text-[var(--warning)] hover:underline"
                         data-comment-id="${node.id}">
-                        Reply
+                        ${window.i18n.reply || 'Reply'}
                     </button>
                 </div>
                 <div class="comment-body prose max-w-none">${body}</div>
@@ -133,7 +133,7 @@
 
         if (!slug || !list || !count) return;
 
-        list.innerHTML = '<div class="comment-empty">Loading comments...</div>';
+        list.innerHTML = `<div class="comment-empty">${window.i18n.loading_comments || 'Loading comments...'}</div>`;
 
         try {
             const response = await fetch('/api/comments/post/' + encodeURIComponent(slug));
@@ -141,10 +141,10 @@
             const nodes = result && result.success && Array.isArray(result.data) ? result.data : [];
             const total = countComments(nodes);
 
-            count.textContent = total + (total === 1 ? ' comment' : ' comments');
+            count.textContent = total + ' ' + (window.i18n.comments_unit || 'comments');
 
             if (!nodes.length) {
-                list.innerHTML = '<div class="comment-empty">No comments yet. Be the first to write one.</div>';
+                list.innerHTML = `<div class="comment-empty">${window.i18n.no_comments_yet || 'No comments yet. Be the first to write one.'}</div>`;
                 return;
             }
 
@@ -152,7 +152,7 @@
             bindReplyButtons(root, nodes);
         } catch (error) {
             count.textContent = '0 comments';
-            list.innerHTML = '<div class="comment-empty">Failed to load comments.</div>';
+            list.innerHTML = `<div class="comment-empty">${window.i18n.load_comments_failed || 'Failed to load comments.'}</div>`;
         }
     }
 
@@ -165,13 +165,13 @@
 
         if (hint) {
             hint.innerHTML = loggedIn
-                ? `Signed in as <span class="text-[var(--accent)]">${escapeHtml(profile.data.username)}</span>`
-                : 'Login is required before submission.';
+                ? `${window.i18n.signed_in_as || 'Signed in as'} <span class="text-[var(--accent)]">${escapeHtml(profile.data.username)}</span>`
+                : (window.i18n.login_required || 'Login is required before submission.');
         }
 
         if (submit) {
             submit.disabled = false;
-            submit.textContent = loggedIn ? 'Submit Comment' : 'Login Required';
+            submit.textContent = loggedIn ? (window.i18n.submit_comment || 'Submit Comment') : (window.i18n.login_required_btn || 'Login Required');
         }
     }
 
@@ -196,14 +196,14 @@
 
             const content = textarea ? textarea.value.trim() : '';
             if (!content) {
-                window.showToast('Comment content is required.', 'error');
-                setFeedback(root, 'Comment content is required.', 'error');
+                window.showToast(window.i18n.content_required || 'Comment content is required.', 'error');
+                setFeedback(root, window.i18n.content_required || 'Comment content is required.', 'error');
                 return;
             }
 
             if (!isLoggedIn(root)) {
-                window.showToast('Please log in before submitting a comment.', 'error');
-                setFeedback(root, 'Please log in before submitting a comment.', 'error');
+                window.showToast(window.i18n.login_before_submit || 'Please log in before submitting a comment.', 'error');
+                setFeedback(root, window.i18n.login_before_submit || 'Please log in before submitting a comment.', 'error');
                 if (textarea) textarea.focus();
                 return;
             }
@@ -226,15 +226,15 @@
                 const result = await response.json().catch(() => null);
 
                 if (!response.ok || !result || !result.success) {
-                    const message = result && result.message ? result.message : 'Failed to submit comment.';
+                    const message = result && result.message ? result.message : (window.i18n.submit_failed || 'Failed to submit comment.');
                     throw new Error(message);
                 }
 
                 form.reset();
                 currentReply = null;
                 updateReplyUi(root);
-                window.showToast('Comment submitted and is waiting for review.', 'success');
-                setFeedback(root, 'Comment submitted and is waiting for review.', 'success');
+                window.showToast(window.i18n.comment_submitted || 'Comment submitted and is waiting for review.', 'success');
+                setFeedback(root, window.i18n.comment_submitted || 'Comment submitted and is waiting for review.', 'success');
                 
                 // Keep disabled for a short duration to show success
                 setTimeout(() => {
@@ -242,8 +242,8 @@
                     syncLoginState(root);
                 }, 2000);
             } catch (error) {
-                window.showToast(error.message || 'Failed to submit comment.', 'error');
-                setFeedback(root, error.message || 'Failed to submit comment.', 'error');
+                window.showToast(error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
+                setFeedback(root, error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
                 window.setLoading(submit, false);
                 syncLoginState(root);
             }

@@ -1,6 +1,6 @@
-{#include base.html}
+{#include "base.html"}
     {#title}
-        {pageTitle ?: 'Links'}
+        {pageTitle ?: '友情链接'}
     {/title}
 
     {#navPath}
@@ -8,13 +8,13 @@
     {/navPath}
 
     {#content}
-        {#include blog/link.content.html /}
+        {#include "blog/link.content.html" /}
     {/content}
 
     {#sidebar}
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-            <h3 class="font-bold mb-2">Links Sidebar</h3>
-            <p class="text-sm">等待页面片段注入侧栏内容。</p>
+            <h3 class="font-bold mb-2">链接侧栏</h3>
+            <p class="text-sm">侧栏内容由页面片段注入。</p>
             <p class="text-sm mt-1">当前语言: {language ?: 'zh-CN'}</p>
         </section>
     {/sidebar}

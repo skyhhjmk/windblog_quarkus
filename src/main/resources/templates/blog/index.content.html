@@ -1,22 +1,22 @@
-<div id="pjax-content-root" data-page-title="首页{#if subPage && subPage > 1} - 第{subPage}页{/if}">
+<div id="pjax-content-root" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
     <div id="pjax-nav-path" class="hidden">
         home {#if subPage && subPage > 1}/ page-{subPage}{/if}
     </div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-12">
             <section class="space-y-4">
-                <h3 class="meta-mono">Stats</h3>
+                <h3 class="meta-mono">统计</h3>
                 <div class="grid grid-cols-1 gap-2">
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Posts</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">文章</span>
                         <span class="text-sm font-mono text-white">{totalPosts ?: 0}</span>
                     </div>
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Language</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
                         <span class="text-sm font-mono text-white">{language ?: 'zh-CN'}</span>
                     </div>
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Page</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">页码</span>
                         <span class="text-sm font-mono text-white">{subPage ?: 1} / {totalPages ?: 1}</span>
                     </div>
                 </div>
@@ -26,7 +26,7 @@
 
     <section class="space-y-16">
         <div class="space-y-2">
-            <h2 class="text-4xl font-bold text-white tracking-tight">Recent Posts</h2>
+            <h2 class="text-4xl font-bold text-white tracking-tight">最近文章</h2>
             <div class="decorative-line w-20"></div>
         </div>
 
@@ -45,7 +45,7 @@
                                     <time class="timestamp" data-timestamp="{post.publishedAt}">{post.publishedAt}</time>
                                     {#if post.aiSummaryStatus != 2 && post.aiSummary && ! post.aiSummary.isEmpty}
                                         <span class="hidden sm:inline opacity-30">/</span>
-                                        <span class="text-accent/70">AI Summarized</span>
+                                        <span class="text-accent/70">AI 摘要</span>
                                     {/if}
                                 </div>
 
@@ -75,7 +75,7 @@
                                     </div>
 
                                     <a href="/post/{post.slug}" class="flex items-center gap-2 text-xs font-medium text-white/40 group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
-                                        <span>Read Full Article</span>
+                                        <span>阅读全文</span>
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
@@ -93,10 +93,10 @@
                     {#if hasPrevPage}
                         <a class="btn-minimal" href="{#if prevPage == 1}/{#else}/page/{prevPage}{/if}">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                            Previous
+                            上一页
                         </a>
                     {#else}
-                        <span class="text-xs meta-mono opacity-20">Previous</span>
+                        <span class="text-xs meta-mono opacity-20">上一页</span>
                     {/if}
                 </div>
                 <div class="meta-mono">
@@ -105,17 +105,17 @@
                 <div>
                     {#if hasNextPage}
                         <a class="btn-minimal" href="/page/{nextPage}">
-                            Next
+                            下一页
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </a>
                     {#else}
-                        <span class="text-xs meta-mono opacity-20">Next</span>
+                        <span class="text-xs meta-mono opacity-20">下一页</span>
                     {/if}
                 </div>
             </nav>
         {#else}
             <div class="card p-12 text-center">
-                <p class="text-gray-500 italic">No posts found.</p>
+                <p class="text-gray-500 italic">未找到文章。</p>
             </div>
         {/if}
     </section>

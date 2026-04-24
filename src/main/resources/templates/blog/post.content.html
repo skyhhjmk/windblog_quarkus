@@ -1,18 +1,18 @@
-<div id="pjax-content-root" data-page-title="{postTitle ?: '文章详情'}">
+<div id="pjax-content-root" data-page-title="{postTitle ?: '文章信息'}">
     <div id="pjax-nav-path" class="hidden">
         post / {postSlug ?: 'unknown'}
     </div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-12">
             <section class="space-y-4">
-                <h3 class="meta-mono">Post Info</h3>
+                <h3 class="meta-mono">文章信息</h3>
                 <div class="grid grid-cols-1 gap-2">
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Slug</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">别名</span>
                         <span class="text-sm font-mono text-white truncate max-w-[150px]">{postSlug}</span>
                     </div>
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Language</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
                         <span class="text-sm font-mono text-white">{language ?: 'zh-CN'}</span>
                     </div>
                 </div>
@@ -24,26 +24,26 @@
         <header class="space-y-6">
             <div class="space-y-2">
                 <div class="flex items-center gap-3">
-                    <span class="meta-mono text-accent">Article</span>
+                    <span class="meta-mono text-accent">文章</span>
                     <span class="w-8 h-[1px] bg-accent/30"></span>
                 </div>
-                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">{postTitle ?: '文章详情'}</h1>
+                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">{postTitle ?: '文章信息'}</h1>
             </div>
             <div class="flex items-center gap-6">
                 <div class="flex items-center gap-2">
                     <div class="w-6 h-6 rounded-full bg-border border border-white/10"></div>
-                    <span class="text-sm text-gray-400">Author</span>
+                    <span class="text-sm text-gray-400">作者</span>
                 </div>
                 <span class="meta-mono">{postSlug}</span>
                 <span class="w-1 h-1 rounded-full bg-border"></span>
-                <time class="timestamp meta-mono" data-timestamp="{post.publishedAt}">{post.publishedAt}</time>
+                <time class="timestamp meta-mono" data-timestamp="{publishedAt}">{publishedAt}</time>
             </div>
         </header>
 
         {#if aiSummaryStatus != 2 && aiSummary && ! aiSummary.isEmpty}
             <section class="card p-8 bg-accent/[0.02] border-accent/20 group">
                 <div class="flex items-center gap-4 mb-6">
-                    <span class="tag-pill border-accent/30 text-accent font-bold">AI Summary</span>
+                    <span class="tag-pill border-accent/30 text-accent font-bold">AI 摘要</span>
                     <div class="decorative-line flex-1"></div>
                 </div>
                 <div class="text-lg text-gray-300 leading-relaxed italic">
@@ -79,21 +79,21 @@
                     <pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm">{postBody}</pre>
                 {/if}
             {#else}
-                <p class="text-gray-500 italic">No content available for this language.</p>
+                <p class="text-gray-500 italic">该语言下暂无内容。</p>
             {/if}
         </section>
 
         <section id="comment-section" class="pt-24 space-y-12" data-post-slug="{postSlug}">
             <div class="space-y-2">
-                <h2 class="text-3xl font-bold text-white tracking-tight">Comments</h2>
+                <h2 class="text-3xl font-bold text-white tracking-tight">评论</h2>
                 <div class="decorative-line w-16"></div>
             </div>
 
             <div class="card p-8 space-y-8">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm text-gray-500 uppercase tracking-widest font-mono">Join the discussion</p>
+                    <p class="text-sm text-gray-500 uppercase tracking-widest font-mono">参与讨论</p>
                     <div id="comment-login-hint" class="text-xs meta-mono text-accent/70">
-                        Checking login status...
+                        正在检查登录状态...
                     </div>
                 </div>
 
@@ -101,8 +101,8 @@
 
                 <form id="comment-form" class="space-y-6">
                     <div id="comment-replying" class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center">
-                        <span class="text-sm">Replying to <span id="comment-replying-user" class="font-bold text-white"></span></span>
-                        <button type="button" id="comment-cancel-reply" class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">Cancel</button>
+                        <span class="text-sm">正在回复 <span id="comment-replying-user" class="font-bold text-white"></span></span>
+                        <button type="button" id="comment-cancel-reply" class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">取消</button>
                     </div>
 
                     <input type="hidden" id="comment-parent-id" name="parentId" value="">
@@ -113,16 +113,16 @@
                                 name="content"
                                 rows="5"
                                 maxlength="4000"
-                                placeholder="What are your thoughts?"
+                                placeholder="分享你的想法..."
                                 class="w-full"></textarea>
                     </div>
 
                     <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                         <p class="text-xs text-gray-500 max-w-md">
-                            Markdown is supported. We maintain a professional environment; please be respectful.
+                            支持 Markdown。请保持友善，共同维护良好的讨论环境。
                         </p>
                         <button type="submit" id="comment-submit" class="btn-minimal px-8 py-3 bg-white text-bg font-bold hover:bg-gray-200 border-none rounded-md flex items-center justify-center gap-2">
-                            <span class="btn-text">Post Comment</span>
+                            <span class="btn-text">发表评论</span>
                             <span class="spinner hidden"></span>
                         </button>
                     </div>
@@ -131,8 +131,8 @@
 
             <div class="space-y-8">
                 <div class="flex items-center justify-between">
-                    <h3 class="meta-mono">Discussion Thread</h3>
-                    <span id="comment-count" class="text-xs meta-mono text-gray-500">0 comments</span>
+                    <h3 class="meta-mono">讨论列表</h3>
+                    <span id="comment-count" class="text-xs meta-mono text-gray-500">0 条评论</span>
                 </div>
                 <div id="comment-list" class="space-y-6"></div>
             </div>

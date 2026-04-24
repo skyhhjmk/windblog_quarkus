@@ -1,23 +1,23 @@
-<div id="pjax-content-root" data-page-title="{pageTitle ?: 'Categories'}">
+<div id="pjax-content-root" data-page-title="{pageTitle ?: '分类'}">
     <div id="pjax-nav-path" class="hidden">{navPath ?: 'categories'}</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-12">
             <section class="space-y-4">
-                <h3 class="meta-mono">Category Stats</h3>
+                <h3 class="meta-mono">分类统计</h3>
                 <div class="grid grid-cols-1 gap-2">
                     {#if detailMode}
                         <div class="flex justify-between items-center py-2 border-b border-border/50">
-                            <span class="text-xs text-gray-500 uppercase tracking-wider">Children</span>
+                            <span class="text-xs text-gray-500 uppercase tracking-wider">子分类</span>
                             <span class="text-sm font-mono text-white">{currentCategory.childCount}</span>
                         </div>
                     {#else}
                         <div class="flex justify-between items-center py-2 border-b border-border/50">
-                            <span class="text-xs text-gray-500 uppercase tracking-wider">Total</span>
+                            <span class="text-xs text-gray-500 uppercase tracking-wider">总计</span>
                             <span class="text-sm font-mono text-white">{totalCount ?: 0}</span>
                         </div>
                     {/if}
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Language</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
                         <span class="text-sm font-mono text-white">{language ?: 'zh-CN'}</span>
                     </div>
                 </div>
@@ -30,7 +30,7 @@
             <header class="space-y-6">
                 <div class="space-y-2">
                     <div class="flex items-center gap-3">
-                        <span class="meta-mono text-accent">Classification</span>
+                        <span class="meta-mono text-accent">分类体系</span>
                         <span class="w-8 h-[1px] bg-accent/30"></span>
                     </div>
                     <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">{currentCategory.name}</h1>
@@ -38,7 +38,7 @@
                 </div>
                 
                 <div class="flex flex-wrap items-center gap-2 text-xs meta-mono">
-                    <a href="/category" class="text-gray-500 hover:text-white transition-colors">ROOT</a>
+                    <a href="/category" class="text-gray-500 hover:text-white transition-colors">根节点</a>
                     {#for node in breadcrumbs}
                         <span class="text-border">/</span>
                         <a href="{node.url}" class="text-accent/70 hover:text-accent transition-colors">{node.name.toUpperCase()}</a>
@@ -48,8 +48,8 @@
 
             <div class="space-y-8">
                 <div class="flex items-center justify-between">
-                    <h2 class="meta-mono">Sub-categories</h2>
-                    <span class="text-xs meta-mono text-gray-500">{currentCategory.childCount} found</span>
+                    <h2 class="meta-mono">子分类</h2>
+                    <span class="text-xs meta-mono text-gray-500">已找到 {currentCategory.childCount} 个</span>
                 </div>
                 
                 {#if children && children.size > 0}
@@ -62,9 +62,9 @@
                                     </h3>
                                     <p class="text-sm text-[#94a3b8] line-clamp-2">{child.description}</p>
                                     <div class="flex items-center gap-4 pt-4 mt-auto">
-                                        <span class="meta-mono text-[9px]">PATH: {child.path}</span>
+                                        <span class="meta-mono text-[9px]">路径: {child.path}</span>
                                         <span class="w-1 h-1 rounded-full bg-border"></span>
-                                        <span class="meta-mono text-[9px]">CHILDREN: {child.childCount}</span>
+                                        <span class="meta-mono text-[9px]">子分类数: {child.childCount}</span>
                                     </div>
                                 </div>
                             </article>
@@ -72,18 +72,18 @@
                     </div>
                 {#else}
                     <div class="card p-12 text-center border-dashed">
-                        <p class="text-gray-500 italic text-sm">This category has no children.</p>
+                        <p class="text-gray-500 italic text-sm">该分类下暂无子分类。</p>
                     </div>
                 {/if}
             </div>
 
             <div class="card p-8 border-accent/10 bg-accent/[0.01]">
                 <div class="flex items-center gap-4 mb-4">
-                    <h2 class="text-sm font-bold text-white uppercase tracking-widest">Content Mapping</h2>
+                    <h2 class="text-sm font-bold text-white uppercase tracking-widest">内容映射</h2>
                     <div class="decorative-line flex-1"></div>
                 </div>
                 <p class="text-sm text-gray-500 leading-relaxed italic">
-                    The current architecture utilizes a hierarchical category tree. Post mapping is currently handled via direct relationships which will be visible in the post-category association views.
+                    当前的架构采用层级分类树。文章映射目前通过直接关系处理，这些关系在文章-分类关联视图中可见。
                 </p>
             </div>
         </section>
@@ -92,17 +92,17 @@
             <header class="space-y-6">
                 <div class="space-y-2">
                     <div class="flex items-center gap-3">
-                        <span class="meta-mono text-accent">Taxonomy</span>
+                        <span class="meta-mono text-accent">分类体系</span>
                         <span class="w-8 h-[1px] bg-accent/30"></span>
                     </div>
-                    <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">All Categories</h1>
+                    <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">所有分类</h1>
                 </div>
                 
                 <form action="/category" method="get" class="relative group">
                     <input type="text"
                            name="q"
                            value="{keyword ?: ''}"
-                           placeholder="Filter categories..."
+                           placeholder="筛选分类..."
                            class="w-full pl-12 pr-4 py-2 bg-[#161B22] border border-border rounded-md text-white outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
                     <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -120,9 +120,9 @@
                                 </h2>
                                 <p class="text-sm text-[#94a3b8] line-clamp-2">{category.description}</p>
                                 <div class="flex items-center gap-4 pt-4 mt-auto">
-                                    <span class="meta-mono text-[9px]">PATH: {category.path}</span>
+                                    <span class="meta-mono text-[9px]">路径: {category.path}</span>
                                     <span class="w-1 h-1 rounded-full bg-border"></span>
-                                    <span class="meta-mono text-[9px]">CHILDREN: {category.childCount}</span>
+                                    <span class="meta-mono text-[9px]">子分类数: {category.childCount}</span>
                                 </div>
                             </div>
                         </article>
@@ -132,23 +132,23 @@
                 <nav class="flex items-center justify-between pt-16">
                     <div>
                         {#if hasPrevPage}
-                            <a class="btn-minimal" href="{prevPageUrl}">Previous</a>
+                            <a class="btn-minimal" href="{prevPageUrl}">上一页</a>
                         {#else}
-                            <span class="text-xs meta-mono opacity-20">Previous</span>
+                            <span class="text-xs meta-mono opacity-20">上一页</span>
                         {/if}
                     </div>
-                    <div class="meta-mono">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
+                    <div class="meta-mono">页码 {currentPage ?: 1} / {totalPages ?: 1}</div>
                     <div>
                         {#if hasNextPage}
-                            <a class="btn-minimal" href="{nextPageUrl}">Next</a>
+                            <a class="btn-minimal" href="{nextPageUrl}">下一页</a>
                         {#else}
-                            <span class="text-xs meta-mono opacity-20">Next</span>
+                            <span class="text-xs meta-mono opacity-20">下一页</span>
                         {/if}
                     </div>
                 </nav>
             {#else}
                 <div class="card p-12 text-center">
-                    <p class="text-gray-500 italic">No categories found matching your search.</p>
+                    <p class="text-gray-500 italic">未找到匹配的分类。</p>
                 </div>
             {/if}
         </section>

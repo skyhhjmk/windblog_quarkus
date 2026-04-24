@@ -1,16 +1,16 @@
-<div id="pjax-content-root" data-page-title="{pageTitle ?: 'Search'}">
+<div id="pjax-content-root" data-page-title="{pageTitle ?: '搜索'}">
     <div id="pjax-nav-path" class="hidden">search</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-12">
             <section class="space-y-4">
-                <h3 class="meta-mono">Search Metrics</h3>
+                <h3 class="meta-mono">搜索指标</h3>
                 <div class="grid grid-cols-1 gap-2">
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Matches</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">匹配项</span>
                         <span class="text-sm font-mono text-white">{totalCount ?: 0}</span>
                     </div>
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Current Page</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">当前页</span>
                         <span class="text-sm font-mono text-white">{currentPage ?: 1}</span>
                     </div>
                 </div>
@@ -22,14 +22,14 @@
         <header class="space-y-8">
             <div class="space-y-2">
                 <div class="flex items-center gap-3">
-                    <span class="meta-mono text-accent">Discovery</span>
+                    <span class="meta-mono text-accent">发现</span>
                     <span class="w-8 h-[1px] bg-accent/30"></span>
                 </div>
-                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">Search Results</h1>
+                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">搜索结果</h1>
                 {#if hasKeyword}
-                    <p class="text-lg text-gray-400">Found {totalCount ?: 0} matches for <span class="text-white font-semibold">"{searchKeyword ?: ''}"</span></p>
+                    <p class="text-lg text-gray-400">找到 {totalCount ?: 0} 个匹配项，关键词：<span class="text-white font-semibold">"{searchKeyword ?: ''}"</span></p>
                 {#else}
-                    <p class="text-lg text-gray-400">Enter a keyword to discover relevant content.</p>
+                    <p class="text-lg text-gray-400">输入关键词以发现相关内容。</p>
                 {/if}
             </div>
 
@@ -38,7 +38,7 @@
                     <input type="text"
                            name="q"
                            value="{searchKeyword ?: ''}"
-                           placeholder="Type to search..."
+                           placeholder="输入以搜索..."
                            class="w-full pl-14 pr-4 py-4 bg-[#161B22] border border-border rounded-lg text-xl text-white outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all" />
                     <svg class="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -47,7 +47,7 @@
 
                 <div class="flex flex-wrap gap-8 text-xs meta-mono border-t border-border pt-8">
                     <div class="flex items-center gap-3">
-                        <span class="text-gray-600 uppercase">Type:</span>
+                        <span class="text-gray-600 uppercase">类型：</span>
                         <div class="flex gap-4">
                             {#for link in typeLinks}
                                 <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
@@ -55,7 +55,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="text-gray-600 uppercase">Sort:</span>
+                        <span class="text-gray-600 uppercase">排序：</span>
                         <div class="flex gap-4">
                             {#for link in sortLinks}
                                 <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
@@ -63,7 +63,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="text-gray-600 uppercase">Date:</span>
+                        <span class="text-gray-600 uppercase">日期：</span>
                         <div class="flex gap-4">
                             {#for link in dateLinks}
                                 <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
@@ -90,7 +90,7 @@
                                         <time class="timestamp" data-timestamp="{hit.dateText}">{hit.dateText}</time>
                                     </div>
                                     {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
-                                        <span class="tag-pill border-accent/20 text-accent/70 text-[9px]">AI Optimized</span>
+                                        <span class="tag-pill border-accent/20 text-accent/70 text-[9px]">AI 优化</span>
                                     {/if}
                                 </div>
 
@@ -118,7 +118,7 @@
                                     </div>
 
                                     <a href="{hit.url}" class="flex items-center gap-2 text-xs font-medium text-white/40 group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
-                                        <span>View Content</span>
+                                        <span>查看内容</span>
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
@@ -133,24 +133,24 @@
             <nav class="flex items-center justify-between pt-16">
                 <div>
                     {#if hasPrevPage}
-                        <a class="btn-minimal" href="{prevPageUrl}">Previous</a>
+                        <a class="btn-minimal" href="{prevPageUrl}">上一页</a>
                     {#else}
-                        <span class="text-xs meta-mono opacity-20">Previous</span>
+                        <span class="text-xs meta-mono opacity-20">上一页</span>
                     {/if}
                 </div>
-                <div class="meta-mono">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
+                <div class="meta-mono">页码 {currentPage ?: 1} / {totalPages ?: 1}</div>
                 <div>
                     {#if hasNextPage}
-                        <a class="btn-minimal" href="{nextPageUrl}">Next</a>
+                        <a class="btn-minimal" href="{nextPageUrl}">下一页</a>
                     {#else}
-                        <span class="text-xs meta-mono opacity-20">Next</span>
+                        <span class="text-xs meta-mono opacity-20">下一页</span>
                     {/if}
                 </div>
             </nav>
         {#else}
             <div class="card p-24 text-center border-dashed">
-                <p class="text-gray-500 italic mb-6">No matches found for your search criteria.</p>
-                <a href="/" class="btn-minimal">Return Home</a>
+                <p class="text-gray-500 italic mb-6">未找到符合您搜索条件的匹配项。</p>
+                <a href="/" class="btn-minimal">返回首页</a>
             </div>
         {/if}
     </section>

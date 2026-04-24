@@ -89,7 +89,7 @@
         const doLogout = (e) => {
             if (e) e.preventDefault();
             const targetBtn = e.currentTarget;
-            showConfirm('退出登录', '确定要退出登录吗？', () => {
+            showConfirm(window.i18n.logout_title || 'Logout', window.i18n.logout_confirm || 'Are you sure you want to logout?', () => {
                 window.setLoading(targetBtn, true);
                 fetch('/user/api/logout', {
                     method: 'POST'
@@ -149,21 +149,21 @@
 
                 if (result.success) {
                     isRedirecting = true;
-                    window.showToast(result.message || '登录成功', 'success');
+                    window.showToast(result.message || window.i18n.login_success || 'Login successful', 'success');
                     setTimeout(() => {
                         window.location.href = result.redirect || '/';
                     }, 1000);
                 } else {
-                    window.showToast(result.message || '登录失败', 'error');
+                    window.showToast(result.message || window.i18n.login_failed || 'Login failed', 'error');
                     if (errorDiv) {
-                        errorDiv.textContent = result.message || '登录失败';
+                        errorDiv.textContent = result.message || window.i18n.login_failed || 'Login failed';
                         errorDiv.classList.remove('hidden');
                     }
                 }
             } catch (err) {
-                window.showToast('网络错误，请稍后重试', 'error');
+                window.showToast(window.i18n.network_error || 'Network error', 'error');
                 if (errorDiv) {
-                    errorDiv.textContent = '网络错误，请稍后重试';
+                    errorDiv.textContent = window.i18n.network_error || 'Network error';
                     errorDiv.classList.remove('hidden');
                 }
             } finally {
@@ -191,7 +191,7 @@
             if (errorDiv) errorDiv.classList.add('hidden');
 
             if (password && confirmPassword && password.value !== confirmPassword.value) {
-                const msg = '两次输入的密码不一致';
+                const msg = window.i18n.password_mismatch || 'Passwords do not match';
                 window.showToast(msg, 'error');
                 if (errorDiv) {
                     errorDiv.textContent = msg;
@@ -226,22 +226,22 @@
 
                 if (result.success) {
                     isRedirecting = true;
-                    window.showToast(result.message || '注册成功', 'success');
+                    window.showToast(result.message || window.i18n.register_success || 'Registration successful', 'success');
                     // 延迟跳转，让用户看到成功提示
                     setTimeout(() => {
                         window.location.href = result.redirect || '/';
                     }, 1500);
                 } else {
-                    window.showToast(result.message || '注册失败', 'error');
+                    window.showToast(result.message || window.i18n.register_failed || 'Registration failed', 'error');
                     if (errorDiv) {
-                        errorDiv.textContent = result.message || '注册失败';
+                        errorDiv.textContent = result.message || window.i18n.register_failed || 'Registration failed';
                         errorDiv.classList.remove('hidden');
                     }
                 }
             } catch (err) {
-                window.showToast('网络错误，请稍后重试', 'error');
+                window.showToast(window.i18n.network_error || 'Network error', 'error');
                 if (errorDiv) {
-                    errorDiv.textContent = '网络错误，请稍后重试';
+                    errorDiv.textContent = window.i18n.network_error || 'Network error';
                     errorDiv.classList.remove('hidden');
                 }
             } finally {

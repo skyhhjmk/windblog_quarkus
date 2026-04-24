@@ -1,17 +1,17 @@
-<div id="pjax-content-root" data-page-title="{pageTitle ?: 'Tags'}">
+<div id="pjax-content-root" data-page-title="{pageTitle ?: '标签'}">
     <div id="pjax-nav-path" class="hidden">{navPath ?: 'tags'}</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-12">
             <section class="space-y-4">
-                <h3 class="meta-mono">Tag Overview</h3>
+                <h3 class="meta-mono">标签概览</h3>
                 <div class="grid grid-cols-1 gap-2">
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Total Tags</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">标签总数</span>
                         <span class="text-sm font-mono text-white">{totalCount ?: 0}</span>
                     </div>
                     {#if detailMode}
                         <div class="flex justify-between items-center py-2 border-b border-border/50">
-                            <span class="text-xs text-gray-500 uppercase tracking-wider">Current Tag</span>
+                            <span class="text-xs text-gray-500 uppercase tracking-wider">当前标签</span>
                             <span class="text-sm font-mono text-accent">#{currentTag.name}</span>
                         </div>
                     {/if}
@@ -25,16 +25,16 @@
             <header class="space-y-6">
                 <div class="space-y-2">
                     <div class="flex items-center gap-3">
-                        <span class="meta-mono text-accent">Tag Archive</span>
+                        <span class="meta-mono text-accent">标签存档</span>
                         <span class="w-8 h-[1px] bg-accent/30"></span>
                     </div>
                     <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">#{currentTag.name}</h1>
                     <p class="text-lg text-gray-400 max-w-2xl">{currentTag.description}</p>
                 </div>
                 <div class="flex items-center gap-6">
-                    <span class="meta-mono">Posts: {currentTag.postCount}</span>
+                    <span class="meta-mono">文章: {currentTag.postCount}</span>
                     <span class="w-1 h-1 rounded-full bg-border"></span>
-                    <a href="/tag" class="btn-minimal px-4 py-1.5 text-xs">View All Tags</a>
+                    <a href="/tag" class="btn-minimal px-4 py-1.5 text-xs">查看所有标签</a>
                 </div>
             </header>
 
@@ -49,7 +49,7 @@
                                 <div class="flex-1">
                                     <!-- Meta Information -->
                                     <div class="flex items-center gap-4 text-[11px] font-mono text-white/40 mb-3 tracking-widest uppercase">
-                                        <span class="text-accent font-semibold">Post</span>
+                                        <span class="text-accent font-semibold">文章</span>
                                         <time class="timestamp" data-timestamp="{post.publishedAtText}">{post.publishedAtText}</time>
                                     </div>
 
@@ -72,7 +72,7 @@
                                         </div>
 
                                         <a href="/post/{post.slug}" class="flex items-center gap-2 text-xs font-medium text-white/40 group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
-                                            <span>Read More</span>
+                                            <span>阅读全文</span>
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                                             </svg>
@@ -87,23 +87,23 @@
                 <nav class="flex items-center justify-between pt-16">
                     <div>
                         {#if hasPrevPage}
-                            <a class="btn-minimal" href="{prevPageUrl}">Previous</a>
+                            <a class="btn-minimal" href="{prevPageUrl}">上一页</a>
                         {#else}
-                            <span class="text-xs meta-mono opacity-20">Previous</span>
+                            <span class="text-xs meta-mono opacity-20">上一页</span>
                         {/if}
                     </div>
-                    <div class="meta-mono">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
+                    <div class="meta-mono">页码 {currentPage ?: 1} / {totalPages ?: 1}</div>
                     <div>
                         {#if hasNextPage}
-                            <a class="btn-minimal" href="{nextPageUrl}">Next</a>
+                            <a class="btn-minimal" href="{nextPageUrl}">下一页</a>
                         {#else}
-                            <span class="text-xs meta-mono opacity-20">Next</span>
+                            <span class="text-xs meta-mono opacity-20">下一页</span>
                         {/if}
                     </div>
                 </nav>
             {#else}
                 <div class="card p-12 text-center">
-                    <p class="text-gray-500 italic">No posts under this tag.</p>
+                    <p class="text-gray-500 italic">该标签下暂无文章。</p>
                 </div>
             {/if}
         </section>
@@ -112,17 +112,17 @@
             <header class="space-y-6">
                 <div class="space-y-2">
                     <div class="flex items-center gap-3">
-                        <span class="meta-mono text-accent">Taxonomy</span>
+                        <span class="meta-mono text-accent">分类体系</span>
                         <span class="w-8 h-[1px] bg-accent/30"></span>
                     </div>
-                    <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">All Tags</h1>
+                    <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">所有标签</h1>
                 </div>
                 
                 <form action="/tag" method="get" class="relative group">
                     <input type="text"
                            name="q"
                            value="{keyword ?: ''}"
-                           placeholder="Filter tags..."
+                           placeholder="筛选标签..."
                            class="w-full pl-12 pr-4 py-2 bg-[#161B22] border border-border rounded-md text-white outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
                     <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -140,7 +140,7 @@
                                 </h2>
                                 <p class="text-sm text-[#94a3b8] line-clamp-2">{tag.description}</p>
                                 <div class="flex items-center gap-4 pt-4 mt-auto">
-                                    <span class="meta-mono">Posts: {tag.postCount}</span>
+                                    <span class="meta-mono">文章: {tag.postCount}</span>
                                     <span class="w-1 h-1 rounded-full bg-border"></span>
                                     <time class="timestamp meta-mono text-[9px]" data-timestamp="{tag.createdAtText}">{tag.createdAtText}</time>
                                 </div>
@@ -152,23 +152,23 @@
                 <nav class="flex items-center justify-between pt-16">
                     <div>
                         {#if hasPrevPage}
-                            <a class="btn-minimal" href="{prevPageUrl}">Previous</a>
+                            <a class="btn-minimal" href="{prevPageUrl}">上一页</a>
                         {#else}
-                            <span class="text-xs meta-mono opacity-20">Previous</span>
+                            <span class="text-xs meta-mono opacity-20">上一页</span>
                         {/if}
                     </div>
-                    <div class="meta-mono">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
+                    <div class="meta-mono">页码 {currentPage ?: 1} / {totalPages ?: 1}</div>
                     <div>
                         {#if hasNextPage}
-                            <a class="btn-minimal" href="{nextPageUrl}">Next</a>
+                            <a class="btn-minimal" href="{nextPageUrl}">下一页</a>
                         {#else}
-                            <span class="text-xs meta-mono opacity-20">Next</span>
+                            <span class="text-xs meta-mono opacity-20">下一页</span>
                         {/if}
                     </div>
                 </nav>
             {#else}
                 <div class="card p-12 text-center">
-                    <p class="text-gray-500 italic">No tags found matching your search.</p>
+                    <p class="text-gray-500 italic">未找到匹配的标签。</p>
                 </div>
             {/if}
         </section>

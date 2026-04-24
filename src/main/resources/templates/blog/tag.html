@@ -1,6 +1,6 @@
 {#include "base.html"}
 {#title}
-{pageTitle ?: 'Tags'}
+{pageTitle ?: '标签'}
 {/title}
 
 {#navPath}
@@ -13,13 +13,13 @@
 
 {#sidebar}
 <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
-    <h3 class="font-bold mb-2">Tag Info</h3>
-    <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
-    <p class="text-sm">Total: {totalCount ?: 0}</p>
+    <h3 class="font-bold mb-2">标签信息</h3>
+    <p class="text-sm">语言：{language ?: 'zh-CN'}</p>
+    <p class="text-sm">总计：{totalCount ?: 0}</p>
     {#if detailMode}
-    <p class="text-sm">Current: {currentTag.name}</p>
+    <p class="text-sm">当前：{currentTag.name}</p>
     {#else}
-    <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
+    <p class="text-sm">页码：{currentPage ?: 1} / {totalPages ?: 1}</p>
     {/if}
 </section>
 {/sidebar}

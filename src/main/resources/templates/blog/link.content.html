@@ -1,16 +1,16 @@
-<div id="pjax-content-root" data-page-title="{pageTitle ?: 'Links'}">
+<div id="pjax-content-root" data-page-title="{pageTitle ?: '友情链接'}">
     <div id="pjax-nav-path" class="hidden">links</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-12">
             <section class="space-y-4">
-                <h3 class="meta-mono">Resource Info</h3>
+                <h3 class="meta-mono">资源信息</h3>
                 <div class="grid grid-cols-1 gap-2">
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Count</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">数量</span>
                         <span class="text-sm font-mono text-white">{links.size}</span>
                     </div>
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">Language</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
                         <span class="text-sm font-mono text-white">{language ?: 'zh-CN'}</span>
                     </div>
                 </div>
@@ -22,24 +22,24 @@
         <header class="space-y-6 text-center">
             <div class="space-y-2 flex flex-col items-center">
                 <div class="flex items-center gap-3">
-                    <span class="meta-mono text-accent">Network</span>
+                    <span class="meta-mono text-accent">网络</span>
                     <span class="w-8 h-[1px] bg-accent/30"></span>
                 </div>
-                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">{pageTitle ?: 'Links'}</h1>
-                <p class="text-lg text-gray-400">A curated collection of quality resources and friends.</p>
+                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">{pageTitle ?: '友情链接'}</h1>
+                <p class="text-lg text-gray-400">精选的优质资源和伙伴。</p>
             </div>
 
             <div class="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
                 <div class="flex items-center gap-3">
-                    <span class="text-xs meta-mono text-gray-600">Filter:</span>
+                    <span class="text-xs meta-mono text-gray-600">筛选：</span>
                     <select id="linkGrepSelect" class="bg-[#161B22] border border-border px-4 py-1.5 rounded-md text-sm text-white outline-none focus:border-accent transition-colors">
-                        <option value="friend_links">Friend Links</option>
-                        <option value="other_links">Other Links</option>
-                        <option value="All">All Resources</option>
+                        <option value="friend_links">友情链接</option>
+                        <option value="other_links">其他链接</option>
+                        <option value="All">所有资源</option>
                     </select>
                 </div>
                 <button id="linkFilterApplyBtn" class="btn-minimal px-6 py-1.5 bg-white text-bg font-bold border-none rounded-md">
-                    Apply Filter
+                    应用筛选
                 </button>
             </div>
         </header>
@@ -69,7 +69,7 @@
                         </div>
 
                         <p class="text-sm text-gray-400 line-clamp-3 mb-6 h-15">
-                            {link.description ?: 'No description provided for this resource.'}
+                            {link.description ?: '该资源暂无描述。'}
                         </p>
 
                         <div class="mt-auto pt-4 border-t border-border flex items-center justify-between">
@@ -83,7 +83,7 @@
             </div>
         {#else}
             <div class="card p-24 text-center border-dashed">
-                <p class="text-gray-500 italic">No resources found in this collection.</p>
+                <p class="text-gray-500 italic">该集合下暂无资源。</p>
             </div>
         {/if}
     </section>

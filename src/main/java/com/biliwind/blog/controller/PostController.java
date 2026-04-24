@@ -96,6 +96,7 @@ public class PostController {
                 .data("aiSummaryStatus", postEntity.aiSummaryStatus != null ? postEntity.aiSummaryStatus.intValue() : 0)
                 .data("postBody", postBody.body())
                 .data("postBodyHtml", postBody.html())
+                .data("publishedAt", postEntity.publishedAt)
                 .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)
                 .data("postBodyJson", escapeJavaScript(postBody.body()));
     }
