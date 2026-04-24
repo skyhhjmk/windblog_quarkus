@@ -148,6 +148,43 @@
             }
         }
 
+        function formatTimestamps(root = document) {
+            const elements = root.querySelectorAll('.timestamp:not(.formatted)');
+            const options = { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            };
+            const formatter = new Intl.DateTimeFormat(navigator.language, options);
+
+            elements.forEach(el => {
+                const raw = el.getAttribute('data-timestamp') || el.textContent;
+                if (!raw) return;
+                
+                try {
+                    const date = new Date(raw.replace(' ', 'T'));
+                    if (!isNaN(date.getTime())) {
+                        el.textContent = formatter.format(date);
+                        el.classList.add('formatted');
+                    }
+                } catch (e) {
+                    console.error('Failed to format timestamp:', raw, e);
+                }
+            });
+        }
+
+        // MutationObserver to handle dynamic content
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                if (mutation.addedNodes.length) {
+                    formatTimestamps();
+                }
+            });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+
         if (!window.history.state) {
             window.history.replaceState({ pjax: false, url: window.location.href }, '', window.location.href);
         }
@@ -169,6 +206,10 @@
 
         window.addEventListener('popstate', () => {
             loadByPjax(window.location.href, false);
+        });
+
+        document.addEventListener('page:ready', () => {
+            formatTimestamps();
         });
 
         dispatch('page:ready', { url: window.location.href });

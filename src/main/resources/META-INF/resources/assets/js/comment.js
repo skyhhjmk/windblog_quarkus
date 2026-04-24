@@ -86,7 +86,7 @@
                 <div class="comment-meta">
                     <div class="flex items-center gap-3">
                         <strong class="text-[var(--accent)]">${userName}</strong>
-                        <time class="text-xs opacity-70">${escapeHtml(formatTime(node.createdAt))}</time>
+                        <time class="timestamp text-xs opacity-70" data-timestamp="${escapeHtml(node.createdAt)}">${escapeHtml(node.createdAt)}</time>
                     </div>
                     <button
                         type="button"

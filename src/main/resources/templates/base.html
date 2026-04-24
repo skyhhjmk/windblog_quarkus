@@ -1,159 +1,173 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN">
 <head>
-    {! TODO: 重构为贴合新系统的写法 !}
     <meta charset="UTF-8" />
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
     <title>{#insert title}{page_title ?: 'WindBlog'}{/insert}</title>
 
-    <!-- PWA / 主题色（暗色） -->
-    <meta name="theme-color" content="#1e1e1e" />
+    <!-- Theme & SEO -->
+    <meta name="theme-color" content="#0A0C10" />
     <meta name="color-scheme" content="dark" />
-
-    <!-- CSRF（推荐后端注入），JS 会自动回退到 Cookie -->
     <meta name="csrf-token" content="{csrfToken ?: ''}">
 
-    <!-- 字体优化 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <!-- Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- JetBrains Mono - 等宽更贴合终端风格 -->
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap"
-          rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
 
-    <!-- Tailwind（CDN 版；若生产建议改 CLI 构建，以获得 tree-shaking） -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#0A0C10',
+                        card: '#0D1117',
+                        border: 'rgba(255, 255, 255, 0.05)',
+                        'border-hover': 'rgba(255, 255, 255, 0.12)',
+                        accent: '#06b6d4',
+                    },
+                    maxWidth: {
+                        '1400': '1400px',
+                    }
+                }
+            }
+        }
+    </script>
 
-    <!-- Font Awesome（如需） -->
-    <link rel="stylesheet" href="/assets/css/font-awesome.css" />
-
-    <!-- 主题样式（极简，仅少量变量与 TUI 细节） -->
+    <!-- Custom Theme Styles -->
     <link rel="stylesheet" href="/assets/css/theme.css" />
 </head>
 
-<body class="min-h-screen flex flex-col bg-[var(--bg)] text-[var(--fg)] font-mono">
+<body class="min-h-screen flex flex-col bg-bg text-[#94a3b8] font-sans selection:bg-accent/30 selection:text-white">
 <!-- Header -->
-<header class="sticky top-0 z-50 bg-[var(--bg)]/95 backdrop-blur border-b border-[var(--border)]">
-    <div class="container mx-auto px-4 py-3 flex items-center justify-between">
-        <!-- 品牌 / 路径（zsh 风格） -->
-        <a href="/" class="flex items-center gap-2 text-xl font-bold">
-            <span class="tui-prompt"></span>
-            <span id="nav-path-text" class="text-[var(--accent)]">
-                {#insert navPath}~/windblog{/insert}
-            </span>
+<header class="sticky top-0 z-50 bg-bg/80 backdrop-blur-md border-b border-border">
+    <div class="max-w-1400 mx-auto px-6 h-16 flex items-center justify-between">
+        <!-- Logo / Brand -->
+        <a href="/" class="flex items-center gap-3 group">
+            <div class="w-8 h-8 bg-accent rounded-sm flex items-center justify-center transform group-hover:rotate-12 transition-transform duration-300">
+                <span class="text-bg font-bold text-lg">W</span>
+            </div>
+            <span class="text-white font-bold tracking-tight text-lg">WindBlog</span>
         </a>
 
-        <!-- 桌面导航 -->
-        <nav class="hidden md:flex items-center gap-6">
-            <a href="/" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Home]</a>
-            <a href="/link" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Links]</a>
-            <a href="/tag" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Tags]</a>
-            <a href="/category" class="hover:bg-[var(--selection)] px-2 py-1 rounded-none">[Categories]</a>
+        <!-- Navigation -->
+        <nav class="hidden md:flex items-center gap-8">
+            <div class="flex items-center gap-6">
+                <a href="/" class="text-sm font-medium hover:text-white transition-colors">Home</a>
+                <a href="/link" class="text-sm font-medium hover:text-white transition-colors">Links</a>
+                <a href="/tag" class="text-sm font-medium hover:text-white transition-colors">Tags</a>
+                <a href="/category" class="text-sm font-medium hover:text-white transition-colors">Categories</a>
+            </div>
 
-            <!-- 搜索 -->
-            <form action="/search" method="get" class="flex items-center gap-2">
+            <div class="h-4 w-[1px] bg-border"></div>
+
+            <!-- Search -->
+            <form action="/search" method="get" class="relative group">
                 <input
                         type="text"
                         name="q"
-                        placeholder="Search..."
-                        class="px-3 py-1 text-sm w-48 bg-[var(--panel-bg)] border border-[var(--border)] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
-                        aria-label="Search" />
-                <button
-                        type="submit"
-                        class="px-3 py-1 text-sm bg-[var(--panel-bg)] border border-[var(--border)] hover:bg-[var(--selection)]">
-                    [Search]
-                </button>
+                        placeholder="Search posts..."
+                        class="pl-10 pr-4 py-1.5 text-sm w-48 bg-[#161B22] border border-border rounded-md text-white placeholder:text-gray-600 outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
             </form>
 
-            <!-- 用户菜单 -->
+            <!-- User -->
             <div class="relative" id="userMenuContainer">
-                <button id="userMenuBtn"
-                        class="px-2 py-1 bg-[var(--panel-bg)] border border-[var(--border)] hover:bg-[var(--selection)]"
-                        aria-haspopup="true" aria-expanded="false" aria-controls="userDropdown">
-                    [User]
+                <button id="userMenuBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors border border-transparent hover:border-border">
+                    <span class="text-sm font-medium">Account</span>
+                    <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
-                <div id="userDropdown"
-                     class="absolute right-0 top-full mt-2 w-48 bg-[var(--bg)] border border-[var(--border)] hidden p-2 z-50"
-                     role="menu" aria-labelledby="userMenuBtn">
-                    <div id="userNotLoggedIn" class="space-y-1">
-                        <a href="/user/login" class="block py-1 hover:bg-[var(--selection)]" role="menuitem">Login</a>
-                        <a href="/user/register" class="block py-1 hover:bg-[var(--selection)]" role="menuitem">Register</a>
+                <div id="userDropdown" class="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-2xl hidden p-1.5 z-50 overflow-hidden">
+                    <div id="userNotLoggedIn" class="space-y-0.5">
+                        <a href="/user/login" class="block px-3 py-2 text-sm rounded-md hover:bg-white/5 hover:text-white transition-colors">Login</a>
+                        <a href="/user/register" class="block px-3 py-2 text-sm rounded-md hover:bg-white/5 hover:text-white transition-colors">Register</a>
                     </div>
-                    <div id="userLoggedIn" class="hidden">
-                        <div class="border-b border-[var(--border)] pb-1 mb-1" id="userNickname">User</div>
-                        <a href="/user/center" class="block py-1 hover:bg-[var(--selection)]" role="menuitem">Center</a>
-                        <a href="#" id="logoutLink"
-                           class="block py-1 text-red-400 hover:bg-[var(--selection)]"
-                           role="menuitem">Logout</a>
+                    <div id="userLoggedIn" class="hidden space-y-0.5">
+                        <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-border/50 mb-1" id="userNickname">User</div>
+                        <a href="/user/center" class="block px-3 py-2 text-sm rounded-md hover:bg-white/5 hover:text-white transition-colors">Dashboard</a>
+                        <a href="#" id="logoutLink" class="block px-3 py-2 text-sm rounded-md hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors">Logout</a>
                     </div>
                 </div>
             </div>
         </nav>
 
-        <!-- 移动端菜单按钮 -->
-        <button id="mobileMenuBtn"
-                class="md:hidden px-2 py-1 bg-[var(--panel-bg)] border border-[var(--border)] hover:bg-[var(--selection)]"
-                aria-controls="mobileMenu" aria-expanded="false">
-            [Menu]
+        <!-- Mobile Toggle -->
+        <button id="mobileMenuBtn" class="md:hidden p-2 text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
         </button>
     </div>
 
-    <!-- 移动端菜单 -->
-    <div id="mobileMenu"
-         class="hidden md:hidden border-t border-[var(--border)] p-4 bg-[var(--bg)]">
-        <a href="/" class="block py-2 hover:bg-[var(--selection)]">[Home]</a>
-        <a href="/link" class="block py-2 hover:bg-[var(--selection)]">[Links]</a>
-        <a href="/tag" class="block py-2 hover:bg-[var(--selection)]">[Tags]</a>
-        <a href="/category" class="block py-2 hover:bg-[var(--selection)]">[Categories]</a>
-        <div class="border-t border-[var(--border)] my-2"></div>
-        <div id="mobileUserAuth" class="space-y-1">
-            <a href="/user/login" class="block py-2 hover:bg-[var(--selection)]">Login</a>
-            <a href="/user/register" class="block py-2 hover:bg-[var(--selection)]">Register</a>
+    <!-- Mobile Menu -->
+    <div id="mobileMenu" class="hidden md:hidden bg-bg border-t border-border px-6 py-4 space-y-4 shadow-xl">
+        <div class="flex flex-col gap-3">
+            <a href="/" class="text-sm py-2 hover:text-white transition-colors font-medium">Home</a>
+            <a href="/link" class="text-sm py-2 hover:text-white transition-colors font-medium">Links</a>
+            <a href="/tag" class="text-sm py-2 hover:text-white transition-colors font-medium">Tags</a>
+            <a href="/category" class="text-sm py-2 hover:text-white transition-colors font-medium">Categories</a>
+        </div>
+        <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">
+            <a href="/user/login" class="text-sm py-2 hover:text-white transition-colors font-medium">Login</a>
+            <a href="/user/register" class="text-sm py-2 hover:text-white transition-colors font-medium">Register</a>
         </div>
     </div>
 </header>
 
-<!-- Main -->
-<main class="flex-grow container mx-auto px-4 py-8 flex flex-col md:flex-row gap-8">
-    <div id="pjax-container" class="w-full md:w-3/4">
-        {#insert content}
-            <p>[content]请填充具体内容</p>
-        {/insert}
+<!-- Main Content -->
+<main class="flex-grow max-w-1400 mx-auto w-full px-6 py-16">
+    <div class="flex flex-col md:flex-row gap-20">
+        <!-- Primary Column -->
+        <div id="pjax-container" class="flex-1 min-w-0">
+            {#insert content}
+                <div class="flex items-center justify-center h-64 border border-dashed border-border rounded-lg">
+                    <p class="text-sm text-gray-600 uppercase tracking-widest font-mono">Content Placeholder</p>
+                </div>
+            {/insert}
+        </div>
+
+        <!-- Sidebar Column (Asymmetric 3:1 approx) -->
+        <aside id="sidebar-container" class="w-full md:w-[320px] shrink-0">
+            {#insert sidebar}
+                <div class="sticky top-32 space-y-12">
+                    <p class="meta-mono">Sidebar Placeholder</p>
+                </div>
+            {/insert}
+        </aside>
     </div>
-    <aside id="sidebar-container" class="w-full md:w-1/4 hidden md:block">
-        {#insert sidebar}
-            <p>[sidebar]请填充具体内容</p>
-        {/insert}
-    </aside>
 </main>
 
 <!-- Footer -->
-<footer class="py-6 text-center text-sm border-t border-[var(--border)] mt-auto">
+<footer class="border-t border-border py-12 mt-32">
+    <div class="max-w-1400 mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div class="flex items-center gap-2 opacity-50">
+            <span class="meta-mono">© 2024 WindBlog. Built with Quarkus.</span>
+        </div>
+        <div class="flex gap-6">
+            <a href="/feed" class="meta-mono hover:text-accent transition-colors">RSS Feed</a>
+            <a href="/sitemap.xml" class="meta-mono hover:text-accent transition-colors">Sitemap</a>
+        </div>
+    </div>
 </footer>
 
-<!-- PJAX 进度条（可选） -->
-<div id="pjax-progress"
-     class="fixed top-0 left-0 h-[2px] w-0 z-[9999] bg-[var(--accent)]"></div>
+<!-- Progress Bar -->
+<div id="pjax-progress" class="fixed top-0 left-0 h-0.5 w-0 z-[9999] bg-accent shadow-[0_0_10px_rgba(6,182,212,0.5)] transition-all"></div>
 
-<!-- 确认对话框 -->
-<div id="confirmDialog" class="fixed inset-0 bg-black/50 z-[9998] hidden flex items-center justify-center">
-    <div class="bg-[var(--panel-bg)] border border-[var(--border)] p-6 max-w-sm w-full mx-4">
-        <h3 id="confirmTitle" class="text-lg font-bold mb-4">确认</h3>
-        <p id="confirmMessage" class="text-sm text-gray-300 mb-6">确定要执行此操作吗？</p>
-        <div class="flex gap-3 justify-end">
-            <button id="confirmCancel"
-                    class="px-4 py-2 border border-[var(--border)] hover:bg-[var(--selection)] transition-colors">
-                取消
-            </button>
-            <button id="confirmOk"
-                    class="px-4 py-2 bg-[var(--accent)] text-[var(--bg)] font-bold hover:opacity-90 transition-opacity">
-                确定
-            </button>
+<!-- Confirm Dialog -->
+<div id="confirmDialog" class="fixed inset-0 bg-bg/80 backdrop-blur-sm z-[9998] hidden flex items-center justify-center p-4">
+    <div class="card max-w-md w-full p-8 shadow-2xl">
+        <h3 id="confirmTitle" class="text-xl font-bold mb-2">Confirmation</h3>
+        <p id="confirmMessage" class="text-gray-400 mb-8">Are you sure you want to proceed?</p>
+        <div class="flex gap-4 justify-end">
+            <button id="confirmCancel" class="px-5 py-2 text-sm font-medium hover:text-white transition-colors">Cancel</button>
+            <button id="confirmOk" class="bg-white text-bg px-5 py-2 rounded-md text-sm font-bold hover:bg-gray-200 transition-colors">Confirm</button>
         </div>
     </div>
 </div>
 
-<!-- JS：无需 jQuery（如你有 PJAX 插件再单独引入） -->
+<!-- JS Scripts -->
 <script src="/assets/js/main.js" defer></script>
 <script src="/assets/js/user.js" defer></script>
 <script src="/assets/js/comment.js" defer></script>

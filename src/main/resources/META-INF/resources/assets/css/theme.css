@@ -1,181 +1,190 @@
 :root {
-    --bg: #1e1e1e;
-    --fg: #abb2bf;
-    --border: #3e4451;
-    --accent: #61afef;
-    --success: #98c379;
-    --warning: #e5c07b;
-    --error: #e06c75;
-    --selection: #3e4451;
-    --panel-bg: #282c34;
+    --bg: #0A0C10;
+    --card-bg: #0D1117;
+    --input-bg: #161B22;
+    --border: rgba(255, 255, 255, 0.05);
+    --border-hover: rgba(255, 255, 255, 0.12);
+    
+    --text-main: rgba(255, 255, 255, 0.9);
+    --text-body: #94a3b8;
+    --text-meta: rgba(255, 255, 255, 0.4);
+    
+    --accent: #06b6d4;
+    --accent-dim: rgba(6, 182, 212, 0.7);
+    --accent-line: #164e63; /* cyan-900 */
+    
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-/* 基础排版（保留等宽终端风格） */
+/* Base Styles */
 html, body {
-    color-scheme: dark;
+    background-color: var(--bg);
+    color: var(--text-body);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
 }
+
 body {
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
-/* 链接 */
-a {
-    color: var(--accent);
-    text-decoration: none;
-}
-a:hover {
-    text-decoration: underline;
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-main);
+    letter-spacing: -0.02em;
+    font-weight: 700;
 }
 
-/* 选区颜色 */
-::selection {
-    background: var(--selection);
-    color: var(--fg);
+/* Typography Utilities */
+.meta-mono {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-meta);
 }
 
-/* 滚动条（Chromium + Firefox） */
-* {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) var(--bg);
+/* Components */
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    transition: border-color 0.2s ease, background-color 0.2s ease;
 }
+
+.card:hover {
+    border-color: var(--border-hover);
+    background-color: rgba(255, 255, 255, 0.01);
+}
+
+.btn-minimal {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-main);
+    font-size: 14px;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-minimal:hover {
+    transform: translateX(4px);
+    border-color: var(--border-hover);
+}
+
+.tag-pill {
+    background: #161B22;
+    border: 1px solid var(--border);
+    color: var(--accent-dim);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Form Inputs */
+input, textarea {
+    background: var(--input-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-sm) !important;
+    color: var(--text-main) !important;
+    padding: 0.75rem 1rem;
+    transition: border-color 0.2s ease;
+}
+
+input:focus, textarea:focus {
+    border-color: var(--accent) !important;
+    outline: none;
+}
+
+input::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+}
+
+/* Decorative Line Transition */
+.decorative-line {
+    height: 1px;
+    background: var(--accent-line);
+    transition: background 0.3s ease;
+}
+
+.card:hover .decorative-line {
+    background: var(--accent);
+}
+
+/* Scrollbar */
 ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 6px;
 }
 ::-webkit-scrollbar-track {
     background: var(--bg);
 }
 ::-webkit-scrollbar-thumb {
     background: var(--border);
-    border: 1px solid var(--bg);
+    border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--accent);
+    background: var(--border-hover);
 }
 
-/* Markdown / Prose（尽量少覆盖） */
+/* Markdown Overrides */
+.prose {
+    color: var(--text-body);
+}
+
 .prose h1, .prose h2, .prose h3 {
+    color: var(--text-main);
+    margin-top: 2.5em;
+    margin-bottom: 1em;
+}
+
+.prose a {
     color: var(--accent);
-    border-bottom: 1px dashed var(--border);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
 }
-.prose code {
-    background: var(--panel-bg);
-    color: var(--warning);
+
+.prose a:hover {
+    border-bottom-color: var(--accent);
 }
-.prose pre {
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-}
+
 .prose blockquote {
-    border-left: 4px solid var(--accent);
-    background: var(--panel-bg);
-    color: var(--fg);
+    border-left: 2px solid var(--accent-line);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 1rem 1.5rem;
+    font-style: italic;
+    color: var(--text-main);
 }
 
-/* TUI 风格：提示符与盒子（可选） */
-.tui-prompt::before {
-    content: "➜";
-    color: var(--success);
-    margin-right: .25rem;
+.prose code {
+    background: var(--input-bg);
+    color: var(--accent-dim);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
 }
-.tui-box {
+
+/* Comments */
+.comment-item {
+    background: var(--card-bg);
     border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     padding: 1.5rem;
-    position: relative;
-    margin-bottom: 1.5rem;
-    background: var(--bg);
-}
-.tui-box[data-title]::before {
-    content: attr(data-title);
-    position: absolute;
-    top: -0.75rem;
-    left: 1rem;
-    background: var(--bg);
-    padding: 0 0.5rem;
-    color: var(--accent);
-    font-size: 0.875rem;
-    font-weight: bold;
-}
-
-/* 表单基础态（其余用 Tailwind） */
-input, textarea, select, button {
-    font-family: inherit;
 }
 
 .comment-shell {
-    position: relative;
-    background: var(--panel-bg);
-    box-shadow: inset 0 0 0 1px rgba(97, 175, 239, 0.08);
-}
-
-.comment-item {
-    position: relative;
+    background: var(--card-bg);
     border: 1px solid var(--border);
-    background: var(--bg);
-    padding: 1rem;
-}
-
-.comment-item::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-left: 2px solid rgba(97, 175, 239, 0.55);
-    pointer-events: none;
-}
-
-.comment-meta {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.75rem;
-}
-
-.comment-children {
-    margin-top: 1rem;
-    margin-left: 1rem;
-    padding-left: 1rem;
-    border-left: 1px dashed var(--border);
-}
-
-.comment-body {
-    word-break: break-word;
-}
-
-.comment-body p:first-child {
-    margin-top: 0;
-}
-
-.comment-body p:last-child {
-    margin-bottom: 0;
-}
-
-.comment-empty {
-    border: 1px dashed var(--border);
-    padding: 1rem;
-    color: rgba(171, 178, 191, 0.8);
-    background: var(--bg);
-}
-
-.comment-feedback-success {
-    border-color: rgba(152, 195, 121, 0.6);
-    color: var(--success);
-}
-
-.comment-feedback-error {
-    border-color: rgba(224, 108, 117, 0.6);
-    color: var(--error);
-}
-
-@media (max-width: 768px) {
-    .comment-children {
-        margin-left: 0.5rem;
-        padding-left: 0.75rem;
-    }
-
-    .comment-meta {
-        align-items: flex-start;
-        flex-direction: column;
-    }
+    border-radius: var(--radius-md);
+    padding: 2rem;
 }

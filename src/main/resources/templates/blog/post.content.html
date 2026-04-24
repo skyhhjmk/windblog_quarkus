@@ -1,84 +1,66 @@
 <div id="pjax-content-root" data-page-title="{postTitle ?: '文章详情'}">
     <div id="pjax-nav-path" class="hidden">
-        ~/windblog / post / {postSlug ?: 'unknown'}
+        post / {postSlug ?: 'unknown'}
     </div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-4">
-            <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-                <h3 class="font-bold mb-2">文章信息</h3>
-                <p class="text-sm">Slug: {postSlug}</p>
-                <p class="text-sm">语言: {language ?: 'zh-CN'}</p>
+        <div class="space-y-12">
+            <section class="space-y-4">
+                <h3 class="meta-mono">Post Info</h3>
+                <div class="grid grid-cols-1 gap-2">
+                    <div class="flex justify-between items-center py-2 border-b border-border/50">
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">Slug</span>
+                        <span class="text-sm font-mono text-white truncate max-w-[150px]">{postSlug}</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-border/50">
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">Language</span>
+                        <span class="text-sm font-mono text-white">{language ?: 'zh-CN'}</span>
+                    </div>
+                </div>
             </section>
         </div>
     </div>
 
-    <article class="space-y-4">
-        <header>
-            <h1 class="text-3xl font-bold">{postTitle ?: '文章详情'}</h1>
-            <p class="text-sm opacity-80">Slug: {postSlug}</p>
+    <article class="space-y-16">
+        <header class="space-y-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-3">
+                    <span class="meta-mono text-accent">Article</span>
+                    <span class="w-8 h-[1px] bg-accent/30"></span>
+                </div>
+                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">{postTitle ?: '文章详情'}</h1>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full bg-border border border-white/10"></div>
+                    <span class="text-sm text-gray-400">Author</span>
+                </div>
+                <span class="meta-mono">{postSlug}</span>
+                <span class="w-1 h-1 rounded-full bg-border"></span>
+                <time class="timestamp meta-mono" data-timestamp="{post.publishedAt}">{post.publishedAt}</time>
+            </div>
         </header>
 
         {#if aiSummaryStatus != 2 && aiSummary && ! aiSummary.isEmpty}
-            <section class="border border-[var(--accent)]/30 p-4 bg-[var(--accent)]/5 relative overflow-hidden group">
-                <div class="absolute top-0 right-0 p-2 opacity-20 pointer-events-none group-hover:opacity-40 transition-opacity">
-                    <svg class="w-12 h-12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10Z"/>
-                    </svg>
+            <section class="card p-8 bg-accent/[0.02] border-accent/20 group">
+                <div class="flex items-center gap-4 mb-6">
+                    <span class="tag-pill border-accent/30 text-accent font-bold">AI Summary</span>
+                    <div class="decorative-line flex-1"></div>
                 </div>
-                <div class="flex items-center gap-2 mb-3">
-                    <span class="bg-[var(--accent)] text-white text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider">AI Summary</span>
-                    <div class="h-[1px] flex-1 bg-[var(--accent)]/20"></div>
-                </div>
-                <div class="text-[var(--foreground)] opacity-90 leading-relaxed italic">
-                    {aiSummary}
+                <div class="text-lg text-gray-300 leading-relaxed italic">
+                    "{aiSummary}"
                 </div>
             </section>
         {/if}
 
-        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+        <section class="prose prose-invert max-w-none">
             {#if postBody && !postBody.isEmpty}
                 {#if postRenderType == 'VDITOR'}
                     <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
                     <style>
-                        .vditor-reset {
-                            color: #e6e6e6 !important;
-                        }
-                        .vditor-reset h1,
-                        .vditor-reset h2,
-                        .vditor-reset h3,
-                        .vditor-reset h4,
-                        .vditor-reset h5,
-                        .vditor-reset h6 {
-                            color: #ffffff !important;
-                        }
-                        .vditor-reset p,
-                        .vditor-reset li,
-                        .vditor-reset td,
-                        .vditor-reset th {
-                            color: #e6e6e6 !important;
-                        }
-                        .vditor-reset a {
-                            color: #58a6ff !important;
-                        }
-                        .vditor-reset code,
-                        .vditor-reset pre {
-                            background: rgba(110, 118, 129, 0.4) !important;
-                            color: #e6e6e6 !important;
-                        }
-                        .vditor-reset blockquote {
-                            border-left-color: #3b434b !important;
-                            color: #8b949e !important;
-                        }
-                        .vditor-reset strong {
-                            color: #ffffff !important;
-                        }
-                        .vditor-reset table tr {
-                            background-color: rgba(110, 118, 129, 0.2) !important;
-                        }
-                        .vditor-reset table td,
-                        .vditor-reset table th {
-                            border-color: #3b434b !important;
-                        }
+                        .vditor-reset { color: var(--text-body) !important; background: transparent !important; }
+                        .vditor-reset h1, .vditor-reset h2, .vditor-reset h3 { color: white !important; border-bottom: none !important; }
+                        .vditor-reset code { background: var(--input-bg) !important; color: var(--accent) !important; }
+                        .vditor-reset pre { background: var(--card-bg) !important; border: 1px solid var(--border) !important; }
                     </style>
                     <script src="/webjars/vditor/dist/index.min.js"></script>
                     <div id="vditor-preview" class="vditor-reset"></div>
@@ -92,74 +74,66 @@
                         });
                     </script>
                 {#else if postBodyHtml}
-                    <div class="prose max-w-none break-words">{postBody.raw}</div>
+                    <div class="break-words">{postBody.raw}</div>
                 {#else}
-                    <pre class="whitespace-pre-wrap break-words">{postBody}</pre>
+                    <pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm">{postBody}</pre>
                 {/if}
             {#else}
-                <p>暂无该语言内容，且默认语言内容也不可用。</p>
+                <p class="text-gray-500 italic">No content available for this language.</p>
             {/if}
         </section>
 
-        <section
-                id="comment-section"
-                class="comment-shell border border-[var(--border)] p-4 bg-[var(--panel-bg)]"
-                data-post-slug="{postSlug}">
-            <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <h2 class="text-2xl font-bold">Comments</h2>
-                    <p class="text-sm opacity-80">
-                        Supports basic Markdown. Links, images, and unsafe HTML are stripped.
-                    </p>
-                </div>
-                <div id="comment-login-hint" class="text-sm opacity-80">
-                    Checking login status...
-                </div>
+        <section id="comment-section" class="pt-24 space-y-12" data-post-slug="{postSlug}">
+            <div class="space-y-2">
+                <h2 class="text-3xl font-bold text-white tracking-tight">Comments</h2>
+                <div class="decorative-line w-16"></div>
             </div>
 
-            <div id="comment-feedback" class="hidden mt-4 rounded-sm border px-3 py-2 text-sm"></div>
-
-            <form id="comment-form" class="mt-4 space-y-3">
-                <div id="comment-replying" class="hidden rounded-sm border border-[var(--accent)]/50 bg-[var(--bg)] px-3 py-2 text-sm">
-                    Replying to <span id="comment-replying-user" class="font-bold"></span>
-                    <button
-                            type="button"
-                            id="comment-cancel-reply"
-                            class="ml-3 text-[var(--warning)] hover:underline">
-                        Cancel
-                    </button>
-                </div>
-
-                <input type="hidden" id="comment-parent-id" name="parentId" value="">
-
-                <label class="block text-sm font-bold" for="comment-content">Comment</label>
-                <textarea
-                        id="comment-content"
-                        name="content"
-                        rows="6"
-                        maxlength="4000"
-                        placeholder="Write a comment with basic Markdown..."
-                        class="w-full resize-y bg-[var(--bg)] border border-[var(--border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"></textarea>
-
-                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <p class="text-xs opacity-70">
-                        Allowed: paragraphs, lists, blockquotes, bold, italic, code. Links and images are not rendered.
-                    </p>
-                    <button
-                            type="submit"
-                            id="comment-submit"
-                            class="px-4 py-2 border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--selection)] transition-colors">
-                        Submit Comment
-                    </button>
-                </div>
-            </form>
-
-            <div class="mt-6">
+            <div class="card p-8 space-y-8">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-lg font-bold">Thread</h3>
-                    <span id="comment-count" class="text-sm opacity-80">0 comments</span>
+                    <p class="text-sm text-gray-500 uppercase tracking-widest font-mono">Join the discussion</p>
+                    <div id="comment-login-hint" class="text-xs meta-mono text-accent/70">
+                        Checking login status...
+                    </div>
                 </div>
-                <div id="comment-list" class="mt-4 space-y-4"></div>
+
+                <div id="comment-feedback" class="hidden rounded-md border px-4 py-3 text-sm"></div>
+
+                <form id="comment-form" class="space-y-6">
+                    <div id="comment-replying" class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center">
+                        <span class="text-sm">Replying to <span id="comment-replying-user" class="font-bold text-white"></span></span>
+                        <button type="button" id="comment-cancel-reply" class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">Cancel</button>
+                    </div>
+
+                    <input type="hidden" id="comment-parent-id" name="parentId" value="">
+
+                    <div class="space-y-2">
+                        <textarea
+                                id="comment-content"
+                                name="content"
+                                rows="5"
+                                maxlength="4000"
+                                placeholder="What are your thoughts?"
+                                class="w-full"></textarea>
+                    </div>
+
+                    <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                        <p class="text-xs text-gray-500 max-w-md">
+                            Markdown is supported. We maintain a professional environment; please be respectful.
+                        </p>
+                        <button type="submit" id="comment-submit" class="btn-minimal px-8 py-3 bg-white text-bg font-bold hover:bg-gray-200 border-none rounded-md">
+                            Post Comment
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="space-y-8">
+                <div class="flex items-center justify-between">
+                    <h3 class="meta-mono">Discussion Thread</h3>
+                    <span id="comment-count" class="text-xs meta-mono text-gray-500">0 comments</span>
+                </div>
+                <div id="comment-list" class="space-y-6"></div>
             </div>
         </section>
     </article>

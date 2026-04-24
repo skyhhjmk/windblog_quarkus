@@ -1,85 +1,90 @@
 <div id="pjax-content-root" data-page-title="{pageTitle ?: 'Links'}">
-    <div id="pjax-nav-path" class="hidden">
-        ~/windblog / links
-    </div>
+    <div id="pjax-nav-path" class="hidden">links</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
-            <h3 class="font-bold mb-2">测试侧栏</h3>
-            <p class="text-sm">该内容来自 `link.content.html` 片段注入。</p>
-        </section>
-        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-            <h3 class="font-bold mb-2">调试信息</h3>
-            <p class="text-sm">当前语言: {language ?: 'zh-CN'}</p>
-            <p class="text-sm">路由: /link</p>
-        </section>
+        <div class="space-y-12">
+            <section class="space-y-4">
+                <h3 class="meta-mono">Resource Info</h3>
+                <div class="grid grid-cols-1 gap-2">
+                    <div class="flex justify-between items-center py-2 border-b border-border/50">
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">Count</span>
+                        <span class="text-sm font-mono text-white">{links.size}</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-border/50">
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">Language</span>
+                        <span class="text-sm font-mono text-white">{language ?: 'zh-CN'}</span>
+                    </div>
+                </div>
+            </section>
+        </div>
     </div>
 
-    <div class="max-w-full mx-auto px-0">
-        <div class="mb-8 text-center px-2">
-            <h1 class="text-2xl font-bold mb-2">
-                <span class="text-green-500">-></span>
-                <span class="text-[var(--accent)]">~</span>
-                {pageTitle ?: 'Links'}
-            </h1>
-            <p class="text-sm opacity-80">A collection of quality resources.</p>
+    <section class="space-y-16">
+        <header class="space-y-6 text-center">
+            <div class="space-y-2 flex flex-col items-center">
+                <div class="flex items-center gap-3">
+                    <span class="meta-mono text-accent">Network</span>
+                    <span class="w-8 h-[1px] bg-accent/30"></span>
+                </div>
+                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">{pageTitle ?: 'Links'}</h1>
+                <p class="text-lg text-gray-400">A curated collection of quality resources and friends.</p>
+            </div>
 
-            <div class="mt-4 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm">
-                <a href="/link" class="text-[var(--accent)] hover:underline">[Links]</a>
-                <div class="flex items-center gap-2">
-                    <label for="linkGrepSelect" class="opacity-80">Grep:</label>
-                    <select id="linkGrepSelect" class="bg-[var(--panel-bg)] border border-[var(--border)] px-2 py-1 outline-none">
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs meta-mono text-gray-600">Filter:</span>
+                    <select id="linkGrepSelect" class="bg-[#161B22] border border-border px-4 py-1.5 rounded-md text-sm text-white outline-none focus:border-accent transition-colors">
                         <option value="friend_links">Friend Links</option>
                         <option value="other_links">Other Links</option>
-                        <option value="All">All</option>
+                        <option value="All">All Resources</option>
                     </select>
                 </div>
-                <button id="linkFilterApplyBtn" class="bg-[var(--accent)] text-white px-4 py-1 rounded hover:opacity-90">
-                    Apply
+                <button id="linkFilterApplyBtn" class="btn-minimal px-6 py-1.5 bg-white text-bg font-bold border-none rounded-md">
+                    Apply Filter
                 </button>
             </div>
-        </div>
+        </header>
 
         {#if links.size > 0}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 link-grid">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 link-grid">
                 {#for link in links}
-                    <div class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] flex flex-col"
+                    <div class="card p-6 flex flex-col group"
                          data-index="{link.id ?: 0}"
                          data-type="{link.type ?: ''}">
-                        <div class="flex items-start mb-4">
-                            <div class="mr-4 flex-shrink-0">
+                        <div class="flex items-center gap-4 mb-6">
+                            <div class="shrink-0">
                                 {#if link.icon}
-                                    <img src="{link.icon}" alt="{link.name}" class="w-10 h-10 border border-[var(--border)]" />
+                                    <img src="{link.icon}" alt="{link.name}" class="w-12 h-12 rounded-lg border border-border object-cover group-hover:border-accent/30 transition-colors" />
                                 {#else}
-                                    <div class="w-10 h-10 border border-[var(--border)] flex items-center justify-center opacity-70">
-                                        <i class="fas fa-link"></i>
+                                    <div class="w-12 h-12 rounded-lg border border-border flex items-center justify-center bg-white/5 group-hover:border-accent/30 transition-colors">
+                                        <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.172 13.828a4 4 0 015.656 0l4 4a4 4 0 11-5.656 5.656l-1.102-1.101" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                     </div>
                                 {/if}
                             </div>
-                            <div class="flex-1 min-w-0 overflow-hidden">
-                                <h2 class="font-bold truncate text-[var(--accent)] hover:underline">
-                                    <a href="{link.url}" target="{link.target ?: '_self'}">{link.name}</a>
+                            <div class="min-w-0 flex-1">
+                                <h2 class="text-lg font-bold text-white group-hover:text-accent transition-colors truncate">
+                                    <a href="{link.url}" target="{link.target ?: '_self'}" class="after:absolute after:inset-0">{link.name}</a>
                                 </h2>
-                                <div class="text-xs opacity-70 mt-1">
-                                    {link.createdAt}
-                                </div>
+                                <p class="text-xs meta-mono text-gray-600 truncate">{link.url}</p>
                             </div>
                         </div>
 
-                        <p class="text-sm mb-4 flex-grow">
-                            {link.description ?: 'No description available.'}
+                        <p class="text-sm text-gray-400 line-clamp-3 mb-6 h-15">
+                            {link.description ?: 'No description provided for this resource.'}
                         </p>
 
-                        <div class="flex justify-between items-center text-xs border-t border-[var(--border)] pt-2 mt-auto">
-                            <a href="{link.url}" target="{link.target ?: '_self'}" class="text-green-500 hover:underline">[Visit]</a>
-                            <span class="opacity-70">{link.redirectType ?: 'direct'}</span>
+                        <div class="mt-auto pt-4 border-t border-border flex items-center justify-between">
+                            <time class="timestamp meta-mono text-[9px] text-gray-600" data-timestamp="{link.createdAt}">{link.createdAt}</time>
+                            <div class="flex items-center gap-2">
+                                <span class="tag-pill text-[9px] opacity-50">{link.redirectType ?: 'direct'}</span>
+                            </div>
                         </div>
                     </div>
                 {/for}
             </div>
         {#else}
-            <div class="border border-[var(--border)] p-10 text-center bg-[var(--panel-bg)]">
-                <p class="opacity-80">No links found.</p>
+            <div class="card p-24 text-center border-dashed">
+                <p class="text-gray-500 italic">No resources found in this collection.</p>
             </div>
         {/if}
-    </div>
+    </section>
 </div>

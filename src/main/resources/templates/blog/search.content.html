@@ -1,122 +1,157 @@
 <div id="pjax-content-root" data-page-title="{pageTitle ?: 'Search'}">
-    <div id="pjax-nav-path" class="hidden">
-        ~/windblog / search
-    </div>
+    <div id="pjax-nav-path" class="hidden">search</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
-            <h3 class="font-bold mb-2">Search Info</h3>
-            <p class="text-sm">Language: {language ?: 'zh-CN'}</p>
-            <p class="text-sm">Keyword: {searchKeyword ?: '-'}</p>
-            <p class="text-sm">Type: {searchType ?: 'all'}</p>
-            <p class="text-sm">Total: {totalCount ?: 0}</p>
-            <p class="text-sm">Page: {currentPage ?: 1} / {totalPages ?: 1}</p>
-        </section>
+        <div class="space-y-12">
+            <section class="space-y-4">
+                <h3 class="meta-mono">Search Metrics</h3>
+                <div class="grid grid-cols-1 gap-2">
+                    <div class="flex justify-between items-center py-2 border-b border-border/50">
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">Matches</span>
+                        <span class="text-sm font-mono text-white">{totalCount ?: 0}</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-border/50">
+                        <span class="text-xs text-gray-500 uppercase tracking-wider">Current Page</span>
+                        <span class="text-sm font-mono text-white">{currentPage ?: 1}</span>
+                    </div>
+                </div>
+            </section>
+        </div>
     </div>
 
-    <div class="max-w-full mx-auto px-0">
-        <div class="mb-8 text-center px-2">
-            <h1 class="text-2xl font-bold mb-2">
-                <span class="text-green-500">-&gt;</span>
-                <span class="text-[var(--accent)]">~</span>
-                grep -r "{searchKeyword ?: ''}" .
-            </h1>
-
-            {#if hasKeyword}
-                <p class="text-sm opacity-80">Total: {totalCount ?: 0} matches</p>
-            {#else}
-                <p class="text-sm opacity-80">Input keyword to start searching.</p>
-            {/if}
-        </div>
-
-        <div class="mb-8">
-            <form action="/search" method="get" class="flex gap-2 max-w-3xl mx-auto">
-                <span class="self-center text-green-500 font-bold">-&gt;</span>
-                <input type="text"
-                       name="q"
-                       value="{searchKeyword ?: ''}"
-                       placeholder="Search..."
-                       class="flex-1 bg-[var(--panel-bg)] border border-[var(--border)] p-2 outline-none focus:border-[var(--accent)]" />
-                <button type="submit"
-                        class="bg-[var(--panel-bg)] px-4 py-2 border border-[var(--border)] hover:bg-[var(--selection)]">
-                    [Enter]
-                </button>
-            </form>
-
-            <div class="max-w-3xl mx-auto mt-4 text-sm flex flex-wrap gap-4 justify-center">
-                <div class="flex gap-2">
-                    <span class="text-gray-500">Type:</span>
-                    {#for link in typeLinks}
-                        <a href="{link.url}" class="{link.cssClass}">[{link.label}]</a>
-                    {/for}
+    <section class="space-y-16">
+        <header class="space-y-8">
+            <div class="space-y-2">
+                <div class="flex items-center gap-3">
+                    <span class="meta-mono text-accent">Discovery</span>
+                    <span class="w-8 h-[1px] bg-accent/30"></span>
                 </div>
+                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">Search Results</h1>
+                {#if hasKeyword}
+                    <p class="text-lg text-gray-400">Found {totalCount ?: 0} matches for <span class="text-white font-semibold">"{searchKeyword ?: ''}"</span></p>
+                {#else}
+                    <p class="text-lg text-gray-400">Enter a keyword to discover relevant content.</p>
+                {/if}
+            </div>
 
-                <div class="flex gap-2">
-                    <span class="text-gray-500">Sort:</span>
-                    {#for link in sortLinks}
-                        <a href="{link.url}" class="{link.cssClass}">[{link.label}]</a>
-                    {/for}
-                </div>
+            <div class="card p-8 space-y-8">
+                <form action="/search" method="get" class="relative group">
+                    <input type="text"
+                           name="q"
+                           value="{searchKeyword ?: ''}"
+                           placeholder="Type to search..."
+                           class="w-full pl-14 pr-4 py-4 bg-[#161B22] border border-border rounded-lg text-xl text-white outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all" />
+                    <svg class="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </form>
 
-                <div class="flex gap-2">
-                    <span class="text-gray-500">Date:</span>
-                    {#for link in dateLinks}
-                        <a href="{link.url}" class="{link.cssClass}">[{link.label}]</a>
-                    {/for}
+                <div class="flex flex-wrap gap-8 text-xs meta-mono border-t border-border pt-8">
+                    <div class="flex items-center gap-3">
+                        <span class="text-gray-600 uppercase">Type:</span>
+                        <div class="flex gap-4">
+                            {#for link in typeLinks}
+                                <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
+                            {/for}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-gray-600 uppercase">Sort:</span>
+                        <div class="flex gap-4">
+                            {#for link in sortLinks}
+                                <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
+                            {/for}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-gray-600 uppercase">Date:</span>
+                        <div class="flex gap-4">
+                            {#for link in dateLinks}
+                                <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
+                            {/for}
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </header>
 
         {#if hits && hits.size > 0}
-            <div class="space-y-4">
+            <div class="grid grid-cols-1 gap-8">
                 {#for hit in hits}
-                    <article class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] space-y-2">
-                        <div class="flex items-start justify-between gap-2">
-                            <div class="space-y-1">
-                                <div class="text-xs opacity-70">[{hit.typeLabel}]</div>
-                                <h2 class="text-xl font-bold">
-                                    <a href="{hit.url}" class="hover:underline">{hit.title}</a>
+                    <article class="group bg-[#0D1117] border border-white/[0.05] p-8 rounded-lg transition-all duration-300 hover:border-white/[0.12] hover:bg-[#12161D] relative">
+                        <div class="flex flex-col md:flex-row gap-8">
+                            <!-- Left Indicator -->
+                            <div class="hidden md:block w-[3px] h-20 bg-cyan-900 rounded-full group-hover:bg-cyan-500 transition-colors duration-500"></div>
+
+                            <div class="flex-1">
+                                <!-- Meta Information -->
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="flex items-center gap-4 text-[11px] font-mono text-white/40 tracking-widest uppercase">
+                                        <span class="text-accent font-semibold">{hit.typeLabel}</span>
+                                        <time class="timestamp" data-timestamp="{hit.dateText}">{hit.dateText}</time>
+                                    </div>
+                                    {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
+                                        <span class="tag-pill border-accent/20 text-accent/70 text-[9px]">AI Optimized</span>
+                                    {/if}
+                                </div>
+
+                                <!-- Title -->
+                                <h2 class="text-2xl font-semibold text-white/90 group-hover:text-white transition-colors tracking-tight">
+                                    <a href="{hit.url}" class="block after:absolute after:inset-0">{hit.title}</a>
                                 </h2>
+
+                                <!-- AI Summary (Optional) -->
+                                {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
+                                    <p class="mt-4 text-sm italic text-gray-400 border-l-2 border-accent/30 pl-4 py-1 line-clamp-2">
+                                        {hit.aiSummary}
+                                    </p>
+                                {/if}
+
+                                <!-- Summary -->
+                                <p class="mt-4 text-[15px] leading-relaxed text-[#94a3b8] line-clamp-2 font-light">
+                                    {hit.summary}
+                                </p>
+
+                                <!-- Footer -->
+                                <div class="mt-8 flex items-center justify-between border-t border-white/[0.03] pt-6">
+                                    <div class="flex gap-2">
+                                        <span class="text-[10px] text-white/30 border border-white/10 px-2.5 py-0.5 rounded font-mono">#{hit.meta}</span>
+                                    </div>
+
+                                    <a href="{hit.url}" class="flex items-center gap-2 text-xs font-medium text-white/40 group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
+                                        <span>View Content</span>
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </a>
+                                </div>
                             </div>
-                            {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
-                                <span class="bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] px-1.5 py-0.5 border border-[var(--accent)]/20 font-bold mt-1">
-                                    AI
-                                </span>
-                            {/if}
                         </div>
-                        {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
-                            <div class="text-sm border-l-2 border-[var(--accent)] pl-3 py-1 my-2 bg-[var(--accent)]/5 italic opacity-90">
-                                {hit.aiSummary}
-                            </div>
-                        {/if}
-                        <p class="text-sm opacity-90">{hit.summary}</p>
-                        <p class="text-xs opacity-70">Date: {hit.dateText} | {hit.meta}</p>
-                        <a href="{hit.url}" class="text-[var(--accent)] hover:underline">{hit.actionLabel}</a>
                     </article>
                 {/for}
             </div>
 
-            <nav class="mt-6 flex items-center justify-between border border-[var(--border)] p-3 bg-[var(--panel-bg)]">
+            <nav class="flex items-center justify-between pt-16">
                 <div>
                     {#if hasPrevPage}
-                        <a class="hover:underline" href="{prevPageUrl}">Previous</a>
+                        <a class="btn-minimal" href="{prevPageUrl}">Previous</a>
                     {#else}
-                        <span class="opacity-50">Previous</span>
+                        <span class="text-xs meta-mono opacity-20">Previous</span>
                     {/if}
                 </div>
-                <div class="text-sm opacity-80">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
+                <div class="meta-mono">Page {currentPage ?: 1} / {totalPages ?: 1}</div>
                 <div>
                     {#if hasNextPage}
-                        <a class="hover:underline" href="{nextPageUrl}">Next</a>
+                        <a class="btn-minimal" href="{nextPageUrl}">Next</a>
                     {#else}
-                        <span class="opacity-50">Next</span>
+                        <span class="text-xs meta-mono opacity-20">Next</span>
                     {/if}
                 </div>
             </nav>
         {#else}
-            <section class="border border-[var(--border)] p-10 text-center bg-[var(--panel-bg)]">
-                <p class="opacity-80">No matches found.</p>
-                <a href="/" class="text-[var(--accent)] hover:underline inline-block mt-3">cd ~</a>
-            </section>
+            <div class="card p-24 text-center border-dashed">
+                <p class="text-gray-500 italic mb-6">No matches found for your search criteria.</p>
+                <a href="/" class="btn-minimal">Return Home</a>
+            </div>
         {/if}
-    </div>
+    </section>
 </div>
