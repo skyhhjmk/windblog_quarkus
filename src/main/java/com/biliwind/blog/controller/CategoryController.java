@@ -4,6 +4,9 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Category;
+import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostStatus;
+import com.biliwind.blog.model.PostTag;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -103,6 +106,11 @@ public class CategoryController {
         List<Category> children = Category.list("parent.id = ?1 order by createdAt desc", entity.id);
         List<CategoryListItem> childItems = children.stream().map(c -> toCategoryListItem(c, lang)).toList();
 
+        var query = Post.find("category.id = ?1 and status = ?2 and deletedAt is null "
+                + "order by publishedAt desc nulls last, createdAt desc", entity.id, PostStatus.PUBLISHED);
+        List<Post> posts = query.list(); // For now, list all. We could add pagination later.
+        List<CategoryPostItem> postItems = posts.stream().map(post -> toCategoryPostItem(post, lang)).toList();
+
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
         return template
                 .data("language", lang)
@@ -110,12 +118,35 @@ public class CategoryController {
                 .data("pageTitle", "Category - " + resolveCategoryName(entity, lang))
                 .data("navPath", "~/windblog / category / " + entity.slug)
                 .data("totalCount", childItems.size())
+                .data("postCount", postItems.size())
                 .data("currentPage", 1)
                 .data("totalPages", 1)
                 .data("currentCategory", toCategoryDetailItem(entity, lang))
                 .data("breadcrumbs", buildBreadcrumbs(entity, lang))
-                .data("children", childItems);
+                .data("children", childItems)
+                .data("posts", postItems);
     }
+
+    private CategoryPostItem toCategoryPostItem(Post post, String lang) {
+        String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
+        String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
+        if (title == null || title.isBlank()) {
+            title = post.slug;
+        }
+        if (summary == null || summary.isBlank()) {
+            summary = "暂无摘要";
+        }
+        
+        List<TagItem> tags = PostTag.<PostTag>find("post", post).stream()
+                .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, lang), pt.tag.slug))
+                .toList();
+
+        OffsetDateTime date = post.publishedAt != null ? post.publishedAt : post.createdAt;
+        return new CategoryPostItem(post.slug, title, summary, formatDate(date), 
+                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", tags);
+    }
+
+    public record TagItem(String name, String slug) {}
 
     private CategoryListItem toCategoryListItem(Category category, String lang) {
         String name = resolveCategoryName(category, lang);
@@ -236,5 +267,8 @@ public class CategoryController {
     }
 
     public record CategoryBreadcrumb(String slug, String name, String url) {
+    }
+
+    public record CategoryPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<TagItem> tags) {
     }
 }
