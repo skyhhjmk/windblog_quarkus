@@ -171,7 +171,13 @@
 
         if (submit) {
             submit.disabled = false;
-            submit.textContent = loggedIn ? (window.i18n.submit_comment || 'Submit Comment') : (window.i18n.login_required_btn || 'Login Required');
+            const text = loggedIn ? (window.i18n.submit_comment || 'Submit Comment') : (window.i18n.login_required_btn || 'Login Required');
+            const textSpan = submit.querySelector('.btn-text');
+            if (textSpan) {
+                textSpan.textContent = text;
+            } else {
+                submit.textContent = text;
+            }
         }
     }
 
@@ -193,6 +199,7 @@
 
         form.onsubmit = async function (event) {
             event.preventDefault();
+            event.stopPropagation();
 
             const content = textarea ? textarea.value.trim() : '';
             if (!content) {

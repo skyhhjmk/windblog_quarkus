@@ -2,7 +2,7 @@
     <div class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
         <h1 class="text-xl font-bold mb-6 text-center">用户登录</h1>
 
-        <form id="loginForm" action="/user/api/login" method="post" class="space-y-4">
+        <form id="loginForm" data-no-debounce="true" action="/user/api/login" method="post" class="space-y-4">
             <input type="hidden" name="redirect" value="{redirect}"/>
 
             <div>

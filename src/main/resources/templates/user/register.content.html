@@ -2,7 +2,7 @@
     <div class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
         <h1 class="text-xl font-bold mb-6 text-center">用户注册</h1>
 
-        <form id="registerForm" action="/user/api/register" method="post" class="space-y-4">
+        <form id="registerForm" data-no-debounce="true" action="/user/api/register" method="post" class="space-y-4">
             <input type="hidden" name="redirect" value="{redirect}"/>
 
             <div>

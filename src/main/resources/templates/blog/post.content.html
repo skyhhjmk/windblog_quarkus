@@ -99,7 +99,7 @@
 
                 <div id="comment-feedback" class="hidden rounded-md border px-4 py-3 text-sm"></div>
 
-                <form id="comment-form" class="space-y-6">
+                <form id="comment-form" data-no-debounce="true" class="space-y-6">
                     <div id="comment-replying" class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center">
                         <span class="text-sm">正在回复 <span id="comment-replying-user" class="font-bold text-white"></span></span>
                         <button type="button" id="comment-cancel-reply" class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">取消</button>
