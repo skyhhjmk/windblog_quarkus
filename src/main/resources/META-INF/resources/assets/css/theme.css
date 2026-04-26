@@ -1,23 +1,45 @@
 :root {
+    /* Shared Variables */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    /* Dark Theme (Default) */
     --bg: #0A0C10;
     --card-bg: #0D1117;
     --input-bg: #161B22;
     --border: rgba(255, 255, 255, 0.05);
     --border-hover: rgba(255, 255, 255, 0.12);
-    
     --text-main: rgba(255, 255, 255, 0.9);
     --text-body: #94a3b8;
     --text-meta: rgba(255, 255, 255, 0.4);
-    
     --accent: #06b6d4;
     --accent-dim: rgba(6, 182, 212, 0.7);
-    --accent-line: #164e63; /* cyan-900 */
-    
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --accent-line: #164e63;
+    --card-hover: rgba(255, 255, 255, 0.01);
+    --placeholder: rgba(255, 255, 255, 0.2);
+    --glass-bg: rgba(13, 17, 23, 0.8);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+.light {
+    /* Light Theme Overrides */
+    --bg: #f9fafb;
+    --card-bg: #ffffff;
+    --input-bg: #f3f4f6;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-hover: rgba(0, 0, 0, 0.15);
+    --text-main: #111827;
+    --text-body: #374151;
+    --text-meta: #4b5563;
+    --accent: #0891b2;
+    --accent-dim: rgba(8, 145, 178, 0.8);
+    --accent-line: #cffafe;
+    --card-hover: rgba(0, 0, 0, 0.02);
+    --placeholder: rgba(0, 0, 0, 0.3);
+    --glass-bg: rgba(255, 255, 255, 0.8);
+    --glass-border: rgba(0, 0, 0, 0.05);
 }
 
 /* Base Styles */
@@ -45,7 +67,7 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    color: var(--text-meta);
+    color: var(--text-body);
 }
 
 /* Components */
@@ -56,9 +78,13 @@ h1, h2, h3, h4, h5, h6 {
     transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
-.card:hover {
+.card:hover:not(.card-static) {
     border-color: var(--border-hover);
-    background-color: rgba(255, 255, 255, 0.01);
+    background-color: var(--card-hover);
+}
+
+.card-static {
+    transition: none;
 }
 
 .btn-minimal {
@@ -80,7 +106,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .tag-pill {
-    background: #161B22;
+    background: var(--input-bg);
     border: 1px solid var(--border);
     color: var(--accent-dim);
     font-family: var(--font-mono);
@@ -107,7 +133,7 @@ input:focus, textarea:focus {
 }
 
 input::placeholder {
-    color: rgba(255, 255, 255, 0.2);
+    color: var(--placeholder);
 }
 
 /* Decorative Line Transition */
@@ -160,7 +186,7 @@ input::placeholder {
 
 .prose blockquote {
     border-left: 2px solid var(--accent-line);
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--card-hover);
     padding: 1rem 1.5rem;
     font-style: italic;
     color: var(--text-main);
@@ -176,9 +202,6 @@ input::placeholder {
 
 /* Comments */
 .comment-item {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
     padding: 1.5rem;
 }
 
@@ -267,10 +290,10 @@ button:disabled {
     pointer-events: auto;
     min-width: 320px;
     padding: 1rem 1.25rem;
-    background: rgba(13, 17, 23, 0.8);
+    background: var(--glass-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
     display: flex;
@@ -329,7 +352,7 @@ h3 { font-size: 1.5rem; }
     margin: 2rem 0;
     padding: 1.5rem;
     border-left: 5px solid var(--accent);
-    background: rgba(255, 255, 255, 0.03); /* Light transparent for dark mode */
+    background: var(--card-hover);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
@@ -342,7 +365,7 @@ h3 { font-size: 1.5rem; }
     align-items: center;
     justify-content: center;
     font-size: 1.3rem;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--border);
     border-radius: 50%;
 }
 
@@ -405,7 +428,7 @@ h3 { font-size: 1.5rem; }
     font-size: 1rem;
     line-height: 1.6;
     color: var(--text-main); /* High contrast */
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--card-hover);
 }
 
 /* Callout Colors - Saturated Headers */

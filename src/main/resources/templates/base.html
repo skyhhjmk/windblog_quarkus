@@ -44,14 +44,18 @@
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        bg: '#0A0C10',
-                        card: '#0D1117',
-                        border: 'rgba(255, 255, 255, 0.05)',
-                        'border-hover': 'rgba(255, 255, 255, 0.12)',
-                        accent: '#06b6d4',
+                        bg: 'var(--bg)',
+                        card: 'var(--card-bg)',
+                        border: 'var(--border)',
+                        'border-hover': 'var(--border-hover)',
+                        accent: 'var(--accent)',
+                        main: 'var(--text-main)',
+                        body: 'var(--text-body)',
+                        meta: 'var(--text-meta)',
                     },
                     maxWidth: {
                         '1400': '1400px',
@@ -60,12 +64,20 @@
             }
         }
     </script>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+            if (theme === 'light') {
+                document.documentElement.classList.add('light');
+            }
+        })();
+    </script>
 
     <!-- Custom Theme Styles -->
     <link rel="stylesheet" href="/assets/css/theme.css" />
 </head>
 
-<body class="min-h-screen flex flex-col bg-bg text-[#94a3b8] font-sans selection:bg-accent/30 selection:text-white">
+<body class="min-h-screen flex flex-col bg-bg text-body font-sans">
 <!-- Header -->
 <header class="sticky top-0 z-50 bg-bg/80 backdrop-blur-md border-b border-border">
     <div class="max-w-1400 mx-auto px-6 h-16 flex items-center justify-between">
@@ -74,16 +86,16 @@
             <div class="w-8 h-8 bg-accent rounded-sm flex items-center justify-center transform group-hover:rotate-12 transition-transform duration-300">
                 <span class="text-bg font-bold text-lg">W</span>
             </div>
-            <span class="text-white font-bold tracking-tight text-lg">WindBlog</span>
+            <span class="text-main font-bold tracking-tight text-lg">WindBlog</span>
         </a>
 
         <!-- Navigation -->
         <nav class="hidden md:flex items-center gap-8">
             <div class="flex items-center gap-6">
-                <a href="/" class="text-sm font-medium hover:text-white transition-colors">首页</a>
-                <a href="/link" class="text-sm font-medium hover:text-white transition-colors">友链</a>
-                <a href="/tag" class="text-sm font-medium hover:text-white transition-colors">标签</a>
-                <a href="/category" class="text-sm font-medium hover:text-white transition-colors">分类</a>
+                <a href="/" class="text-sm font-medium text-body hover:text-main transition-colors">首页</a>
+                <a href="/link" class="text-sm font-medium text-body hover:text-main transition-colors">友链</a>
+                <a href="/tag" class="text-sm font-medium text-body hover:text-main transition-colors">标签</a>
+                <a href="/category" class="text-sm font-medium text-body hover:text-main transition-colors">分类</a>
             </div>
 
             <div class="h-4 w-[1px] bg-border"></div>
@@ -94,11 +106,19 @@
                         type="text"
                         name="q"
                         placeholder="搜索文章..."
-                        class="pl-10 pr-4 py-1.5 text-sm w-48 bg-[#161B22] border border-border rounded-md text-white placeholder:text-gray-600 outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
+                        class="pl-10 pr-4 py-1.5 text-sm w-48 bg-card border border-border rounded-md text-main placeholder:text-meta outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
             </form>
+
+            <div class="h-4 w-[1px] bg-border"></div>
+
+            <!-- Theme Toggle -->
+            <button class="theme-toggle p-2 rounded-md hover:bg-white/5 transition-colors border border-transparent hover:border-border text-meta hover:text-main" title="切换主题">
+                <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
 
             <!-- User -->
             <div class="relative" id="userMenuContainer">
@@ -121,7 +141,7 @@
         </nav>
 
         <!-- Mobile Toggle -->
-        <button id="mobileMenuBtn" class="md:hidden p-2 text-gray-400 hover:text-white">
+        <button id="mobileMenuBtn" class="md:hidden p-2 text-meta hover:text-main">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
         </button>
     </div>
@@ -129,14 +149,21 @@
     <!-- Mobile Menu -->
     <div id="mobileMenu" class="hidden md:hidden bg-bg border-t border-border px-6 py-4 space-y-4 shadow-xl">
         <div class="flex flex-col gap-3">
-            <a href="/" class="text-sm py-2 hover:text-white transition-colors font-medium">首页</a>
-            <a href="/link" class="text-sm py-2 hover:text-white transition-colors font-medium">友链</a>
-            <a href="/tag" class="text-sm py-2 hover:text-white transition-colors font-medium">标签</a>
-            <a href="/category" class="text-sm py-2 hover:text-white transition-colors font-medium">分类</a>
+            <a href="/" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">首页</a>
+            <a href="/link" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">友链</a>
+            <a href="/tag" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">标签</a>
+            <a href="/category" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">分类</a>
         </div>
         <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">
-            <a href="/user/login" class="text-sm py-2 hover:text-white transition-colors font-medium">登录</a>
-            <a href="/user/register" class="text-sm py-2 hover:text-white transition-colors font-medium">注册</a>
+            <div class="flex items-center justify-between py-2">
+                <span class="text-sm font-medium">外观</span>
+                <button class="theme-toggle p-2 rounded-md hover:bg-white/5 transition-colors border border-border text-meta hover:text-main" title="切换主题">
+                    <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                    <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </button>
+            </div>
+            <a href="/user/login" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">登录</a>
+            <a href="/user/register" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">注册</a>
         </div>
     </div>
 </header>
@@ -167,7 +194,7 @@
 <!-- Footer -->
 <footer class="border-t border-border py-12 mt-32">
     <div class="max-w-1400 mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-        <div class="flex items-center gap-2 opacity-50">
+        <div class="flex items-center gap-2">
             <span class="meta-mono">© 2024 WindBlog. Built with Quarkus.</span>
         </div>
         <div class="flex gap-6">
@@ -187,7 +214,7 @@
         <p id="confirmMessage" class="text-gray-400 mb-8">你确定要继续吗？</p>
         <div class="flex gap-4 justify-end">
             <button id="confirmCancel" class="px-5 py-2 text-sm font-medium hover:text-white transition-colors">取消</button>
-            <button id="confirmOk" class="bg-white text-bg px-5 py-2 rounded-md text-sm font-bold hover:bg-gray-200 transition-colors">确认</button>
+            <button id="confirmOk" class="bg-accent text-white px-5 py-2 rounded-md text-sm font-bold hover:opacity-90 transition-colors">确认</button>
         </div>
     </div>
 </div>

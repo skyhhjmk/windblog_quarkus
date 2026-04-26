@@ -116,6 +116,28 @@
             });
         }
 
+        // Theme Toggle Logic
+        const themeToggles = document.querySelectorAll('.theme-toggle');
+        const darkIcons = document.querySelectorAll('.theme-icon-dark');
+        const lightIcons = document.querySelectorAll('.theme-icon-light');
+
+        function updateThemeUI() {
+            const isLight = document.documentElement.classList.contains('light');
+            darkIcons.forEach(icon => isLight ? icon.classList.add('hidden') : icon.classList.remove('hidden'));
+            lightIcons.forEach(icon => isLight ? icon.classList.remove('hidden') : icon.classList.add('hidden'));
+        }
+
+        if (themeToggles.length > 0) {
+            updateThemeUI();
+            themeToggles.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const isLight = document.documentElement.classList.toggle('light');
+                    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+                    updateThemeUI();
+                });
+            });
+        }
+
         const userMenuBtn = document.getElementById('userMenuBtn');
         const userDropdown = document.getElementById('userDropdown');
         const userMenuContainer = document.getElementById('userMenuContainer');

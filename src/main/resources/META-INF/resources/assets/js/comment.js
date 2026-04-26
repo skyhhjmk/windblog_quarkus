@@ -82,7 +82,7 @@
         const body = node.contentHtml || '';
 
         return `
-            <article class="comment-item">
+            <article class="comment-item card card-static">
                 <div class="comment-meta">
                     <div class="flex items-center gap-3">
                         <strong class="text-[var(--accent)]">${userName}</strong>

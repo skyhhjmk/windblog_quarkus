@@ -7,7 +7,7 @@
                 <div class="grid grid-cols-1 gap-2">
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
                         <span class="text-xs text-gray-500 uppercase tracking-wider">标签总数</span>
-                        <span class="text-sm font-mono text-white">{totalCount ?: 0}</span>
+                        <span class="text-sm font-mono text-main">{totalCount ?: 0}</span>
                     </div>
                     {#if detailMode}
                         <div class="flex justify-between items-center py-2 border-b border-border/50">
@@ -28,8 +28,8 @@
                         <span class="meta-mono text-accent">标签存档</span>
                         <span class="w-8 h-[1px] bg-accent/30"></span>
                     </div>
-                    <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">#{currentTag.name}</h1>
-                    <p class="text-lg text-gray-400 max-w-2xl">{currentTag.description}</p>
+                    <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">#{currentTag.name}</h1>
+                    <p class="text-lg text-body max-w-2xl">{currentTag.description}</p>
                 </div>
                 <div class="flex items-center gap-6">
                     <span class="meta-mono">文章: {currentTag.postCount}</span>
@@ -41,27 +41,27 @@
             {#if posts && posts.size > 0}
                 <div class="grid grid-cols-1 gap-8">
                     {#for post in posts}
-                        <article class="group bg-[#0D1117] border border-white/[0.05] p-8 rounded-lg transition-all duration-300 hover:border-white/[0.12] hover:bg-[#12161D] relative">
+                        <article class="group card p-8 transition-all duration-300 relative">
                             <div class="flex flex-col md:flex-row gap-8">
                                 <!-- Left Indicator -->
                                 <div class="hidden md:block w-[3px] h-20 bg-cyan-900 rounded-full group-hover:bg-cyan-500 transition-colors duration-500"></div>
 
                                 <div class="flex-1">
                                     <!-- Meta Information -->
-                                    <div class="flex items-center gap-4 text-[11px] font-mono text-white/40 mb-3 tracking-widest uppercase">
+                                    <div class="flex items-center gap-4 text-[11px] font-mono text-meta mb-3 tracking-widest uppercase">
                                         <span class="text-accent font-semibold">文章</span>
                                         <time class="timestamp" data-timestamp="{post.publishedAtText}">{post.publishedAtText}</time>
                                     </div>
 
                                     <!-- Title -->
-                                    <h3 class="text-2xl font-semibold text-white/90 group-hover:text-white transition-colors tracking-tight">
+                                    <h3 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight">
                                         <a href="/post/{post.slug}" class="block after:absolute after:inset-0">
                                             {post.title}
                                         </a>
                                     </h3>
 
                                     <!-- Summary -->
-                                    <p class="mt-4 text-[15px] leading-relaxed text-[#94a3b8] line-clamp-2 font-light">
+                                    <p class="mt-4 text-[15px] leading-relaxed text-body line-clamp-2 font-light">
                                         {post.summary}
                                     </p>
 
@@ -71,7 +71,7 @@
                                             <span class="text-[10px] text-white/30 border border-white/10 px-2.5 py-0.5 rounded font-mono">#{post.slug}</span>
                                         </div>
 
-                                        <a href="/post/{post.slug}" class="flex items-center gap-2 text-xs font-medium text-white/40 group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
+                                        <a href="/post/{post.slug}" class="flex items-center gap-2 text-xs font-medium text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
                                             <span>阅读全文</span>
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -115,7 +115,7 @@
                         <span class="meta-mono text-accent">分类体系</span>
                         <span class="w-8 h-[1px] bg-accent/30"></span>
                     </div>
-                    <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">所有标签</h1>
+                    <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">所有标签</h1>
                 </div>
                 
                 <form action="/tag" method="get" class="relative group">
@@ -123,7 +123,7 @@
                            name="q"
                            value="{keyword ?: ''}"
                            placeholder="筛选标签..."
-                           class="w-full pl-12 pr-4 py-2 bg-[#161B22] border border-border rounded-md text-white outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
+                           class="w-full pl-12 pr-4 py-2 bg-card border border-border rounded-md text-main outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
                     <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -135,10 +135,10 @@
                     {#for tag in tags}
                         <article class="card p-6 group relative overflow-hidden">
                             <div class="flex flex-col gap-3">
-                                <h2 class="text-xl font-bold text-white group-hover:text-accent transition-colors">
+                                <h2 class="text-xl font-bold text-main group-hover:text-accent transition-colors">
                                     <a href="/tag/{tag.slug}" class="after:absolute after:inset-0">#{tag.name}</a>
                                 </h2>
-                                <p class="text-sm text-[#94a3b8] line-clamp-2">{tag.description}</p>
+                                <p class="text-sm text-body line-clamp-2">{tag.description}</p>
                                 <div class="flex items-center gap-4 pt-4 mt-auto">
                                     <span class="meta-mono">文章: {tag.postCount}</span>
                                     <span class="w-1 h-1 rounded-full bg-border"></span>
