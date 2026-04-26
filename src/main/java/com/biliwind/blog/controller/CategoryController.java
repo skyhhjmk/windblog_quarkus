@@ -158,6 +158,7 @@ public class CategoryController {
                 description,
                 safe(category.path),
                 childCount,
+                category.postCount,
                 formatDate(category.createdAt)
         );
     }
@@ -172,6 +173,7 @@ public class CategoryController {
                 description,
                 safe(category.path),
                 childCount,
+                category.postCount,
                 formatDate(category.createdAt)
         );
     }
@@ -260,10 +262,10 @@ public class CategoryController {
         return value == null ? "" : value.trim();
     }
 
-    public record CategoryListItem(String slug, String name, String description, String path, long childCount, String createdAtText) {
+    public record CategoryListItem(String slug, String name, String description, String path, long childCount, long postCount, String createdAtText) {
     }
 
-    public record CategoryDetailItem(String slug, String name, String description, String path, long childCount, String createdAtText) {
+    public record CategoryDetailItem(String slug, String name, String description, String path, long childCount, long postCount, String createdAtText) {
     }
 
     public record CategoryBreadcrumb(String slug, String name, String url) {

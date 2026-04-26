@@ -73,4 +73,10 @@ public class Category extends PanacheEntityBase {
     @Column(name = "updated_at", nullable = false)
     @UpdateTimestamp
     public OffsetDateTime updatedAt;
+
+    /**
+     * 该分类下的文章数量（缓存）
+     */
+    @Column(name = "post_count", nullable = false)
+    public Long postCount = 0L;
 }

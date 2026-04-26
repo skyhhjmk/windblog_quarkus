@@ -7,6 +7,7 @@ import io.quarkus.panache.common.Sort;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
@@ -45,8 +46,50 @@ public class AdminCategoryController {
         return toItem(c);
     }
 
-    // Update and Delete similarly implemented...
-    // Skipping to save time for this task as User/Post/Comment are mainstream
+    @PUT
+    @Path("/{id}")
+    @Transactional
+    @Operation(summary = "更新分类")
+    public AdminCategoryItem update(@PathParam("id") Long id, CategoryCreateRequest req) {
+        Category c = Category.findById(id);
+        if (c == null) throw new NotFoundException();
+        c.slug = req.slug();
+        c.name = req.name();
+        c.description = req.description();
+        if (req.parentId() != null) {
+            c.parent = Category.findById(req.parentId());
+        } else {
+            c.parent = null;
+        }
+        c.persist();
+        return toItem(c);
+    }
+
+    @DELETE
+    @Path("/{id}")
+    @Transactional
+    @Operation(summary = "删除分类")
+    public void delete(@PathParam("id") Long id) {
+        Category c = Category.findById(id);
+        if (c == null) throw new NotFoundException();
+        // 处理子分类或关联文章的逻辑通常由业务决定，这里简单处理
+        Category.deleteById(id);
+    }
+
+    @POST
+    @Path("/re-scan")
+    @Transactional
+    @Operation(summary = "重新扫描全表计算分类文章数量")
+    public Response reScan() {
+        List<Category> allCategories = Category.listAll();
+        for (Category c : allCategories) {
+            // 这里可以根据需求决定是否递归计算子分类的文章数量
+            // 目前只计算直接关联该分类的文章数量
+            c.postCount = com.biliwind.blog.model.Post.count("category.id = ?1 and deletedAt is null", c.id);
+            c.persist();
+        }
+        return Response.ok(java.util.Map.of("success", true, "message", "扫描完成")).build();
+    }
 
     private AdminCategoryItem toItem(Category c) {
         return new AdminCategoryItem(
@@ -56,6 +99,7 @@ public class AdminCategoryController {
                 c.name,
                 c.description,
                 c.path,
-                c.createdAt);
+                c.createdAt,
+                c.postCount);
     }
 }

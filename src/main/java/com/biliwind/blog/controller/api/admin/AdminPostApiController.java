@@ -86,6 +86,7 @@ public class AdminPostApiController {
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("pageSize") @DefaultValue("10") int pageSize,
             @QueryParam("status") Short status,
+            @QueryParam("categoryId") Long categoryId,
             @QueryParam("keyword") String keyword) {
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(1, Math.min(pageSize, 100));
@@ -96,6 +97,10 @@ public class AdminPostApiController {
         if (status != null) {
             where.append(" and status = :status");
             parameters.put("status", status);
+        }
+        if (categoryId != null) {
+            where.append(" and category.id = :categoryId");
+            parameters.put("categoryId", categoryId);
         }
         if (keyword != null && !keyword.isBlank()) {
             where.append(" and lower(slug) like :keyword");
