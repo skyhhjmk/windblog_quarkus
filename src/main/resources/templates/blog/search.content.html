@@ -114,7 +114,7 @@
                                 <!-- Footer -->
                                 <div class="mt-8 flex items-center justify-between border-t border-white/[0.03] pt-6">
                                     <div class="flex gap-2">
-                                        <span class="text-[10px] text-white/30 border border-white/10 px-2.5 py-0.5 rounded font-mono">#{hit.meta}</span>
+                                        <span class="text-[10px] text-white/30 border border-white/10 px-2.5 py-0.5 rounded font-mono">Slug: {hit.slug ?: (hit.url.contains('/post/') ? hit.url.substring(6) : hit.meta)}</span>
                                     </div>
 
                                     <a href="{hit.url}" class="flex items-center gap-2 text-xs font-medium text-white/40 group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">

@@ -9,8 +9,10 @@ import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
+import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.model.TutorialBlock;
 import com.biliwind.blog.model.TutorialLevelDef;
+import com.biliwind.blog.model.Category;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -128,8 +130,14 @@ public class PostController {
                 .data("postBodyHtml", postBody.html())
                 .data("publishedAt", postEntity.publishedAt)
                 .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)
-                .data("postBodyJson", escapeJavaScript(postBody.body()));
+                .data("postBodyJson", escapeJavaScript(postBody.body()))
+                .data("postCategory", postEntity.category != null ? LanguageHelper.resolveLocalizedValue(postEntity.category.name, resolvedLang) : "未分类")
+                .data("postTags", PostTag.<PostTag>find("post", postEntity).stream()
+                        .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, resolvedLang), pt.tag.slug))
+                        .collect(Collectors.toList()));
     }
+
+    public record TagItem(String name, String slug) {}
 
     private String escapeJavaScript(String input) {
         if (input == null || input.isEmpty()) {

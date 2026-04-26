@@ -151,8 +151,16 @@ public class TagController {
         }
 
         OffsetDateTime date = post.publishedAt != null ? post.publishedAt : post.createdAt;
-        return new TagPostItem(post.slug, title, summary, formatDate(date));
+        
+        List<TagItem> tags = PostTag.<PostTag>find("post", post).stream()
+                .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, lang), pt.tag.slug))
+                .toList();
+
+        return new TagPostItem(post.slug, title, summary, formatDate(date), 
+                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", tags);
     }
+
+    public record TagItem(String name, String slug) {}
 
     private boolean matchesKeyword(Tag tag, String keyword, String lang) {
         if (keyword.isBlank()) {
@@ -228,6 +236,6 @@ public class TagController {
     public record TagDetailItem(String slug, String name, String description, long postCount, String createdAtText) {
     }
 
-    public record TagPostItem(String slug, String title, String summary, String publishedAtText) {
+    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<TagItem> tags) {
     }
 }

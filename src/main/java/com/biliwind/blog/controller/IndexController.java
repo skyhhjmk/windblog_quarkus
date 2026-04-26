@@ -3,8 +3,10 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
+import com.biliwind.blog.model.PostTag;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Parameters;
 import io.quarkus.qute.Location;
@@ -105,6 +107,13 @@ public class IndexController {
             summary = "暂无摘要";
         }
 
+        Category cat = post.category;
+        String categoryName = cat != null ? LanguageHelper.resolveLocalizedValue(cat.name, lang) : "未分类";
+
+        List<TagItem> tags = PostTag.<PostTag>find("post", post).stream()
+                .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, lang), pt.tag.slug))
+                .toList();
+
         return new IndexPostItem(
                 post.id,
                 post.slug,
@@ -113,9 +122,13 @@ public class IndexController {
                 post.aiSummary,
                 post.aiSummaryStatus != null ? post.aiSummaryStatus.intValue() : 0,
                 post.publishedAt,
-                post.createdAt
+                post.createdAt,
+                categoryName,
+                tags
         );
     }
+
+    public record TagItem(String name, String slug) {}
 
     public record IndexPostItem(
             Long id,
@@ -125,7 +138,9 @@ public class IndexController {
             Map<String, String> aiSummary,
             Integer aiSummaryStatus,
             OffsetDateTime publishedAt,
-            OffsetDateTime createdAt
+            OffsetDateTime createdAt,
+            String categoryName,
+            List<TagItem> tags
     ) {
     }
 }

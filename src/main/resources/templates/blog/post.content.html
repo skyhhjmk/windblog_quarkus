@@ -25,7 +25,7 @@
             <header class="space-y-6">
                 <div class="space-y-2">
                     <div class="flex items-center gap-3">
-                        <span class="meta-mono text-accent">文章</span>
+                        <span class="meta-mono text-accent">{postCategory}</span>
                         <span class="w-8 h-[1px] bg-accent/30"></span>
                     </div>
                     <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">{postTitle ?: '文章信息'}</h1>
@@ -35,7 +35,7 @@
                         <div class="w-6 h-6 rounded-full bg-border border border-white/10"></div>
                         <span class="text-sm text-gray-400">作者</span>
                     </div>
-                    <span class="meta-mono">{postSlug}</span>
+                    <span class="meta-mono">Slug: {postSlug}</span>
                     <span class="w-1 h-1 rounded-full bg-border"></span>
                     <time class="timestamp meta-mono" data-timestamp="{publishedAt}">{publishedAt}</time>
                 </div>
@@ -83,6 +83,12 @@
                     <p class="text-gray-500 italic">该语言下暂无内容。</p>
                 {/if}
             </section>
+            
+            <div class="mt-12 pt-8 border-t border-border flex flex-wrap gap-3">
+                {#for tag in postTags}
+                    <a href="/tag/{tag.slug}" class="tag-pill px-4 py-1.5 text-sm hover:border-accent transition-colors">#{tag.name}</a>
+                {/for}
+            </div>
         </article>
     </div>
 
