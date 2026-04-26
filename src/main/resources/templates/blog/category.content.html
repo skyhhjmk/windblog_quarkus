@@ -57,14 +57,14 @@
                         {#for child in children}
                             <article class="card p-6 group relative overflow-hidden">
                                 <div class="flex flex-col gap-3">
-                                    <h3 class="text-xl font-bold text-white group-hover:text-accent transition-colors">
+                                    <h3 class="text-xl font-bold text-main group-hover:text-accent transition-colors">
                                         <a href="/category/{child.slug}" class="after:absolute after:inset-0">{child.name}</a>
                                     </h3>
-                                    <p class="text-sm text-[#94a3b8] line-clamp-2">{child.description}</p>
+                                    <p class="text-sm text-body line-clamp-2">{child.description}</p>
                                     <div class="flex items-center gap-4 pt-4 mt-auto">
-                                        <span class="meta-mono text-[9px]">路径: {child.path}</span>
+                                        <span class="meta-mono text-meta text-[9px]">路径: {child.path}</span>
                                         <span class="w-1 h-1 rounded-full bg-border"></span>
-                                        <span class="meta-mono text-[9px]">子分类数: {child.childCount}</span>
+                                        <span class="meta-mono text-meta text-[9px]">子分类数: {child.childCount}</span>
                                     </div>
                                 </div>
                             </article>
@@ -115,14 +115,14 @@
                     {#for category in categories}
                         <article class="card p-6 group relative overflow-hidden">
                             <div class="flex flex-col gap-3">
-                                <h2 class="text-xl font-bold text-white group-hover:text-accent transition-colors">
+                                <h2 class="text-xl font-bold text-main group-hover:text-accent transition-colors">
                                     <a href="/category/{category.slug}" class="after:absolute after:inset-0">{category.name}</a>
                                 </h2>
-                                <p class="text-sm text-[#94a3b8] line-clamp-2">{category.description}</p>
+                                <p class="text-sm text-body line-clamp-2">{category.description}</p>
                                 <div class="flex items-center gap-4 pt-4 mt-auto">
-                                    <span class="meta-mono text-[9px]">路径: {category.path}</span>
+                                    <span class="meta-mono text-meta text-[9px]">路径: {category.path}</span>
                                     <span class="w-1 h-1 rounded-full bg-border"></span>
-                                    <span class="meta-mono text-[9px]">子分类数: {category.childCount}</span>
+                                    <span class="meta-mono text-meta text-[9px]">子分类数: {category.childCount}</span>
                                 </div>
                             </div>
                         </article>
