@@ -8,16 +8,18 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class ColumnBlockParser extends AbstractBlockParser {
-    private static final Pattern START_PATTERN = Pattern.compile("^\\s*:::\\s*column\\s*$");
-    private static final Pattern END_PATTERN = Pattern.compile("^\\s*:::\\s*$");
+public class CustomContainerBlockParser extends AbstractBlockParser {
+    private static final Pattern START_PATTERN = Pattern.compile("^\\s*:::\\s+([a-zA-Z0-9_-]+)\\s*$");
 
-    private final MdNodes.ColumnBlock block;
+    private final MdNodes.CustomContainerBlock block;
+    private final String name;
 
-    public ColumnBlockParser(BasedSequence chars) {
-        this.block = new MdNodes.ColumnBlock(chars);
+    public CustomContainerBlockParser(BasedSequence chars, String name) {
+        this.name = name.trim();
+        this.block = new MdNodes.CustomContainerBlock(chars, this.name);
     }
 
     @Override
@@ -28,7 +30,9 @@ public class ColumnBlockParser extends AbstractBlockParser {
     @Override
     public BlockContinue tryContinue(ParserState state) {
         BasedSequence line = state.getLine();
-        if (END_PATTERN.matcher(line).matches()) {
+        String trimmed = line.toString().trim();
+        if (trimmed.equals("::: /" + this.name)) {
+            this.block.setClosed(true);
             return BlockContinue.finished();
         }
         return BlockContinue.atIndex(state.getIndex());
@@ -73,8 +77,10 @@ public class ColumnBlockParser extends AbstractBlockParser {
                 @Override
                 public BlockStart tryStart(@NotNull ParserState state, @NotNull MatchedBlockParser matchedBlockParser) {
                     BasedSequence line = state.getLine();
-                    if (START_PATTERN.matcher(line).matches()) {
-                        return BlockStart.of(new ColumnBlockParser(line)).atIndex(state.getIndex());
+                    Matcher matcher = START_PATTERN.matcher(line);
+                    if (matcher.matches()) {
+                        String name = matcher.group(1).trim();
+                        return BlockStart.of(new CustomContainerBlockParser(line, name)).atIndex(state.getLineEndIndex());
                     }
                     return BlockStart.none();
                 }

@@ -7,16 +7,26 @@ import org.jetbrains.annotations.NotNull;
 
 public class MdNodes {
 
-    public static class RegionBlock extends Block {
-        private final String type;
-        public RegionBlock(BasedSequence chars, String type) { super(chars); this.type = type; }
-        public String getType() { return type; }
-        @Override
-        public @NotNull BasedSequence[] getSegments() { return BasedSequence.EMPTY_SEGMENTS; }
-    }
+    public static class CustomContainerBlock extends Block {
+        private final String name;
+        private boolean isClosed = false;
 
-    public static class ColumnBlock extends Block {
-        public ColumnBlock(BasedSequence chars) { super(chars); }
+        public CustomContainerBlock(BasedSequence chars, String name) {
+            super(chars);
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public boolean isClosed() {
+            return isClosed;
+        }
+
+        public void setClosed(boolean closed) {
+            this.isClosed = closed;
+        }
         @Override
         public @NotNull BasedSequence[] getSegments() { return BasedSequence.EMPTY_SEGMENTS; }
     }

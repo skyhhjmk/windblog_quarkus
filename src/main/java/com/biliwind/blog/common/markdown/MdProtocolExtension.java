@@ -23,8 +23,7 @@ public class MdProtocolExtension implements Parser.ParserExtension, HtmlRenderer
 
     @Override
     public void extend(Parser.Builder parserBuilder) {
-        parserBuilder.customBlockParserFactory(new RegionBlockParser.Factory());
-        parserBuilder.customBlockParserFactory(new ColumnBlockParser.Factory());
+        parserBuilder.customBlockParserFactory(new CustomContainerBlockParser.Factory());
         parserBuilder.customBlockParserFactory(new CalloutBlockParser.Factory());
         parserBuilder.customDelimiterProcessor(new HighlightDelimiterProcessor());
         parserBuilder.customInlineParserExtensionFactory(new MdInlineParserExtension.Factory());

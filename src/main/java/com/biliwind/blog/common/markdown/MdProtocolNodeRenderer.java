@@ -5,7 +5,6 @@ import com.vladsch.flexmark.html.renderer.NodeRenderer;
 import com.vladsch.flexmark.html.renderer.NodeRendererContext;
 import com.vladsch.flexmark.html.renderer.NodeRendererFactory;
 import com.vladsch.flexmark.html.renderer.NodeRenderingHandler;
-import com.vladsch.flexmark.util.ast.Node;
 import com.vladsch.flexmark.util.data.DataHolder;
 import org.jetbrains.annotations.NotNull;
 
@@ -17,8 +16,8 @@ public class MdProtocolNodeRenderer implements NodeRenderer {
     @Override
     public Set<NodeRenderingHandler<?>> getNodeRenderingHandlers() {
         Set<NodeRenderingHandler<?>> handlers = new HashSet<>();
-        handlers.add(new NodeRenderingHandler<>(MdNodes.RegionBlock.class, this::renderRegion));
-        handlers.add(new NodeRenderingHandler<>(MdNodes.ColumnBlock.class, this::renderColumn));
+        handlers.add(new NodeRenderingHandler<>(MdNodes.CustomContainerBlock.class, this::renderCustomContainer));
+        handlers.add(new NodeRenderingHandler<>(com.vladsch.flexmark.ast.BlockQuote.class, this::renderBlockQuote));
         handlers.add(new NodeRenderingHandler<>(MdNodes.CalloutBlock.class, this::renderCallout));
         handlers.add(new NodeRenderingHandler<>(MdNodes.HighlightNode.class, this::renderHighlight));
         handlers.add(new NodeRenderingHandler<>(MdNodes.KeyboardNode.class, this::renderKeyboard));
@@ -27,9 +26,26 @@ public class MdProtocolNodeRenderer implements NodeRenderer {
         return handlers;
     }
 
-    private void renderRegion(MdNodes.RegionBlock node, NodeRendererContext context, HtmlWriter html) {
-        String type = node.getType().toLowerCase();
-        html.attr("class", "md-region md-region-" + type)
+    private void renderCustomContainer(MdNodes.CustomContainerBlock node, NodeRendererContext context, HtmlWriter html) {
+        if (!node.isClosed()) {
+            html.attr("class", "error-block").attr("style", "color: red; border: 1px solid red; padding: 10px; margin: 10px 0;")
+                    .withAttr()
+                    .tag("div");
+            html.text("解析错误：缺少闭合标签 ::: /" + node.getName());
+            html.tag("/div");
+            return;
+        }
+        html.attr("class", "custom-block block-" + node.getName())
+                .attr("data-name", node.getName())
+                .withAttr()
+                .tag("div");
+        context.renderChildren(node);
+        html.tag("/div");
+    }
+
+    private void renderBlockQuote(com.vladsch.flexmark.ast.BlockQuote node, NodeRendererContext context, HtmlWriter html) {
+        // Render blockquote with old 'tip' style
+        html.attr("class", "md-region md-region-tip")
             .withAttr()
             .tag("aside");
         
@@ -46,14 +62,6 @@ public class MdProtocolNodeRenderer implements NodeRenderer {
         html.tag("/div");
         
         html.tag("/aside");
-    }
-
-    private void renderColumn(MdNodes.ColumnBlock node, NodeRendererContext context, HtmlWriter html) {
-        html.attr("class", "md-columns")
-            .withAttr()
-            .tag("div");
-        context.renderChildren(node);
-        html.tag("/div");
     }
 
     private void renderHighlight(MdNodes.HighlightNode node, NodeRendererContext context, HtmlWriter html) {
