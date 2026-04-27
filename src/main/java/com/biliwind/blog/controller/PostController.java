@@ -10,8 +10,6 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostTag;
-import com.biliwind.blog.model.TutorialBlock;
-import com.biliwind.blog.model.TutorialLevelDef;
 import com.biliwind.blog.model.Category;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -35,9 +33,6 @@ public class PostController {
     @Location("blog/post.content.html")
     Template postContentTemplate;
 
-    @Inject
-    @Location("blog/tutorial-block.html")
-    Template tutorialBlockTemplate;
 
     @Inject
     LanguageContext languageContext;
@@ -90,27 +85,7 @@ public class PostController {
         String localizedContent =
                 resolveContent(postEntity.currentRevision, resolvedLang);
 
-        PostBodyView postBody;
-        if (postEntity.renderType == PostRenderType.TUTORIAL_BLOCK && postEntity.currentRevision != null && postEntity.currentRevision.contentBlocks != null) {
-            List<TutorialBlock> blocks = postEntity.currentRevision.contentBlocks.get(resolvedLang);
-            if (blocks == null) {
-                blocks = postEntity.currentRevision.contentBlocks.get("zh");
-            }
-            if (blocks != null) {
-                // Filter blocks based on requested levels, if levels parameter is provided
-                List<TutorialBlock> filteredBlocks = filterBlocksByLevels(blocks, levels);
-                
-                String renderedBlocksHtml = tutorialBlockTemplate
-                        .data("blocks", filteredBlocks)
-                        .data("lang", resolvedLang)
-                        .render();
-                postBody = new PostBodyView(renderedBlocksHtml, true, PostRenderType.TUTORIAL_BLOCK);
-            } else {
-                postBody = new PostBodyView("", true, PostRenderType.TUTORIAL_BLOCK);
-            }
-        } else {
-            postBody = resolvePostBody(postEntity.renderType, localizedContent);
-        }
+        PostBodyView postBody = resolvePostBody(postEntity.renderType, localizedContent);
 
         String localizedAiSummary =
                 LanguageHelper.resolveLocalizedValue(postEntity.aiSummary, resolvedLang);
@@ -217,26 +192,4 @@ public class PostController {
 
     private record PostBodyView(String body, boolean html, PostRenderType renderType) {}
 
-    private List<TutorialBlock> filterBlocksByLevels(List<TutorialBlock> blocks, List<Short> levels) {
-        if (blocks == null || blocks.isEmpty()) {
-            return blocks;
-        }
-        if (levels == null || levels.isEmpty()) {
-            return blocks; // Return all if no specific levels requested
-        }
-        return blocks.stream()
-                .filter(b -> b.level == null || levels.contains(b.level))
-                .map(b -> {
-                    if (b.children != null && !b.children.isEmpty()) {
-                        TutorialBlock copy = new TutorialBlock();
-                        copy.type = b.type;
-                        copy.level = b.level;
-                        copy.data = b.data;
-                        copy.children = filterBlocksByLevels(b.children, levels);
-                        return copy;
-                    }
-                    return b;
-                })
-                .collect(Collectors.toList());
-    }
 }

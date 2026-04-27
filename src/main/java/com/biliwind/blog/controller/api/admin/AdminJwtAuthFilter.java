@@ -10,8 +10,9 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.ext.Provider;
-
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
@@ -84,6 +85,33 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
         requestContext.setProperty(REQUEST_USERNAME_KEY, verified.username());
         requestContext.setProperty(REQUEST_ROLE_NAME_KEY, verified.roleName());
         requestContext.setProperty(REQUEST_IS_SUPER_ADMIN_KEY, verified.isSuperAdmin());
+
+        // Set SecurityContext to support @RolesAllowed
+        requestContext.setSecurityContext(new SecurityContext() {
+            @Override
+            public Principal getUserPrincipal() {
+                return () -> verified.username();
+            }
+
+            @Override
+            public boolean isUserInRole(String role) {
+                // If the user is super admin, allow all roles
+                if (verified.isSuperAdmin()) return true;
+                if (verified.roleName() == null) return false;
+                return role.equalsIgnoreCase(verified.roleName()) || 
+                       role.equalsIgnoreCase("admin") && verified.isAdmin();
+            }
+
+            @Override
+            public boolean isSecure() {
+                return requestContext.getSecurityContext().isSecure();
+            }
+
+            @Override
+            public String getAuthenticationScheme() {
+                return "Bearer";
+            }
+        });
     }
 
     private void abort(ContainerRequestContext requestContext, Response.Status status, String message) {

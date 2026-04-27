@@ -4,8 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
-import com.biliwind.blog.model.TutorialBlock;
-import com.biliwind.blog.model.TutorialLevelDef;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -22,8 +20,6 @@ public final class AdminPostDtos {
                         Map<String, String> summary,
                         Map<String, String> aiSummary,
                         Map<String, String> contentMarkdown,
-                        Map<String, List<TutorialBlock>> contentBlocks,
-                        List<TutorialLevelDef> tutorialLevelDefs,
                         Short status,
                         Short visibility,
                         String password,
@@ -43,8 +39,6 @@ public final class AdminPostDtos {
                         Map<String, String> summary,
                         Map<String, String> aiSummary,
                         Map<String, String> contentMarkdown,
-                        Map<String, List<TutorialBlock>> contentBlocks,
-                        List<TutorialLevelDef> tutorialLevelDefs,
                         Short status,
                         Short visibility,
                         String password,
@@ -83,8 +77,6 @@ public final class AdminPostDtos {
                         Map<String, String> summary,
                         Map<String, String> aiSummary,
                         Map<String, String> contentMarkdown,
-                        Map<String, List<TutorialBlock>> contentBlocks,
-                        List<TutorialLevelDef> tutorialLevelDefs,
                         Short status,
                         Short visibility,
                         String password,

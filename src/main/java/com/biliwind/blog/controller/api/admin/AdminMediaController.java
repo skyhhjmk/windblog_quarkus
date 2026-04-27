@@ -30,8 +30,9 @@ public class AdminMediaController {
 
     @Inject
     MediaManagementService mediaService;
+
     @Inject
-    AdminTokenVerifier tokenVerifier;
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     @GET
     @Operation(summary = "列出媒体资源")
@@ -47,9 +48,8 @@ public class AdminMediaController {
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Transactional
     @Operation(summary = "上传媒体文件")
-    public AdminMediaDtos.MediaItem upload(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization,
-                                           @RestForm("file") FileUpload filePart) {
-        User operator = mustFindOperator(authorization);
+    public AdminMediaDtos.MediaItem upload(@RestForm("file") FileUpload filePart) {
+        User operator = mustFindOperator();
         if (filePart == null) {
             throw new BadRequestException("缺少 file 字段");
         }
@@ -68,14 +68,14 @@ public class AdminMediaController {
     @Path("/scan")
     @Transactional
     @Operation(summary = "重建媒体引用索引")
-    public AdminMediaDtos.MediaScanResult scan(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization) {
-        mustFindOperator(authorization);
+    public AdminMediaDtos.MediaScanResult scan() {
+        mustFindOperator();
         return mediaService.rebuildReferences();
     }
 
 
-    private User mustFindOperator(String authorization) {
-        Long userId = extractUserId(authorization);
+    private User mustFindOperator() {
+        Long userId = adminRequestContext.getUserId();
         if (userId == null) {
             throw unauthorized();
         }
@@ -84,21 +84,6 @@ public class AdminMediaController {
             throw unauthorized();
         }
         return user;
-    }
-
-    private Long extractUserId(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return null;
-        }
-        String token = authorization.substring("Bearer ".length()).trim();
-        if (token.isBlank()) {
-            return null;
-        }
-        AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(token);
-        if (verified == null || !verified.isAdmin()) {
-            return null;
-        }
-        return verified.uid();
     }
 
     private WebApplicationException unauthorized() {

@@ -38,15 +38,6 @@ public class PostRevision extends PanacheEntityBase {
     @Column(name = "content_markdown", columnDefinition = "jsonb", nullable = false)
     public Map<String, String> contentMarkdown;
 
-    /** 块结构多级别教程正文（JSONB，多语言） */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "content_blocks", columnDefinition = "jsonb")
-    public Map<String, List<TutorialBlock>> contentBlocks;
-
-    /** 单篇文章在保存该版本时的教程级别自定义配置（JSONB） */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "tutorial_level_defs", columnDefinition = "jsonb")
-    public List<TutorialLevelDef> tutorialLevelDefs;
 
     /** 编辑器类型：0Markdown，1HTML，2BlockEditor */
     @Column(name = "editor_type", nullable = false)

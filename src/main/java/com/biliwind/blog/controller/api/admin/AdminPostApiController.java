@@ -153,7 +153,6 @@ public class AdminPostApiController {
         post.renderType = resolveRenderType(request.renderType());
         post.aiSummaryStatus = request.aiSummaryStatus() == null ? 0 : request.aiSummaryStatus();
         post.user = operator;
-        post.tutorialLevelDefs = request.tutorialLevelDefs();
         post.createdAt = now;
         post.updatedAt = now;
 
@@ -178,8 +177,6 @@ public class AdminPostApiController {
         revision.post = post;
         revision.title = request.title();
         revision.contentMarkdown = request.contentMarkdown();
-        revision.contentBlocks = request.contentBlocks();
-        revision.tutorialLevelDefs = request.tutorialLevelDefs();
         revision.editorType = request.editorType() == null ? 0 : request.editorType();
         revision.revisionNumber = 1;
         revision.createdBy = operator;
@@ -187,7 +184,7 @@ public class AdminPostApiController {
         revision.persist();
 
         post.currentRevision = revision;
-        mediaService.syncPostReferences(post, revision.contentMarkdown, revision.contentBlocks);
+        mediaService.syncPostReferences(post, revision.contentMarkdown);
 
         // 设置标签关联
         if (request.tagIds() != null && !request.tagIds().isEmpty()) {
@@ -388,8 +385,6 @@ public class AdminPostApiController {
                 post.summary,
                 post.aiSummary,
                 post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown,
-                post.currentRevision == null ? null : post.currentRevision.contentBlocks,
-                post.tutorialLevelDefs,
                 statusCode(post.status),
                 post.visibility,
                 post.password,
@@ -488,7 +483,6 @@ public class AdminPostApiController {
         changed |= updateField(post.seoTitle, request.seoTitle(), v -> post.seoTitle = v);
         changed |= updateField(post.seoKeywords, request.seoKeywords(), v -> post.seoKeywords = v);
         changed |= updateField(post.seoDescription, request.seoDescription(), v -> post.seoDescription = v);
-        changed |= updateField(post.tutorialLevelDefs, request.tutorialLevelDefs(), v -> post.tutorialLevelDefs = v);
 
         if (request.renderType() != null) {
             PostRenderType nextRenderType = requireRenderType(request.renderType());
@@ -524,28 +518,18 @@ public class AdminPostApiController {
     }
 
     private boolean updateContent(Post post, PostUpdateRequest request) {
-        if (request.title() != null || request.contentMarkdown() != null || request.contentBlocks() != null || request.editorType() != null || request.tutorialLevelDefs() != null) {
+        if (request.title() != null || request.contentMarkdown() != null || request.editorType() != null) {
             Map<String, String> nextTitle = request.title() == null ? post.title : request.title();
             Map<String, String> currentContent = post.currentRevision == null ? Map.of()
                     : post.currentRevision.contentMarkdown;
             Map<String, String> nextContent = request.contentMarkdown() == null ? currentContent
                     : request.contentMarkdown();
-            Map<String, List<TutorialBlock>> currentBlocks = post.currentRevision == null ? null
-                    : post.currentRevision.contentBlocks;
-            Map<String, List<TutorialBlock>> nextBlocks = request.contentBlocks() == null ? currentBlocks
-                    : request.contentBlocks();
-            List<TutorialLevelDef> currentLevels = post.currentRevision == null ? null
-                    : post.currentRevision.tutorialLevelDefs;
-            List<TutorialLevelDef> nextLevels = request.tutorialLevelDefs() == null ? currentLevels
-                    : request.tutorialLevelDefs();
             
             short currentEditorType = post.currentRevision == null ? 0 : post.currentRevision.editorType;
             short nextEditorType = request.editorType() == null ? currentEditorType : request.editorType();
-
+            
             boolean revisionChanged = !Objects.equals(nextTitle, post.title)
                     || !Objects.equals(nextContent, currentContent)
-                    || !Objects.equals(nextBlocks, currentBlocks)
-                    || !Objects.equals(nextLevels, currentLevels)
                     || nextEditorType != currentEditorType;
             if (revisionChanged) {
                 User operator = mustFindOperator();
@@ -553,8 +537,6 @@ public class AdminPostApiController {
                 nextRevision.post = post;
                 nextRevision.title = nextTitle;
                 nextRevision.contentMarkdown = nextContent;
-                nextRevision.contentBlocks = nextBlocks;
-                nextRevision.tutorialLevelDefs = nextLevels;
                 nextRevision.editorType = nextEditorType;
                 nextRevision.revisionNumber = nextRevisionNumber(post.id);
                 nextRevision.createdBy = operator;
@@ -562,7 +544,7 @@ public class AdminPostApiController {
                 nextRevision.persist();
 
                 post.currentRevision = nextRevision;
-                mediaService.syncPostReferences(post, nextRevision.contentMarkdown, nextRevision.contentBlocks);
+                mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
                 post.title = nextRevision.title;
                 return true;
             }
@@ -603,6 +585,10 @@ public class AdminPostApiController {
             throw new NotFoundException("版本不存在");
         }
 
+        List<Long> tagIds = PostTag.find("post.id = ?1", post.id).stream()
+                .map(pt -> ((PostTag) pt).tag.id)
+                .toList();
+
         return new AdminPostDetail(
                 post.id,
                 post.slug,
@@ -610,8 +596,6 @@ public class AdminPostApiController {
                 post.summary,
                 post.aiSummary,
                 revision.contentMarkdown,
-                revision.contentBlocks,
-                revision.tutorialLevelDefs,
                 statusCode(post.status),
                 post.visibility,
                 post.password,
@@ -625,13 +609,10 @@ public class AdminPostApiController {
                 post.version,
                 post.user == null ? null : post.user.id,
                 post.category == null ? null : post.category.id,
-                PostTag.find("post.id = ?1", post.id).stream()
-                        .map(pt -> ((PostTag) pt).tag.id)
-                        .toList(),
+                tagIds,
                 post.publishedAt,
                 post.createdAt,
-                post.updatedAt
-        );
+                post.updatedAt);
     }
 
     @POST
@@ -658,8 +639,6 @@ public class AdminPostApiController {
         newRevision.post = post;
         newRevision.title = revision.title;
         newRevision.contentMarkdown = revision.contentMarkdown;
-        newRevision.contentBlocks = revision.contentBlocks;
-        newRevision.tutorialLevelDefs = revision.tutorialLevelDefs;
         newRevision.editorType = revision.editorType;
         newRevision.revisionNumber = nextRevisionNumber(post.id);
         newRevision.createdBy = operator;
@@ -667,11 +646,10 @@ public class AdminPostApiController {
         newRevision.persist();
 
         post.currentRevision = newRevision;
-        post.tutorialLevelDefs = newRevision.tutorialLevelDefs;
         post.title = newRevision.title;
         post.updatedAt = now;
 
-        mediaService.syncPostReferences(post, newRevision.contentMarkdown, newRevision.contentBlocks);
+        mediaService.syncPostReferences(post, newRevision.contentMarkdown);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
 
         return toDetail(post);

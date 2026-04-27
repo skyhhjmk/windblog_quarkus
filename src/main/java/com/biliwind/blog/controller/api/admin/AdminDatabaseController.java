@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import liquibase.Liquibase;
@@ -34,13 +35,16 @@ public class AdminDatabaseController {
     @Inject
     AgroalDataSource dataSource;
 
+    @Inject
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
+
     @POST
     @Path("/migrate")
-    @RolesAllowed("admin")
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "手动触发数据库迁移")
     @APIResponse(responseCode = "200", description = "迁移成功")
     public Response migrate() {
+        mustFindAdmin();
         try {
             Liquibase liquibase = liquibaseFactory.createLiquibase();
             liquibase.update();
@@ -60,11 +64,11 @@ public class AdminDatabaseController {
 
     @POST
     @Path("/seed")
-    @RolesAllowed("admin")
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "一键添加数据库种子数据")
     @APIResponse(responseCode = "200", description = "种子数据添加成功")
     public Response seed() {
+        mustFindAdmin();
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             
@@ -88,6 +92,15 @@ public class AdminDatabaseController {
             error.put("success", false);
             error.put("message", "数据库种子数据添加失败：" + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(error).build();
+        }
+    }
+
+    private void mustFindAdmin() {
+        if (adminRequestContext.getUserId() == null) {
+            throw new WebApplicationException("未登录", Response.Status.UNAUTHORIZED);
+        }
+        if (!adminRequestContext.isSuperAdmin() && !"ADMIN".equalsIgnoreCase(adminRequestContext.getRoleName())) {
+            throw new WebApplicationException("权限不足", Response.Status.FORBIDDEN);
         }
     }
 
