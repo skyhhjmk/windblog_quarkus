@@ -46,4 +46,5 @@
     <include file="migration/042-add-tutorial-level-defs.sql" relativeToChangelogFile="true"/>
     <include file="migration/043-add-category-post-count.sql" relativeToChangelogFile="true"/>
     <include file="migration/044-del-tutorial-level-defs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/045-create-system-settings-center.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>
