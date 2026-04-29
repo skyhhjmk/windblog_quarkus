@@ -21,6 +21,9 @@ import java.util.stream.Collectors;
 @Tag(name = "AdminCategory")
 public class AdminCategoryController {
 
+    @jakarta.inject.Inject
+    com.biliwind.blog.service.AuditService auditService;
+
     @GET
     @Operation(summary = "所有分类")
     public List<AdminCategoryItem> list() {
@@ -43,6 +46,7 @@ public class AdminCategoryController {
         }
         c.createdAt = OffsetDateTime.now();
         c.persist();
+        auditService.log("category", c.id, "create", null, java.util.Map.of("name", c.name, "slug", c.slug));
         return toItem(c);
     }
 
@@ -62,6 +66,7 @@ public class AdminCategoryController {
             c.parent = null;
         }
         c.persist();
+        auditService.log("category", c.id, "update", null, java.util.Map.of("name", c.name, "slug", c.slug));
         return toItem(c);
     }
 
@@ -73,6 +78,7 @@ public class AdminCategoryController {
         Category c = Category.findById(id);
         if (c == null) throw new NotFoundException();
         // 处理子分类或关联文章的逻辑通常由业务决定，这里简单处理
+        auditService.log("category", c.id, "delete", java.util.Map.of("name", c.name), null);
         Category.deleteById(id);
     }
 

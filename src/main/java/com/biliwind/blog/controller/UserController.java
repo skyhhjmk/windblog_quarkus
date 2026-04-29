@@ -5,6 +5,7 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.ConfigManager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.qute.Location;
@@ -56,6 +57,9 @@ public class UserController {
     Template loginContentTemplate;
 
     @Inject
+    ConfigManager configManager;
+
+    @Inject
     @Location("user/register.html")
     Template registerTemplate;
 
@@ -95,6 +99,9 @@ public class UserController {
     @Path("/register")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance registerPage(@QueryParam("redirect") String redirect, @Context HttpHeaders headers) {
+        if (!configManager.getBoolean("feature_toggles", "enable_registration", true)) {
+            throw new ForbiddenException("注册功能暂未开放");
+        }
         String targetRedirect = redirect != null ? redirect : "/";
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? registerContentTemplate : registerTemplate;
@@ -133,6 +140,12 @@ public class UserController {
             @FormParam("email") @NotBlank @Email String email,
             @FormParam("password") @NotBlank @Size(min = 6, max = 32) String password,
             @FormParam("redirect") String redirect) {
+
+        if (!configManager.getBoolean("feature_toggles", "enable_registration", true)) {
+            return Response.status(Response.Status.FORBIDDEN)
+                    .entity(Map.of("success", false, "message", "注册功能暂未开放"))
+                    .build();
+        }
 
         // 检查用户名是否已存在
         if (User.find("username = ?1 and deletedAt is null", username).firstResult() != null) {

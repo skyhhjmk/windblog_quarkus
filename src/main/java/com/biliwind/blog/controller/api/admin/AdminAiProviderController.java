@@ -24,6 +24,9 @@ public class AdminAiProviderController {
     @Inject
     AiProviderConfigService configService;
 
+    @Inject
+    com.biliwind.blog.service.AuditService auditService;
+
     @GET
     public List<AiProviderConfigDto> list() {
         return configService.listAll().stream()
@@ -40,6 +43,7 @@ public class AdminAiProviderController {
                         request.endpoint(), request.apiKey(), request.model(), request.config()
                 ))
         );
+        auditService.log("ai_provider", dto.id(), "create", null, java.util.Map.of("name", dto.name()));
         return Response.ok(dto).build();
     }
 
@@ -53,6 +57,7 @@ public class AdminAiProviderController {
                         request.endpoint(), request.apiKey(), request.model(), request.config()
                 ))
         );
+        auditService.log("ai_provider", id, "update", null, java.util.Map.of("name", dto.name()));
         return Response.ok(dto).build();
     }
 
@@ -60,6 +65,7 @@ public class AdminAiProviderController {
     @Path("/{id}")
     public Response delete(@PathParam("id") Long id) {
         configService.delete(id);
+        auditService.log("ai_provider", id, "delete", null, null);
         return Response.noContent().build();
     }
 }

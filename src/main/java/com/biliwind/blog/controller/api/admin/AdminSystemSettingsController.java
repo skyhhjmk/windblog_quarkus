@@ -38,6 +38,9 @@ public class AdminSystemSettingsController {
     @Inject
     ObjectMapper mapper;
 
+    @Inject
+    com.biliwind.blog.service.AuditService auditService;
+
     @GET
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "获取所有设置项")
@@ -106,6 +109,10 @@ public class AdminSystemSettingsController {
         // 启动 Watchdog (3分钟后验证)
         watchdog.watch(key, 3);
 
+        auditService.log("system_setting", setting.id, "update",
+                Map.of("key", key, "value", setting.configValue, "version", setting.version - 1),
+                Map.of("key", key, "value", newValue, "version", setting.version));
+
         return Response.ok(Map.of("success", true, "message", "配置已更新，进入3分钟验证期", "data", setting)).build();
     }
 
@@ -121,6 +128,7 @@ public class AdminSystemSettingsController {
         }
         setting.isFrozen = false;
         setting.persist();
+        auditService.log("system_setting", setting.id, "confirm", null, Map.of("key", key));
         return Response.ok(Map.of("success", true, "message", "配置已确认")).build();
     }
 
@@ -135,6 +143,7 @@ public class AdminSystemSettingsController {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
         watchdog.rollback(setting);
+        auditService.log("system_setting", setting.id, "rollback", null, Map.of("key", key));
         return Response.ok(Map.of("success", true, "message", "已执行回滚")).build();
     }
 
@@ -145,5 +154,55 @@ public class AdminSystemSettingsController {
     public Response getHistory(@PathParam("key") String key) {
         List<SystemSettingHistory> history = SystemSettingHistory.list("configKey", key);
         return Response.ok(Map.of("success", true, "data", history)).build();
+    }
+
+    @POST
+    @Path("/apply-audit-value")
+    @Transactional
+    @SecurityRequirement(name = "adminBearerAuth")
+    @Operation(summary = "从审计日志应用值（回滚/重用）")
+    public Response applyAuditValue(Map<String, Object> body) {
+        String key = (String) body.get("key");
+        Object valueObj = body.get("value");
+        if (key == null || valueObj == null) {
+            throw new BadRequestException("Key and value are required");
+        }
+
+        SystemSetting setting = SystemSetting.findByKey(key);
+        if (setting == null) {
+            throw new NotFoundException("Setting not found");
+        }
+
+        if (setting.isFrozen) {
+            throw new WebApplicationException("Setting is currently frozen", Response.Status.CONFLICT);
+        }
+
+        JsonNode newValue = mapper.valueToTree(valueObj);
+
+        // 记录历史
+        SystemSettingHistory history = new SystemSettingHistory();
+        history.settingId = setting.id;
+        history.configKey = setting.configKey;
+        history.configValue = setting.configValue;
+        history.version = setting.version;
+        history.operatorId = adminRequestContext.getUserId();
+        history.changeReason = "Rollback/Apply from audit log";
+        history.persist();
+
+        // 更新
+        setting.configValue = newValue;
+        setting.version += 1;
+        setting.isFrozen = true;
+        setting.persist();
+
+        // 触发热更新和 Watchdog
+        configChangedEvent.fire(new ConfigChangedEvent(key, newValue));
+        watchdog.watch(key, 3);
+
+        auditService.log("system_setting", setting.id, "audit_apply",
+                Map.of("key", key, "value", history.configValue, "version", history.version),
+                Map.of("key", key, "value", newValue, "version", setting.version));
+
+        return Response.ok(Map.of("success", true, "message", "已应用配置并进入验证期")).build();
     }
 }

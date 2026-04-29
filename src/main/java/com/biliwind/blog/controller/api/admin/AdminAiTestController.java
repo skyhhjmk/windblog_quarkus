@@ -1,7 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.model.AiProviderConfig;
-import com.biliwind.blog.service.ai.AiManager;
 import com.biliwind.blog.service.ai.AiProviderConfigService;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Multi;
@@ -24,7 +23,10 @@ public class AdminAiTestController {
     AiProviderConfigService configService;
 
     @Inject
-    AiManager aiManager;
+    com.biliwind.blog.service.ai.AiManager aiManager;
+
+    @Inject
+    com.biliwind.blog.service.AuditService auditService;
 
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
@@ -47,20 +49,8 @@ public class AdminAiTestController {
         Long performingUserId = adminRequestContext.getUserId();
 
         // 记录测试触发的起始审计日志（初步记录）
-        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
-            @Override
-            public void run() {
-                com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
-                auditLog.entityType = "ai_provider";
-                auditLog.entityId = configId;
-                auditLog.action = "ai_provider_test_triggered";
-                auditLog.newValue = java.util.Map.of("prompt", request.prompt(), "provider", config.provider);
-                if (performingUserId != null) {
-                    auditLog.performedBy = com.biliwind.blog.model.User.findById(performingUserId);
-                }
-                auditLog.persist();
-            }
-        });
+        auditService.log("ai_provider", configId, "ai_provider_test_triggered",
+                null, java.util.Map.of("prompt", request.prompt(), "provider", config.provider));
 
         // 用于捕获流式输出内容以记录到审计日志
         StringBuilder outputBuffer = new StringBuilder();
@@ -80,23 +70,8 @@ public class AdminAiTestController {
                 String finalOutput = outputBuffer.toString();
 
                 // 流式任务完成后的补充记录
-                io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
-                    @Override
-                    public void run() {
-                        com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
-                        auditLog.entityType = "ai_provider";
-                        auditLog.entityId = configId;
-                        auditLog.action = "ai_provider_test_completed";
-                        auditLog.durationMs = durationMs;
-                        // 记录输出结果
-                        auditLog.newValue = java.util.Map.of("output", finalOutput);
-
-                        if (performingUserId != null) {
-                            auditLog.performedBy = com.biliwind.blog.model.User.findById(performingUserId);
-                        }
-                        auditLog.persist();
-                    }
-                });
+                auditService.log("ai_provider", configId, "ai_provider_test_completed",
+                        null, java.util.Map.of("output", finalOutput), durationMs, null, null, null);
             }
         });
     }

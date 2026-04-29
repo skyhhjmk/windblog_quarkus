@@ -46,14 +46,31 @@ public class ConfigManager {
         return (node != null && node.isTextual()) ? node.asText() : defaultValue;
     }
 
+    public String getString(String key, String field, String defaultValue) {
+        JsonNode node = get(key);
+        if (node != null && node.has(field)) {
+            JsonNode fieldNode = node.get(field);
+            return fieldNode.isTextual() ? fieldNode.asText() : fieldNode.toString();
+        }
+        return defaultValue;
+    }
+
     public Integer getInt(String key, Integer defaultValue) {
         JsonNode node = get(key);
-        return (node != null && node.isInt()) ? node.asInt() : defaultValue;
+        return (node != null && node.canConvertToInt()) ? node.asInt() : defaultValue;
     }
 
     public Boolean getBoolean(String key, Boolean defaultValue) {
         JsonNode node = get(key);
         return (node != null && node.isBoolean()) ? node.asBoolean() : defaultValue;
+    }
+
+    public Boolean getBoolean(String key, String field, Boolean defaultValue) {
+        JsonNode node = get(key);
+        if (node != null && node.has(field)) {
+            return node.get(field).asBoolean();
+        }
+        return defaultValue;
     }
 
     public void onConfigChanged(@Observes ConfigChangedEvent event) {

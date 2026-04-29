@@ -32,6 +32,9 @@ public class AdminUserController {
     @Inject
     AdminRequestContext adminRequestContext;
 
+    @Inject
+    com.biliwind.blog.service.AuditService auditService;
+
     @GET
     @Operation(summary = "用户列表")
     public PageResult<AdminUserItem> list(
@@ -88,6 +91,7 @@ public class AdminUserController {
 
         user.updatedAt = OffsetDateTime.now();
         user.persist();
+        auditService.log("user", user.id, "update", null, java.util.Map.of("username", user.username, "role", user.roleName, "status", user.status));
         return toItem(user);
     }
 

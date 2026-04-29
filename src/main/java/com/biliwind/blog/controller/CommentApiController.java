@@ -4,6 +4,7 @@ import com.biliwind.blog.common.helper.CommentMarkdownHelper;
 import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.ConfigManager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -11,28 +12,11 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.ForbiddenException;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.Cookie;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.*;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Path("/api/comments")
 @ApplicationScoped
@@ -46,6 +30,9 @@ public class CommentApiController {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    ConfigManager configManager;
 
     @GET
     @Path("/post/{slug}")
@@ -86,6 +73,10 @@ public class CommentApiController {
     @POST
     @Transactional
     public Response create(CommentCreateRequest request, @Context HttpHeaders headers) {
+        if (!configManager.getBoolean("feature_toggles", "enable_comment", true)) {
+            return Response.status(Response.Status.FORBIDDEN)
+                    .entity(Map.of("success", false, "message", "评论功能已关闭")).build();
+        }
         if (request == null) {
             throw new BadRequestException("Request body is required");
         }

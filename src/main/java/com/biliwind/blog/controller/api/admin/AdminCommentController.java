@@ -29,6 +29,9 @@ public class AdminCommentController {
     com.biliwind.blog.service.ai.AiManager aiManager;
 
     @Inject
+    com.biliwind.blog.service.AuditService auditService;
+
+    @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     @GET
@@ -74,12 +77,21 @@ public class AdminCommentController {
             throw new NotFoundException();
         }
 
+        Map<String, Object> oldVal = new HashMap<>();
+        Map<String, Object> newVal = new HashMap<>();
+
         if (req.status() != null) {
+            oldVal.put("status", comment.status);
             comment.status = req.status();
+            newVal.put("status", comment.status);
         }
         if (req.content() != null && !req.content().isBlank()) {
+            oldVal.put("content", comment.content);
             comment.content = req.content().trim();
+            newVal.put("content", comment.content);
         }
+
+        auditService.log("comment", comment.id, "update", oldVal, newVal);
 
         return toItem(comment);
     }
@@ -92,6 +104,7 @@ public class AdminCommentController {
         Comment comment = Comment.findById(id);
         if (comment != null) {
             comment.deletedAt = OffsetDateTime.now();
+            auditService.log("comment", comment.id, "delete", Map.of("deleted", false), Map.of("deleted", true));
         }
     }
 
@@ -128,21 +141,10 @@ public class AdminCommentController {
                         c.status = aiResult.isSafe ? (short) 1 : (short) 2;
 
                         // 写入审计日志
-                        com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
-                        auditLog.entityType = "comment";
-                        auditLog.entityId = c.id;
-                        auditLog.action = "ai_moderation";
-                        auditLog.oldValue = java.util.Map.of("status", oldStatus);
-                        auditLog.newValue = java.util.Map.of("status", c.status, "isSafe", aiResult.isSafe);
-                        auditLog.durationMs = durationMs;
-                        auditLog.inputTokens = aiResult.inputTokens;
-                        auditLog.outputTokens = aiResult.outputTokens;
-                        auditLog.totalTokens = aiResult.totalTokens;
-
-                        if (performingUserId != null) {
-                            auditLog.performedBy = com.biliwind.blog.model.User.findById(performingUserId);
-                        }
-                        auditLog.persist();
+                        auditService.log("comment", c.id, "ai_moderation",
+                                Map.of("status", oldStatus),
+                                Map.of("status", c.status, "isSafe", aiResult.isSafe),
+                                durationMs, aiResult.inputTokens, aiResult.outputTokens, aiResult.totalTokens);
                     }
                 });
 

@@ -28,10 +28,13 @@
             password_mismatch: "两次输入的密码不一致"
         };
     </script>
-    <title>{#insert title}{page_title ?: 'WindBlog'}{/insert}</title>
+    <title>{#insert title}{page_title ?: config:siteTitle}{/insert}</title>
+    <meta name="description" content="{config:siteDescription}"/>
+    <meta name="keywords" content="{config:siteKeywords}"/>
+    <link rel="icon" href="{config:faviconUrl}"/>
 
     <!-- Theme & SEO -->
-    <meta name="theme-color" content="#0A0C10" />
+    <meta name="theme-color" content="{config:themeColor}"/>
     <meta name="color-scheme" content="dark" />
     <meta name="csrf-token" content="{csrfToken ?: ''}">
 
@@ -84,9 +87,9 @@
         <!-- Logo / Brand -->
         <a href="/" class="flex items-center gap-3 group">
             <div class="w-8 h-8 bg-accent rounded-sm flex items-center justify-center transform group-hover:rotate-12 transition-transform duration-300">
-                <span class="text-bg font-bold text-lg">W</span>
+                <span class="text-bg font-bold text-lg">{config:siteTitle.substring(0, 1)}</span>
             </div>
-            <span class="text-main font-bold tracking-tight text-lg">WindBlog</span>
+            <span class="text-main font-bold tracking-tight text-lg">{config:siteTitle}</span>
         </a>
 
         <!-- Navigation -->
@@ -106,7 +109,7 @@
                         type="text"
                         name="q"
                         placeholder="搜索文章..."
-                        class="pl-10 pr-4 py-1.5 text-sm w-48 bg-card border border-border rounded-md text-main placeholder:text-meta outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent transition-all" />
+                        class="pl-10 pr-4 py-1.5 text-sm w-48 bg-card border border-border rounded-md text-main placeholder:text-meta"/>
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -115,26 +118,32 @@
             <div class="h-4 w-[1px] bg-border"></div>
 
             <!-- Theme Toggle -->
-            <button class="theme-toggle p-2 rounded-md hover:bg-white/5 transition-colors border border-transparent hover:border-border text-meta hover:text-main" title="切换主题">
+            <button class="theme-toggle p-2 rounded-md hover:bg-accent/5 transition-colors border border-transparent hover:border-border text-meta hover:text-main"
+                    title="切换主题">
                 <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                 <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </button>
 
             <!-- User -->
             <div class="relative" id="userMenuContainer">
-                <button id="userMenuBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors border border-transparent hover:border-border">
+                <button id="userMenuBtn"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-accent/5 transition-colors border border-transparent hover:border-border">
                     <span class="text-sm font-medium">账户</span>
                     <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
                 <div id="userDropdown" class="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-2xl hidden p-1.5 z-50 overflow-hidden">
                     <div id="userNotLoggedIn" class="space-y-0.5">
-                        <a href="/user/login" class="block px-3 py-2 text-sm rounded-md hover:bg-white/5 hover:text-white transition-colors">登录</a>
-                        <a href="/user/register" class="block px-3 py-2 text-sm rounded-md hover:bg-white/5 hover:text-white transition-colors">注册</a>
+                        <a href="/user/login"
+                           class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors">登录</a>
+                        <a href="/user/register"
+                           class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors">注册</a>
                     </div>
                     <div id="userLoggedIn" class="hidden space-y-0.5">
                         <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-border/50 mb-1" id="userNickname">User</div>
-                        <a href="/user/center" class="block px-3 py-2 text-sm rounded-md hover:bg-white/5 hover:text-white transition-colors">个人中心</a>
-                        <a href="#" id="logoutLink" class="block px-3 py-2 text-sm rounded-md hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors">退出登录</a>
+                        <a href="/user/center"
+                           class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors">个人中心</a>
+                        <a href="#" id="logoutLink"
+                           class="block px-3 py-2 text-sm rounded-md hover:bg-red-500/10 text-red-500/80 hover:text-red-600 transition-colors">退出登录</a>
                     </div>
                 </div>
             </div>
@@ -157,7 +166,8 @@
         <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">
             <div class="flex items-center justify-between py-2">
                 <span class="text-sm font-medium">外观</span>
-                <button class="theme-toggle p-2 rounded-md hover:bg-white/5 transition-colors border border-border text-meta hover:text-main" title="切换主题">
+                <button class="theme-toggle p-2 rounded-md hover:bg-accent/5 transition-colors border border-border text-meta hover:text-main"
+                        title="切换主题">
                     <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                     <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </button>
@@ -194,14 +204,26 @@
 <!-- Footer -->
 <footer class="border-t border-border py-12 mt-32">
     <div class="max-w-1400 mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-        <div class="flex items-center gap-2">
-            <span class="meta-mono">© 2024 WindBlog. Built with Quarkus.</span>
+        <div class="flex flex-col gap-2">
+            <span class="meta-mono">{config:copyright}</span>
+            {#if config:icp}
+                <span class="text-xs text-meta">{config:icp}</span>
+            {/if}
         </div>
-        <div class="flex gap-6">
+        <div class="flex gap-6 items-center">
+            {#if config:social('github')}
+                <a href="{config:social('github')}" target="_blank"
+                   class="meta-mono hover:text-accent transition-colors">GitHub</a>
+            {/if}
             <a href="/feed" class="meta-mono hover:text-accent transition-colors">RSS 订阅</a>
             <a href="/sitemap.xml" class="meta-mono hover:text-accent transition-colors">站点地图</a>
         </div>
     </div>
+    {#if config:footerHtml}
+        <div class="max-w-1400 mx-auto px-6 mt-8">
+            {config:footerHtml.raw}
+        </div>
+    {/if}
 </footer>
 
 <!-- Progress Bar -->
@@ -213,7 +235,8 @@
         <h3 id="confirmTitle" class="text-xl font-bold mb-2">确认</h3>
         <p id="confirmMessage" class="text-gray-400 mb-8">你确定要继续吗？</p>
         <div class="flex gap-4 justify-end">
-            <button id="confirmCancel" class="px-5 py-2 text-sm font-medium hover:text-white transition-colors">取消</button>
+            <button id="confirmCancel" class="px-5 py-2 text-sm font-medium hover:text-main transition-colors">取消
+            </button>
             <button id="confirmOk" class="bg-accent text-white px-5 py-2 rounded-md text-sm font-bold hover:opacity-90 transition-colors">确认</button>
         </div>
     </div>

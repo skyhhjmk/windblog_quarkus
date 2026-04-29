@@ -46,6 +46,9 @@ public class AdminPostApiController {
     @Inject
     jakarta.enterprise.event.Event<PostSyncedEvent> esSyncEvent;
 
+    @Inject
+    com.biliwind.blog.service.AuditService auditService;
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -291,6 +294,7 @@ public class AdminPostApiController {
         post.deletedAt = now;
         post.updatedAt = now;
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        auditService.log("post", post.id, "delete", java.util.Map.of("deleted", false), java.util.Map.of("deleted", true));
         return Response.ok(Map.of("success", true, "id", id)).build();
     }
 

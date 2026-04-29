@@ -5,7 +5,6 @@ import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkAudit;
 import com.biliwind.blog.model.LinkMonitorLog;
-import com.biliwind.blog.service.ai.AiManager;
 import com.biliwind.blog.service.link.LinkMonitorService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
@@ -32,7 +31,10 @@ public class AdminLinkController {
     LinkMonitorService linkMonitorService;
 
     @Inject
-    AiManager aiManager;
+    com.biliwind.blog.service.ai.AiManager aiManager;
+
+    @Inject
+    com.biliwind.blog.service.AuditService auditService;
 
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
@@ -99,21 +101,10 @@ public class AdminLinkController {
                         }
 
                         // 写入审计日志
-                        com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
-                        auditLog.entityType = "link";
-                        auditLog.entityId = l.id;
-                        auditLog.action = "ai_moderation";
-                        auditLog.oldValue = java.util.Map.of("status", l.status == 2 ? 1 : l.status);
-                        auditLog.newValue = java.util.Map.of("status", l.status, "isSafe", safe);
-                        auditLog.durationMs = durationMs;
-                        auditLog.inputTokens = aiResult.inputTokens;
-                        auditLog.outputTokens = aiResult.outputTokens;
-                        auditLog.totalTokens = aiResult.totalTokens;
-
-                        if (performingUserId != null) {
-                            auditLog.performedBy = com.biliwind.blog.model.User.findById(performingUserId);
-                        }
-                        auditLog.persist();
+                        auditService.log("link", l.id, "ai_moderation",
+                                java.util.Map.of("status", l.status == 2 ? 1 : l.status),
+                                java.util.Map.of("status", l.status, "isSafe", safe),
+                                durationMs, aiResult.inputTokens, aiResult.outputTokens, aiResult.totalTokens);
                     }
                 });
 
@@ -193,6 +184,7 @@ public class AdminLinkController {
         l.updatedAt = OffsetDateTime.now();
 
         l.persist();
+        auditService.log("link", l.id, "create", null, java.util.Map.of("name", l.name, "url", l.url));
         return toItem(l);
     }
 
@@ -238,6 +230,7 @@ public class AdminLinkController {
             l.seoDescription = req.seoDescription();
 
         l.updatedAt = OffsetDateTime.now();
+        auditService.log("link", l.id, "update", null, java.util.Map.of("name", l.name, "url", l.url)); // For simplicity, just log key info
         return toItem(l);
     }
 
@@ -245,7 +238,11 @@ public class AdminLinkController {
     @Path("/{id}")
     @Transactional
     public void delete(@PathParam("id") Long id) {
-        Link.deleteById(id);
+        Link l = Link.findById(id);
+        if (l != null) {
+            auditService.log("link", l.id, "delete", java.util.Map.of("name", l.name), null);
+            Link.deleteById(id);
+        }
     }
 
     private AdminLinkItem toItem(Link l) {

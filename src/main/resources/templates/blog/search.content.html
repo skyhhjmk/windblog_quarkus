@@ -7,11 +7,11 @@
                 <div class="grid grid-cols-1 gap-2">
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
                         <span class="text-xs text-gray-500 uppercase tracking-wider">匹配项</span>
-                        <span class="text-sm font-mono text-white">{totalCount ?: 0}</span>
+                        <span class="text-sm font-mono text-main">{totalCount ?: 0}</span>
                     </div>
                     <div class="flex justify-between items-center py-2 border-b border-border/50">
                         <span class="text-xs text-gray-500 uppercase tracking-wider">当前页</span>
-                        <span class="text-sm font-mono text-white">{currentPage ?: 1}</span>
+                        <span class="text-sm font-mono text-main">{currentPage ?: 1}</span>
                     </div>
                 </div>
             </section>
@@ -25,9 +25,10 @@
                     <span class="meta-mono text-accent">发现</span>
                     <span class="w-8 h-[1px] bg-accent/30"></span>
                 </div>
-                <h1 class="text-5xl font-bold text-white tracking-tight leading-tight">搜索结果</h1>
+                <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">搜索结果</h1>
                 {#if hasKeyword}
-                    <p class="text-lg text-gray-400">找到 {totalCount ?: 0} 个匹配项，关键词：<span class="text-white font-semibold">"{searchKeyword ?: ''}"</span></p>
+                    <p class="text-lg text-gray-400">找到 {totalCount ?: 0} 个匹配项，关键词：<span
+                                class="text-main font-semibold">"{searchKeyword ?: ''}"</span></p>
                 {#else}
                     <p class="text-lg text-gray-400">输入关键词以发现相关内容。</p>
                 {/if}
@@ -39,7 +40,7 @@
                            name="q"
                            value="{searchKeyword ?: ''}"
                            placeholder="输入以搜索..."
-                           class="w-full pl-14 pr-4 py-4 bg-[#161B22] border border-border rounded-lg text-xl text-white outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all" />
+                           class="w-full pl-14 pr-4 py-4 bg-card border border-border rounded-lg text-xl text-main outline-none"/>
                     <svg class="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -50,7 +51,8 @@
                         <span class="text-gray-600 uppercase">类型：</span>
                         <div class="flex gap-4">
                             {#for link in typeLinks}
-                                <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
+                                <a href="{link.url}"
+                                   class="{link.cssClass} hover:text-main transition-colors">{link.label}</a>
                             {/for}
                         </div>
                     </div>
@@ -58,7 +60,8 @@
                         <span class="text-gray-600 uppercase">排序：</span>
                         <div class="flex gap-4">
                             {#for link in sortLinks}
-                                <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
+                                <a href="{link.url}"
+                                   class="{link.cssClass} hover:text-main transition-colors">{link.label}</a>
                             {/for}
                         </div>
                     </div>
@@ -66,7 +69,8 @@
                         <span class="text-gray-600 uppercase">日期：</span>
                         <div class="flex gap-4">
                             {#for link in dateLinks}
-                                <a href="{link.url}" class="{link.cssClass} hover:text-white transition-colors">{link.label}</a>
+                                <a href="{link.url}"
+                                   class="{link.cssClass} hover:text-main transition-colors">{link.label}</a>
                             {/for}
                         </div>
                     </div>
@@ -85,7 +89,7 @@
                             <div class="flex-1">
                                 <!-- Meta Information -->
                                 <div class="flex items-center justify-between mb-3">
-                                    <div class="flex items-center gap-4 text-[11px] font-mono text-white/40 tracking-widest uppercase">
+                                    <div class="flex items-center gap-4 text-[11px] font-mono text-meta tracking-widest uppercase">
                                         <span class="text-accent font-semibold">{hit.typeLabel}</span>
                                         <time class="timestamp" data-timestamp="{hit.dateText}">{hit.dateText}</time>
                                     </div>
