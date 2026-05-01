@@ -37,4 +37,8 @@ public class AdminWalletDtos {
             Long newBalance,
             String description) {
     }
+
+    public record UpdateCheckInRewardRequest(
+            com.fasterxml.jackson.databind.JsonNode reward) {
+    }
 }

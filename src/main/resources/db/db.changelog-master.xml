@@ -48,4 +48,5 @@
     <include file="migration/044-del-tutorial-level-defs.sql" relativeToChangelogFile="true"/>
     <include file="migration/045-create-system-settings-center.sql" relativeToChangelogFile="true"/>
     <include file="migration/046-refactor-audit-logs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/047-create-user-check-ins.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

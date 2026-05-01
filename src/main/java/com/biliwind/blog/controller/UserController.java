@@ -75,6 +75,12 @@ public class UserController {
     @Location("user/center.content.html")
     Template centerContentTemplate;
 
+    @Inject
+    com.biliwind.blog.service.WalletService walletService;
+
+    @Inject
+    com.biliwind.blog.service.CheckInService checkInService;
+
     // ==================== 页面路由 ====================
 
     /**
@@ -110,19 +116,25 @@ public class UserController {
                 .data("redirect", targetRedirect);
     }
 
-    /**
-     * 用户中心页面
-     */
     @GET
     @Path("/center")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance centerPage(@Context HttpHeaders headers) {
         UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) {
+            return loginPage("/user/center", headers);
+        }
+
+        Long pointsBalance = walletService.getPointsBalance(profile.id());
+        boolean hasCheckedIn = checkInService.hasCheckedInToday(profile.id());
+
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? centerContentTemplate : centerTemplate;
         return template
                 .data("language", languageContext.getLang())
-                .data("user", profile);
+                .data("user", profile)
+                .data("pointsBalance", pointsBalance)
+                .data("hasCheckedIn", hasCheckedIn);
     }
 
     // ==================== API接口 ====================

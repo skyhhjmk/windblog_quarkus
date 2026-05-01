@@ -2,22 +2,23 @@ package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.exception.ConcurrentModificationException;
 import com.biliwind.blog.common.exception.ConflictException;
-import com.biliwind.blog.controller.api.admin.dto.AdminWalletDtos.AdjustPointsRequest;
-import com.biliwind.blog.controller.api.admin.dto.AdminWalletDtos.TransactionHistory;
-import com.biliwind.blog.controller.api.admin.dto.AdminWalletDtos.TransactionItem;
-import com.biliwind.blog.controller.api.admin.dto.AdminWalletDtos.WalletInfo;
+import com.biliwind.blog.controller.api.admin.dto.AdminWalletDtos.*;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.model.UserWallet;
 import com.biliwind.blog.model.WalletTransaction;
 import com.biliwind.blog.service.WalletService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 管理员钱包管理接口
@@ -30,6 +31,9 @@ public class AdminWalletController {
 
     @Inject
     WalletService walletService;
+
+    @Inject
+    ObjectMapper objectMapper;
 
     /**
      * 查询用户钱包信息
@@ -136,5 +140,37 @@ public class AdminWalletController {
         } catch (ConcurrentModificationException e) {
             throw new ConflictException("数据已被修改，请稍后重试");
         }
+    }
+
+    /**
+     * 设置用户专属签到奖励
+     */
+    @POST
+    @Path("/check-in-reward")
+    @Transactional
+    @Operation(summary = "设置用户专属签到奖励")
+    public Response updateCheckInReward(@PathParam("userId") Long userId, UpdateCheckInRewardRequest request) {
+        User user = User.findById(userId);
+        if (user == null || user.deletedAt != null) {
+            throw new NotFoundException("用户不存在");
+        }
+
+        ObjectNode extraInfo;
+        if (user.extraInfo == null) {
+            extraInfo = objectMapper.createObjectNode();
+        } else {
+            extraInfo = (ObjectNode) objectMapper.valueToTree(user.extraInfo);
+        }
+
+        if (request.reward() == null || request.reward().isNull()) {
+            extraInfo.remove("checkInReward");
+        } else {
+            extraInfo.set("checkInReward", request.reward());
+        }
+
+        user.extraInfo = extraInfo;
+        user.persist();
+
+        return Response.ok(Map.of("success", true, "message", "设置成功")).build();
     }
 }
