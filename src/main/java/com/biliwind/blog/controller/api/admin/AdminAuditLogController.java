@@ -17,6 +17,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 审计日志控制器
+ * 已重构为通用结构，支持 extInfo (JSONB) 存储不同业务的扩展字段（如 AI Token）
+ */
 @Path("/api/admin/audit-logs")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -62,46 +66,42 @@ public class AdminAuditLogController {
         for (AuditLog log : logs) {
             String formattedTime = "";
             if (log.createdAt != null) {
-                // 转换为系统默认时区（或特定时区，此处按用户习惯可能需要本地时间）
                 formattedTime = log.createdAt.atZoneSameInstant(java.time.ZoneId.systemDefault()).format(formatter);
             }
 
             items.add(new AuditLogItem(
                 log.id,
                 log.entityType,
-                log.entityId,
+                    log.entityId, // 现为 String
                 log.action,
                 log.oldValue,
                 log.newValue,
+                    log.extInfo, // 新增扩展字段
                 log.performedBy != null ? log.performedBy.id : null,
                 log.performedBy != null ? log.performedBy.username : null,
                     log.createdAt,
-                    formattedTime,
-                    log.durationMs,
-                    log.inputTokens,
-                    log.outputTokens,
-                    log.totalTokens
+                    formattedTime
             ));
         }
 
         return new PageResult<>(items, panacheQuery.count(), safePage, safePageSize);
     }
 
+    /**
+     * 审计日志展示项
+     */
     public record AuditLogItem(
             Long id,
             String entityType,
-            Long entityId,
+            String entityId,
             String action,
-            Map<String, Object> oldValue,
-            Map<String, Object> newValue,
+            Object oldValue,
+            Object newValue,
+            Object extInfo,
             Long performedById,
             String performedByUsername,
             OffsetDateTime createdAt,
-            String createdAtFormatted,
-            Long durationMs,
-            Integer inputTokens,
-            Integer outputTokens,
-            Integer totalTokens
+            String createdAtFormatted
     ) {
     }
 }

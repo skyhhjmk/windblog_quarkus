@@ -16,23 +16,19 @@ public class AuditService {
     AdminRequestContext adminRequestContext;
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void log(String entityType, Long entityId, String action, Map<String, Object> oldValue, Map<String, Object> newValue) {
-        log(entityType, entityId, action, oldValue, newValue, null, null, null, null);
+    public void log(String entityType, Object entityId, String action, Object oldValue, Object newValue) {
+        log(entityType, entityId, action, oldValue, newValue, null);
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void log(String entityType, Long entityId, String action, Map<String, Object> oldValue, Map<String, Object> newValue,
-                    Long durationMs, Integer inputTokens, Integer outputTokens, Integer totalTokens) {
+    public void log(String entityType, Object entityId, String action, Object oldValue, Object newValue, Map<String, Object> extInfo) {
         AuditLog auditLog = new AuditLog();
         auditLog.entityType = entityType;
-        auditLog.entityId = entityId;
+        auditLog.entityId = entityId == null ? null : String.valueOf(entityId);
         auditLog.action = action;
         auditLog.oldValue = oldValue;
         auditLog.newValue = newValue;
-        auditLog.durationMs = durationMs;
-        auditLog.inputTokens = inputTokens;
-        auditLog.outputTokens = outputTokens;
-        auditLog.totalTokens = totalTokens;
+        auditLog.extInfo = extInfo;
 
         Long userId = adminRequestContext.getUserId();
         if (userId != null) {

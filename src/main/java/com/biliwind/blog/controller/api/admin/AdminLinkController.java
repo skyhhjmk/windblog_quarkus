@@ -101,10 +101,17 @@ public class AdminLinkController {
                         }
 
                         // 写入审计日志
-                        auditService.log("link", l.id, "ai_moderation",
+                        java.util.Map<String, Object> extInfo = new java.util.HashMap<>();
+                        extInfo.put("durationMs", durationMs);
+                        extInfo.put("inputTokens", aiResult.inputTokens);
+                        extInfo.put("outputTokens", aiResult.outputTokens);
+                        extInfo.put("totalTokens", aiResult.totalTokens);
+                        extInfo.put("isSafe", safe);
+
+                        auditService.log("link", String.valueOf(l.id), "ai_moderation",
                                 java.util.Map.of("status", l.status == 2 ? 1 : l.status),
-                                java.util.Map.of("status", l.status, "isSafe", safe),
-                                durationMs, aiResult.inputTokens, aiResult.outputTokens, aiResult.totalTokens);
+                                java.util.Map.of("status", (int) l.status),
+                                extInfo);
                     }
                 });
 
@@ -184,7 +191,7 @@ public class AdminLinkController {
         l.updatedAt = OffsetDateTime.now();
 
         l.persist();
-        auditService.log("link", l.id, "create", null, java.util.Map.of("name", l.name, "url", l.url));
+        auditService.log("link", String.valueOf(l.id), "create", null, java.util.Map.of("name", l.name, "url", l.url));
         return toItem(l);
     }
 
@@ -230,7 +237,7 @@ public class AdminLinkController {
             l.seoDescription = req.seoDescription();
 
         l.updatedAt = OffsetDateTime.now();
-        auditService.log("link", l.id, "update", null, java.util.Map.of("name", l.name, "url", l.url)); // For simplicity, just log key info
+        auditService.log("link", String.valueOf(l.id), "update", null, java.util.Map.of("name", l.name, "url", l.url)); // For simplicity, just log key info
         return toItem(l);
     }
 
@@ -240,7 +247,7 @@ public class AdminLinkController {
     public void delete(@PathParam("id") Long id) {
         Link l = Link.findById(id);
         if (l != null) {
-            auditService.log("link", l.id, "delete", java.util.Map.of("name", l.name), null);
+            auditService.log("link", String.valueOf(l.id), "delete", java.util.Map.of("name", l.name), null);
             Link.deleteById(id);
         }
     }

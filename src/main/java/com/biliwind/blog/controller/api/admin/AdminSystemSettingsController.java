@@ -109,7 +109,7 @@ public class AdminSystemSettingsController {
         // 启动 Watchdog (3分钟后验证)
         watchdog.watch(key, 3);
 
-        auditService.log("system_setting", setting.id, "update",
+        auditService.log("system_setting", String.valueOf(setting.id), "update",
                 Map.of("key", key, "value", setting.configValue, "version", setting.version - 1),
                 Map.of("key", key, "value", newValue, "version", setting.version));
 
@@ -128,7 +128,7 @@ public class AdminSystemSettingsController {
         }
         setting.isFrozen = false;
         setting.persist();
-        auditService.log("system_setting", setting.id, "confirm", null, Map.of("key", key));
+        auditService.log("system_setting", String.valueOf(setting.id), "confirm", null, Map.of("key", key));
         return Response.ok(Map.of("success", true, "message", "配置已确认")).build();
     }
 
@@ -143,7 +143,7 @@ public class AdminSystemSettingsController {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
         watchdog.rollback(setting);
-        auditService.log("system_setting", setting.id, "rollback", null, Map.of("key", key));
+        auditService.log("system_setting", String.valueOf(setting.id), "rollback", null, Map.of("key", key));
         return Response.ok(Map.of("success", true, "message", "已执行回滚")).build();
     }
 
@@ -199,7 +199,7 @@ public class AdminSystemSettingsController {
         configChangedEvent.fire(new ConfigChangedEvent(key, newValue));
         watchdog.watch(key, 3);
 
-        auditService.log("system_setting", setting.id, "audit_apply",
+        auditService.log("system_setting", String.valueOf(setting.id), "audit_apply",
                 Map.of("key", key, "value", history.configValue, "version", history.version),
                 Map.of("key", key, "value", newValue, "version", setting.version));
 

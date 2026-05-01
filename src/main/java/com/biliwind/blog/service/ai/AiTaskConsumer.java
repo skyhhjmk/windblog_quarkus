@@ -173,7 +173,7 @@ public class AiTaskConsumer {
                 // 写审计日志
                 com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
                 auditLog.entityType = "post";
-                auditLog.entityId = postId;
+                auditLog.entityId = postId.toString();
                 auditLog.action = "ai_summary_generated";
                 Map<String, Object> oldVal = new HashMap<>();
                 if (post.aiSummary != null) {
@@ -189,11 +189,13 @@ public class AiTaskConsumer {
                 }
                 auditLog.newValue = newVal;
 
-                // 记录 AI 消耗详情
-                auditLog.durationMs = durationMs;
-                auditLog.inputTokens = aiResult.inputTokens;
-                auditLog.outputTokens = aiResult.outputTokens;
-                auditLog.totalTokens = aiResult.totalTokens;
+                // 记录 AI 消耗详情 (封装到 extInfo)
+                Map<String, Object> extInfo = new HashMap<>();
+                extInfo.put("durationMs", durationMs);
+                extInfo.put("inputTokens", aiResult.inputTokens);
+                extInfo.put("outputTokens", aiResult.outputTokens);
+                extInfo.put("totalTokens", aiResult.totalTokens);
+                auditLog.extInfo = extInfo;
 
                 if (userId != null) {
                     auditLog.performedBy = com.biliwind.blog.model.User.findById(userId);

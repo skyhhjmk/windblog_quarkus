@@ -91,7 +91,7 @@ public class AdminCommentController {
             newVal.put("content", comment.content);
         }
 
-        auditService.log("comment", comment.id, "update", oldVal, newVal);
+        auditService.log("comment", String.valueOf(comment.id), "update", oldVal, newVal);
 
         return toItem(comment);
     }
@@ -104,7 +104,7 @@ public class AdminCommentController {
         Comment comment = Comment.findById(id);
         if (comment != null) {
             comment.deletedAt = OffsetDateTime.now();
-            auditService.log("comment", comment.id, "delete", Map.of("deleted", false), Map.of("deleted", true));
+            auditService.log("comment", String.valueOf(comment.id), "delete", Map.of("deleted", false), Map.of("deleted", true));
         }
     }
 
@@ -141,10 +141,16 @@ public class AdminCommentController {
                         c.status = aiResult.isSafe ? (short) 1 : (short) 2;
 
                         // 写入审计日志
-                        auditService.log("comment", c.id, "ai_moderation",
+                        Map<String, Object> extInfo = new HashMap<>();
+                        extInfo.put("durationMs", durationMs);
+                        extInfo.put("inputTokens", aiResult.inputTokens);
+                        extInfo.put("outputTokens", aiResult.outputTokens);
+                        extInfo.put("totalTokens", aiResult.totalTokens);
+
+                        auditService.log("comment", String.valueOf(c.id), "ai_moderation",
                                 Map.of("status", oldStatus),
-                                Map.of("status", c.status, "isSafe", aiResult.isSafe),
-                                durationMs, aiResult.inputTokens, aiResult.outputTokens, aiResult.totalTokens);
+                                Map.of("status", (int) c.status, "isSafe", aiResult.isSafe),
+                                extInfo);
                     }
                 });
 

@@ -7,7 +7,6 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
-import java.util.Map;
 
 /**
  * 审计日志实体，对应 audit_logs
@@ -25,9 +24,11 @@ public class AuditLog extends PanacheEntityBase {
     @Column(name = "entity_type", nullable = false, length = 50)
     public String entityType;
 
-    /** 实体ID */
-    @Column(name = "entity_id", nullable = false)
-    public Long entityId;
+    /**
+     * 实体标识（支持数字 ID 或字符串 Key）
+     */
+    @Column(name = "entity_id", nullable = false, length = 255)
+    public String entityId;
 
     /** 操作类型，如 create、update、delete*/
     @Column(nullable = false, length = 50)
@@ -36,12 +37,19 @@ public class AuditLog extends PanacheEntityBase {
     /** 变更前数据（JSONB）*/
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "old_value", columnDefinition = "jsonb")
-    public Map<String, Object> oldValue;
+    public Object oldValue;
 
     /** 变更后数据（JSONB） */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "new_value", columnDefinition = "jsonb")
-    public Map<String, Object> newValue;
+    public Object newValue;
+
+    /**
+     * 扩展信息，用于存储 AI Token、IP 地址、TraceID 等
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "ext_info", columnDefinition = "jsonb")
+    public Object extInfo;
 
     /** 操作人 */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -52,28 +60,4 @@ public class AuditLog extends PanacheEntityBase {
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp
     public OffsetDateTime createdAt;
-
-    /**
-     * 消耗时长 (毫秒)
-     */
-    @Column(name = "duration_ms")
-    public Long durationMs;
-
-    /**
-     * 输入 Token 数
-     */
-    @Column(name = "input_tokens")
-    public Integer inputTokens;
-
-    /**
-     * 输出 Token 数
-     */
-    @Column(name = "output_tokens")
-    public Integer outputTokens;
-
-    /**
-     * 总 Token 数
-     */
-    @Column(name = "total_tokens")
-    public Integer totalTokens;
 }

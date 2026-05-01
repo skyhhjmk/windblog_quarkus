@@ -49,7 +49,7 @@ public class AdminAiTestController {
         Long performingUserId = adminRequestContext.getUserId();
 
         // 记录测试触发的起始审计日志（初步记录）
-        auditService.log("ai_provider", configId, "ai_provider_test_triggered",
+        auditService.log("ai_provider", String.valueOf(configId), "ai_provider_test_triggered",
                 null, java.util.Map.of("prompt", request.prompt(), "provider", config.provider));
 
         // 用于捕获流式输出内容以记录到审计日志
@@ -70,8 +70,8 @@ public class AdminAiTestController {
                 String finalOutput = outputBuffer.toString();
 
                 // 流式任务完成后的补充记录
-                auditService.log("ai_provider", configId, "ai_provider_test_completed",
-                        null, java.util.Map.of("output", finalOutput), durationMs, null, null, null);
+                auditService.log("ai_provider", String.valueOf(configId), "ai_provider_test_completed",
+                        null, java.util.Map.of("output", finalOutput), java.util.Map.of("durationMs", durationMs));
             }
         });
     }
