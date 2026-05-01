@@ -76,6 +76,13 @@ public class AdminUserController {
             user.status = req.status();
         }
 
+        if (req.nickname() != null) {
+            user.nickname = req.nickname().trim();
+        }
+        if (req.avatar() != null) {
+            user.avatar = req.avatar().trim();
+        }
+
         if (req.roleName() != null && !req.roleName().isBlank()) {
             if (!adminRequestContext.isSuperAdmin()) {
                 throw new ForbiddenException("只有超级管理员可修改角色");
@@ -96,10 +103,14 @@ public class AdminUserController {
     }
 
     private AdminUserItem toItem(User user) {
-        String avatar = "https://ui-avatars.com/api/?name=" + user.username;
+        String avatar = user.avatar;
+        if (avatar == null || avatar.isBlank()) {
+            avatar = "https://ui-avatars.com/api/?name=" + user.username;
+        }
         return new AdminUserItem(
                 user.id,
                 user.username,
+                user.nickname,
                 user.email,
                 avatar,
                 user.roleName,

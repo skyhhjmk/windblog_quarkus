@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
-
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +62,7 @@ public final class AdminPostDtos {
                         Short aiSummaryStatus,
                         Integer version,
                         Long userId,
+                        String userName,
                         Long categoryId,
                         List<Long> tagIds,
                         OffsetDateTime publishedAt,
@@ -89,6 +89,7 @@ public final class AdminPostDtos {
                         Integer currentRevisionNumber,
                         Integer version,
                         Long userId,
+                        String userName,
                         Long categoryId,
                         List<Long> tagIds,
                         OffsetDateTime publishedAt,

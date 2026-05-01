@@ -3,7 +3,9 @@ package com.biliwind.blog.model;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 
@@ -42,6 +44,37 @@ public class User extends PanacheEntityBase {
      */
     @Column(name = "role_name", length = 64)
     public String roleName;
+
+    /**
+     * 用户昵称
+     */
+    @Column(length = 100)
+    public String nickname;
+
+    /**
+     * 用户头像 URL
+     */
+    @Column(length = 512)
+    public String avatar;
+
+    /**
+     * 手机号
+     */
+    @Column(length = 20)
+    public String phone;
+
+    /**
+     * 扩展信息
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "extra_info", columnDefinition = "jsonb")
+    public Object extraInfo;
+
+    /**
+     * 关联的钱包 ID
+     */
+    @Column(name = "wallet_id")
+    public Long walletId;
 
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)

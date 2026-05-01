@@ -7,6 +7,7 @@ public class AdminUserDtos {
     public record AdminUserItem(
             Long id,
             String username,
+            String nickname,
             String email,
             String avatar,
             String roleName,
@@ -16,6 +17,8 @@ public class AdminUserDtos {
     }
 
     public record UserUpdateRequest(
+            String nickname,
+            String avatar,
             String email,
             String password,
             Short status,

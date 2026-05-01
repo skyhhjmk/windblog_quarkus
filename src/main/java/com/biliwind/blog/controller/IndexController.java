@@ -124,6 +124,7 @@ public class IndexController {
                 post.publishedAt,
                 post.createdAt,
                 categoryName,
+                post.user != null ? post.user.username : "Unknown",
                 tags
         );
     }
@@ -140,6 +141,7 @@ public class IndexController {
             OffsetDateTime publishedAt,
             OffsetDateTime createdAt,
             String categoryName,
+            String authorName,
             List<TagItem> tags
     ) {
     }

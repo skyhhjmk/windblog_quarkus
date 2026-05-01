@@ -10,7 +10,6 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostTag;
-import com.biliwind.blog.model.Category;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -19,6 +18,7 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -104,6 +104,8 @@ public class PostController {
                 .data("postBody", postBody.body())
                 .data("postBodyHtml", postBody.html())
                 .data("publishedAt", postEntity.publishedAt)
+                .data("authorName", postEntity.user != null ? postEntity.user.username : "Unknown")
+                .data("authorAvatar", postEntity.user != null ? "https://ui-avatars.com/api/?name=" + postEntity.user.username : "/static/img/avatar-default.png")
                 .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)
                 .data("postBodyJson", escapeJavaScript(postBody.body()))
                 .data("postCategory", postEntity.category != null ? LanguageHelper.resolveLocalizedValue(postEntity.category.name, resolvedLang) : "未分类")

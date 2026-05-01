@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.exception.ConcurrentModificationException;
 import com.biliwind.blog.common.exception.InsufficientBalanceException;
+import com.biliwind.blog.model.User;
 import com.biliwind.blog.model.UserWallet;
 import com.biliwind.blog.model.WalletTransaction;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
@@ -56,6 +57,12 @@ public class WalletService {
         // 检查是否已存在
         UserWallet existing = getWalletByUserId(userId);
         if (existing != null) {
+            // 补课：如果钱包已存在但用户表未关联，则进行关联
+            User user = User.findById(userId);
+            if (user != null && user.walletId == null) {
+                user.walletId = existing.id;
+                user.persist();
+            }
             return existing;
         }
 
@@ -64,6 +71,14 @@ public class WalletService {
         wallet.pointsBalance = 0L;
         wallet.version = 0;
         wallet.persist();
+
+        // 绑定到用户
+        User user = User.findById(userId);
+        if (user != null) {
+            user.walletId = wallet.id;
+            user.persist();
+        }
+
         return wallet;
     }
 
