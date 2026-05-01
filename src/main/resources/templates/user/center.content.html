@@ -180,7 +180,10 @@
 
                                     if (result.success) {
                                         if (window.showToast) window.showToast('签到成功！获得积分奖励', 'success');
-                                        else alert('签到成功！');
+                                        else await window.showModal({
+                                            title: '签到成功',
+                                            message: '您已成功获得积分奖励'
+                                        });
 
                                         const balanceEl = document.getElementById('userPointsBalance');
                                         if (balanceEl && result.newBalance !== undefined) {
@@ -192,13 +195,19 @@
                                         checkInBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>今日已签到';
                                     } else {
                                         if (window.showToast) window.showToast(result.message || '签到失败', 'error');
-                                        else alert(result.message || '签到失败');
+                                        else await window.showModal({
+                                            title: '签到失败',
+                                            message: result.message || '请稍后再试'
+                                        });
                                         checkInBtn.disabled = false;
                                         checkInBtn.innerHTML = originalHtml;
                                     }
                                 } catch (e) {
                                     if (window.showToast) window.showToast('网络异常', 'error');
-                                    else alert('网络异常');
+                                    else await window.showModal({
+                                        title: '网络异常',
+                                        message: '无法连接到服务器，请检查您的网络设置'
+                                    });
                                     checkInBtn.disabled = false;
                                     checkInBtn.innerHTML = originalHtml;
                                 }

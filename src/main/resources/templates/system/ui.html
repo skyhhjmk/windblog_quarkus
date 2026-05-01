@@ -1,0 +1,31 @@
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- App Modal -->
+<div id="appModal" class="fixed inset-0 z-[9999] hidden items-center justify-center p-4">
+    <div class="modal-overlay absolute inset-0 bg-bg/20"></div>
+    <div class="modal-container relative bg-card border border-border shadow-2xl max-w-md w-full overflow-hidden rounded-xl">
+        <div class="p-8">
+            <h3 id="modalTitle" class="text-xl font-bold mb-3 tracking-tight">确认</h3>
+            <p id="modalMessage" class="text-body text-sm mb-8 leading-relaxed"></p>
+
+            <div id="modalPromptContainer" class="hidden mb-8">
+                <input type="text" id="modalPromptInput"
+                       class="w-full px-4 py-2.5 bg-input-bg border border-border rounded-lg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
+                       placeholder="请输入..."/>
+            </div>
+
+            <div class="flex gap-3 justify-end">
+                <button id="modalCancel"
+                        class="px-6 py-2.5 text-sm font-semibold text-meta hover:text-main hover:bg-white/5 rounded-lg transition-all">
+                    取消
+                </button>
+                <button id="modalOk"
+                        class="px-8 py-2.5 bg-accent text-bg font-black rounded-lg text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-accent/20">
+                    确定
+                </button>
+            </div>
+        </div>
+        <div class="h-1 w-full bg-gradient-to-r from-transparent via-accent to-transparent opacity-30"></div>
+    </div>
+</div>

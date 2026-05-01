@@ -78,6 +78,7 @@
 
     <!-- Custom Theme Styles -->
     <link rel="stylesheet" href="/assets/css/theme.css" />
+    <link rel="stylesheet" href="/assets/css/ui.css"/>
 </head>
 
 <body class="min-h-screen flex flex-col bg-bg text-body font-sans">
@@ -229,23 +230,11 @@
 <!-- Progress Bar -->
 <div id="pjax-progress" class="fixed top-0 left-0 h-0.5 w-0 z-[9999] bg-accent shadow-[0_0_10px_rgba(6,182,212,0.5)] transition-all"></div>
 
-<!-- Confirm Dialog -->
-<div id="confirmDialog" class="fixed inset-0 bg-bg/80 backdrop-blur-sm z-[9998] hidden flex items-center justify-center p-4">
-    <div class="card max-w-md w-full p-8 shadow-2xl">
-        <h3 id="confirmTitle" class="text-xl font-bold mb-2">确认</h3>
-        <p id="confirmMessage" class="text-gray-400 mb-8">你确定要继续吗？</p>
-        <div class="flex gap-4 justify-end">
-            <button id="confirmCancel" class="px-5 py-2 text-sm font-medium hover:text-main transition-colors">取消
-            </button>
-            <button id="confirmOk" class="bg-accent text-white px-5 py-2 rounded-md text-sm font-bold hover:opacity-90 transition-colors">确认</button>
-        </div>
-    </div>
-</div>
-
-<!-- Toast Container -->
-<div id="toastContainer" class="toast-container"></div>
+<!-- UI Components -->
+    {#include system/ui.html /}
 
 <!-- JS Scripts -->
+<script src="/assets/js/ui.js" defer></script>
 <script src="/assets/js/main.js" defer></script>
 <script src="/assets/js/user.js" defer></script>
 <script src="/assets/js/comment.js" defer></script>

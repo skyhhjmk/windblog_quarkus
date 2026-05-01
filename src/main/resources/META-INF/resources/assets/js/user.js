@@ -48,38 +48,15 @@
             });
     }
 
-    function showConfirm(title, message, onConfirm) {
-        const dialog = document.getElementById('confirmDialog');
-        const titleEl = document.getElementById('confirmTitle');
-        const messageEl = document.getElementById('confirmMessage');
-        const okBtn = document.getElementById('confirmOk');
-        const cancelBtn = document.getElementById('confirmCancel');
-
-        if (!dialog) {
-            if (confirm(message)) onConfirm();
-            return;
-        }
-
-        titleEl.textContent = title;
-        messageEl.textContent = message;
-        dialog.classList.remove('hidden');
-
-        function cleanup() {
-            dialog.classList.add('hidden');
-            okBtn.onclick = null;
-            cancelBtn.onclick = null;
-        }
-
-        okBtn.onclick = () => {
-            cleanup();
+    async function showConfirm(title, message, onConfirm) {
+        const result = await window.showModal({
+            title: title,
+            message: message,
+            showCancel: true
+        });
+        if (result && onConfirm) {
             onConfirm();
-        };
-
-        cancelBtn.onclick = cleanup;
-
-        dialog.onclick = (e) => {
-            if (e.target === dialog) cleanup();
-        };
+        }
     }
 
     function bindLogout() {
