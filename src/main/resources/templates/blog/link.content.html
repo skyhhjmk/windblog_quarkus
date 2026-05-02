@@ -1,20 +1,10 @@
 <div id="pjax-content-root" data-page-title="{pageTitle ?: '友情链接'}">
     <div id="pjax-nav-path" class="hidden">links</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-12">
-            <section class="space-y-4">
-                <h3 class="meta-mono">资源信息</h3>
-                <div class="grid grid-cols-1 gap-2">
-                    <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">数量</span>
-                        <span class="text-sm font-mono text-main">{links.size}</span>
-                    </div>
-                    <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
-                        <span class="text-sm font-mono text-main">{language ?: 'zh-CN'}</span>
-                    </div>
-                </div>
-            </section>
+        <div class="sticky top-32 space-y-8">
+                {#include sidebar/stats.html /}
+                {#include sidebar/recent_posts.html /}
+                {#include sidebar/tags.html /}
         </div>
     </div>
 

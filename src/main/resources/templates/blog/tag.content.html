@@ -1,22 +1,10 @@
 <div id="pjax-content-root" data-page-title="{pageTitle ?: '标签'}">
     <div id="pjax-nav-path" class="hidden">{navPath ?: 'tags'}</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-12">
-            <section class="space-y-4">
-                <h3 class="meta-mono">标签概览</h3>
-                <div class="grid grid-cols-1 gap-2">
-                    <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">标签总数</span>
-                        <span class="text-sm font-mono text-main">{totalCount ?: 0}</span>
-                    </div>
-                    {#if detailMode}
-                        <div class="flex justify-between items-center py-2 border-b border-border/50">
-                            <span class="text-xs text-gray-500 uppercase tracking-wider">当前标签</span>
-                            <span class="text-sm font-mono text-accent">#{currentTag.name}</span>
-                        </div>
-                    {/if}
-                </div>
-            </section>
+        <div class="sticky top-32 space-y-8">
+                {#include sidebar/tags.html /}
+                {#include sidebar/categories.html /}
+                {#include sidebar/stats.html /}
         </div>
     </div>
 

@@ -1,27 +1,10 @@
 <div id="pjax-content-root" data-page-title="{pageTitle ?: '分类'}">
     <div id="pjax-nav-path" class="hidden">{navPath ?: 'categories'}</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-12">
-            <section class="space-y-4">
-                <h3 class="meta-mono">分类统计</h3>
-                <div class="grid grid-cols-1 gap-2">
-                    {#if detailMode}
-                        <div class="flex justify-between items-center py-2 border-b border-border/50">
-                            <span class="text-xs text-gray-500 uppercase tracking-wider">子分类</span>
-                            <span class="text-sm font-mono text-main">{currentCategory.childCount}</span>
-                        </div>
-                    {#else}
-                        <div class="flex justify-between items-center py-2 border-b border-border/50">
-                            <span class="text-xs text-gray-500 uppercase tracking-wider">总计</span>
-                            <span class="text-sm font-mono text-main">{totalCount ?: 0}</span>
-                        </div>
-                    {/if}
-                    <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
-                        <span class="text-sm font-mono text-main">{language ?: 'zh-CN'}</span>
-                    </div>
-                </div>
-            </section>
+        <div class="sticky top-32 space-y-8">
+                {#include sidebar/categories.html /}
+                {#include sidebar/tags.html /}
+                {#include sidebar/stats.html /}
         </div>
     </div>
 
