@@ -109,6 +109,22 @@
             return true;
         }
 
+        function injectSidebar() {
+            const template = document.querySelector('#pjax-sidebar-html');
+            const container = document.getElementById('sidebar-container');
+            if (!container) return;
+
+            // 如果当前页面没有提供新的侧边栏模板，则不修改现有侧边栏
+            if (!template) return;
+
+            const nextHtml = template.innerHTML || '';
+            // 只有当内容确实改变时才更新，避免闪烁
+            if (container.innerHTML.trim() !== nextHtml.trim()) {
+                container.innerHTML = nextHtml;
+                dispatch('sidebar:updated');
+            }
+        }
+
         async function loadByPjax(url, pushState) {
             const container = document.getElementById('pjax-container');
             if (!container) {
@@ -147,16 +163,6 @@
                     }
                 }
 
-                const sidebarTemplate = container.querySelector('#pjax-sidebar-html');
-                const sidebarContainer = document.getElementById('sidebar-container');
-                if (sidebarTemplate && sidebarContainer) {
-                    const nextSidebarHtml = sidebarTemplate.innerHTML || '';
-                    if (sidebarContainer.innerHTML !== nextSidebarHtml) {
-                        sidebarContainer.innerHTML = nextSidebarHtml;
-                        document.dispatchEvent(new Event('sidebar:updated'));
-                    }
-                }
-
                 if (pushState) {
                     window.history.pushState({ pjax: true, url: url }, '', url);
                 }
@@ -172,27 +178,37 @@
 
         function formatTimestamps(root = document) {
             const elements = root.querySelectorAll('.timestamp:not(.formatted)');
-            const options = { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            };
-            const formatter = new Intl.DateTimeFormat(navigator.language, options);
-
             elements.forEach(el => {
-                const raw = el.getAttribute('data-timestamp') || el.textContent;
-                if (!raw) return;
-                
                 try {
-                    const date = new Date(raw.replace(' ', 'T'));
-                    if (!isNaN(date.getTime())) {
-                        el.textContent = formatter.format(date);
-                        el.classList.add('formatted');
+                    if (el.classList.contains('formatted')) return;
+                    const raw = el.getAttribute('data-timestamp') || el.textContent;
+                    if (!raw) return;
+
+                    // 处理各种日期格式，确保能够被 new Date() 正确解析
+                    let isoStr = raw.trim();
+                    if (!isoStr.includes('T')) {
+                        isoStr = isoStr.replace(' ', 'T');
                     }
-                } catch (e) {
-                    console.error('Failed to format timestamp:', raw, e);
+
+                    const date = new Date(isoStr);
+                    if (isNaN(date.getTime())) {
+                        console.warn('Invalid date format:', raw);
+                        return;
+                    }
+
+                    const formatted = new Intl.DateTimeFormat('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }).format(date);
+
+                    el.textContent = formatted;
+                    el.classList.add('formatted');
+                } catch (err) {
+                    console.error('Failed to format timestamp:', err, el);
                 }
             });
         }
@@ -232,6 +248,7 @@
 
         document.addEventListener('page:ready', () => {
             formatTimestamps();
+            injectSidebar();
         });
 
         dispatch('page:ready', { url: window.location.href });

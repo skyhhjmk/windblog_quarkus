@@ -99,11 +99,11 @@ public class PostController {
         // 安全处理：对于未购买用户，只返回预览内容，不包含任何付费内容
         if (postPrice > 0 && maxPointsPaid < postPrice && !isAuthor) {
             // 未买断且文章整体收费：仅返回预览内容
-            localizedContent = postAccessService.getPreviewOnlyContent(localizedContent, freeLines, true, postEntity.id, postPrice);
+            localizedContent = postAccessService.getPreviewOnlyContent(localizedContent, freeLines, true, postEntity.id, postPrice, currentUserId);
         } else {
             // 已买断、或者是作者、或者是文章本身免费：返回完整内容
             // 但是内容中的 [hide-text price=...] 标签会由 filterHiddenContent 根据 maxPointsPaid 状态决定是否解锁
-            localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postEntity.id, postPrice);
+            localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postEntity.id, postPrice, currentUserId);
         }
 
         PostBodyView postBody = resolvePostBody(postEntity.renderType, localizedContent);

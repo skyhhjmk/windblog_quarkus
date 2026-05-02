@@ -41,7 +41,7 @@ public class UserGamificationController {
         }
 
         try {
-            postAccessService.buyPost(userId, postId);
+            postAccessService.buyPost(userId, postId, null, null);
             return Response.ok(Map.of("success", true, "message", "购买成功")).build();
         } catch (Exception e) {
             return Response.status(Response.Status.BAD_REQUEST).entity(Map.of("success", false, "message", e.getMessage())).build();

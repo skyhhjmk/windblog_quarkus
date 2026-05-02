@@ -11,32 +11,45 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const content = document.querySelector('.prose') || document.querySelector('#post-content');
-        if (!content) return;
+    (function () {
+        function initToc() {
+            const content = document.querySelector('.prose') || document.querySelector('#post-content-section');
+            if (!content) return;
 
-        const headings = content.querySelectorAll('h1, h2, h3, h4');
-        if (headings.length < 2) return;
+            const headings = content.querySelectorAll('h1, h2, h3, h4');
+            const tocWidget = document.getElementById('toc-widget');
+            const tocContent = document.getElementById('toc-content');
 
-        const tocWidget = document.getElementById('toc-widget');
-        const tocContent = document.getElementById('toc-content');
+            if (!tocWidget || !tocContent) return;
 
-        tocWidget.classList.remove('hidden');
+            if (headings.length < 2) {
+                tocWidget.classList.add('hidden');
+                return;
+            }
 
-        headings.forEach((heading, index) => {
-            const id = heading.id || "heading-" + index;
-            heading.id = id;
+            // 清空旧内容
+            tocContent.innerHTML = '';
+            tocWidget.classList.remove('hidden');
 
-            const level = parseInt(heading.tagName[1]);
-            const item = document.createElement('a');
-            item.href = "#" + id;
-            item.className = "block py-1.5 text-body hover:text-accent transition-colors";
-            item.style.paddingLeft = (level - 1) + "rem";
-            item.textContent = heading.textContent;
+            headings.forEach((heading, index) => {
+                const id = heading.id || "heading-" + index;
+                heading.id = id;
 
-            tocContent.appendChild(item);
-        });
+                const level = parseInt(heading.tagName[1]);
+                const item = document.createElement('a');
+                item.href = "#" + id;
+                item.className = "block py-1.5 text-body hover:text-accent transition-colors";
+                item.style.paddingLeft = (level - 1) + "rem";
+                item.textContent = heading.textContent;
 
-        // Scroll spy logic could be added here
-    });
+                tocContent.appendChild(item);
+            });
+        }
+
+        // 初始加载和侧边栏更新后都运行
+        document.addEventListener('DOMContentLoaded', initToc);
+        document.addEventListener('sidebar:updated', initToc);
+        // 兼容 PJAX ready 事件
+        document.addEventListener('page:ready', initToc);
+    })();
 </script>

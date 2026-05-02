@@ -36,6 +36,12 @@ public class UserPurchaseRecord extends PanacheEntityBase {
     public Long targetId;
 
     /**
+     * 购买目标区块 ID（用于文章内部分区块解锁）
+     */
+    @Column(name = "target_block_id", length = 64)
+    public String targetBlockId;
+
+    /**
      * 支付积分数量
      */
     @Column(name = "points_paid", nullable = false)

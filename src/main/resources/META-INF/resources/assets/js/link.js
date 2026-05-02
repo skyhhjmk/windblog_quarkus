@@ -24,21 +24,8 @@
         };
     }
 
-    function injectSidebar() {
-        const template = document.getElementById('pjax-sidebar-html');
-        const container = document.getElementById('sidebar-container');
-        if (!template || !container) return;
-
-        const nextHtml = template.innerHTML || '';
-        if (container.innerHTML !== nextHtml) {
-            container.innerHTML = nextHtml;
-            document.dispatchEvent(new Event('sidebar:updated'));
-        }
-    }
-
     function initPage() {
         initLinkList();
-        injectSidebar();
     }
 
     document.addEventListener('DOMContentLoaded', initPage);

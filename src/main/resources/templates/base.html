@@ -195,7 +195,23 @@
         <aside id="sidebar-container" class="w-full md:w-[320px] shrink-0">
             {#insert sidebar}
                 <div class="sticky top-32 space-y-12">
-                    <p class="meta-mono">Sidebar Placeholder</p>
+                    <section class="space-y-4">
+                        <h3 class="meta-mono">统计</h3>
+                        <div class="grid grid-cols-1 gap-2">
+                            <div class="flex justify-between items-center py-2 border-b border-border/50">
+                                <span class="text-xs text-gray-500 uppercase tracking-wider">文章</span>
+                                <span class="text-sm font-mono text-main">10</span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-border/50">
+                                <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
+                                <span class="text-sm font-mono text-main">zh-CN</span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-border/50">
+                                <span class="text-xs text-gray-500 uppercase tracking-wider">页码</span>
+                                <span class="text-sm font-mono text-main">1 / 1</span>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             {/insert}
         </aside>

@@ -78,7 +78,7 @@ public class UserPostContentController {
 
         String resolvedLang = languageContext.getLang();
         String localizedContent = resolveContent(post.currentRevision, resolvedLang);
-        localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postId, postPrice);
+        localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postId, postPrice, userId);
 
         // 全站买断判定
         boolean hasPurchased = isAuthor
@@ -119,14 +119,17 @@ public class UserPostContentController {
     @POST
     @Path("/buy/{postId}")
     @Operation(summary = "购买文章/解锁区块")
-    public Response buyPost(@PathParam("postId") Long postId, @QueryParam("price") Long price, @Context HttpHeaders headers) {
+    public Response buyPost(@PathParam("postId") Long postId,
+                            @QueryParam("price") Long price,
+                            @QueryParam("blockId") String blockId,
+                            @Context HttpHeaders headers) {
         Long userId = resolveUserId(headers);
         if (userId == null) {
             return unauthorized();
         }
 
         try {
-            postAccessService.buyPost(userId, postId, price);
+            postAccessService.buyPost(userId, postId, price, blockId);
             return Response.ok(Map.of("success", true, "message", "解锁成功"))
                     .header("Cache-Control", "no-cache, no-store, must-revalidate")
                     .build();
