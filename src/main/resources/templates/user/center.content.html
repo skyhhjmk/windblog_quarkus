@@ -21,6 +21,25 @@
     <!-- Main Grid -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div class="md:col-span-2 space-y-8">
+            <!-- Gamification Status Bar (Level & EXP) -->
+            <section
+                    class="border border-[var(--border)] bg-[var(--panel-bg)] p-6 flex flex-col sm:flex-row items-center gap-6">
+                <div class="flex flex-col items-center justify-center w-24 h-24 rounded-full border-4 border-[var(--border)] bg-[var(--bg)] shadow-[0_0_15px_rgba(var(--accent-rgb),0.2)]">
+                    <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Level</span>
+                    <span class="text-3xl font-black text-[var(--accent)]">{level}</span>
+                </div>
+                <div class="flex-grow w-full">
+                    <div class="flex justify-between text-sm mb-2 font-mono">
+                        <span class="text-gray-400">EXP: {currentLevelExp} / {currentLevelMaxExp}</span>
+                        <span class="text-[var(--accent)] font-bold">{expPercent}%</span>
+                    </div>
+                    <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+                        <div class="h-full bg-[var(--accent)] transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(var(--accent-rgb),0.8)]"
+                             style="width: {expPercent}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2 text-right">总经验值: {exp}</p>
+                </div>
+            </section>
             <!-- Wallet Card -->
             <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-8 overflow-hidden relative group">
                 <div class="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)]/10 blur-3xl -mr-16 -mt-16 group-hover:bg-[var(--accent)]/20 transition-all"></div>
@@ -77,6 +96,46 @@
                         <span class="text-gray-400">邮箱</span>
                         <span>{user.email}</span>
                     </div>
+                </div>
+            </section>
+
+            <!-- 2D Backpack -->
+            <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-bold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-[var(--accent)]" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                        </svg>
+                        我的背包
+                    </h2>
+                    <span class="text-xs font-mono text-gray-500">{backpackCapacity} 格容量</span>
+                </div>
+
+                <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 gap-2">
+                    {#for item in backpackItems}
+                        {#if item}
+                            <div class="aspect-square bg-[var(--bg)] border border-gray-700/50 rounded-md relative group cursor-pointer overflow-hidden transition-all duration-300 hover:scale-105 hover:z-10"
+                                 style="box-shadow: inset 0 0 10px {item.rarity}20, 0 0 0 1px {item.rarity}50;"
+                                 title="{item.name} ({item.type})"
+                                 onclick="showItemDetails('{item.id}', '{item.name}', '{item.description}', '{item.rarity}', '{item.type}')">
+                                <div class="absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity"
+                                     style="background-color: {item.rarity}"></div>
+                                <div class="absolute inset-0 flex items-center justify-center p-2 text-xs font-bold text-center drop-shadow-md z-10"
+                                     style="color: {item.rarity}">
+                                    {item.name.substring(0, 2)}
+                                </div>
+                                <div class="absolute bottom-0 inset-x-0 h-1"
+                                     style="background-color: {item.rarity}"></div>
+                            </div>
+                        {#else}
+                            <div class="aspect-square bg-gray-900/50 border border-gray-800 rounded-md shadow-inner flex items-center justify-center opacity-50">
+                                <div class="w-1.5 h-1.5 rounded-full bg-gray-800"></div>
+                            </div>
+                        {/if}
+                    {/for}
                 </div>
             </section>
         </div>
@@ -143,6 +202,23 @@
                 </div>
             </div>
 
+            <!-- Item Details Modal (Simple) -->
+            <div id="itemModal" class="fixed inset-0 z-[100] hidden">
+                <div class="absolute inset-0 bg-bg/60 backdrop-blur-md item-modal-overlay"></div>
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm bg-card border border-border shadow-2xl rounded-xl p-6 transition-all duration-300 scale-95 opacity-0 item-modal-container">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 id="itemModalName" class="text-xl font-bold"></h3>
+                        <button class="item-modal-close p-1 hover:text-[var(--accent)]">✕</button>
+                    </div>
+                    <div id="itemModalType"
+                         class="text-xs uppercase tracking-widest text-gray-500 mb-4 font-mono"></div>
+                    <p id="itemModalDesc" class="text-sm text-gray-300 mb-6"></p>
+                    <button class="w-full py-2 bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 rounded hover:bg-[var(--accent)]/20">
+                        使用 / 查看
+                    </button>
+                </div>
+            </div>
+
             <style>
                 #historyModal.show .modal-container {
                     transform: translate(-50%, -50%) scale(1);
@@ -155,6 +231,28 @@
                     let currentPage = 1;
                     const pageSize = 10;
                     let totalItems = 0;
+
+                    // Expose to window for inline onclick
+                    window.showItemDetails = function (id, name, desc, rarity, type) {
+                        const modal = document.getElementById('itemModal');
+                        document.getElementById('itemModalName').textContent = name;
+                        document.getElementById('itemModalName').style.color = rarity;
+                        document.getElementById('itemModalType').textContent = type;
+                        document.getElementById('itemModalDesc').textContent = desc || '无详细描述';
+
+                        modal.classList.remove('hidden');
+                        void modal.offsetWidth;
+                        modal.querySelector('.item-modal-container').style.transform = 'translate(-50%, -50%) scale(1)';
+                        modal.querySelector('.item-modal-container').style.opacity = '1';
+
+                        const close = () => {
+                            modal.querySelector('.item-modal-container').style.transform = 'translate(-50%, -50%) scale(0.95)';
+                            modal.querySelector('.item-modal-container').style.opacity = '0';
+                            setTimeout(() => modal.classList.add('hidden'), 300);
+                        };
+                        modal.querySelector('.item-modal-overlay').onclick = close;
+                        modal.querySelector('.item-modal-close').onclick = close;
+                    };
 
                     function init() {
                         const checkInBtn = document.getElementById('checkInBtn');

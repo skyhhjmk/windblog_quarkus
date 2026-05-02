@@ -8,7 +8,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -132,6 +131,13 @@ public class Post extends PanacheEntityBase {
      */
     @Column(name = "allow_comment", nullable = false)
     public Boolean allowComment = true;
+
+    /**
+     * 扩展元数据（如买断价格等）
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "extra_info", columnDefinition = "jsonb")
+    public Object extraInfo;
 
     /** 乐观锁版本号 */
     @Version

@@ -28,6 +28,8 @@ public final class AdminPostDtos {
                         Short renderType,
                         Short editorType,
                         Short aiSummaryStatus,
+                        Long pointsPrice,
+                        Integer freeLines,
                         Long categoryId,
                         List<Long> tagIds) {
         }
@@ -48,6 +50,8 @@ public final class AdminPostDtos {
                         Short editorType,
                         Short aiSummaryStatus,
                         @NotNull(message = "version 不能为空") Integer version,
+                        Long pointsPrice,
+                        Integer freeLines,
                         Long categoryId,
                         List<Long> tagIds) {
         }
@@ -88,6 +92,8 @@ public final class AdminPostDtos {
                         Short aiSummaryStatus,
                         Integer currentRevisionNumber,
                         Integer version,
+                        Long pointsPrice,
+                        Integer freeLines,
                         Long userId,
                         String userName,
                         Long categoryId,

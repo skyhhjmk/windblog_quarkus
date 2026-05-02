@@ -166,6 +166,9 @@ public class AdminPostApiController {
 
         post.persist();
 
+        // 更新买断价格和免费行数
+        updateExtraInfo(post, request.pointsPrice(), request.freeLines());
+
         // 如果状态为自动(0)，则触发 AI 摘要任务
         if (post.aiSummaryStatus == 0 && request.contentMarkdown() != null && !request.contentMarkdown().isEmpty()) {
             aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
@@ -230,6 +233,10 @@ public class AdminPostApiController {
 
         changed |= updateBasicFields(post, request);
         changed |= updateCategory(post, request);
+
+        // 更新买断价格和免费行数
+        updateExtraInfo(post, request.pointsPrice(), request.freeLines());
+        changed = true; // extraInfo 变更标记为已更改
 
         if (request.tagIds() != null) {
             changed |= updatePostTags(post, request.tagIds());
@@ -401,6 +408,8 @@ public class AdminPostApiController {
                 post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 post.currentRevision == null ? 0 : post.currentRevision.revisionNumber,
                 post.version,
+                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getExtraPointsPrice(post),
+                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getFreeLines(post),
                 post.user == null ? null : post.user.id,
                 post.user == null ? null : post.user.username,
                 post.category == null ? null : post.category.id,
@@ -408,6 +417,32 @@ public class AdminPostApiController {
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt);
+    }
+
+    private void updateExtraInfo(Post post, Long pointsPrice, Integer freeLines) {
+        Map<String, Object> extra = null;
+        if (post.extraInfo instanceof Map) {
+            extra = new HashMap<>((Map<String, Object>) post.extraInfo);
+        } else if (post.extraInfo != null) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                extra = mapper.convertValue(post.extraInfo, new com.fasterxml.jackson.core.type.TypeReference<>() {
+                });
+            } catch (Exception e) {
+                extra = new HashMap<>();
+            }
+        } else {
+            extra = new HashMap<>();
+        }
+
+        if (pointsPrice != null) {
+            extra.put("points_price", pointsPrice);
+        }
+        if (freeLines != null) {
+            extra.put("free_lines", freeLines);
+        }
+
+        post.extraInfo = extra;
     }
 
     private PostStatus resolveStatus(Short status, PostStatus fallback) {
@@ -613,6 +648,8 @@ public class AdminPostApiController {
                 post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 revision.revisionNumber,
                 post.version,
+                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getExtraPointsPrice(post),
+                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getFreeLines(post),
                 post.user == null ? null : post.user.id,
                 post.user == null ? null : post.user.username,
                 post.category == null ? null : post.category.id,

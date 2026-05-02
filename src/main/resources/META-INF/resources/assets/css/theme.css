@@ -7,6 +7,7 @@
 
     /* Dark Theme (Default) */
     --bg: #0A0C10;
+    --bg-rgb: 10, 12, 16;
     --card-bg: #0D1117;
     --input-bg: #161B22;
     --border: rgba(255, 255, 255, 0.05);
@@ -15,17 +16,25 @@
     --text-body: #94a3b8;
     --text-meta: rgba(255, 255, 255, 0.4);
     --accent: #06b6d4;
+    --accent-rgb: 6, 182, 212;
     --accent-dim: rgba(6, 182, 212, 0.7);
     --accent-line: #164e63;
     --card-hover: rgba(255, 255, 255, 0.01);
     --placeholder: rgba(255, 255, 255, 0.2);
     --glass-bg: rgba(13, 17, 23, 0.8);
     --glass-border: rgba(255, 255, 255, 0.1);
+
+    /* Spacing System */
+    --space-sm: 1rem;
+    --space-md: 2rem;
+    --space-lg: 4rem;
+    --space-xl: 6rem;
 }
 
 .light {
     /* Light Theme Overrides */
     --bg: #f9fafb;
+    --bg-rgb: 249, 250, 251;
     --card-bg: #ffffff;
     --input-bg: #f3f4f6;
     --border: rgba(0, 0, 0, 0.08);
@@ -87,22 +96,61 @@ h1, h2, h3, h4, h5, h6 {
     transition: none;
 }
 
-.btn-minimal {
+.btn-action-primary {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text-main);
-    font-size: 14px;
-    transition: transform 0.2s ease, border-color 0.2s ease;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1.125rem 2.5rem;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 1rem;
+    font-size: 0.9375rem;
+    font-weight: 800;
+    transition: all 0.25s ease;
+    cursor: pointer;
+    box-shadow: none; /* 移除沉重的发光阴影 */
+    white-space: nowrap;
 }
 
-.btn-minimal:hover {
-    transform: translateX(4px);
-    border-color: var(--border-hover);
+.btn-action-primary:hover {
+    filter: brightness(1.05);
+    transform: translateY(-2px);
+}
+
+.btn-action-primary:active {
+    transform: translateY(0);
+}
+
+.btn-action-primary svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2.5;
+}
+
+.btn-minimal:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-main);
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .tag-pill {
@@ -346,10 +394,146 @@ h3 { font-size: 1.5rem; }
     color: #ef4444;
 }
 
-/* Info */
-.md-region-info {
-    border-left-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.05);
+/* Sidebar Price Highlight - Darker & Solid for Contrast */
+.sidebar-price-tag {
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sidebar-price-value {
+    font-size: 3rem;
+    line-height: 1;
+    font-weight: 900;
+    color: var(--accent);
+    font-family: var(--font-mono);
+}
+
+.sidebar-price-unit {
+    font-size: 0.875rem;
+    font-weight: 800;
+    color: var(--accent);
+    opacity: 0.6;
+    text-transform: uppercase;
+}
+
+/* Premium Paid Content Card - Minimalist Glassmorphism */
+.md-region-premium-card {
+    margin: 4rem 0;
+    padding: 3rem;
+    background: var(--card-bg);
+    border: 1px solid var(--accent);
+    border-radius: 1.5rem;
+    box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.4);
+    position: relative;
+    overflow: hidden;
+}
+
+.md-region-premium-card::before {
+    display: none; /* 移除浮夸的炫技光圈 */
+}
+
+.premium-card-body {
+    display: flex;
+    align-items: center;
+    gap: 3rem;
+}
+
+.md-region-premium-card.full-hide .premium-card-body {
+    flex-direction: column;
+    text-align: center;
+    gap: 2rem;
+}
+
+.premium-icon {
+    flex-shrink: 0;
+    width: 72px;
+    height: 72px;
+    background: rgba(var(--accent-rgb), 0.1);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.premium-icon svg {
+    width: 28px;
+    height: 28px;
+    stroke-width: 2;
+}
+
+.premium-text {
+    flex: 1;
+}
+
+.premium-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: 0.5rem !important;
+}
+
+.premium-desc {
+    font-size: 0.9375rem;
+    color: var(--text-body);
+    line-height: 1.6;
+    opacity: 0.7;
+    margin: 0 !important;
+}
+
+/* Header Meta Spacing */
+.post-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.post-meta-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--text-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.post-meta-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+/* Comment Section Overlay */
+.comment-form-container {
+    position: relative;
+}
+
+.comment-auth-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(var(--bg-rgb, 10, 12, 16), 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border);
+}
+
+.comment-auth-overlay p {
+    font-size: 1.125rem;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: 0.5rem;
 }
 .md-region-info .md-region-icon::before { content: "ℹ"; color: #3b82f6; }
 

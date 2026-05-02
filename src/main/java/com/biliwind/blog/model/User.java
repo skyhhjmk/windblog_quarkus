@@ -76,6 +76,24 @@ public class User extends PanacheEntityBase {
     @Column(name = "wallet_id")
     public Long walletId;
 
+    /**
+     * 用户等级
+     */
+    @Column(nullable = false)
+    public Integer level = 1;
+
+    /**
+     * 经验值
+     */
+    @Column(nullable = false)
+    public Integer exp = 0;
+
+    /**
+     * 背包容量（默认36格：4x9）
+     */
+    @Column(name = "backpack_capacity", nullable = false)
+    public Integer backpackCapacity = 36;
+
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp

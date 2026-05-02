@@ -60,6 +60,15 @@ public class ConfigManager {
         return (node != null && node.canConvertToInt()) ? node.asInt() : defaultValue;
     }
 
+    public Integer getInt(String key, String field, Integer defaultValue) {
+        JsonNode node = get(key);
+        if (node != null && node.has(field)) {
+            JsonNode fieldNode = node.get(field);
+            return fieldNode.canConvertToInt() ? fieldNode.asInt() : defaultValue;
+        }
+        return defaultValue;
+    }
+
     public Boolean getBoolean(String key, Boolean defaultValue) {
         JsonNode node = get(key);
         return (node != null && node.isBoolean()) ? node.asBoolean() : defaultValue;

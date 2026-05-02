@@ -4,41 +4,159 @@
     </div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-12">
-            <section class="space-y-4">
-                <h3 class="meta-mono">文章信息</h3>
-                <div class="grid grid-cols-1 gap-2">
-                    <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">别名</span>
-                        <span class="text-sm font-mono text-main truncate max-w-[150px]">{postSlug}</span>
+            <!-- 价格与购买状态 -->
+            {#if postPrice > 0}
+                <section class="space-y-6">
+                    <h3 class="meta-mono text-accent text-xs tracking-[0.2em] uppercase font-black">内容权限</h3>
+                    <div class="sidebar-price-tag group">
+                        <div class="sidebar-price-unit">解锁全文需支付</div>
+                        <div class="sidebar-price-value">{postPrice}</div>
+                        <div class="sidebar-price-unit">积分</div>
+
+                        <div class="sidebar-status-badge">
+                            {#if hasPurchased}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500"
+                                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <path d="M20 6L9 17l-5-5"></path>
+                                </svg>
+                                <span class="text-green-500">已解锁全文</span>
+                            {#else}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="3">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                                <span>等待解锁内容</span>
+                            {/if}
+                        </div>
                     </div>
-                    <div class="flex justify-between items-center py-2 border-b border-border/50">
-                        <span class="text-xs text-gray-500 uppercase tracking-wider">语言</span>
-                        <span class="text-sm font-mono text-main">{language ?: 'zh-CN'}</span>
-                    </div>
+                </section>
+            {/if}
+
+            <!-- 附件信息 -->
+            {#if attachments && ! attachments.isEmpty}
+                <section class="space-y-6">
+                    <h3 class="meta-mono text-accent text-xs tracking-[0.2em] uppercase font-black">专属资源</h3>
+                    {#if hasPurchased}
+                        <div class="space-y-3">
+                            {#for media in attachments}
+                                <div class="card card-static p-4 flex items-center gap-4 group/file hover:border-accent/40 transition-all border-border/60 bg-card-bg/50">
+                                    <div class="w-10 h-10 rounded-lg bg-card-bg border border-border flex items-center justify-center text-accent group-hover/file:scale-110 transition-transform">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                        </svg>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-xs text-main font-bold truncate mb-0.5"
+                                           title="{media.fileName}">{media.fileName}</p>
+                                        <p class="text-[10px] text-gray-500 font-mono opacity-80">{media.formattedSize}</p>
+                                    </div>
+                                    <a href="{media.url}" download
+                                       class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                    </a>
+                                </div>
+                            {/for}
+                        </div>
+                    {#else}
+                        <div class="card card-static p-6 border-border/40 bg-card-bg/20 flex flex-col items-center text-center gap-3">
+                            <div class="w-12 h-12 rounded-full bg-accent/5 flex items-center justify-center text-accent/40">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <rect x="8" y="13" width="8" height="2" rx="1"></rect>
+                                    <rect x="8" y="17" width="4" height="2" rx="1"></rect>
+                                </svg>
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-xs font-bold text-main">包含 {attachments.size} 个付费附件</p>
+                                <p class="text-[10px] text-gray-500">解锁文章后即可获取下载链接</p>
+                            </div>
+                        </div>
+                    {/if}
+                </section>
+            {/if}
+
+            <!-- 关联商品 -->
+            {#if relatedStoreItems && ! relatedStoreItems.isEmpty}
+                <section class="space-y-6">
+                    <h3 class="meta-mono text-accent text-xs tracking-[0.2em] uppercase font-black">推荐商品</h3>
+                    <div class="space-y-5">
+                        {#for item in relatedStoreItems}
+                            <div class="card card-static overflow-hidden group/item border-border/60 hover:border-accent/40 transition-all bg-card-bg/30">
+                                <div class="p-5 space-y-4">
+                                    <div class="flex justify-between items-start gap-4">
+                                        <h4 class="text-sm font-black text-main line-clamp-2 leading-relaxed">{item.name}</h4>
+                                        <div class="px-2.5 py-1 bg-accent/10 text-accent text-xs font-black rounded-lg border border-accent/20 font-mono shadow-sm">
+                                            {item.price}P
+                                        </div>
+                                    </div>
+                                    {#if item.description}
+                                        <p class="text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90">{item.description}</p>
+                                    {/if}
+                                    <a href="/user/store"
+                                       class="flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]">
+                                        进店详情
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="ml-2" width="14" height="14"
+                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <line x1="7" y1="17" x2="17" y2="7"></line>
+                                            <polyline points="7 7 17 7 17 17"></polyline>
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
+                        {/for}
                 </div>
             </section>
+            {/if}
+
+            <!-- 此处原本的“文章详细信息”已移除，因为对普通读者无意义且浪费空间 -->
         </div>
     </div>
 
     <div class="card card-static p-8 md:p-12">
         <article class="space-y-16">
-            <header class="space-y-6">
-                <div class="space-y-2">
-                    <div class="flex items-center gap-3">
-                        <span class="meta-mono text-accent">{postCategory}</span>
-                        <span class="w-8 h-[1px] bg-accent/30"></span>
+            <header class="space-y-12 mb-16">
+                <div class="space-y-6">
+                    <div class="flex items-center gap-4">
+                        <span class="meta-mono text-accent px-3 py-1 bg-accent/5 border border-accent/20 rounded-md">{postCategory}</span>
+                        <div class="h-[1px] flex-1 bg-gradient-to-r from-accent/20 to-transparent"></div>
                     </div>
-                    <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">{postTitle ?: '文章信息'}</h1>
+                    <h1 class="text-6xl font-black text-main tracking-tight leading-[1.1]">{postTitle ?: '文章信息'}</h1>
                 </div>
-                <div class="flex items-center gap-6">
-                    <div class="flex items-center gap-2">
-                        <img src="{authorAvatar}" alt="{authorName}"
-                             class="w-6 h-6 rounded-full border border-white/10">
-                        <span class="text-sm text-gray-400">{authorName}</span>
+
+                <div class="flex items-center gap-12 py-6 border-y border-border/40">
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">作者</span>
+                        <div class="flex items-center gap-2">
+                            <img src="{authorAvatar}" alt="{authorName}"
+                                 class="w-6 h-6 rounded-full ring-2 ring-accent/20">
+                            <span class="post-meta-value">{authorName}</span>
+                        </div>
                     </div>
-                    <span class="meta-mono">Slug: {postSlug}</span>
-                    <span class="w-1 h-1 rounded-full bg-border"></span>
-                    <time class="timestamp meta-mono" data-timestamp="{publishedAt}">{publishedAt}</time>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">发布时间</span>
+                        <time class="timestamp post-meta-value" data-timestamp="{publishedAt}">{publishedAt}</time>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">资源状态</span>
+                        <span class="post-meta-value flex items-center gap-2">
+                            {#if postPrice > 0}
+                                <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-green-500' : 'bg-accent'}"></span>
+                                {hasPurchased ? '已解锁' : '付费专享'}
+                            {#else}
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span> 免费阅读
+                            {/if}
+                        </span>
+                    </div>
                 </div>
             </header>
 
@@ -53,6 +171,7 @@
                     </div>
                 </section>
             {/if}
+
 
             <section class="prose dark:prose-invert max-w-none">
                 {#if postBody && !postBody.isEmpty}
@@ -90,6 +209,34 @@
                     <a href="/tag/{tag.slug}" class="tag-pill px-4 py-1.5 text-sm hover:border-accent transition-colors">#{tag.name}</a>
                 {/for}
             </div>
+
+            <script>
+                async function buyCurrentPost(postId, price) {
+                    const confirmed = await window.confirm('确认使用 ' + price + ' 积分购买并解锁这篇文章吗？');
+                    if (!confirmed) return;
+
+                    try {
+                        const response = await fetch('/api/user/buy-post/' + postId, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'}
+                        });
+                        const result = await response.json();
+                        if (result.success) {
+                            window.showToast('解锁成功！', 'success');
+                            setTimeout(() => window.location.reload(), 1000);
+                        } else {
+                            if (result.message.includes('未登录') || result.message.includes('必须登录')) {
+                                window.showToast('请先登录', 'error');
+                                setTimeout(() => window.location.href = '/user/login?redirect=' + encodeURIComponent(window.location.pathname), 1000);
+                            } else {
+                                window.showToast(result.message || '购买失败', 'error');
+                            }
+                        }
+                    } catch (e) {
+                        window.showToast('网络异常', 'error');
+                    }
+                }
+            </script>
         </article>
     </div>
 
@@ -102,48 +249,57 @@
                 </div>
 
                 <div class="card card-static p-8 space-y-8">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm text-gray-500 uppercase tracking-widest font-mono">参与讨论</p>
-                        <div id="comment-login-hint" class="text-xs meta-mono text-accent/70">
-                            正在检查登录状态...
+                    <div class="flex items-center justify-between py-6 border-b border-border/60">
+                        <div class="space-y-1">
+                            <h2 class="text-2xl font-black text-main">参与讨论</h2>
+                            <p class="text-xs text-gray-500">请保持友善，共同维护良好的讨论环境。</p>
+                        </div>
+                        <div id="comment-login-hint">
+                            <!-- 登录状态信息将由 JS 动态注入 -->
                         </div>
                     </div>
 
                     <div id="comment-feedback" class="hidden rounded-md border px-4 py-3 text-sm"></div>
 
-                    <form id="comment-form" data-no-debounce="true" class="space-y-6">
-                        <div id="comment-replying"
-                             class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center">
-                            <span class="text-sm">正在回复 <span id="comment-replying-user"
-                                                                 class="font-bold text-main"></span></span>
-                            <button type="button" id="comment-cancel-reply"
-                                    class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">取消
-                            </button>
+                    <div class="comment-form-container">
+                        <div id="comment-auth-overlay" class="comment-auth-overlay hidden">
+                            <p>您需要登录后才能发表评论</p>
+                            <a href="/user/login?redirect={postSlug}" class="btn-action-primary">立即登录</a>
                         </div>
 
-                        <input type="hidden" id="comment-parent-id" name="parentId" value="">
+                        <form id="comment-form" data-no-debounce="true" class="space-y-6">
+                            <div id="comment-replying"
+                                 class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center">
+                                <span class="text-sm">正在回复 <span id="comment-replying-user"
+                                                                     class="font-bold text-main"></span></span>
+                                <button type="button" id="comment-cancel-reply"
+                                        class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">取消
+                                </button>
+                            </div>
 
-                        <div class="space-y-2">
-                            <textarea
-                                    id="comment-content"
-                                    name="content"
-                                    rows="5"
-                                    maxlength="4000"
-                                    placeholder="分享你的想法..."
-                                    class="w-full"></textarea>
-                        </div>
+                            <input type="hidden" id="comment-parent-id" name="parentId" value="">
 
-                        <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                            <p class="text-xs text-gray-500 max-w-md">
-                                支持 Markdown。请保持友善，共同维护良好的讨论环境。
-                            </p>
-                            <button type="submit" id="comment-submit"
-                                    class="btn-minimal px-8 py-3 bg-accent text-white font-bold hover:opacity-90 border-none rounded-md flex items-center justify-center gap-2">
-                                <span class="btn-text">发表评论</span>
-                                <span class="spinner hidden"></span>
-                            </button>
-                        </div>
-                    </form>
+                            <div class="space-y-2">
+                                <textarea
+                                        id="comment-content"
+                                        name="content"
+                                        rows="5"
+                                        maxlength="4000"
+                                        placeholder="分享你的想法..."
+                                        class="w-full"></textarea>
+                            </div>
+
+                            <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                                <p class="text-xs text-gray-500 max-w-md">
+                                    支持 Markdown 语法。
+                                </p>
+                                <button type="submit" id="comment-submit" class="btn-minimal min-w-[140px]">
+                                    <span class="btn-text">发表评论</span>
+                                    <span class="spinner hidden"></span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
 
                 <div class="space-y-8">

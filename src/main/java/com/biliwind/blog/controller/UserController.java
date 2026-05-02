@@ -81,6 +81,9 @@ public class UserController {
     @Inject
     com.biliwind.blog.service.CheckInService checkInService;
 
+    @Inject
+    com.biliwind.blog.service.StoreService storeService;
+
     // ==================== 页面路由 ====================
 
     /**
@@ -128,13 +131,57 @@ public class UserController {
         Long pointsBalance = walletService.getPointsBalance(profile.id());
         boolean hasCheckedIn = checkInService.hasCheckedInToday(profile.id());
 
+        // 获取用户完整信息以获取 gamification 数据
+        User fullUser = User.findById(profile.id());
+        int level = fullUser != null ? fullUser.level : 1;
+        int exp = fullUser != null ? fullUser.exp : 0;
+        int backpackCapacity = fullUser != null ? fullUser.backpackCapacity : 36;
+
+        // 计算当前等级的经验上限
+        int nextLevelRequiredExp = (level) * (level + 1) / 2 * 100;
+        int currentLevelBaseExp = (level - 1) * level / 2 * 100;
+        int currentLevelExp = exp - currentLevelBaseExp;
+        int currentLevelMaxExp = nextLevelRequiredExp - currentLevelBaseExp;
+        int expPercent = Math.min(100, Math.max(0, (int) ((float) currentLevelExp / currentLevelMaxExp * 100)));
+
+        java.util.List<com.biliwind.blog.model.UserBackpackItem> backpack = storeService.getUserBackpack(profile.id());
+
+        java.util.List<java.util.Map<String, Object>> backpackDetails = backpack.stream().map(item -> {
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", item.id);
+            map.put("storeItemId", item.storeItemId);
+            com.biliwind.blog.model.StoreItem sItem = com.biliwind.blog.model.StoreItem.findById(item.storeItemId);
+            if (sItem != null) {
+                map.put("name", sItem.name);
+                map.put("rarity", sItem.rarity != null ? sItem.rarity : "#4b5563");
+                map.put("type", sItem.type);
+                map.put("description", sItem.description);
+            } else {
+                map.put("name", "未知物品");
+                map.put("rarity", "#4b5563");
+            }
+            return map;
+        }).collect(java.util.stream.Collectors.toList());
+
+        // 填充空白格子以满足容量
+        while (backpackDetails.size() < backpackCapacity) {
+            backpackDetails.add(null);
+        }
+
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? centerContentTemplate : centerTemplate;
         return template
                 .data("language", languageContext.getLang())
                 .data("user", profile)
                 .data("pointsBalance", pointsBalance)
-                .data("hasCheckedIn", hasCheckedIn);
+                .data("hasCheckedIn", hasCheckedIn)
+                .data("level", level)
+                .data("exp", exp)
+                .data("currentLevelExp", currentLevelExp)
+                .data("currentLevelMaxExp", currentLevelMaxExp)
+                .data("expPercent", expPercent)
+                .data("backpackCapacity", backpackCapacity)
+                .data("backpackItems", backpackDetails);
     }
 
     // ==================== API接口 ====================

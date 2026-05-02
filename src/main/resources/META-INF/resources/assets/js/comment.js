@@ -159,19 +159,28 @@
     async function syncLoginState(root) {
         const hint = root.querySelector('#comment-login-hint');
         const submit = root.querySelector('#comment-submit');
+        const overlay = root.querySelector('#comment-auth-overlay');
         const profile = await getProfile();
         const loggedIn = !!(profile && profile.success && profile.data);
         root.dataset.commentLoggedIn = loggedIn ? 'true' : 'false';
 
         if (hint) {
             hint.innerHTML = loggedIn
-                ? `${window.i18n.signed_in_as || 'Signed in as'} <span class="text-[var(--accent)]">${escapeHtml(profile.data.username)}</span>`
-                : (window.i18n.login_required || 'Login is required before submission.');
+                ? `<span class="text-xs font-bold text-gray-500">已登录为</span> <span class="text-xs font-black text-accent">${escapeHtml(profile.data.username)}</span>`
+                : `<span class="text-xs font-bold text-gray-400">访客模式</span>`;
+        }
+
+        if (overlay) {
+            if (loggedIn) {
+                overlay.classList.add('hidden');
+            } else {
+                overlay.classList.remove('hidden');
+            }
         }
 
         if (submit) {
-            submit.disabled = false;
-            const text = loggedIn ? (window.i18n.submit_comment || 'Submit Comment') : (window.i18n.login_required_btn || 'Login Required');
+            submit.disabled = !loggedIn;
+            const text = loggedIn ? (window.i18n.submit_comment || '发表评论') : (window.i18n.login_required_btn || '请先登录');
             const textSpan = submit.querySelector('.btn-text');
             if (textSpan) {
                 textSpan.textContent = text;
