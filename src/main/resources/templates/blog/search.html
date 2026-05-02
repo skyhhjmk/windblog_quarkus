@@ -12,13 +12,10 @@
 {/content}
 
 {#sidebar}
-<section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
-    <h3 class="font-bold mb-2">搜索信息</h3>
-    <p class="text-sm">语言：{language ?: 'zh-CN'}</p>
-    <p class="text-sm">关键词：{searchKeyword ?: '-'}</p>
-    <p class="text-sm">类型：{searchType ?: 'all'}</p>
-    <p class="text-sm">总计：{totalCount ?: 0}</p>
-    <p class="text-sm">页码：{currentPage ?: 1} / {totalPages ?: 1}</p>
-</section>
+    <div class="sticky top-32 space-y-8">
+            {#include sidebar/recent_posts.html /}
+            {#include sidebar/categories.html /}
+            {#include sidebar/tags.html /}
+    </div>
 {/sidebar}
 {/include}

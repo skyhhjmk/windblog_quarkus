@@ -12,16 +12,10 @@
 {/content}
 
 {#sidebar}
-<section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)] mb-4">
-    <h3 class="font-bold mb-2">分类信息</h3>
-    <p class="text-sm">语言：{language ?: 'zh-CN'}</p>
-    {#if detailMode}
-    <p class="text-sm">当前：{currentCategory.name}</p>
-    <p class="text-sm">子分类：{currentCategory.childCount}</p>
-    {#else}
-    <p class="text-sm">总计：{totalCount ?: 0}</p>
-    <p class="text-sm">页码：{currentPage ?: 1} / {totalPages ?: 1}</p>
-    {/if}
-</section>
+    <div class="sticky top-32 space-y-8">
+            {#include sidebar/categories.html /}
+            {#include sidebar/tags.html /}
+            {#include sidebar/stats.html /}
+    </div>
 {/sidebar}
 {/include}

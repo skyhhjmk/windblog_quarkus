@@ -12,12 +12,11 @@
 {/content}
 
 {#sidebar}
-<div class="space-y-4">
-    <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-        <h3 class="font-bold mb-2">文章信息</h3>
-        <p class="text-sm">Slug: {postSlug}</p>
-        <p class="text-sm">语言: {language ?: 'zh-CN'}</p>
-    </section>
+    <div class="sticky top-32 space-y-8">
+            {#include sidebar/toc.html /}
+            {#include sidebar/author.html /}
+            {#include sidebar/recent_posts.html /}
+            {#include sidebar/tags.html /}
 </div>
 {/sidebar}
 {/include}

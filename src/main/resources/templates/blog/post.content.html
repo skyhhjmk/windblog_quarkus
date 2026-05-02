@@ -35,7 +35,7 @@
 
             <!-- 附件信息 -->
             {#if attachments && ! attachments.isEmpty}
-                <section class="space-y-6">
+                <section class="space-y-6" data-attachments-section="true">
                     <h3 class="meta-mono text-accent text-xs tracking-[0.2em] uppercase font-black">专属资源</h3>
                     {#if hasPurchased}
                         <div class="space-y-3">
@@ -53,15 +53,18 @@
                                            title="{media.fileName}">{media.fileName}</p>
                                         <p class="text-[10px] text-gray-500 font-mono opacity-80">{media.formattedSize}</p>
                                     </div>
-                                    <a href="{media.url}" download
-                                       class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
-                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                            <polyline points="7 10 12 15 17 10"></polyline>
-                                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                                        </svg>
-                                    </a>
+                                    {#if hasPurchased && media.url}
+                                        <a href="{media.url}" download
+                                           class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                 stroke-width="2.5">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="7 10 12 15 17 10"></polyline>
+                                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                                            </svg>
+                                        </a>
+                                    {/if}
                                 </div>
                             {/for}
                         </div>
@@ -118,7 +121,7 @@
             </section>
             {/if}
 
-            <!-- 此处原本的“文章详细信息”已移除，因为对普通读者无意义且浪费空间 -->
+            <!-- 此处原本的"文章详细信息"已移除，因为对普通读者无意义且浪费空间 -->
         </div>
     </div>
 
@@ -148,7 +151,7 @@
                     </div>
                     <div class="post-meta-item">
                         <span class="post-meta-label">资源状态</span>
-                        <span class="post-meta-value flex items-center gap-2">
+                        <span class="post-meta-value flex items-center gap-2" data-purchase-status="true">
                             {#if postPrice > 0}
                                 <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-green-500' : 'bg-accent'}"></span>
                                 {hasPurchased ? '已解锁' : '付费专享'}
@@ -173,8 +176,9 @@
             {/if}
 
 
-            <section class="prose dark:prose-invert max-w-none">
-                {#if postBody && !postBody.isEmpty}
+            <!-- 付费内容安全加载：初始只显示预览内容 -->
+            <section class="prose dark:prose-invert max-w-none" id="post-content-section">
+                {#if postBody && ! postBody.isEmpty()}
                     {#if postRenderType == 'VDITOR'}
                         <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
                         <style>
@@ -185,47 +189,89 @@
                         </style>
                         <script src="/webjars/vditor/dist/index.min.js"></script>
                         <div id="vditor-preview" class="vditor-reset"></div>
-                        <script>
-                            document.addEventListener('DOMContentLoaded', function() {
+                    <script id="initial-vditor-script">
+                        (function () {
                                 const markdownContent = "{postBodyJson}";
-                                Vditor.preview(document.getElementById('vditor-preview'), markdownContent, {
-                                    cdn: '/webjars/vditor',
-                                    mode: 'both'
-                                });
-                            });
+
+                            function initVditor() {
+                                const previewEl = document.getElementById('vditor-preview');
+                                if (previewEl && typeof Vditor !== 'undefined') {
+                                    Vditor.preview(previewEl, markdownContent, {
+                                        cdn: '/webjars/vditor',
+                                        mode: 'both'
+                                    });
+                                }
+                            }
+
+                            if (document.readyState === 'loading') {
+                                document.addEventListener('DOMContentLoaded', initVditor);
+                            } else {
+                                initVditor();
+                            }
+                        })();
                         </script>
                     {#else if postBodyHtml}
-                        <div class="break-words">{postBody.raw}</div>
+                    <div class="break-words" id="post-body-content">{postBody.raw}</div>
                     {#else}
-                        <pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm">{postBody}</pre>
+                    <pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm"
+                         id="post-body-content">{postBody}</pre>
                     {/if}
                 {#else}
                     <p class="text-gray-500 italic">该语言下暂无内容。</p>
                 {/if}
             </section>
-            
+
+            <!-- 附件区域容器（动态更新） -->
+            <div id="attachments-container">
+                <!-- 初始附件信息已在侧边栏显示 -->
+            </div>
+
             <div class="mt-12 pt-8 border-t border-border flex flex-wrap gap-3">
                 {#for tag in postTags}
                     <a href="/tag/{tag.slug}" class="tag-pill px-4 py-1.5 text-sm hover:border-accent transition-colors">#{tag.name}</a>
                 {/for}
             </div>
 
+            <!-- 安全的付费内容加载脚本 -->
             <script>
-                async function buyCurrentPost(postId, price) {
+                // 文章ID和购买状态
+                const currentPostId = {postId};
+                const isPaidArticle = {postPrice} >
+                0;
+                const userHasPurchased = {hasPurchased};
+
+                // Toast 提示函数（如果未定义）
+                if (!window.showToast) {
+                    window.showToast = function (message, type) {
+                        alert(message);
+                    };
+                }
+
+                // 购买文章函数
+                async function buyCurrentPost(postId, price, button) {
                     const confirmed = await window.confirm('确认使用 ' + price + ' 积分购买并解锁这篇文章吗？');
                     if (!confirmed) return;
 
+                    if (window.setLoading && button) {
+                        window.setLoading(button, true, {text: '正在解锁...'});
+                    }
+
                     try {
-                        const response = await fetch('/api/user/buy-post/' + postId, {
+                        const response = await fetch('/api/user/post/buy/' + postId + '?price=' + price, {
                             method: 'POST',
-                            headers: {'Content-Type': 'application/json'}
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Cache-Control': 'no-cache'
+                            },
+                            credentials: 'same-origin'
                         });
                         const result = await response.json();
                         if (result.success) {
                             window.showToast('解锁成功！', 'success');
-                            setTimeout(() => window.location.reload(), 1000);
+                            // 购买成功后立即加载完整内容
+                            setTimeout(() => loadFullPostContent(), 500);
                         } else {
-                            if (result.message.includes('未登录') || result.message.includes('必须登录')) {
+                            if (result.message && (result.message.includes('未登录') || result.message.includes('必须登录'))) {
                                 window.showToast('请先登录', 'error');
                                 setTimeout(() => window.location.href = '/user/login?redirect=' + encodeURIComponent(window.location.pathname), 1000);
                             } else {
@@ -233,8 +279,190 @@
                             }
                         }
                     } catch (e) {
+                        console.error('购买失败:', e);
                         window.showToast('网络异常', 'error');
+                    } finally {
+                        if (window.setLoading && button) {
+                            window.setLoading(button, false);
+                        }
                     }
+                }
+
+                // 加载完整付费内容
+                async function loadFullPostContent() {
+                    try {
+                        const response = await fetch('/api/user/post/content/' + currentPostId, {
+                            method: 'GET',
+                            headers: {
+                                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                                'Pragma': 'no-cache',
+                                'Expires': '0'
+                            },
+                            credentials: 'same-origin'
+                        });
+
+                        if (response.status === 403) {
+                            window.showToast('您尚未购买此文章', 'error');
+                            return;
+                        }
+
+                        const result = await response.json();
+                        if (result.success && result.data) {
+                            const contentData = result.data;
+                            updatePostContent(contentData);
+                            updatePurchaseStatus(true);
+                        } else {
+                            window.showToast(result.message || '加载内容失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('加载内容失败:', e);
+                        window.showToast('加载内容失败', 'error');
+                    }
+                }
+
+                // 更新文章内容
+                function updatePostContent(contentData) {
+                    const contentSection = document.getElementById('post-content-section');
+                    const renderType = contentData.renderType;
+
+                    if (renderType === 'VDITOR') {
+                        // Vditor 渲染
+                        const vditorPreview = document.getElementById('vditor-preview');
+                        if (vditorPreview && typeof Vditor !== 'undefined') {
+                            vditorPreview.innerHTML = '';
+                            Vditor.preview(vditorPreview, contentData.content, {
+                                cdn: '/webjars/vditor',
+                                mode: 'both'
+                            });
+                        }
+                    } else if (contentData.contentHtml) {
+                        // HTML 渲染
+                        const contentDiv = document.getElementById('post-body-content');
+                        if (contentDiv) {
+                            contentDiv.innerHTML = contentData.content;
+                        } else {
+                            contentSection.innerHTML = '<div class="break-words">' + contentData.content + '</div>';
+                        }
+                    } else {
+                        // 普通文本渲染
+                        const contentDiv = document.getElementById('post-body-content');
+                        if (contentDiv) {
+                            contentDiv.textContent = contentData.content;
+                        } else {
+                            contentSection.innerHTML = '<pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm">' +
+                                escapeHtml(contentData.content) + '</pre>';
+                        }
+                    }
+
+                    // 更新附件
+                    if (contentData.attachments) {
+                        updateAttachments(contentData.attachments);
+                    }
+                }
+
+                // 更新附件显示
+                function updateAttachments(attachments) {
+                    const sidebarAttachments = document.querySelector('[data-attachments-section="true"]');
+                    if (sidebarAttachments && attachments) {
+                        const attachmentsHtml = attachments.map(media => {
+                            let html = '<div class="card card-static p-4 flex items-center gap-4 group/file hover:border-accent/40 transition-all border-border/60 bg-card-bg/50">';
+                            html += '<div class="w-10 h-10 rounded-lg bg-card-bg border border-border flex items-center justify-center text-accent group-hover/file:scale-110 transition-transform">';
+                            html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
+                            html += '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>';
+                            html += '<polyline points="14 2 14 8 20 8"></polyline>';
+                            html += '</svg>';
+                            html += '</div>';
+                            html += '<div class="flex-1 min-w-0">';
+                            html += '<p class="text-xs text-main font-bold truncate mb-0.5" title="' + escapeHtml(media.fileName) + '">' + escapeHtml(media.fileName) + '</p>';
+                            html += '<p class="text-[10px] text-gray-500 font-mono opacity-80">' + media.formattedSize + '</p>';
+                            html += '</div>';
+
+                            if (media.url) {
+                                html += '<a href="' + escapeHtml(media.url) + '" download class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">';
+                                html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">';
+                                html += '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>';
+                                html += '<polyline points="7 10 12 15 17 10"></polyline>';
+                                html += '<line x1="12" y1="15" x2="12" y2="3"></line>';
+                                html += '</svg>';
+                                html += '</a>';
+                            }
+                            html += '</div>';
+                            return html;
+                        }).join('');
+
+                        // 更新侧边栏附件部分
+                        const attachmentsWrapper = sidebarAttachments.querySelector('.space-y-3');
+                        if (attachmentsWrapper) {
+                            attachmentsWrapper.innerHTML = attachmentsHtml;
+                        } else {
+                            sidebarAttachments.innerHTML = '<h3 class="meta-mono text-accent text-xs tracking-[0.2em] uppercase font-black">专属资源</h3><div class="space-y-3">' + attachmentsHtml + '</div>';
+                        }
+                    }
+                }
+
+                // 更新购买状态显示
+                function updatePurchaseStatus(hasPurchased) {
+                    // 更新资源状态
+                    const statusElements = document.querySelectorAll('[data-purchase-status="true"]');
+                    statusElements.forEach(el => {
+                        if (hasPurchased) {
+                            el.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> 已解锁';
+                        } else {
+                            el.innerHTML = '<span class="w-2 h-2 rounded-full bg-accent"></span> 付费专享';
+                        }
+                    });
+
+                    // 更新侧边栏状态
+                    const sidebarBadge = document.querySelector('.sidebar-status-badge');
+                    if (sidebarBadge && hasPurchased) {
+                        sidebarBadge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">' +
+                            '<path d="M20 6L9 17l-5-5"></path>' +
+                            '</svg>' +
+                            '<span class="text-green-500">已解锁全文</span>';
+                    }
+
+                    // 移除所有购买按钮
+                    document.querySelectorAll('.buy-post-btn').forEach(btn => {
+                        btn.remove();
+                    });
+                }
+
+                // HTML 转义
+                function escapeHtml(text) {
+                    if (!text) return '';
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+
+                // 初始化购买按钮事件监听
+                function initBuyButtons() {
+                    document.addEventListener('click', function (e) {
+                        const target = e.target.closest('.buy-post-btn');
+                        if (target) {
+                            e.preventDefault();
+                            const pid = target.dataset.postId || currentPostId;
+                            const pPrice = target.dataset.price || {postPrice};
+                            console.log('Unlock clicked:', {pid, pPrice});
+                            buyCurrentPost(pid, pPrice, target);
+                        }
+                    });
+                }
+
+                // 如果用户已购买且是付费文章，立即加载完整内容
+                if (isPaidArticle && userHasPurchased) {
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', loadFullPostContent);
+                    } else {
+                        loadFullPostContent();
+                    }
+                }
+
+                // 初始化购买按钮
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initBuyButtons);
+                } else {
+                    initBuyButtons();
                 }
             </script>
         </article>

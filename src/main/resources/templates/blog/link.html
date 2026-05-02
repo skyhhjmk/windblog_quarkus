@@ -12,10 +12,10 @@
     {/content}
 
     {#sidebar}
-        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-            <h3 class="font-bold mb-2">链接侧栏</h3>
-            <p class="text-sm">侧栏内容由页面片段注入。</p>
-            <p class="text-sm mt-1">当前语言: {language ?: 'zh-CN'}</p>
-        </section>
+    <div class="sticky top-32 space-y-8">
+        {#include sidebar/stats.html /}
+        {#include sidebar/recent_posts.html /}
+        {#include sidebar/tags.html /}
+    </div>
     {/sidebar}
 {/include}

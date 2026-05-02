@@ -12,14 +12,12 @@
 {/content}
 
 {#sidebar}
-<div class="space-y-4">
-    <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-        <h3 class="font-bold mb-2">页面信息</h3>
-        <p class="text-sm">当前语言: {language ?: 'zh-CN'}</p>
-        <p class="text-sm">当前分页: 第{subPage ?: 1}页</p>
-        <p class="text-sm">文章总数: {totalPosts ?: 0}</p>
-        <p class="text-sm">总页数: {totalPages ?: 1}</p>
-    </section>
+    <div class="sticky top-32 space-y-8">
+            {#include sidebar/author.html /}
+            {#include sidebar/stats.html /}
+            {#include sidebar/recent_posts.html /}
+            {#include sidebar/categories.html /}
+            {#include sidebar/tags.html /}
 </div>
 {/sidebar}
 {/include}

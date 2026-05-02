@@ -520,7 +520,14 @@ public class AdminPostApiController {
         changed |= updateField(post.aiSummary, request.aiSummary(), v -> post.aiSummary = v);
         changed |= updateField(post.aiSummaryStatus, request.aiSummaryStatus(), v -> post.aiSummaryStatus = v);
         changed |= updateField(post.visibility, request.visibility(), v -> post.visibility = v);
-        changed |= updateField(post.password, request.password(), v -> post.password = v);
+        // 密码允许设为 null (即清除密码)
+        if (request.password() != null || (request.visibility() != null && request.visibility() != 2)) {
+            String nextPassword = (request.visibility() != null && request.visibility() != 2) ? null : request.password();
+            if (!Objects.equals(post.password, nextPassword)) {
+                post.password = nextPassword;
+                changed = true;
+            }
+        }
         changed |= updateField(post.seoTitle, request.seoTitle(), v -> post.seoTitle = v);
         changed |= updateField(post.seoKeywords, request.seoKeywords(), v -> post.seoKeywords = v);
         changed |= updateField(post.seoDescription, request.seoDescription(), v -> post.seoDescription = v);

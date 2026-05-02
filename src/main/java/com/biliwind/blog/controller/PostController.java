@@ -90,22 +90,20 @@ public class PostController {
         Long currentUserId = resolveUserIdFromCookie(httpHeaders);
 
         long postPrice = postAccessService.getPostPrice(postEntity);
+        int freeLines = postAccessService.getFreeLines(postEntity);
+        long maxPointsPaid = postAccessService.getMaxPointsPaid(currentUserId, postEntity.id);
 
         // 作者直接绕过购买检查
         boolean isAuthor = currentUserId != null && postEntity.user != null && currentUserId.equals(postEntity.user.id);
-        boolean hasPurchased = isAuthor || postPrice <= 0 || postAccessService.hasPurchasedPost(currentUserId, postEntity.id);
 
-        // Filter content (or strip tags if purchased)
-        localizedContent = postAccessService.filterHiddenContent(localizedContent, hasPurchased);
-
-        // Apply free preview if not purchased
-        if (!hasPurchased) {
-            long price = postAccessService.getPostPrice(postEntity);
-            int freeLines = postAccessService.getFreeLines(postEntity);
-            // 只有当文章设置了价格（无论是全局价格还是短代码总价）且未购买时，才尝试应用免费行数预览
-            if (price > 0) {
-                localizedContent = postAccessService.applyFreePreview(localizedContent, freeLines, true);
-            }
+        // 安全处理：对于未购买用户，只返回预览内容，不包含任何付费内容
+        if (postPrice > 0 && maxPointsPaid < postPrice && !isAuthor) {
+            // 未买断且文章整体收费：仅返回预览内容
+            localizedContent = postAccessService.getPreviewOnlyContent(localizedContent, freeLines, true, postEntity.id, postPrice);
+        } else {
+            // 已买断、或者是作者、或者是文章本身免费：返回完整内容
+            // 但是内容中的 [hide-text price=...] 标签会由 filterHiddenContent 根据 maxPointsPaid 状态决定是否解锁
+            localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postEntity.id, postPrice);
         }
 
         PostBodyView postBody = resolvePostBody(postEntity.renderType, localizedContent);
@@ -117,6 +115,11 @@ public class PostController {
                 PjaxHelper.isPjaxRequest(httpHeaders)
                         ? postContentTemplate
                         : postTemplate;
+
+        // 全站买断判定：或者是作者，或者支付过文章全价（且总价 > 0），或者文章免费但支付过（产生的0积分记录）
+        boolean hasPurchased = isAuthor
+                || (postPrice > 0 && maxPointsPaid >= postPrice)
+                || (postPrice == 0 && maxPointsPaid >= 0);
 
         return template
                 .data("language", resolvedLang)
@@ -141,11 +144,13 @@ public class PostController {
                 .data("attachments", PostMedia.<PostMedia>list("post.id = ?1", postEntity.id).stream()
                         .filter(pm -> pm.usageType == 3) // 3 = 附件
                         .map(pm -> {
+                            // 安全处理：全站买断后才显示底部附件下载链接
+                            String attachmentUrl = hasPurchased ? pm.media.url : "";
                             long bytes = pm.media.size != null ? pm.media.size : 0;
                             String formattedSize = bytes < 1024 * 1024
                                     ? (bytes / 1024) + " KB"
                                     : String.format("%.2f MB", bytes / (1024.0 * 1024.0));
-                            return new AttachmentView(pm.media.fileName, pm.media.url, formattedSize);
+                            return new AttachmentView(pm.media.fileName, attachmentUrl, formattedSize);
                         })
                         .collect(Collectors.toList()))
                 .data("relatedStoreItems", resolveRelatedStoreItems(postEntity));
