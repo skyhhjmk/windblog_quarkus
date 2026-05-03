@@ -180,4 +180,25 @@
             showCancel: true
         });
     };
+
+    /**
+     * Get CSRF Token from meta tag or cookie
+     * @returns {string}
+     */
+    window.getCsrfToken = function () {
+        // 1. Try meta tag (highest priority)
+        const meta = document.head.querySelector('meta[name="csrf-token"]');
+        if (meta && meta.content) return meta.content;
+
+        // 2. Try cookies (XSRF-TOKEN is set by CsrfFilter)
+        const getCookie = (name) => {
+            const cookie = document.cookie.split(';').map(s => s.trim());
+            for (const c of cookie) {
+                if (c.startsWith(name + '=')) return decodeURIComponent(c.slice(name.length + 1));
+            }
+            return null;
+        };
+
+        return getCookie('XSRF-TOKEN') || getCookie('_token') || '';
+    };
 })();

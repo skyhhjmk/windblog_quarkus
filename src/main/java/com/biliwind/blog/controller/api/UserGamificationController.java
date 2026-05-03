@@ -4,8 +4,6 @@ import com.biliwind.blog.model.User;
 import com.biliwind.blog.model.UserBackpackItem;
 import com.biliwind.blog.service.PostAccessService;
 import com.biliwind.blog.service.StoreService;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -14,7 +12,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +27,9 @@ public class UserGamificationController {
 
     @Inject
     PostAccessService postAccessService;
+
+    @Inject
+    com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
     @POST
     @Path("/buy-post/{postId}")
@@ -112,16 +112,10 @@ public class UserGamificationController {
         if (cookie == null || cookie.getValue() == null || cookie.getValue().isBlank()) {
             return null;
         }
-        try {
-            String[] parts = cookie.getValue().split("\\.");
-            if (parts.length != 3) return null;
-            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
-            ObjectMapper mapper = new ObjectMapper();
-            Map<String, Object> claims = mapper.readValue(payload, new TypeReference<>() {
-            });
-            return claims.get("uid") instanceof Number n ? n.longValue() : null;
-        } catch (Exception e) {
+        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified = tokenVerifier.verify(cookie.getValue());
+        if (verified == null) {
             return null;
         }
+        return verified.uid();
     }
 }

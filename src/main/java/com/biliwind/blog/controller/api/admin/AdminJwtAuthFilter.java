@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.ext.Provider;
+
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +45,6 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
             return;
         }
         if (path.equals("/api/admin/auth/login")
-                || path.equals("/api/admin/auth/me")
                 || path.startsWith("/api/admin/docs")
                 || path.startsWith("/api/admin/openapi")) {
             return;

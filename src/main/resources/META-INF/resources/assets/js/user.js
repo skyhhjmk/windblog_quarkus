@@ -7,20 +7,6 @@
         else document.addEventListener('DOMContentLoaded', fn);
     }
 
-    function getCookie(name) {
-        const cookie = document.cookie.split(';').map(s => s.trim());
-        for (const c of cookie) {
-            if (c.startsWith(name + '=')) return decodeURIComponent(c.slice(name.length + 1));
-        }
-        return null;
-    }
-
-    function getCsrfToken() {
-        const meta = document.head.querySelector('meta[name="csrf-token"]');
-        if (meta && meta.content) return meta.content;
-        // 回退 cookie
-        return getCookie('_token') || getCookie('XSRF-TOKEN') || '';
-    }
 
     function checkUserStatus() {
         fetch('/user/api/profile')
@@ -69,7 +55,10 @@
             showConfirm(window.i18n.logout_title || 'Logout', window.i18n.logout_confirm || 'Are you sure you want to logout?', () => {
                 window.setLoading(targetBtn, true);
                 fetch('/user/api/logout', {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'X-XSRF-TOKEN': window.getCsrfToken()
+                    }
                 }).then(() => {
                     window.location.href = '/';
                 }).catch(() => {
@@ -117,7 +106,8 @@
                 const response = await fetch('/user/api/login', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-XSRF-TOKEN': window.getCsrfToken()
                     },
                     body: formData.toString()
                 });
@@ -194,7 +184,8 @@
                 const response = await fetch('/user/api/register', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-XSRF-TOKEN': window.getCsrfToken()
                     },
                     body: formData.toString()
                 });
@@ -318,7 +309,10 @@
                 try {
                     var response = await fetch('/api/user/wallet/check-in', {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'}
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-XSRF-TOKEN': window.getCsrfToken()
+                        }
                     });
                     var result = await response.json();
 

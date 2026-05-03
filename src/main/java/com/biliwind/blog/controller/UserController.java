@@ -6,8 +6,6 @@ import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ConfigManager;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -23,7 +21,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
 
@@ -35,6 +32,9 @@ public class UserController {
 
     @Inject
     PasswordHasher passwordHasher;
+
+    @Inject
+    com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
     @Inject
     LanguageContext languageContext;
@@ -366,37 +366,18 @@ public class UserController {
         }
 
         String token = cookie.getValue();
-        try {
-            // 简单解析JWT获取用户信息（实际应该使用TokenVerifier）
-            String[] parts = token.split("\\.");
-            if (parts.length != 3) {
-                return null;
-            }
-
-            // 解析payload获取用户信息
-            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
-            ObjectMapper mapper = new ObjectMapper();
-            Map<String, Object> claims = mapper.readValue(payload, new TypeReference<>() {
-            });
-
-            Long uid = claims.get("uid") instanceof Number n ? n.longValue() : null;
-            String username = (String) claims.get("upn");
-            String roleName = (String) claims.get("role_name");
-
-            if (uid == null || username == null) {
-                return null;
-            }
-
-            // 验证用户是否存在且有效
-            User user = User.find("id = ?1 and deletedAt is null", uid).firstResult();
-            if (user == null || user.status != 1) {
-                return null;
-            }
-
-            return new UserProfile(user.id, user.username, user.email, user.roleName);
-        } catch (Exception e) {
+        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified = tokenVerifier.verify(token);
+        if (verified == null) {
             return null;
         }
+
+        // 验证用户是否存在且有效
+        User user = User.find("id = ?1 and deletedAt is null", verified.uid()).firstResult();
+        if (user == null || user.status != 1) {
+            return null;
+        }
+
+        return new UserProfile(user.id, user.username, user.email, user.roleName);
     }
 
     public record UserProfile(Long id, String username, String email, String roleName) {

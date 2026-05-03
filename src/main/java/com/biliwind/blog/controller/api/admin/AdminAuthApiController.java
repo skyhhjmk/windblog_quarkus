@@ -11,7 +11,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -38,6 +37,9 @@ public class AdminAuthApiController {
 
     @Inject
     AdminTokenVerifier tokenVerifier;
+
+    @Inject
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     @ConfigProperty(name = "admin.jwt.secret")
     String jwtSecret;
@@ -98,8 +100,8 @@ public class AdminAuthApiController {
     @Operation(summary = "当前管理员信息", description = "返回当前已登录管理员信息。")
     @APIResponse(responseCode = "200", description = "成功")
     @APIResponse(responseCode = "401", description = "未登录或 token 无效")
-    public Response me(@HeaderParam(HttpHeaders.AUTHORIZATION) String authorization) {
-        Long userId = resolveUserIdFromBearer(authorization);
+    public Response me() {
+        Long userId = adminRequestContext.getUserId();
         if (userId == null) {
             return Response.status(Response.Status.UNAUTHORIZED)
                     .entity(Map.of("success", false, "message", "未登录"))
@@ -119,23 +121,6 @@ public class AdminAuthApiController {
         )).build();
     }
 
-    private Long resolveUserIdFromBearer(String authorization) {
-        if (authorization == null || authorization.isBlank()) {
-            return null;
-        }
-        try {
-            AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(authorization);
-            if (verified == null) {
-                return null;
-            }
-            if (!verified.isAdmin()) {
-                return null;
-            }
-            return verified.uid();
-        } catch (Exception e) {
-            return null;
-        }
-    }
     private Response unauthorized() {
         return Response.status(Response.Status.UNAUTHORIZED)
                 .entity(Map.of("success", false, "message", "账号或密码错误"))

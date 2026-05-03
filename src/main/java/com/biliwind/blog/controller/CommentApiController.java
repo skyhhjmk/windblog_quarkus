@@ -5,7 +5,6 @@ import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ConfigManager;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -30,6 +29,9 @@ public class CommentApiController {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
     @Inject
     ConfigManager configManager;
@@ -169,28 +171,16 @@ public class CommentApiController {
             return null;
         }
 
-        try {
-            String[] parts = cookie.getValue().split("\\.");
-            if (parts.length != 3) {
-                return null;
-            }
-
-            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
-            Map<String, Object> claims = objectMapper.readValue(payload, new TypeReference<>() {
-            });
-            Long uid = claims.get("uid") instanceof Number n ? n.longValue() : null;
-            if (uid == null) {
-                return null;
-            }
-
-            User user = User.find("id = ?1 and deletedAt is null", uid).firstResult();
-            if (user == null || user.status != 1) {
-                return null;
-            }
-            return user;
-        } catch (Exception ignored) {
+        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified = tokenVerifier.verify(cookie.getValue());
+        if (verified == null) {
             return null;
         }
+
+        User user = User.find("id = ?1 and deletedAt is null", verified.uid()).firstResult();
+        if (user == null || user.status != 1) {
+            return null;
+        }
+        return user;
     }
 
     public record CommentCreateRequest(

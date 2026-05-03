@@ -8,7 +8,6 @@ import com.biliwind.blog.model.PostMedia;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.service.PostAccessService;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -19,7 +18,6 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -42,6 +40,9 @@ public class UserPostContentController {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
     /**
      * 安全获取文章完整内容（含付费内容）
@@ -160,21 +161,11 @@ public class UserPostContentController {
             return null;
         }
 
-        String token = cookie.getValue();
-        try {
-            String[] parts = token.split("\\.");
-            if (parts.length != 3) {
-                return null;
-            }
-
-            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
-            Map<String, Object> claims = objectMapper.readValue(payload, new TypeReference<>() {
-            });
-
-            return claims.get("uid") instanceof Number n ? n.longValue() : null;
-        } catch (Exception e) {
+        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified = tokenVerifier.verify(cookie.getValue());
+        if (verified == null) {
             return null;
         }
+        return verified.uid();
     }
 
     private Response unauthorized() {

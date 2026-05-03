@@ -236,7 +236,10 @@
             try {
                 const response = await fetch('/api/comments', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-XSRF-TOKEN': window.getCsrfToken()
+                    },
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json().catch(() => null);

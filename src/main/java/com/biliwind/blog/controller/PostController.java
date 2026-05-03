@@ -30,6 +30,8 @@ public class PostController {
     @Location("blog/post.content.html")
     Template postContentTemplate;
 
+    @Inject
+    com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
     @Inject
     LanguageContext languageContext;
@@ -161,17 +163,11 @@ public class PostController {
         if (cookie == null || cookie.getValue() == null || cookie.getValue().isBlank()) {
             return null;
         }
-        try {
-            String[] parts = cookie.getValue().split("\\.");
-            if (parts.length != 3) return null;
-            String payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            java.util.Map<String, Object> claims = mapper.readValue(payload, new com.fasterxml.jackson.core.type.TypeReference<>() {
-            });
-            return claims.get("uid") instanceof Number n ? n.longValue() : null;
-        } catch (Exception e) {
+        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified = tokenVerifier.verify(cookie.getValue());
+        if (verified == null) {
             return null;
         }
+        return verified.uid();
     }
 
     public record TagItem(String name, String slug) {}

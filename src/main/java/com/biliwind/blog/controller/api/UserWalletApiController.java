@@ -5,7 +5,6 @@ import com.biliwind.blog.model.UserWallet;
 import com.biliwind.blog.model.WalletTransaction;
 import com.biliwind.blog.service.CheckInService;
 import com.biliwind.blog.service.WalletService;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -16,7 +15,6 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +35,9 @@ public class UserWalletApiController {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
     /**
      * 获取钱包基本信息与今日签到状态
@@ -134,21 +135,11 @@ public class UserWalletApiController {
             return null;
         }
 
-        String token = cookie.getValue();
-        try {
-            String[] parts = token.split("\\.");
-            if (parts.length != 3) {
-                return null;
-            }
-
-            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
-            Map<String, Object> claims = objectMapper.readValue(payload, new TypeReference<>() {
-            });
-
-            return claims.get("uid") instanceof Number n ? n.longValue() : null;
-        } catch (Exception e) {
+        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified = tokenVerifier.verify(cookie.getValue());
+        if (verified == null) {
             return null;
         }
+        return verified.uid();
     }
 
     private Response unauthorized() {
