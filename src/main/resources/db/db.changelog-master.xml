@@ -51,4 +51,6 @@
     <include file="migration/047-create-user-check-ins.sql" relativeToChangelogFile="true"/>
     <include file="migration/048-add-gamification-and-store.sql" relativeToChangelogFile="true"/>
     <include file="migration/049-add-purchase-record-block-id.sql" relativeToChangelogFile="true"/>
+    <include file="migration/050-add-comment-audit-fields.sql" relativeToChangelogFile="true"/>
+    <include file="migration/051-add-comment-ai-metrics.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

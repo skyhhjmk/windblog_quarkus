@@ -13,6 +13,11 @@ public class AdminCommentDtos {
             String content,
             Long parentId,
             short status,
+            short auditStatus,
+            short auditType,
+            String auditReason,
+            Long aiDurationMs,
+            Integer aiTotalTokens,
             OffsetDateTime createdAt) {
     }
 

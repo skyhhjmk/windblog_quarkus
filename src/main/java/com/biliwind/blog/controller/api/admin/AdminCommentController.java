@@ -83,7 +83,11 @@ public class AdminCommentController {
         if (req.status() != null) {
             oldVal.put("status", comment.status);
             comment.status = req.status();
+            comment.auditType = 2; // 人工审核
+            comment.auditStatus = (comment.status == 1) ? (short) 2 : (short) 3; // 2=通过, 3=拒绝
             newVal.put("status", comment.status);
+            newVal.put("auditType", comment.auditType);
+            newVal.put("auditStatus", comment.auditStatus);
         }
         if (req.content() != null && !req.content().isBlank()) {
             oldVal.put("content", comment.content);
@@ -139,6 +143,11 @@ public class AdminCommentController {
 
                         short oldStatus = c.status;
                         c.status = aiResult.isSafe ? (short) 1 : (short) 2;
+                        c.auditType = 1; // AI 审核
+                        c.auditStatus = aiResult.isSafe ? (short) 2 : (short) 3;
+                        c.auditReason = aiResult.isSafe ? "AI 判定内容安全" : (aiResult.errorMessage != null ? aiResult.errorMessage : "AI 判定内容存在风险");
+                        c.aiDurationMs = durationMs;
+                        c.aiTotalTokens = aiResult.totalTokens;
 
                         // 写入审计日志
                         Map<String, Object> extInfo = new HashMap<>();
@@ -171,6 +180,11 @@ public class AdminCommentController {
                 comment.content,
                 comment.parent != null ? comment.parent.id : null,
                 comment.status,
+                comment.auditStatus,
+                comment.auditType,
+                comment.auditReason,
+                comment.aiDurationMs,
+                comment.aiTotalTokens,
                 comment.createdAt);
     }
 

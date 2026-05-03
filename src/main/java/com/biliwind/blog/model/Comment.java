@@ -58,4 +58,34 @@ public class Comment extends PanacheEntityBase {
     /** 软删除时间 */
     @Column(name = "deleted_at")
     public OffsetDateTime deletedAt;
+
+    /**
+     * 审核状态：0=未审核 1=审核中 2=审核通过 3=审核拒绝
+     */
+    @Column(name = "audit_status", nullable = false)
+    public short auditStatus;
+
+    /**
+     * 审核类型：0=无 1=AI 审核 2=人工审核
+     */
+    @Column(name = "audit_type", nullable = false)
+    public short auditType;
+
+    /**
+     * 审核原因/理由
+     */
+    @Column(name = "audit_reason", columnDefinition = "text")
+    public String auditReason;
+
+    /**
+     * AI 审核耗时
+     */
+    @Column(name = "ai_duration_ms")
+    public Long aiDurationMs;
+
+    /**
+     * AI 审核消耗 Token
+     */
+    @Column(name = "ai_total_tokens")
+    public Integer aiTotalTokens;
 }

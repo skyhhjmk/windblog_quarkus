@@ -44,8 +44,9 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
             // 排除不需要 CSRF 防护的路径（如 Admin API，通常使用 Bearer Token 已经天然防御 CSRF）
             // 但如果 Admin API 也使用 Cookie 认证，则也需要校验
             // 这里我们主要针对前台 API
-            // 针对所有 API 接口进行校验
-            if (path.startsWith("/api/") || path.startsWith("/user/api/")) {
+            // 针对前台和用户中心 API 进行校验
+            // 排除 /api/admin/：后台 API 使用 Bearer Token 认证，天然防御 CSRF
+            if ((path.startsWith("/api/") && !path.startsWith("/api/admin/")) || path.startsWith("/user/api/")) {
                 Cookie csrfCookie = requestContext.getCookies().get(CSRF_COOKIE_NAME);
                 String csrfHeader = requestContext.getHeaderString(CSRF_HEADER_NAME);
 
