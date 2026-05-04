@@ -119,7 +119,25 @@ public class ChatGlmAiService implements AiService {
     }
 
     private HttpRequest buildRequest(AiProviderConfig config, Map<String, Object> payload) throws Exception {
-        String endpoint = (config.endpoint == null || config.endpoint.isBlank()) ? DEFAULT_ENDPOINT : resolveEndpoint(config.endpoint);
+        boolean forceEndpoint = false;
+        if (config.config != null && !config.config.isBlank()) {
+            try {
+                JsonNode extra = objectMapper.readTree(config.config);
+                if (extra.has("force_endpoint")) {
+                    forceEndpoint = extra.get("force_endpoint").asBoolean();
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+
+        String endpoint;
+        if (forceEndpoint && config.endpoint != null && !config.endpoint.isBlank()) {
+            endpoint = resolveEndpoint(config.endpoint);
+        } else {
+            endpoint = DEFAULT_ENDPOINT;
+        }
+
         String json = objectMapper.writeValueAsString(payload);
 
         return HttpRequest.newBuilder()

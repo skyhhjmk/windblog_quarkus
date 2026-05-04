@@ -23,4 +23,11 @@ public interface AiService {
      * Returns true if this service implementation supports this provider vendor type from config.
      */
     boolean supports(com.biliwind.blog.model.AiProviderConfig config);
+
+    /**
+     * Fetch list of available models from the provider.
+     */
+    default java.util.concurrent.CompletionStage<java.util.List<String>> fetchModels(com.biliwind.blog.model.AiProviderConfig config) {
+        return java.util.concurrent.CompletableFuture.completedFuture(java.util.List.of());
+    }
 }

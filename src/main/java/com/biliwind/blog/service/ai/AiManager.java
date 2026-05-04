@@ -144,5 +144,13 @@ public class AiManager {
             return svc.testStream(config, req);
         }
     }
+
+    public CompletionStage<List<String>> fetchModels(AiProviderConfig config) {
+        AiService svc = findService(config);
+        if (svc == null) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+        return svc.fetchModels(config);
+    }
 }
 

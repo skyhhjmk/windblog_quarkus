@@ -330,4 +330,58 @@ public class OpenAiAiService implements AiService {
             }
         });
     }
+
+    @Override
+    public CompletionStage<List<String>> fetchModels(AiProviderConfig config) {
+        try {
+            String endpoint = config.endpoint;
+            if (endpoint == null || endpoint.isBlank()) {
+                endpoint = "https://api.openai.com/v1";
+            }
+            if (endpoint.endsWith("/chat/completions")) {
+                endpoint = endpoint.substring(0, endpoint.length() - "/chat/completions".length());
+            } else if (endpoint.endsWith("/chat/completions/")) {
+                endpoint = endpoint.substring(0, endpoint.length() - "/chat/completions/".length());
+            }
+
+            if (!endpoint.endsWith("/")) {
+                endpoint = endpoint + "/";
+            }
+            endpoint = endpoint + "models";
+
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint))
+                    .header("Accept", "application/json")
+                    .GET();
+
+            attachApiKeyHeader(builder, config);
+
+            return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    .thenApply(response -> {
+                        if (response.statusCode() >= 400) {
+                            LOG.warn("获取 OpenAI 模型列表失败: " + response.statusCode() + " " + response.body());
+                            return List.of();
+                        }
+                        try {
+                            JsonNode root = objectMapper.readTree(response.body());
+                            List<String> models = new ArrayList<>();
+                            if (root.has("data") && root.get("data").isArray()) {
+                                for (JsonNode node : root.get("data")) {
+                                    if (node.has("id")) {
+                                        models.add(node.get("id").asText());
+                                    }
+                                }
+                            }
+                            models.sort(String::compareToIgnoreCase);
+                            return models;
+                        } catch (Exception e) {
+                            LOG.error("解析 OpenAI 模型列表失败", e);
+                            return List.of();
+                        }
+                    });
+        } catch (Exception e) {
+            LOG.error("获取 OpenAI 模型列表请求异常", e);
+            return CompletableFuture.completedFuture(List.of());
+        }
+    }
 }

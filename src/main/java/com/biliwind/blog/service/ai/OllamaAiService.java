@@ -318,4 +318,44 @@ public class OllamaAiService implements AiService {
             }
         });
     }
+
+    @Override
+    public CompletionStage<List<String>> fetchModels(AiProviderConfig config) {
+        try {
+            URI uri = resolveUri(config, "/api/tags");
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(uri)
+                    .timeout(TIMEOUT)
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+
+            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    .thenApply(response -> {
+                        if (response.statusCode() >= 400) {
+                            log.warn("获取 Ollama 模型列表失败: " + response.statusCode());
+                            return List.of();
+                        }
+                        try {
+                            JsonNode root = objectMapper.readTree(response.body());
+                            List<String> models = new ArrayList<>();
+                            if (root.has("models") && root.get("models").isArray()) {
+                                for (JsonNode node : root.get("models")) {
+                                    if (node.has("name")) {
+                                        models.add(node.get("name").asText());
+                                    }
+                                }
+                            }
+                            models.sort(String::compareToIgnoreCase);
+                            return models;
+                        } catch (Exception e) {
+                            log.error("解析 Ollama 模型列表失败", e);
+                            return List.of();
+                        }
+                    });
+        } catch (Exception e) {
+            log.error("获取 Ollama 模型列表请求异常", e);
+            return CompletableFuture.completedFuture(List.of());
+        }
+    }
 }
