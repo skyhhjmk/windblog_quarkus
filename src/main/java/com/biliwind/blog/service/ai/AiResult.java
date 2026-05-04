@@ -38,6 +38,16 @@ public class AiResult {
      */
     public Boolean isSafe;
 
+    /**
+     * 安全评分 (通常 0-100)
+     */
+    public Integer score;
+
+    /**
+     * 原始输出内容
+     */
+    public String rawResponse;
+
     public AiResult() {
     }
 

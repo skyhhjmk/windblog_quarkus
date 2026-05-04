@@ -21,6 +21,10 @@ public class AiTaskProducer {
     @Channel("ai-summary-tasks")
     Emitter<AiSummaryTask> taskEmitter;
 
+    @Inject
+    @Channel("ai-audit-tasks")
+    Emitter<AiAuditTask> auditEmitter;
+
     public void sendSummaryTask(AiSummaryTask task) {
         int rabbitPriority = convertToRabbitPriority(task.priority());
 
@@ -38,6 +42,12 @@ public class AiTaskProducer {
     public void sendSummaryTask(Long postId, Map<String, String> content, int priority, int retryCount, Long performedBy) {
         AiSummaryTask task = new AiSummaryTask(postId, content, priority, retryCount, performedBy);
         sendSummaryTask(task);
+    }
+
+    public void sendAuditTask(Long commentId, String content) {
+        AiAuditTask task = new AiAuditTask(commentId, content);
+        log.info("发送 AI 审核任务到队列，commentId={}", commentId);
+        auditEmitter.send(task);
     }
 
     public boolean resendFailedTask(AiSummaryTask originalTask) {

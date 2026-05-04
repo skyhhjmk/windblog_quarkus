@@ -1,6 +1,5 @@
 package com.biliwind.blog.controller.api.admin;
 
-import com.biliwind.blog.service.ai.AiSummaryTask;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
@@ -62,24 +61,33 @@ public class AdminQueueMonitorApi {
             ConnectionFactory factory = createConnectionFactory();
             try (Connection connection = factory.newConnection();
                  Channel channel = connection.createChannel()) {
-                
-                // 获取 ai-summary-tasks 队列信息
-                AMQP.Queue.DeclareOk taskQueue = channel.queueDeclarePassive("ai-summary-tasks");
-                Map<String, Object> taskQueueInfo = new HashMap<>();
-                taskQueueInfo.put("name", "ai-summary-tasks");
-                taskQueueInfo.put("messageCount", taskQueue.getMessageCount());
-                taskQueueInfo.put("consumerCount", getConsumerCount(channel, "ai-summary-tasks"));
-                taskQueueInfo.put("description", "AI 摘要任务队列");
-                queues.add(taskQueueInfo);
-                
-                // 获取死信队列信息
-                AMQP.Queue.DeclareOk dlxQueue = channel.queueDeclarePassive("ai-summary-dead-letter");
-                Map<String, Object> dlxQueueInfo = new HashMap<>();
-                dlxQueueInfo.put("name", "ai-summary-dead-letter");
-                dlxQueueInfo.put("messageCount", dlxQueue.getMessageCount());
-                dlxQueueInfo.put("consumerCount", getConsumerCount(channel, "ai-summary-dead-letter"));
-                dlxQueueInfo.put("description", "死信队列");
-                queues.add(dlxQueueInfo);
+
+                // 定义需要监控的队列及其描述
+                Map<String, String> monitorQueues = new LinkedHashMap<>();
+                monitorQueues.put("ai-summary-tasks", "AI 摘要任务队列");
+                monitorQueues.put("ai-audit-tasks", "AI 评论审核任务队列");
+                monitorQueues.put("ai-summary-dead-letter", "AI 摘要死信队列");
+                monitorQueues.put("ai-audit-dead-letter", "AI 审核死信队列");
+
+                for (Map.Entry<String, String> entry : monitorQueues.entrySet()) {
+                    String name = entry.getKey();
+                    String desc = entry.getValue();
+
+                    try {
+                        // 使用 active declare 确保队列存在，同时获取信息
+                        // 注意：这里的参数必须与 application.properties 中的配置一致
+                        AMQP.Queue.DeclareOk ok = channel.queueDeclare(name, true, false, false, null);
+
+                        Map<String, Object> info = new HashMap<>();
+                        info.put("name", name);
+                        info.put("messageCount", ok.getMessageCount());
+                        info.put("consumerCount", ok.getConsumerCount());
+                        info.put("description", desc);
+                        queues.add(info);
+                    } catch (Exception e) {
+                        log.warn("无法获取队列信息: {}, error: {}", name, e.getMessage());
+                    }
+                }
             }
             
             return Response.ok(Map.of(
@@ -150,46 +158,59 @@ public class AdminQueueMonitorApi {
             @PathParam("queueName") String queueName,
             TestMessageRequest request) {
         
-        if (request == null || request.postId == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of(
-                            "success", false,
-                            "message", "postId 是必填参数"
-                    )).build();
-        }
-        
         try {
             ConnectionFactory factory = createConnectionFactory();
             try (Connection connection = factory.newConnection();
                  Channel channel = connection.createChannel()) {
-                
-                // 构建测试任务
-                Map<String, String> content = new HashMap<>();
-                content.put("zh-cn", request.content != null ? request.content : "测试文章内容");
 
-                int priorityValue = 1;
-                if (request.priority != null) {
-                    priorityValue = request.priority;
+                String exchange;
+                String routingKey;
+                Object task;
+                String typeId;
+
+                if ("ai-audit-tasks".equals(queueName)) {
+                    if (request.commentId == null) {
+                        return Response.status(Response.Status.BAD_REQUEST)
+                                .entity(Map.of("success", false, "message", "审核队列需要 commentId")).build();
+                    }
+                    exchange = "ai-audit-tasks";
+                    routingKey = ""; // fanout
+                    task = new com.biliwind.blog.service.ai.AiAuditTask(
+                            request.commentId,
+                            request.content != null ? request.content : "这是一条测试评论内容，包含一些关键词如 spam。"
+                    );
+                    typeId = com.biliwind.blog.service.ai.AiAuditTask.class.getName();
+                } else {
+                    if (request.postId == null) {
+                        return Response.status(Response.Status.BAD_REQUEST)
+                                .entity(Map.of("success", false, "message", "摘要队列需要 postId")).build();
+                    }
+                    exchange = "ai-tasks";
+                    routingKey = "summary";
+                    Map<String, String> content = new HashMap<>();
+                    content.put("zh-cn", request.content != null ? request.content : "这是一篇测试文章的内容，用于生成 AI 摘要。");
+                    task = new com.biliwind.blog.service.ai.AiSummaryTask(
+                            request.postId,
+                            content,
+                            request.priority != null ? request.priority : 1,
+                            0,
+                            null
+                    );
+                    typeId = com.biliwind.blog.service.ai.AiSummaryTask.class.getName();
                 }
-                
-                AiSummaryTask task = new AiSummaryTask(
-                        request.postId,
-                        content,
-                        priorityValue,
-                        0,
-                        null
-                );
-                
-                // 设置 RabbitMQ 优先级
-                int rabbitPriority = switch (task.priority()) {
-                    case 0 -> 10;
-                    case 1 -> 5;
-                    default -> 0;
-                };
 
-                // 解决缺少类型导致的消费者反序列化崩溃问题
+                // 设置 RabbitMQ 优先级 (仅摘要任务支持优先级)
+                int rabbitPriority = 0;
+                if (task instanceof com.biliwind.blog.service.ai.AiSummaryTask summaryTask) {
+                    rabbitPriority = switch (summaryTask.priority()) {
+                        case 0 -> 10;
+                        case 1 -> 5;
+                        default -> 0;
+                    };
+                }
+
                 Map<String, Object> headers = new HashMap<>();
-                headers.put("__TypeId__", AiSummaryTask.class.getName());
+                headers.put("__TypeId__", typeId);
                 
                 AMQP.BasicProperties props = new AMQP.BasicProperties.Builder()
                         .priority(rabbitPriority)
@@ -198,24 +219,17 @@ public class AdminQueueMonitorApi {
                         .timestamp(Date.from(Instant.now()))
                         .build();
                 
-                // 使用 Jackson 序列化任务为 JSON
                 String messageBody = objectMapper.writeValueAsString(task);
-                
-                channel.basicPublish("ai-tasks", "summary", props, messageBody.getBytes("UTF-8"));
-                
-                log.info("测试消息已发送到队列，queueName={}, postId={}, priority={}", 
-                        queueName, request.postId, request.priority);
+                channel.basicPublish(exchange, routingKey, props, messageBody.getBytes("UTF-8"));
                 
                 return Response.ok(Map.of(
                         "success", true,
-                        "message", "消息已成功发送到队列",
+                        "message", "消息已成功发送到 " + queueName,
                         "data", Map.of(
-                                "postId", request.postId,
-                                "priority", request.priority,
+                                "id", request.postId != null ? request.postId : request.commentId,
                                 "queue", queueName
                         )
                 )).build();
-                
             }
         } catch (Exception e) {
             log.error("推送测试消息失败，queueName={}", queueName, e);
@@ -234,16 +248,22 @@ public class AdminQueueMonitorApi {
     @Path("/generate-example")
     @Operation(summary = "生成消息示例", description = "生成一个可用于测试的消息示例")
     public Response generateExample() {
-        Map<String, Object> example = new HashMap<>();
-        example.put("postId", 1);
-        example.put("priority", 1);
-        example.put("content", "这是一篇测试文章的摘要内容，用于测试消息队列功能。");
-        example.put("description", "AI 摘要任务示例");
-        example.put("usage", "将此示例的 postId 和 content 修改后，通过 /api/admin/queues/{queueName}/publish 接口推送");
+        Map<String, Object> summaryExample = new HashMap<>();
+        summaryExample.put("postId", 1);
+        summaryExample.put("priority", 1);
+        summaryExample.put("content", "这是一篇测试文章的内容，用于测试 AI 摘要生成。");
+
+        Map<String, Object> auditExample = new HashMap<>();
+        auditExample.put("commentId", 1);
+        auditExample.put("content", "这是一条包含敏感词的测试评论，用于测试 AI 审核功能。");
         
         return Response.ok(Map.of(
                 "success", true,
-                "data", example
+                "data", Map.of(
+                        "summary", summaryExample,
+                        "audit", auditExample
+                ),
+                "usage", "根据队列类型选择对应的参数。摘要队列使用 postId，审核队列使用 commentId。"
         )).build();
     }
 
@@ -278,6 +298,7 @@ public class AdminQueueMonitorApi {
      */
     public static class TestMessageRequest {
         public Long postId;
+        public Long commentId;
         public Integer priority;
         public String content;
     }

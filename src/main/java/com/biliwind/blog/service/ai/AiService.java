@@ -12,7 +12,7 @@ public interface AiService {
     /**
      * Moderate content using AI (e.g. for spam or toxic content).
      */
-    CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String content);
+    CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String prompt, String content);
 
     /**
      * 流式交互测试接口

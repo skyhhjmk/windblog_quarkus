@@ -29,15 +29,16 @@ public class MockAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String content) {
+    public CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String prompt, String content) {
         // Simple mock moderation: if content contains "spam", it's not safe
         boolean safe = true;
-        if (content.toLowerCase().contains("spam")) {
+        if (content != null && content.toLowerCase().contains("spam")) {
             safe = false;
         }
 
         AiResult res = new AiResult();
         res.isSafe = safe;
+        res.score = safe ? 95 : 20;
         res.addUsage(5, 5, 10);
         return CompletableFuture.completedStage(res);
     }

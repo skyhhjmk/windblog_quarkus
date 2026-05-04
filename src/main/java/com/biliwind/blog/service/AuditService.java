@@ -22,6 +22,11 @@ public class AuditService {
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void log(String entityType, Object entityId, String action, Object oldValue, Object newValue, Map<String, Object> extInfo) {
+        log(entityType, entityId, action, oldValue, newValue, extInfo, adminRequestContext.getUserId());
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void log(String entityType, Object entityId, String action, Object oldValue, Object newValue, Map<String, Object> extInfo, Long userId) {
         AuditLog auditLog = new AuditLog();
         auditLog.entityType = entityType;
         auditLog.entityId = entityId == null ? null : String.valueOf(entityId);
@@ -30,7 +35,6 @@ public class AuditService {
         auditLog.newValue = newValue;
         auditLog.extInfo = extInfo;
 
-        Long userId = adminRequestContext.getUserId();
         if (userId != null) {
             auditLog.performedBy = User.findById(userId);
         }

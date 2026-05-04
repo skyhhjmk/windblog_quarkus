@@ -93,9 +93,16 @@ public class AiManager {
         if (best == null) {
             best = configs.get(0);
         }
-        
-        log.info("[AI] 开始审核内容，接管配置={}", best.name);
-        return executeModerate(best, content);
+
+        // 获取系统设置中的提示词
+        String prompt = "你是一个评论审核专家。请审核以下评论内容，判断其是否包含不当内容（色情、暴力、政治敏感、广告垃圾等）。回答 JSON: {\"isSafe\": true/false, \"reason\": \"理由\", \"score\": 评分0-100}。待审核内容: {{content}}";
+        com.biliwind.blog.model.SystemSetting setting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
+        if (setting != null && setting.configValue != null && setting.configValue.has("prompt")) {
+            prompt = setting.configValue.get("prompt").asText();
+        }
+
+        log.info("[AI] 开始审核内容，使用配置={}, provider={}", best.name, best.provider);
+        return executeModerate(best, prompt, content);
     }
 
     public CompletionStage<AiResult> executeSummarize(AiProviderConfig config, Map<String, String> content) {
@@ -109,17 +116,18 @@ public class AiManager {
         }
     }
 
-    public CompletionStage<AiResult> executeModerate(AiProviderConfig config, String content) {
+    public CompletionStage<AiResult> executeModerate(AiProviderConfig config, String prompt, String content) {
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-            return pollingService.get().moderate(config, content);
+            return pollingService.get().moderate(config, prompt, content);
         } else {
             AiService svc = findService(config);
             if (svc == null) {
+                log.warn("[AI] 未找到支持该配置的 AI 服务: name={}, provider={}", config.name, config.provider);
                 AiResult defaultRes = new AiResult();
                 defaultRes.isSafe = true;
                 return CompletableFuture.completedFuture(defaultRes);
             }
-            return svc.moderate(config, content);
+            return svc.moderate(config, prompt, content);
         }
     }
 

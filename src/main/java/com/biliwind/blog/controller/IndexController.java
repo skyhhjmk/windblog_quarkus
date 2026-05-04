@@ -7,8 +7,8 @@ import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
+import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
-import io.quarkus.panache.common.Parameters;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -22,11 +22,12 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Index controller
+ * 首页控制器
  */
 @Path("/")
 public class IndexController {
@@ -44,51 +45,62 @@ public class IndexController {
     @Inject
     LanguageContext languageContext;
 
-    /**
-     * @param httpHeaders HttpHeaders
-     * @return Index page
-     */
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance index(@Context HttpHeaders httpHeaders) {
         return subPage(1, httpHeaders);
     }
 
-    /**
-     * 首页（文章列表）分页
-     *
-     * @param subPage page number
-     * @param httpHeaders HttpHeaders
-     * @return subPage page
-     */
     @Path("/page/{subPage}")
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance subPage(@PathParam("subPage") Integer subPage,
                                     @Context HttpHeaders httpHeaders) {
-        if (subPage == null || subPage < 1) {
+        if (subPage == null) {
+            subPage = 1;
+        }
+        if (subPage < 1) {
             subPage = 1;
         }
 
-        String lang = languageContext.getLang();
-        var postQuery =
-                Post.find("status = :status and deletedAt is null order by publishedAt desc nulls last, createdAt desc",
-                        Parameters.with("status", PostStatus.PUBLISHED).map());
-        long total = postQuery.count();
+        String language = languageContext.getLang();
+
+        // 替换已弃用的 Parameters.with，直接使用 Map.of
+        Map<String, Object> parameters = Map.of("status", PostStatus.PUBLISHED);
+
+        PanacheQuery<Post> postQuery = Post.find(
+                "status = :status and deletedAt is null order by publishedAt desc nulls last, createdAt desc",
+                parameters
+        );
+
+        long totalPostsCount = postQuery.count();
         List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
-        long totalPages = total == 0 ? 1 : (long) Math.ceil((double) total / PAGE_SIZE);
 
-        List<IndexPostItem> postItems = posts.stream()
-                .map(post -> toIndexItem(post, lang))
-                .toList();
+        long totalPages;
+        if (totalPostsCount == 0) {
+            totalPages = 1;
+        } else {
+            totalPages = (long) Math.ceil((double) totalPostsCount / PAGE_SIZE);
+        }
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? indexContent : index;
+        List<IndexPostItem> postItems = new ArrayList<>();
+        for (Post post : posts) {
+            IndexPostItem postItem = toIndexItem(post, language);
+            postItems.add(postItem);
+        }
+
+        Template template;
+        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
+            template = indexContent;
+        } else {
+            template = index;
+        }
 
         return template
-                .data("language", lang)
+                .data("language", language)
                 .data("subPage", subPage)
                 .data("pageSize", PAGE_SIZE)
-                .data("totalPosts", total)
+                .data("totalPosts", totalPostsCount)
                 .data("totalPages", totalPages)
                 .data("hasPrevPage", subPage > 1)
                 .data("hasNextPage", subPage < totalPages)
@@ -97,22 +109,47 @@ public class IndexController {
                 .data("posts", postItems);
     }
 
-    private IndexPostItem toIndexItem(Post post, String lang) {
-        String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
-        String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
-        if (title == null || title.isBlank()) {
+    private IndexPostItem toIndexItem(Post post, String language) {
+        String title = LanguageHelper.resolveLocalizedValue(post.title, language);
+        String summary = LanguageHelper.resolveLocalizedValue(post.summary, language);
+
+        if (title == null) {
+            title = post.slug;
+        } else if (title.isBlank()) {
             title = post.slug;
         }
-        if (summary == null || summary.isBlank()) {
+
+        if (summary == null) {
+            summary = "暂无摘要";
+        } else if (summary.isBlank()) {
             summary = "暂无摘要";
         }
 
-        Category cat = post.category;
-        String categoryName = cat != null ? LanguageHelper.resolveLocalizedValue(cat.name, lang) : "未分类";
+        Category category = post.category;
+        String categoryName;
+        if (category != null) {
+            categoryName = LanguageHelper.resolveLocalizedValue(category.name, language);
+        } else {
+            categoryName = "未分类";
+        }
 
-        List<TagItem> tags = PostTag.<PostTag>find("post", post).stream()
-                .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, lang), pt.tag.slug))
-                .toList();
+        List<PostTag> postTags = PostTag.find("post", post).list();
+        List<TagItem> tags = new ArrayList<>();
+        for (PostTag postTag : postTags) {
+            String tagName = LanguageHelper.resolveLocalizedValue(postTag.tag.name, language);
+            TagItem tagItem = new TagItem(tagName, postTag.tag.slug);
+            tags.add(tagItem);
+        }
+
+        int aiSummaryStatusValue = 0;
+        if (post.aiSummaryStatus != null) {
+            aiSummaryStatusValue = post.aiSummaryStatus.intValue();
+        }
+
+        String authorName = "Unknown";
+        if (post.user != null) {
+            authorName = post.user.username;
+        }
 
         return new IndexPostItem(
                 post.id,
@@ -120,11 +157,11 @@ public class IndexController {
                 title,
                 summary,
                 post.aiSummary,
-                post.aiSummaryStatus != null ? post.aiSummaryStatus.intValue() : 0,
+                aiSummaryStatusValue,
                 post.publishedAt,
                 post.createdAt,
                 categoryName,
-                post.user != null ? post.user.username : "Unknown",
+                authorName,
                 tags
         );
     }
@@ -146,3 +183,4 @@ public class IndexController {
     ) {
     }
 }
+

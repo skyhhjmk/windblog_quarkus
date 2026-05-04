@@ -88,4 +88,10 @@ public class Comment extends PanacheEntityBase {
      */
     @Column(name = "ai_total_tokens")
     public Integer aiTotalTokens;
+
+    /**
+     * AI 审核评分 (0-100)
+     */
+    @Column(name = "ai_score")
+    public Integer aiScore;
 }

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -25,6 +27,8 @@ import java.util.concurrent.CompletionStage;
  */
 @ApplicationScoped
 public class OllamaAiService implements AiService {
+
+    private static final Logger log = LoggerFactory.getLogger(OllamaAiService.class);
 
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
 
@@ -176,10 +180,59 @@ public class OllamaAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<AiResult> moderate(AiProviderConfig config, String content) {
-        AiResult res = new AiResult();
-        res.isSafe = true;
-        return CompletableFuture.completedFuture(res);
+    public CompletionStage<AiResult> moderate(AiProviderConfig config, String prompt, String content) {
+        String finalPrompt = prompt.replace("{{content}}", content != null ? content : "");
+        if (!prompt.contains("{{content}}")) {
+            finalPrompt = prompt + "\n\n内容如下：\n" + content;
+        }
+
+        try {
+            URI uri = resolveUri(config, "/api/chat");
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("model", chooseModel(config, "llama3"));
+            payload.put("stream", false);
+            payload.put("messages", List.of(Map.of("role", "user", "content", finalPrompt)));
+            payload.put("format", "json");
+
+            String bodyJson = objectMapper.writeValueAsString(payload);
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(uri)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
+                    .build();
+
+            return httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    .thenApply(response -> {
+                        if (response.statusCode() >= 400) {
+                            throw new RuntimeException("Ollama 审核失败: " + response.statusCode() + " " + response.body());
+                        }
+                        try {
+                            JsonNode root = objectMapper.readTree(response.body());
+                            String resultText = extractTextFromResponse(root);
+                            JsonNode resultJson = objectMapper.readTree(resultText);
+
+                            AiResult res = new AiResult();
+                            res.isSafe = resultJson.has("isSafe") ? resultJson.get("isSafe").asBoolean() : true;
+                            res.errorMessage = resultJson.has("reason") ? resultJson.get("reason").asText() : null;
+                            res.score = resultJson.has("score") ? resultJson.get("score").asInt() : null;
+                            res.rawResponse = response.body();
+
+                            // Ollama usage info is usually in prompt_eval_count and eval_count
+                            int promptTokens = root.has("prompt_eval_count") ? root.get("prompt_eval_count").asInt() : 0;
+                            int completionTokens = root.has("eval_count") ? root.get("eval_count").asInt() : 0;
+                            res.addUsage(promptTokens, completionTokens, promptTokens + completionTokens);
+
+                            return res;
+                        } catch (Exception e) {
+                            log.error("解析 Ollama 审核响应失败", e);
+                            AiResult fallback = new AiResult();
+                            fallback.isSafe = true;
+                            return fallback;
+                        }
+                    });
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     @Override

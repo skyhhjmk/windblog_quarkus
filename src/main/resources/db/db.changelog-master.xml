@@ -53,4 +53,6 @@
     <include file="migration/049-add-purchase-record-block-id.sql" relativeToChangelogFile="true"/>
     <include file="migration/050-add-comment-audit-fields.sql" relativeToChangelogFile="true"/>
     <include file="migration/051-add-comment-ai-metrics.sql" relativeToChangelogFile="true"/>
+    <include file="migration/052-add-ai-audit-settings.sql" relativeToChangelogFile="true"/>
+    <include file="migration/053-add-comment-ai-score.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

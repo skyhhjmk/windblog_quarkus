@@ -36,6 +36,9 @@ public class CommentApiController {
     @Inject
     ConfigManager configManager;
 
+    @Inject
+    com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
+
     @GET
     @Path("/post/{slug}")
     @Transactional
@@ -99,6 +102,14 @@ public class CommentApiController {
         comment.content = content;
         comment.status = STATUS_PENDING;
         comment.persist();
+
+        // 触发 AI 审核
+        com.biliwind.blog.model.SystemSetting auditSetting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
+        if (auditSetting != null && auditSetting.configValue != null && auditSetting.configValue.has("auto_audit") && auditSetting.configValue.get("auto_audit").asBoolean()) {
+            comment.auditStatus = 1; // 审核中
+            comment.persist();
+            aiTaskProducer.sendAuditTask(comment.id, comment.content);
+        }
 
         return Response.status(Response.Status.CREATED)
                 .entity(Map.of(

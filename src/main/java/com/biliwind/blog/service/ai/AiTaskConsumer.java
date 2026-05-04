@@ -106,6 +106,48 @@ public class AiTaskConsumer {
         }
     }
 
+    /**
+     * 消费 AI 审核任务消息。
+     */
+    @Incoming("ai-audit-tasks-in")
+    @Blocking
+    public java.util.concurrent.CompletionStage<Void> consumeAudit(Message<JsonObject> message) {
+        log.info("{} 收到审核消息", MQ_TAG);
+
+        AiAuditTask task;
+        try {
+            task = message.getPayload().mapTo(AiAuditTask.class);
+        } catch (Exception deserializeEx) {
+            log.error("{} 反序列化审核消息失败: {}", MQ_TAG, deserializeEx.getMessage());
+            return safeAck(message);
+        }
+
+        if (task.commentId() == null || task.content() == null || task.content().isEmpty()) {
+            log.error("{} 审核任务字段无效，丢弃消息，commentId={}", MQ_TAG, task.commentId());
+            return safeAck(message);
+        }
+
+        long startTime = System.currentTimeMillis();
+        try {
+            // 阻塞等待 AI 结果
+            AiResult aiResult = aiManager.moderate(task.content())
+                    .toCompletableFuture()
+                    .get(TASK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            long endTime = System.currentTimeMillis();
+            long durationMs = endTime - startTime;
+
+            saveAiAuditResult(task.commentId(), aiResult, durationMs);
+            log.info("{} AI 审核成功，commentId={}，耗时={}ms", MQ_TAG, task.commentId(), durationMs);
+            return safeAck(message);
+
+        } catch (Exception ex) {
+            log.error("{} AI 审核失败，commentId={}, error={}", MQ_TAG, task.commentId(), ex.getMessage());
+            // 目前先不重试审核任务，直接确认
+            return safeAck(message);
+        }
+    }
+
     private int getRetryCount(Message<JsonObject> message, AiSummaryTask task) {
         Optional<IncomingRabbitMQMetadata> metadata = message.getMetadata(IncomingRabbitMQMetadata.class);
         if (metadata.isPresent()) {
@@ -207,6 +249,52 @@ public class AiTaskConsumer {
                 post.aiSummary = aiResult.contents;
                 post.persist();
                 log.info("{} 已保存 AI 摘要并写入审计日志，postId={}", MQ_TAG, postId);
+            }
+        });
+    }
+
+    /**
+     * 在新事务中保存审核结果。
+     */
+    private void saveAiAuditResult(Long commentId, AiResult aiResult, long durationMs) {
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
+            @Override
+            public void run() {
+                com.biliwind.blog.model.Comment comment = com.biliwind.blog.model.Comment.findById(commentId);
+                if (comment == null) {
+                    log.warn("{} 评论不存在，跳过，commentId={}", MQ_TAG, commentId);
+                    return;
+                }
+
+                short oldStatus = comment.status;
+                comment.status = aiResult.isSafe ? (short) 1 : (short) 2;
+                comment.auditType = 1; // AI 审核
+                comment.auditStatus = aiResult.isSafe ? (short) 2 : (short) 3;
+                comment.auditReason = aiResult.isSafe ? "AI 判定内容安全" : (aiResult.errorMessage != null ? aiResult.errorMessage : "AI 判定内容存在风险");
+                comment.aiDurationMs = durationMs;
+                comment.aiTotalTokens = aiResult.totalTokens;
+                comment.aiScore = aiResult.score;
+
+                // 写入审计日志
+                Map<String, Object> extInfo = new HashMap<>();
+                extInfo.put("durationMs", durationMs);
+                extInfo.put("inputTokens", aiResult.inputTokens);
+                extInfo.put("outputTokens", aiResult.outputTokens);
+                extInfo.put("totalTokens", aiResult.totalTokens);
+                extInfo.put("score", aiResult.score);
+                extInfo.put("rawResponse", aiResult.rawResponse);
+
+                com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
+                auditLog.entityType = "comment";
+                auditLog.entityId = commentId.toString();
+                auditLog.action = "ai_moderation";
+                auditLog.oldValue = Map.of("status", oldStatus);
+                auditLog.newValue = Map.of("status", (int) comment.status, "isSafe", aiResult.isSafe);
+                auditLog.extInfo = extInfo;
+                auditLog.persist();
+
+                comment.persist();
+                log.info("{} 已保存 AI 审核结果，commentId={}", MQ_TAG, commentId);
             }
         });
     }

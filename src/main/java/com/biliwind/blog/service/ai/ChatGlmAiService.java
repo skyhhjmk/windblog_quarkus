@@ -157,10 +157,57 @@ public class ChatGlmAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<AiResult> moderate(AiProviderConfig config, String content) {
-        AiResult res = new AiResult();
-        res.isSafe = true;
-        return CompletableFuture.completedFuture(res);
+    public CompletionStage<AiResult> moderate(AiProviderConfig config, String prompt, String content) {
+        if (!isConfigReady(config)) {
+            return CompletableFuture.failedFuture(new RuntimeException("ChatGLM 配置未就绪"));
+        }
+
+        String finalPrompt = prompt.replace("{{content}}", content != null ? content : "");
+        if (!prompt.contains("{{content}}")) {
+            finalPrompt = prompt + "\n\n内容如下：\n" + content;
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("model", (config.model == null || config.model.isBlank()) ? DEFAULT_MODEL : config.model);
+        payload.put("messages", List.of(Map.of("role", "user", "content", finalPrompt)));
+        payload.put("response_format", Map.of("type", "json_object"));
+
+        try {
+            HttpRequest httpRequest = buildRequest(config, payload);
+            return httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    .thenApply(response -> {
+                        if (response.statusCode() >= 400) {
+                            throw new RuntimeException("ChatGLM 审核调用失败: " + response.statusCode() + " " + response.body());
+                        }
+                        try {
+                            JsonNode root = objectMapper.readTree(response.body());
+                            String resultText = extractTextFromResponse(root);
+                            JsonNode resultJson = objectMapper.readTree(resultText);
+
+                            AiResult res = new AiResult();
+                            res.isSafe = resultJson.has("isSafe") ? resultJson.get("isSafe").asBoolean() : true;
+                            res.errorMessage = resultJson.has("reason") ? resultJson.get("reason").asText() : null;
+                            res.score = resultJson.has("score") ? resultJson.get("score").asInt() : null;
+                            res.rawResponse = response.body();
+
+                            if (root.has("usage")) {
+                                JsonNode usage = root.get("usage");
+                                int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
+                                int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
+                                int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
+                                res.addUsage(promptTokens, completionTokens, totalTokens);
+                            }
+                            return res;
+                        } catch (Exception e) {
+                            LOG.error("解析 ChatGLM 审核响应失败", e);
+                            AiResult fallback = new AiResult();
+                            fallback.isSafe = true;
+                            return fallback;
+                        }
+                    });
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     @Override

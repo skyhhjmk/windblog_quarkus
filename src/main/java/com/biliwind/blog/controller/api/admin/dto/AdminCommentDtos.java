@@ -18,6 +18,7 @@ public class AdminCommentDtos {
             String auditReason,
             Long aiDurationMs,
             Integer aiTotalTokens,
+            Integer aiScore,
             OffsetDateTime createdAt) {
     }
 

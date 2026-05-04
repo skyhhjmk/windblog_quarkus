@@ -71,10 +71,10 @@ public class AiPollingService {
         return tryNodesForSummarize(nodes, alg, groupConfig.id, 0, content);
     }
 
-    public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String content) {
+    public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String prompt, String content) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
-        return tryNodesForModerate(nodes, alg, groupConfig.id, 0, content);
+        return tryNodesForModerate(nodes, alg, groupConfig.id, 0, prompt, content);
     }
 
     public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig groupConfig, com.biliwind.blog.controller.api.admin.dto.AiTestRequest req) {
@@ -140,7 +140,7 @@ public class AiPollingService {
                 }).thenCompose(s -> s);
     }
 
-    private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, String content) {
+    private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, String prompt, String content) {
         if (nodes.isEmpty() || retryCount >= nodes.size()) {
             AiResult defaultResult = new AiResult();
             defaultResult.isSafe = true;
@@ -150,14 +150,14 @@ public class AiPollingService {
         NodeInfo selected = pickNext(nodes, alg, groupId);
         AiProviderConfig cfg = configService.getById(selected.id()).orElse(null);
         if (cfg == null || !cfg.enabled || cfg.type != AiConfigType.PROVIDER) {
-            return tryNodesForModerate(nodes, alg, groupId, retryCount + 1, content);
+            return tryNodesForModerate(nodes, alg, groupId, retryCount + 1, prompt, content);
         }
 
-        return aiManager.executeModerate(cfg, content)
+        return aiManager.executeModerate(cfg, prompt, content)
                 .handle((res, ex) -> {
                     if (ex != null) {
                         log.warn("轮询节点 {} 审核失败: {}", cfg.name, ex.getMessage());
-                        return tryNodesForModerate(nodes, alg, groupId, retryCount + 1, content);
+                        return tryNodesForModerate(nodes, alg, groupId, retryCount + 1, prompt, content);
                     }
                     return CompletableFuture.completedStage(res);
                 }).thenCompose(s -> s);
