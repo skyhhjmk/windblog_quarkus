@@ -14,11 +14,8 @@ public class AdminCommentDtos {
             Long parentId,
             short status,
             short auditStatus,
-            short auditType,
-            String auditReason,
-            Long aiDurationMs,
-            Integer aiTotalTokens,
-            Integer aiScore,
+            Object aiReviewData,
+            boolean isReviewing,
             OffsetDateTime createdAt) {
     }
 

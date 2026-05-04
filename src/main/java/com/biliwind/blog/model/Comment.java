@@ -3,7 +3,9 @@ package com.biliwind.blog.model;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 
@@ -66,32 +68,15 @@ public class Comment extends PanacheEntityBase {
     public short auditStatus;
 
     /**
-     * 审核类型：0=无 1=AI 审核 2=人工审核
+     * AI 审核数据
      */
-    @Column(name = "audit_type", nullable = false)
-    public short auditType;
+    @Column(name = "ai_review_data", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    public Object aiReviewData;
 
     /**
-     * 审核原因/理由
+     * 是否正在审核中
      */
-    @Column(name = "audit_reason", columnDefinition = "text")
-    public String auditReason;
-
-    /**
-     * AI 审核耗时
-     */
-    @Column(name = "ai_duration_ms")
-    public Long aiDurationMs;
-
-    /**
-     * AI 审核消耗 Token
-     */
-    @Column(name = "ai_total_tokens")
-    public Integer aiTotalTokens;
-
-    /**
-     * AI 审核评分 (0-100)
-     */
-    @Column(name = "ai_score")
-    public Integer aiScore;
+    @Column(name = "is_reviewing", nullable = false)
+    public boolean isReviewing = false;
 }

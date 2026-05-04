@@ -186,7 +186,7 @@ public class ChatGlmAiService implements AiService {
 
                             AiResult res = new AiResult();
                             res.isSafe = resultJson.has("isSafe") ? resultJson.get("isSafe").asBoolean() : true;
-                            res.errorMessage = resultJson.has("reason") ? resultJson.get("reason").asText() : null;
+                            res.reason = resultJson.has("reason") ? resultJson.get("reason").asText() : null;
                             res.score = resultJson.has("score") ? resultJson.get("score").asInt() : null;
                             res.rawResponse = response.body();
 

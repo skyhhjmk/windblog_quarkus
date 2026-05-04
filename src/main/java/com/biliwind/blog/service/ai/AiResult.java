@@ -34,6 +34,11 @@ public class AiResult {
     public String errorMessage;
 
     /**
+     * AI 审核理由（来自 AI 原始输出的 reason 字段）
+     */
+    public String reason;
+
+    /**
      * 是否安全 (用于审核功能)
      */
     public Boolean isSafe;

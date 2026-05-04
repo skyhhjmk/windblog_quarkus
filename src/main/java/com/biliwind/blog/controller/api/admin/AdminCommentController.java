@@ -7,7 +7,6 @@ import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.service.AuditService;
 import com.biliwind.blog.service.ai.AiManager;
-import com.biliwind.blog.service.ai.AiResult;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
@@ -22,9 +21,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletionStage;
-import java.util.function.Function;
 
 @Path("/api/admin/comments")
 @Produces(MediaType.APPLICATION_JSON)
@@ -34,6 +30,9 @@ public class AdminCommentController {
 
     @Inject
     AiManager aiManager;
+
+    @Inject
+    com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
 
     @Inject
     AuditService auditService;
@@ -115,11 +114,9 @@ public class AdminCommentController {
 
         if (req.status() != null) {
             oldVal.put("status", comment.status);
-            oldVal.put("auditType", comment.auditType);
             oldVal.put("auditStatus", comment.auditStatus);
             
             comment.status = req.status();
-            comment.auditType = 2; // 人工审核
 
             if (comment.status == 1) {
                 comment.auditStatus = 2; // 通过
@@ -128,7 +125,6 @@ public class AdminCommentController {
             }
             
             newVal.put("status", comment.status);
-            newVal.put("auditType", comment.auditType);
             newVal.put("auditStatus", comment.auditStatus);
         }
 
@@ -159,89 +155,33 @@ public class AdminCommentController {
 
     @POST
     @Path("/{id}/audit")
-    @Transactional
     @Operation(summary = "AI 审核评论")
-    public CompletionStage<AdminCommentItem> audit(@PathParam("id") final Long id) {
-        final Comment comment = Comment.findById(id);
-        if (comment == null) {
-            throw new NotFoundException();
-        }
-        if (comment.deletedAt != null) {
-            throw new NotFoundException();
+    public AdminCommentItem audit(@PathParam("id") final Long id) {
+        // 定义一个临时类来携带数据
+        class AuditData {
+            AdminCommentItem item;
+            String content;
         }
 
-        final long startTime = System.currentTimeMillis();
-        final Long commentId = comment.id;
-        final Long performingUserId = adminRequestContext.getUserId();
-
-        return aiManager.moderate(comment.content).thenApply(new Function<AiResult, AdminCommentItem>() {
-            @Override
-            public AdminCommentItem apply(final AiResult aiResult) {
-                final long durationMs = System.currentTimeMillis() - startTime;
-
-                return io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(new Callable<AdminCommentItem>() {
-                    @Override
-                    public AdminCommentItem call() {
-                        Comment c = Comment.findById(commentId);
-                        if (c == null) {
-                            throw new NotFoundException("Comment not found");
-                        }
-
-                        short oldStatus = c.status;
-
-                        boolean safe = false;
-                        if (aiResult.isSafe != null) {
-                            if (aiResult.isSafe == true) {
-                                safe = true;
-                            }
-                        }
-
-                        if (safe) {
-                            c.status = 1;
-                            c.auditStatus = 2;
-                            c.auditReason = "AI 判定内容安全";
-                        } else {
-                            c.status = 2;
-                            c.auditStatus = 3;
-                            if (aiResult.errorMessage != null) {
-                                c.auditReason = aiResult.errorMessage;
-                            } else {
-                                c.auditReason = "AI 判定内容存在风险";
-                            }
-                        }
-                        
-                        c.auditType = 1; // AI 审核
-                        c.aiDurationMs = durationMs;
-                        c.aiTotalTokens = aiResult.totalTokens;
-                        c.aiScore = aiResult.score;
-
-                        // 写入审计日志
-                        Map<String, Object> extInfo = new HashMap<String, Object>();
-                        extInfo.put("durationMs", durationMs);
-                        extInfo.put("inputTokens", aiResult.inputTokens);
-                        extInfo.put("outputTokens", aiResult.outputTokens);
-                        extInfo.put("totalTokens", aiResult.totalTokens);
-                        extInfo.put("score", aiResult.score);
-                        extInfo.put("rawResponse", aiResult.rawResponse);
-
-                        Map<String, Object> oldStatusMap = new HashMap<String, Object>();
-                        oldStatusMap.put("status", oldStatus);
-
-                        Map<String, Object> newStatusMap = new HashMap<String, Object>();
-                        newStatusMap.put("status", (int) c.status);
-                        newStatusMap.put("isSafe", aiResult.isSafe);
-
-                        auditService.log("comment", String.valueOf(c.id), "ai_moderation",
-                                oldStatusMap,
-                                newStatusMap,
-                                extInfo,
-                                performingUserId);
-
-                        return toItem(c);
-                    }
-                });
+        final AuditData data = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() -> {
+            Comment c = Comment.findById(id);
+            if (c == null || c.deletedAt != null) {
+                throw new jakarta.ws.rs.NotFoundException();
             }
+            if (!c.isReviewing) {
+                c.isReviewing = true;
+                c.persist();
+            }
+            AuditData ad = new AuditData();
+            ad.item = toItem(c);
+            ad.content = c.content;
+            return ad;
         });
+
+        // 事务提交后发送异步任务
+        aiTaskProducer.sendAuditTask(id, data.content);
+
+        return data.item;
     }
 
     private AdminCommentItem toItem(Comment comment) {
@@ -283,11 +223,8 @@ public class AdminCommentController {
                 parentId,
                 comment.status,
                 comment.auditStatus,
-                comment.auditType,
-                comment.auditReason,
-                comment.aiDurationMs,
-                comment.aiTotalTokens,
-                comment.aiScore,
+                comment.aiReviewData,
+                comment.isReviewing,
                 comment.createdAt);
     }
 

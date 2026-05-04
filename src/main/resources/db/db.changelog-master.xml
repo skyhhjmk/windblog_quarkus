@@ -55,4 +55,5 @@
     <include file="migration/051-add-comment-ai-metrics.sql" relativeToChangelogFile="true"/>
     <include file="migration/052-add-ai-audit-settings.sql" relativeToChangelogFile="true"/>
     <include file="migration/053-add-comment-ai-score.sql" relativeToChangelogFile="true"/>
+    <include file="migration/054-optimize-comment-ai-audit.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

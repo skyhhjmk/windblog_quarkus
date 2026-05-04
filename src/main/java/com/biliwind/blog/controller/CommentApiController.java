@@ -76,7 +76,6 @@ public class CommentApiController {
     }
 
     @POST
-    @Transactional
     public Response create(CommentCreateRequest request, @Context HttpHeaders headers) {
         if (!configManager.getBoolean("feature_toggles", "enable_comment", true)) {
             return Response.status(Response.Status.FORBIDDEN)
@@ -91,24 +90,42 @@ public class CommentApiController {
             throw new ForbiddenException("Login required");
         }
 
-        Post post = findPublicPost(request.postSlug());
-        Comment parent = resolveParent(post, request.parentId());
+        final Post post = findPublicPost(request.postSlug());
+        final Comment parent = resolveParent(post, request.parentId());
+        final String content = normalizeContent(request.content());
 
-        String content = normalizeContent(request.content());
-        Comment comment = new Comment();
-        comment.post = post;
-        comment.parent = parent;
-        comment.user = user;
-        comment.content = content;
-        comment.status = STATUS_PENDING;
-        comment.persist();
+        final Comment comment = new Comment();
+        // 用于在事务外携带数据
+        class CreateResult {
+            Long id;
+            String content;
+            boolean isReviewing;
+        }
+        final CreateResult result = new CreateResult();
 
-        // 触发 AI 审核
-        com.biliwind.blog.model.SystemSetting auditSetting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
-        if (auditSetting != null && auditSetting.configValue != null && auditSetting.configValue.has("auto_audit") && auditSetting.configValue.get("auto_audit").asBoolean()) {
-            comment.auditStatus = 1; // 审核中
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+            comment.post = post;
+            comment.parent = parent;
+            comment.user = user;
+            comment.content = content;
+            comment.status = STATUS_PENDING;
+
+            // 触发 AI 审核状态预设
+            com.biliwind.blog.model.SystemSetting auditSetting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
+            if (auditSetting != null && auditSetting.configValue != null && auditSetting.configValue.has("allowAutoDecision") && auditSetting.configValue.get("allowAutoDecision").asBoolean()) {
+                comment.auditStatus = 1; // 审核中
+                comment.isReviewing = true;
+            }
             comment.persist();
-            aiTaskProducer.sendAuditTask(comment.id, comment.content);
+
+            result.id = comment.id;
+            result.content = comment.content;
+            result.isReviewing = comment.isReviewing;
+        });
+
+        // 提交成功后发送异步任务
+        if (result.isReviewing) {
+            aiTaskProducer.sendAuditTask(result.id, result.content);
         }
 
         return Response.status(Response.Status.CREATED)

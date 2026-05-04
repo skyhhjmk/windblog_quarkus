@@ -106,9 +106,6 @@ public class AiTaskConsumer {
         }
     }
 
-    /**
-     * 消费 AI 审核任务消息。
-     */
     @Incoming("ai-audit-tasks-in")
     @Blocking
     public java.util.concurrent.CompletionStage<Void> consumeAudit(Message<JsonObject> message) {
@@ -127,6 +124,11 @@ public class AiTaskConsumer {
             return safeAck(message);
         }
 
+        int currentRetryCount = getAuditRetryCount(message, task);
+        int allowedMaxRetries = getMaxRetries();
+        log.info("{} 处理审核任务，commentId={}, retry={}/{}", MQ_TAG,
+                task.commentId(), currentRetryCount, allowedMaxRetries);
+
         long startTime = System.currentTimeMillis();
         try {
             // 阻塞等待 AI 结果
@@ -143,8 +145,74 @@ public class AiTaskConsumer {
 
         } catch (Exception ex) {
             log.error("{} AI 审核失败，commentId={}, error={}", MQ_TAG, task.commentId(), ex.getMessage());
-            // 目前先不重试审核任务，直接确认
-            return safeAck(message);
+            return handleRetryOrDeadLetterAudit(message, task, currentRetryCount, allowedMaxRetries, ex);
+        }
+    }
+
+    private int getAuditRetryCount(Message<JsonObject> message, AiAuditTask task) {
+        Optional<IncomingRabbitMQMetadata> metadata = message.getMetadata(IncomingRabbitMQMetadata.class);
+        if (metadata.isPresent()) {
+            Map<String, Object> headerMap = metadata.get().getHeaders();
+            if (headerMap != null && headerMap.containsKey("x-death")) {
+                Object xDeath = headerMap.get("x-death");
+                if (xDeath instanceof Iterable) {
+                    for (Object entry : (Iterable<?>) xDeath) {
+                        if (entry instanceof Map) {
+                            Object countObj = ((Map<?, ?>) entry).get("count");
+                            if (countObj instanceof Number) {
+                                return ((Number) countObj).intValue();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return task.retryCount();
+    }
+
+    private java.util.concurrent.CompletionStage<Void> handleRetryOrDeadLetterAudit(Message<JsonObject> message, AiAuditTask task,
+                                                                                    int currentRetryCount, int allowedMaxRetries, Exception ex) {
+        if (currentRetryCount < allowedMaxRetries) {
+            int nextRetryCount = currentRetryCount + 1;
+            log.warn("{} 审核重试 {}/{}，commentId={}", MQ_TAG, nextRetryCount, allowedMaxRetries, task.commentId());
+            try {
+                taskProducer.sendAuditTask(new AiAuditTask(task.commentId(), task.content(), nextRetryCount));
+
+                // 记录重试日志
+                io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+                    com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
+                    auditLog.entityType = "comment";
+                    auditLog.entityId = task.commentId().toString();
+                    auditLog.action = "ai_moderation_retry";
+                    auditLog.extInfo = Map.of("retryCount", nextRetryCount, "error", ex.getMessage());
+                    auditLog.persist();
+                });
+
+                return safeAck(message);
+            } catch (Exception sendEx) {
+                log.error("{} 重新发布审核任务失败，进行 NACK，commentId={}", MQ_TAG, task.commentId(), sendEx);
+                return safeNack(message, sendEx);
+            }
+        } else {
+            log.error("{} 审核达到最大重试次数，进行 NACK 进入死信并标记失败，commentId={}", MQ_TAG, task.commentId());
+
+            // 标记记录失败，恢复状态
+            io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+                com.biliwind.blog.model.Comment comment = com.biliwind.blog.model.Comment.findById(task.commentId());
+                if (comment != null) {
+                    comment.isReviewing = false;
+                    comment.persist();
+                }
+
+                com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
+                auditLog.entityType = "comment";
+                auditLog.entityId = task.commentId().toString();
+                auditLog.action = "ai_moderation_failed";
+                auditLog.extInfo = Map.of("error", ex.getMessage());
+                auditLog.persist();
+            });
+
+            return safeNack(message, ex);
         }
     }
 
@@ -266,35 +334,81 @@ public class AiTaskConsumer {
                     return;
                 }
 
+                // 读取配置
+                boolean allowAutoDecision = false;
+                com.biliwind.blog.model.SystemSetting auditSetting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
+                if (auditSetting != null && auditSetting.configValue != null && auditSetting.configValue.has("allowAutoDecision")) {
+                    allowAutoDecision = auditSetting.configValue.get("allowAutoDecision").asBoolean();
+                }
+
                 short oldStatus = comment.status;
-                comment.status = aiResult.isSafe ? (short) 1 : (short) 2;
-                comment.auditType = 1; // AI 审核
-                comment.auditStatus = aiResult.isSafe ? (short) 2 : (short) 3;
-                comment.auditReason = aiResult.isSafe ? "AI 判定内容安全" : (aiResult.errorMessage != null ? aiResult.errorMessage : "AI 判定内容存在风险");
-                comment.aiDurationMs = durationMs;
-                comment.aiTotalTokens = aiResult.totalTokens;
-                comment.aiScore = aiResult.score;
+                short newStatus = oldStatus;
+                short oldAuditStatus = comment.auditStatus;
+                short newAuditStatus = oldAuditStatus;
+
+                String reason;
+                if (aiResult.reason != null && !aiResult.reason.isBlank()) {
+                    reason = aiResult.reason;
+                } else if (aiResult.isSafe) {
+                    reason = "AI 判定内容安全";
+                } else {
+                    reason = "AI 判定内容存在风险";
+                }
+                Integer score = aiResult.score;
+
+                // 仅当允许全自动且评分大于等于 80 时，才改变状态
+                boolean statusChanged = false;
+                if (allowAutoDecision && score != null && score >= 80) {
+                    newStatus = aiResult.isSafe ? (short) 1 : (short) 2;
+                    newAuditStatus = aiResult.isSafe ? (short) 2 : (short) 3;
+
+                    comment.status = newStatus;
+                    comment.auditStatus = newAuditStatus;
+                    statusChanged = true;
+                } else if (allowAutoDecision && (score == null || score < 80)) {
+                    // 转入待人工复审
+                    comment.auditStatus = 0; // pending
+                    newAuditStatus = 0;
+                }
+
+                // 组装 aiReviewData
+                Map<String, Object> aiData = new HashMap<>();
+                aiData.put("durationMs", durationMs);
+                aiData.put("totalTokens", aiResult.totalTokens);
+                aiData.put("inputTokens", aiResult.inputTokens);
+                aiData.put("outputTokens", aiResult.outputTokens);
+                if (score != null) {
+                    aiData.put("score", score);
+                }
+                aiData.put("isSafe", aiResult.isSafe);
+                aiData.put("reason", reason);
+                if (aiResult.rawResponse != null) {
+                    aiData.put("rawResponse", aiResult.rawResponse);
+                }
+                aiData.put("auditTime", System.currentTimeMillis());
+
+                comment.aiReviewData = aiData;
+                comment.isReviewing = false;
 
                 // 写入审计日志
                 Map<String, Object> extInfo = new HashMap<>();
                 extInfo.put("durationMs", durationMs);
-                extInfo.put("inputTokens", aiResult.inputTokens);
-                extInfo.put("outputTokens", aiResult.outputTokens);
                 extInfo.put("totalTokens", aiResult.totalTokens);
-                extInfo.put("score", aiResult.score);
+                extInfo.put("score", score);
+                extInfo.put("statusChanged", statusChanged);
                 extInfo.put("rawResponse", aiResult.rawResponse);
 
                 com.biliwind.blog.model.AuditLog auditLog = new com.biliwind.blog.model.AuditLog();
                 auditLog.entityType = "comment";
                 auditLog.entityId = commentId.toString();
                 auditLog.action = "ai_moderation";
-                auditLog.oldValue = Map.of("status", oldStatus);
-                auditLog.newValue = Map.of("status", (int) comment.status, "isSafe", aiResult.isSafe);
+                auditLog.oldValue = Map.of("status", (int) oldStatus, "auditStatus", (int) oldAuditStatus);
+                auditLog.newValue = Map.of("status", (int) newStatus, "auditStatus", (int) newAuditStatus, "isSafe", aiResult.isSafe);
                 auditLog.extInfo = extInfo;
                 auditLog.persist();
 
                 comment.persist();
-                log.info("{} 已保存 AI 审核结果，commentId={}", MQ_TAG, commentId);
+                log.info("{} 已保存 AI 审核结果，commentId={}, statusChanged={}", MQ_TAG, commentId, statusChanged);
             }
         });
     }

@@ -45,8 +45,11 @@ public class AiTaskProducer {
     }
 
     public void sendAuditTask(Long commentId, String content) {
-        AiAuditTask task = new AiAuditTask(commentId, content);
-        log.info("发送 AI 审核任务到队列，commentId={}", commentId);
+        sendAuditTask(new AiAuditTask(commentId, content, 0));
+    }
+
+    public void sendAuditTask(AiAuditTask task) {
+        log.info("发送 AI 审核任务到队列，commentId={}, retryCount={}", task.commentId(), task.retryCount());
         auditEmitter.send(task);
     }
 
