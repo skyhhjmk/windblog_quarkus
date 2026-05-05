@@ -113,10 +113,10 @@ public class PostController {
                         ? postContentTemplate
                         : postTemplate;
 
-        // 全站买断判定：或者是作者，或者支付过文章全价（且总价 > 0），或者文章免费但支付过（产生的0积分记录）
+        // 全站买断判定
         boolean hasPurchased = isAuthor
                 || (postPrice > 0 && maxPointsPaid >= postPrice)
-                || (postPrice == 0 && maxPointsPaid >= 0);
+                || postAccessService.hasPurchasedPost(currentUserId, postEntity.id);
 
         List<PostTag> rawPostTags = PostTag.find("post", postEntity).list();
         List<TagItem> postTags = new java.util.ArrayList<>();

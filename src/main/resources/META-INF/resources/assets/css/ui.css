@@ -136,3 +136,26 @@ button:disabled {
     opacity: 0.6;
     filter: grayscale(0.2);
 }
+
+/* Vditor Preview Theme Overrides */
+.vditor-reset {
+    color: var(--text-body) !important;
+    background: transparent !important;
+}
+
+.vditor-reset h1,
+.vditor-reset h2,
+.vditor-reset h3 {
+    color: var(--text-main) !important;
+    border-bottom: none !important;
+}
+
+.vditor-reset code {
+    background: var(--input-bg) !important;
+    color: var(--accent) !important;
+}
+
+.vditor-reset pre {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+}

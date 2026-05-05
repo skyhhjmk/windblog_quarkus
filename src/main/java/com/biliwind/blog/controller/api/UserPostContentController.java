@@ -84,7 +84,7 @@ public class UserPostContentController {
         // 全站买断判定
         boolean hasPurchased = isAuthor
                 || (postPrice > 0 && maxPointsPaid >= postPrice)
-                || (postPrice == 0 && maxPointsPaid >= 0);
+                || postAccessService.hasPurchasedPost(userId, postId);
 
         PostBodyView postBody = resolvePostBody(post.renderType, localizedContent);
 
@@ -150,7 +150,7 @@ public class UserPostContentController {
 
         boolean hasPurchased = isAuthor
                 || (postPrice > 0 && maxPointsPaid >= postPrice)
-                || (postPrice == 0 && maxPointsPaid >= 0);
+                || postAccessService.hasPurchasedPost(userId, postId);
 
         List<AttachmentView> attachments = hasPurchased ? PostMedia.<PostMedia>list("post.id = ?1", postId).stream()
                 .filter(pm -> pm.usageType == 3)

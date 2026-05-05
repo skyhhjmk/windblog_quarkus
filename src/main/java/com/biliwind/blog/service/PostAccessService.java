@@ -184,7 +184,8 @@ public class PostAccessService {
 
         // 全站买断判定：或者是作者，或者支付过文章全价（且总价 > 0）
         boolean fullUnlocked = isAuthor
-                || (postPrice > 0 && maxPointsPaid >= postPrice);
+                || (postPrice > 0 && maxPointsPaid >= postPrice)
+                || hasPurchasedPost(userId, postId);
 
         // 处理 [hide-text]
         java.util.regex.Pattern textPattern = java.util.regex.Pattern.compile(
@@ -292,7 +293,9 @@ public class PostAccessService {
         java.util.Map<String, String> unlockedBlocks = new java.util.HashMap<>();
         if (rawContent == null || rawContent.isEmpty()) return unlockedBlocks;
 
-        boolean fullUnlocked = isAuthor || (postPrice > 0 && maxPointsPaid >= postPrice);
+        boolean fullUnlocked = isAuthor
+                || (postPrice > 0 && maxPointsPaid >= postPrice)
+                || hasPurchasedPost(userId, postId);
 
         // 处理 [hide-text]
         java.util.regex.Pattern textPattern = java.util.regex.Pattern.compile(
