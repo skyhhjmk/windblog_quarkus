@@ -1,6 +1,7 @@
 package com.biliwind.blog.common.helper;
 
 import com.biliwind.blog.common.constant.LanguageConstant;
+import io.quarkus.qute.TemplateData;
 
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -10,9 +11,10 @@ import java.util.Set;
 /**
  * 语言助手类
  */
+@TemplateData
 public final class LanguageHelper {
 
-    private LanguageHelper() {
+    public LanguageHelper() {
     }
 
     /**
@@ -77,6 +79,13 @@ public final class LanguageHelper {
             if (value != null && !value.isBlank()) {
                 return value;
             }
+        }
+        return null;
+    }
+
+    public String resolveLocalizedValue(Object localized, String preferredLang) {
+        if (localized instanceof Map) {
+            return resolveLocalizedValue((Map<String, String>) localized, preferredLang);
         }
         return null;
     }

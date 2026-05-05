@@ -21,5 +21,7 @@ public class QuteConfig {
      */
     void onTemplateInstance(@Observes TemplateInstance instance) {
         instance.data("language", languageContext.getLang());
+        instance.data("LanguageHelper", new com.biliwind.blog.common.helper.LanguageHelper());
+        instance.data("MarkdownHelper", new com.biliwind.blog.common.helper.MarkdownHelper());
     }
 }

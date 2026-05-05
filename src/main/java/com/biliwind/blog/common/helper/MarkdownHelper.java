@@ -4,12 +4,14 @@ import com.biliwind.blog.common.markdown.MdProtocolExtension;
 import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
+import io.quarkus.qute.TemplateData;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.safety.Safelist;
 
 import java.util.Collections;
 
+@TemplateData
 public final class MarkdownHelper {
 
     private static final MutableDataSet OPTIONS = new MutableDataSet()
@@ -38,7 +40,7 @@ public final class MarkdownHelper {
             .addAttributes("line", "x1", "y1", "x2", "y2")
             .addAttributes("polyline", "points");
 
-    private MarkdownHelper() {
+    public MarkdownHelper() {
     }
 
     public static String toHtml(String markdown) {
@@ -50,5 +52,10 @@ public final class MarkdownHelper {
         // 执行 HTML 净化
         Document.OutputSettings outputSettings = new Document.OutputSettings().prettyPrint(false);
         return Jsoup.clean(unsafeHtml, "", POST_SAFE_LIST, outputSettings);
+    }
+
+    public String toHtml(Object markdown) {
+        if (markdown == null) return "";
+        return toHtml(markdown.toString());
     }
 }

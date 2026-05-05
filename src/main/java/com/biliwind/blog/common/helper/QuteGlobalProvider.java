@@ -31,4 +31,14 @@ public class QuteGlobalProvider {
             return "";
         }
     }
+
+    @TemplateGlobal
+    public static com.biliwind.blog.common.helper.LanguageHelper LanguageHelper() {
+        return new com.biliwind.blog.common.helper.LanguageHelper();
+    }
+
+    @TemplateGlobal
+    public static com.biliwind.blog.common.helper.MarkdownHelper MarkdownHelper() {
+        return new com.biliwind.blog.common.helper.MarkdownHelper();
+    }
 }
