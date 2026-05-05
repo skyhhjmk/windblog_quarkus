@@ -12,6 +12,18 @@ import jakarta.ws.rs.BadRequestException;
 @ApplicationScoped
 public class PostAccessService {
 
+    @jakarta.inject.Inject
+    @io.quarkus.qute.Location("system/components/premium_card.html")
+    io.quarkus.qute.Template premiumCardTemplate;
+
+    @jakarta.inject.Inject
+    @io.quarkus.qute.Location("system/components/premium_attachment.html")
+    io.quarkus.qute.Template premiumAttachmentTemplate;
+
+    @jakarta.inject.Inject
+    @io.quarkus.qute.Location("system/components/store_item_card.html")
+    io.quarkus.qute.Template storeItemCardTemplate;
+
     public Post findBySlug(String slug) {
         return Post.find("slug = ?1 and deletedAt is null", slug)
                 .firstResult();
@@ -152,15 +164,16 @@ public class PostAccessService {
     }
 
     /**
-     * 过滤文章内容中的隐藏短代码，并替换为占位符提示。
+     * 根据购买状态过滤文章内容中的隐藏短代码，并替换为占位符提示。
      * 支持 [hide-text price=100]...[/hide-text]
      * 支持 [hide-attachment price=200]...[/hide-attachment]
-     */
-    /**
-     * 根据购买状态过滤或清理隐藏内容标签
      *
-     * @param rawContent   原始 Markdown 内容
-     * @param hasPurchased 是否已购买
+     * @param rawContent    原始 Markdown 内容
+     * @param maxPointsPaid 用户已支付的最高积分
+     * @param isAuthor      是否为文章作者
+     * @param postId        文章 ID
+     * @param postPrice     文章价格
+     * @param userId        用户 ID
      * @return 处理后的内容
      */
     public String filterHiddenContent(String rawContent, long maxPointsPaid, boolean isAuthor, Long postId, long postPrice, Long userId) {
@@ -203,21 +216,16 @@ public class PostAccessService {
                 String buttonText = isFree ? "免费解锁" : ("支付 " + displayPrice + " 积分解锁区块");
                 String descText = isFree ? "当前为免费专享区块，解锁后即可阅读隐藏内容" : "解锁该区块即可查看精彩内容，或购买全文解锁更多";
 
-                String replacement = "\n\n<div class=\"md-region-premium-card\">\n" +
-                        "    <div class=\"premium-card-body\">\n" +
-                        "        <div class=\"premium-icon\">\n" +
-                        "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                        "        </div>\n" +
-                        "        <div class=\"premium-text\">\n" +
-                        "            <p class=\"premium-title\">" + title + "</p>\n" +
-                        "            <p class=\"premium-desc\">" + descText + "</p>\n" +
-                        "        </div>\n" +
-                        "        <button class=\"btn-action-primary buy-post-btn\" data-post-id=\"" + postId + "\" data-price=\"" + displayPrice + "\" data-block-id=\"" + blockId + "\">\n" +
-                        "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                        "            " + buttonText + "\n" +
-                        "        </button>\n" +
-                        "    </div>\n" +
-                        "</div>\n\n";
+                String replacement = "\n\n" + premiumCardTemplate
+                        .data("fullHide", false)
+                        .data("title", title)
+                        .data("desc", descText)
+                        .data("showButton", true)
+                        .data("postId", postId)
+                        .data("price", displayPrice)
+                        .data("blockId", blockId)
+                        .data("buttonText", buttonText)
+                        .render() + "\n\n";
                 textMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
             }
         }
@@ -255,21 +263,15 @@ public class PostAccessService {
                 String buttonText = isFree ? "免费解锁附件" : ("支付 " + displayPrice + " 积分解锁附件");
                 String descText = isFree ? "当前为免费资源，解锁后即可获取下载链接" : "解锁该资源即可获取下载链接，或购买全文解锁更多";
 
-                String replacement = "\n\n<div class=\"md-region-premium-card\">\n" +
-                        "    <div class=\"premium-card-body\">\n" +
-                        "        <div class=\"premium-icon\">\n" +
-                        "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"></path><polyline points=\"7 10 12 15 17 10\"></polyline><line x1=\"12\" y1=\"15\" x2=\"12\" y2=\"3\"></line></svg>\n" +
-                        "        </div>\n" +
-                        "        <div class=\"premium-text\">\n" +
-                        "            <p class=\"premium-title\">" + label + "</p>\n" +
-                        "            <p class=\"premium-desc\">" + descText + "</p>\n" +
-                        "        </div>\n" +
-                        "        <button class=\"btn-action-primary buy-post-btn\" data-post-id=\"" + postId + "\" data-price=\"" + displayPrice + "\" data-block-id=\"" + blockId + "\">\n" +
-                        "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                        "            " + buttonText + "\n" +
-                        "        </button>\n" +
-                        "    </div>\n" +
-                        "</div>\n\n";
+                String replacement = "\n\n" + premiumAttachmentTemplate
+                        .data("title", label)
+                        .data("desc", descText)
+                        .data("showButton", true)
+                        .data("postId", postId)
+                        .data("price", displayPrice)
+                        .data("blockId", blockId)
+                        .data("buttonText", buttonText)
+                        .render() + "\n\n";
                 attachMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
             }
 
@@ -290,27 +292,11 @@ public class PostAccessService {
                 Long itemId = Long.parseLong(idStr);
                 com.biliwind.blog.model.StoreItem item = com.biliwind.blog.model.StoreItem.findById(itemId);
                 if (item != null) {
-                    String itemHtml = "\n\n<div class=\"card card-static overflow-hidden group/item border-border/60 hover:border-accent/40 transition-all bg-card-bg/30 my-6\">\n" +
-                            "    <div class=\"p-5 space-y-4\">\n" +
-                            "        <div class=\"flex justify-between items-start gap-4\">\n" +
-                            "            <div>\n" +
-                            "                <h4 class=\"text-sm font-black text-main line-clamp-1 leading-relaxed\">" + item.name + "</h4>\n" +
-                            "                <p class=\"text-[10px] text-gray-500 uppercase tracking-wider mt-1\">商店专供物品</p>\n" +
-                            "            </div>\n" +
-                            "            <div class=\"px-2.5 py-1 bg-accent/10 text-accent text-xs font-black rounded-lg border border-accent/20 font-mono shadow-sm\">\n" +
-                            "                " + item.price + "P\n" +
-                            "            </div>\n" +
-                            "        </div>\n" +
-                            "        <p class=\"text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90\">" + (item.description != null ? item.description : "暂无描述") + "</p>\n" +
-                            "        <a href=\"/user/store\" class=\"flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]\">\n" +
-                            "            进店详情\n" +
-                            "            <svg xmlns=\"http://www.w3.org/2000/svg\" class=\"ml-2\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\">\n" +
-                            "                <line x1=\"7\" y1=\"17\" x2=\"17\" y2=\"7\"></line>\n" +
-                            "                <polyline points=\"7 7 17 7 17 17\"></polyline>\n" +
-                            "            </svg>\n" +
-                            "        </a>\n" +
-                            "    </div>\n" +
-                            "</div>\n\n";
+                    String itemHtml = "\n\n" + storeItemCardTemplate
+                            .data("name", item.name)
+                            .data("price", item.price)
+                            .data("desc", item.description != null ? item.description : "暂无描述")
+                            .render() + "\n\n";
                     storeMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(itemHtml));
                 } else {
                     storeMatcher.appendReplacement(sb, "<!-- Store Item " + itemId + " Not Found -->");
@@ -348,33 +334,11 @@ public class PostAccessService {
     }
 
     public Long getExtraPointsPrice(Post post) {
-        if (post.extraInfo != null) {
-            try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.fasterxml.jackson.databind.JsonNode extraNode = mapper.convertValue(post.extraInfo, com.fasterxml.jackson.databind.JsonNode.class);
-                if (extraNode.has("points_price")) {
-                    return extraNode.get("points_price").asLong(0);
-                }
-            } catch (Exception e) {
-                // ignore
-            }
-        }
-        return null;
+        return com.biliwind.blog.common.helper.PostHelper.getExtraPointsPrice(post);
     }
 
     public int getFreeLines(Post post) {
-        if (post.extraInfo != null) {
-            try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.fasterxml.jackson.databind.JsonNode extraNode = mapper.convertValue(post.extraInfo, com.fasterxml.jackson.databind.JsonNode.class);
-                if (extraNode.has("free_lines")) {
-                    return extraNode.get("free_lines").asInt(0);
-                }
-            } catch (Exception e) {
-                // ignore
-            }
-        }
-        return 0;
+        return com.biliwind.blog.common.helper.PostHelper.getFreeLines(post);
     }
 
     /**
@@ -421,21 +385,16 @@ public class PostAccessService {
             String buttonText = isFree ? "免费解锁" : ("支付 " + displayPrice + " 积分解锁区块");
             String descText = isFree ? "当前为免费专享区块，解锁后即可阅读隐藏内容" : "解锁该区块即可查看精彩内容，或购买全文解锁更多";
 
-            String replacement = "\n\n<div class=\"md-region-premium-card\">\n" +
-                    "    <div class=\"premium-card-body\">\n" +
-                    "        <div class=\"premium-icon\">\n" +
-                    "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                    "        </div>\n" +
-                    "        <div class=\"premium-text\">\n" +
-                    "            <p class=\"premium-title\">" + title + "</p>\n" +
-                    "            <p class=\"premium-desc\">" + descText + "</p>\n" +
-                    "        </div>\n" +
-                    "        <button class=\"btn-action-primary buy-post-btn\" data-post-id=\"" + postId + "\" data-price=\"" + displayPrice + "\" data-block-id=\"" + blockId + "\">\n" +
-                    "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                    "            " + buttonText + "\n" +
-                    "        </button>\n" +
-                    "    </div>\n" +
-                    "</div>\n\n";
+            String replacement = "\n\n" + premiumCardTemplate
+                    .data("fullHide", false)
+                    .data("title", title)
+                    .data("desc", descText)
+                    .data("showButton", true)
+                    .data("postId", postId)
+                    .data("price", displayPrice)
+                    .data("blockId", blockId)
+                    .data("buttonText", buttonText)
+                    .render() + "\n\n";
             textMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
         }
         textMatcher.appendTail(sb);
@@ -458,19 +417,15 @@ public class PostAccessService {
             String displayPrice = isFree ? String.valueOf(postPrice) : priceAttr;
             String buttonText = isFree ? "免费解锁附件" : ("支付 " + displayPrice + " 积分解锁附件");
 
-            String replacement = "\n\n<div class=\"md-region md-region-info\">\n" +
-                    "    <div class=\"md-region-icon\"></div>\n" +
-                    "    <div class=\"md-region-content\">\n" +
-                    "        <strong>专属附件已隐藏</strong>：您可以解锁当前区块或购买整篇文章后查看该专属附件。\n" +
-                    "        <div class=\"mt-4 flex items-center gap-3\">\n" +
-                    "            <button class=\"btn-action-primary buy-post-btn !py-2.5 !px-6 !text-xs !rounded-lg\" data-post-id=\"" + postId + "\" data-price=\"" + displayPrice + "\" data-block-id=\"" + blockId + "\">\n" +
-                    "                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                    "                <span>" + buttonText + "</span>\n" +
-                    "            </button>\n" +
-                    "            <p class=\"text-[10px] text-gray-500 opacity-60 font-medium\">解锁后立即显示下载链接</p>\n" +
-                    "        </div>\n" +
-                    "    </div>\n" +
-                    "</div>\n\n";
+            String replacement = "\n\n" + premiumAttachmentTemplate
+                    .data("title", "专属附件已隐藏")
+                    .data("desc", "您可以解锁当前区块或购买整篇文章后查看该专属附件。")
+                    .data("showButton", true)
+                    .data("postId", postId)
+                    .data("price", displayPrice)
+                    .data("blockId", blockId)
+                    .data("buttonText", buttonText)
+                    .render() + "\n\n";
             attachMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
         }
         attachMatcher.appendTail(sb);
@@ -489,27 +444,11 @@ public class PostAccessService {
                 Long itemId = Long.parseLong(idStr);
                 com.biliwind.blog.model.StoreItem item = com.biliwind.blog.model.StoreItem.findById(itemId);
                 if (item != null) {
-                    String itemHtml = "\n\n<div class=\"card card-static overflow-hidden group/item border-border/60 hover:border-accent/40 transition-all bg-card-bg/30 my-6\">\n" +
-                            "    <div class=\"p-5 space-y-4\">\n" +
-                            "        <div class=\"flex justify-between items-start gap-4\">\n" +
-                            "            <div>\n" +
-                            "                <h4 class=\"text-sm font-black text-main line-clamp-1 leading-relaxed\">" + item.name + "</h4>\n" +
-                            "                <p class=\"text-[10px] text-gray-500 uppercase tracking-wider mt-1\">商店专供物品</p>\n" +
-                            "            </div>\n" +
-                            "            <div class=\"px-2.5 py-1 bg-accent/10 text-accent text-xs font-black rounded-lg border border-accent/20 font-mono shadow-sm\">\n" +
-                            "                " + item.price + "P\n" +
-                            "            </div>\n" +
-                            "        </div>\n" +
-                            "        <p class=\"text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90\">" + (item.description != null ? item.description : "暂无描述") + "</p>\n" +
-                            "        <a href=\"/user/store\" class=\"flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]\">\n" +
-                            "            进店详情\n" +
-                            "            <svg xmlns=\"http://www.w3.org/2000/svg\" class=\"ml-2\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\">\n" +
-                            "                <line x1=\"7\" y1=\"17\" x2=\"17\" y2=\"7\"></line>\n" +
-                            "                <polyline points=\"7 7 17 7 17 17\"></polyline>\n" +
-                            "            </svg>\n" +
-                            "        </a>\n" +
-                            "    </div>\n" +
-                            "</div>\n\n";
+                    String itemHtml = "\n\n" + storeItemCardTemplate
+                            .data("name", item.name)
+                            .data("price", item.price)
+                            .data("desc", item.description != null ? item.description : "暂无描述")
+                            .render() + "\n\n";
                     storeMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(itemHtml));
                 } else {
                     storeMatcher.appendReplacement(sb, "<!-- Store Item " + itemId + " Not Found -->");
@@ -538,36 +477,16 @@ public class PostAccessService {
             sb.append(lines[i]).append("\n");
         }
 
-        String placeholder = limit == 0 ? "\n\n<div class=\"md-region-premium-card full-hide\">\n" +
-                "    <div class=\"premium-card-body\">\n" +
-                "        <div class=\"premium-icon\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "        </div>\n" +
-                "        <div class=\"premium-text\">\n" +
-                "            <p class=\"premium-title\">本文内容已锁定</p>\n" +
-                "            <p class=\"premium-desc\">这是一篇付费专享文章，解锁后即可阅读全文内容</p>\n" +
-                "        </div>\n" +
-                "        <button class=\"btn-action-primary buy-post-btn\" data-post-id=\"" + postId + "\" data-price=\"" + postPrice + "\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "            立即解锁全文\n" +
-                "        </button>\n" +
-                "    </div>\n" +
-                "</div>\n\n"
-                : "\n\n<div class=\"md-region-premium-card\">\n" +
-                "    <div class=\"premium-card-body\">\n" +
-                "        <div class=\"premium-icon\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "        </div>\n" +
-                "        <div class=\"premium-text\">\n" +
-                "            <p class=\"premium-title\">专享内容已锁定</p>\n" +
-                "            <p class=\"premium-desc\">解锁全文即可查看此处及后续所有精彩内容</p>\n" +
-                "        </div>\n" +
-                "        <button class=\"btn-action-primary buy-post-btn\" data-post-id=\"" + postId + "\" data-price=\"" + postPrice + "\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "            立即解锁全文\n" +
-                "        </button>\n" +
-                "    </div>\n" +
-                "</div>\n\n";
+        String placeholder = "\n\n" + premiumCardTemplate
+                .data("fullHide", limit == 0)
+                .data("title", limit == 0 ? "本文内容已锁定" : "专享内容已锁定")
+                .data("desc", limit == 0 ? "这是一篇付费专享文章，解锁后即可阅读全文内容" : "解锁全文即可查看此处及后续所有精彩内容")
+                .data("showButton", true)
+                .data("postId", postId)
+                .data("price", postPrice)
+                .data("blockId", null)
+                .data("buttonText", "立即解锁全文")
+                .render() + "\n\n";
 
         sb.append(placeholder);
         return sb.toString();
@@ -589,36 +508,16 @@ public class PostAccessService {
             sb.append(lines[i]).append("\n");
         }
 
-        String placeholder = limit == 0 ? "\n\n<div class=\"md-region-premium-card full-hide\">\n" +
-                "    <div class=\"premium-card-body\">\n" +
-                "        <div class=\"premium-icon\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "        </div>\n" +
-                "        <div class=\"premium-text\">\n" +
-                "            <p class=\"premium-title\">本文内容已锁定</p>\n" +
-                "            <p class=\"premium-desc\">这是一篇付费专享文章，解锁后即可阅读全文内容</p>\n" +
-                "        </div>\n" +
-                "        <button class=\"btn-action-primary buy-post-btn\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "            立即解锁全文\n" +
-                "        </button>\n" +
-                "    </div>\n" +
-                "</div>\n\n"
-                : "\n\n<div class=\"md-region-premium-card\">\n" +
-                "    <div class=\"premium-card-body\">\n" +
-                "        <div class=\"premium-icon\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "        </div>\n" +
-                "        <div class=\"premium-text\">\n" +
-                "            <p class=\"premium-title\">专享内容已锁定</p>\n" +
-                "            <p class=\"premium-desc\">解锁全文即可查看此处及后续所有精彩内容</p>\n" +
-                "        </div>\n" +
-                "        <button class=\"btn-action-primary buy-post-btn\">\n" +
-                "            <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>\n" +
-                "            立即解锁全文\n" +
-                "        </button>\n" +
-                "    </div>\n" +
-                "</div>\n\n";
+        String placeholder = "\n\n" + premiumCardTemplate
+                .data("fullHide", limit == 0)
+                .data("title", limit == 0 ? "本文内容已锁定" : "专享内容已锁定")
+                .data("desc", limit == 0 ? "这是一篇付费专享文章，解锁后即可阅读全文内容" : "解锁全文即可查看此处及后续所有精彩内容")
+                .data("showButton", true)
+                .data("postId", null)
+                .data("price", null)
+                .data("blockId", null)
+                .data("buttonText", "立即解锁全文")
+                .render() + "\n\n";
 
         sb.append(placeholder);
         return sb.toString();

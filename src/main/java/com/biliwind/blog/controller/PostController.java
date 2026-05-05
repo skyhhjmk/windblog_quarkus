@@ -17,7 +17,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Path("/")
 public class PostController {
@@ -35,6 +34,9 @@ public class PostController {
 
     @Inject
     LanguageContext languageContext;
+
+    @Inject
+    com.biliwind.blog.service.PostAccessService postAccessService;
 
     @GET
     @Path("/post/{slug}")
@@ -84,9 +86,7 @@ public class PostController {
         String localizedContent =
                 resolveContent(postEntity.currentRevision, resolvedLang);
 
-        // Get PostAccessService via CDI
-        com.biliwind.blog.service.PostAccessService postAccessService =
-                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get();
+
 
         // Check if user is logged in
         Long currentUserId = resolveUserIdFromCookie(httpHeaders);
@@ -123,6 +123,25 @@ public class PostController {
                 || (postPrice > 0 && maxPointsPaid >= postPrice)
                 || (postPrice == 0 && maxPointsPaid >= 0);
 
+        List<PostTag> rawPostTags = PostTag.find("post", postEntity).list();
+        List<TagItem> postTags = new java.util.ArrayList<>();
+        for (PostTag pt : rawPostTags) {
+            postTags.add(new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, resolvedLang), pt.tag.slug));
+        }
+
+        List<PostMedia> rawPostMedia = PostMedia.list("post.id = ?1", postEntity.id);
+        List<AttachmentView> attachments = new java.util.ArrayList<>();
+        for (PostMedia pm : rawPostMedia) {
+            if (pm.usageType == 3) { // 3 = 附件
+                String attachmentUrl = hasPurchased ? pm.media.url : "";
+                long bytes = pm.media.size != null ? pm.media.size : 0;
+                String formattedSize = bytes < 1024 * 1024
+                        ? (bytes / 1024) + " KB"
+                        : String.format("%.2f MB", bytes / (1024.0 * 1024.0));
+                attachments.add(new AttachmentView(pm.media.fileName, attachmentUrl, formattedSize));
+            }
+        }
+
         return template
                 .data("language", resolvedLang)
                 .data("postId", postEntity.id)
@@ -140,21 +159,8 @@ public class PostController {
                 .data("postCategory", postEntity.category != null ? LanguageHelper.resolveLocalizedValue(postEntity.category.name, resolvedLang) : "未分类")
                 .data("postPrice", postPrice)
                 .data("hasPurchased", hasPurchased)
-                .data("postTags", PostTag.<PostTag>find("post", postEntity).stream()
-                        .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, resolvedLang), pt.tag.slug))
-                        .collect(Collectors.toList()))
-                .data("attachments", PostMedia.<PostMedia>list("post.id = ?1", postEntity.id).stream()
-                        .filter(pm -> pm.usageType == 3) // 3 = 附件
-                        .map(pm -> {
-                            // 安全处理：全站买断后才显示底部附件下载链接
-                            String attachmentUrl = hasPurchased ? pm.media.url : "";
-                            long bytes = pm.media.size != null ? pm.media.size : 0;
-                            String formattedSize = bytes < 1024 * 1024
-                                    ? (bytes / 1024) + " KB"
-                                    : String.format("%.2f MB", bytes / (1024.0 * 1024.0));
-                            return new AttachmentView(pm.media.fileName, attachmentUrl, formattedSize);
-                        })
-                        .collect(Collectors.toList()))
+                .data("postTags", postTags)
+                .data("attachments", attachments)
                 .data("relatedStoreItems", resolveRelatedStoreItems(postEntity));
     }
 

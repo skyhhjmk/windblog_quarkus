@@ -22,7 +22,6 @@ import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement
 
 import java.time.OffsetDateTime;
 import java.util.*;
-import java.util.function.Consumer;
 
 @Path("/api/admin/posts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -48,6 +47,9 @@ public class AdminPostApiController {
 
     @Inject
     com.biliwind.blog.service.AuditService auditService;
+
+    @Inject
+    com.biliwind.blog.service.PostAccessService postAccessService;
 
     @POST
     @Path("/{id}/ai-summary/trigger")
@@ -110,11 +112,14 @@ public class AdminPostApiController {
             parameters.put("keyword", "%" + keyword.trim().toLowerCase() + "%");
         }
 
-        var query = Post.find(where + " order by updatedAt desc", parameters);
+        io.quarkus.hibernate.orm.panache.PanacheQuery<Post> query = Post.find(where + " order by updatedAt desc", parameters);
         long total = query.count();
         List<Post> entities = query.page(Page.of(safePage - 1, safePageSize)).list();
 
-        List<AdminPostItem> items = entities.stream().map(this::toItem).toList();
+        List<AdminPostItem> items = new ArrayList<>();
+        for (Post post : entities) {
+            items.add(toItem(post));
+        }
         return new PageResult<>(items, total, safePage, safePageSize);
     }
 
@@ -167,7 +172,7 @@ public class AdminPostApiController {
         post.persist();
 
         // 更新买断价格和免费行数
-        updateExtraInfo(post, request.pointsPrice(), request.freeLines());
+        com.biliwind.blog.common.helper.PostHelper.updateExtraInfo(post, request.pointsPrice(), request.freeLines());
 
         // 如果状态为自动(0)，则触发 AI 摘要任务
         if (post.aiSummaryStatus == 0 && request.contentMarkdown() != null && !request.contentMarkdown().isEmpty()) {
@@ -182,7 +187,7 @@ public class AdminPostApiController {
         PostRevision revision = new PostRevision();
         revision.post = post;
         revision.title = request.title();
-        revision.contentMarkdown = request.contentMarkdown();
+        revision.contentMarkdown = com.biliwind.blog.common.helper.PostHelper.injectBlockIds(request.contentMarkdown());
         revision.editorType = request.editorType() == null ? 0 : request.editorType();
         revision.revisionNumber = 1;
         revision.createdBy = operator;
@@ -235,7 +240,7 @@ public class AdminPostApiController {
         changed |= updateCategory(post, request);
 
         // 更新买断价格和免费行数
-        updateExtraInfo(post, request.pointsPrice(), request.freeLines());
+        com.biliwind.blog.common.helper.PostHelper.updateExtraInfo(post, request.pointsPrice(), request.freeLines());
         changed = true; // extraInfo 变更标记为已更改
 
         if (request.tagIds() != null) {
@@ -362,9 +367,11 @@ public class AdminPostApiController {
 
     private AdminPostItem toItem(Post post) {
         // 获取文章的标签ID列表
-        List<Long> tagIds = PostTag.find("post.id = ?1", post.id).stream()
-                .map(pt -> ((PostTag) pt).tag.id)
-                .toList();
+        List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
+        List<Long> tagIds = new ArrayList<>();
+        for (PostTag pt : postTags) {
+            tagIds.add(pt.tag.id);
+        }
 
         return new AdminPostItem(
                 post.id,
@@ -386,9 +393,11 @@ public class AdminPostApiController {
 
     private AdminPostDetail toDetail(Post post) {
         // 获取文章的标签ID列表
-        List<Long> tagIds = PostTag.find("post.id = ?1", post.id).stream()
-                .map(pt -> ((PostTag) pt).tag.id)
-                .toList();
+        List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
+        List<Long> tagIds = new ArrayList<>();
+        for (PostTag pt : postTags) {
+            tagIds.add(pt.tag.id);
+        }
 
         return new AdminPostDetail(
                 post.id,
@@ -408,8 +417,8 @@ public class AdminPostApiController {
                 post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 post.currentRevision == null ? 0 : post.currentRevision.revisionNumber,
                 post.version,
-                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getExtraPointsPrice(post),
-                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getFreeLines(post),
+                postAccessService.getExtraPointsPrice(post),
+                postAccessService.getFreeLines(post),
                 post.user == null ? null : post.user.id,
                 post.user == null ? null : post.user.username,
                 post.category == null ? null : post.category.id,
@@ -419,31 +428,7 @@ public class AdminPostApiController {
                 post.updatedAt);
     }
 
-    private void updateExtraInfo(Post post, Long pointsPrice, Integer freeLines) {
-        Map<String, Object> extra = null;
-        if (post.extraInfo instanceof Map) {
-            extra = new HashMap<>((Map<String, Object>) post.extraInfo);
-        } else if (post.extraInfo != null) {
-            try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                extra = mapper.convertValue(post.extraInfo, new com.fasterxml.jackson.core.type.TypeReference<>() {
-                });
-            } catch (Exception e) {
-                extra = new HashMap<>();
-            }
-        } else {
-            extra = new HashMap<>();
-        }
 
-        if (pointsPrice != null) {
-            extra.put("points_price", pointsPrice);
-        }
-        if (freeLines != null) {
-            extra.put("free_lines", freeLines);
-        }
-
-        post.extraInfo = extra;
-    }
 
     private PostStatus resolveStatus(Short status, PostStatus fallback) {
         if (status == null) {
@@ -460,18 +445,14 @@ public class AdminPostApiController {
         return status == null ? PostStatus.DRAFT.getCode() : status.getCode();
     }
 
-    private <T> boolean updateField(T currentValue, T newValue, Consumer<T> setter) {
-        if (newValue != null && !Objects.equals(currentValue, newValue)) {
-            setter.accept(newValue);
-            return true;
-        }
-        return false;
-    }
+
 
     private boolean updatePostTags(Post post, List<Long> newTagIds) {
-        List<Long> currentTagIds = PostTag.find("post.id = ?1", post.id).stream()
-                .map(pt -> ((PostTag) pt).tag.id)
-                .toList();
+        List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
+        List<Long> currentTagIds = new ArrayList<>();
+        for (PostTag pt : postTags) {
+            currentTagIds.add(pt.tag.id);
+        }
 
         Set<Long> currentSet = new HashSet<>(currentTagIds);
         Set<Long> newSet = new HashSet<>(newTagIds != null ? newTagIds : List.of());
@@ -516,10 +497,22 @@ public class AdminPostApiController {
             post.slug = nextSlug;
         }
 
-        changed |= updateField(post.summary, request.summary(), v -> post.summary = v);
-        changed |= updateField(post.aiSummary, request.aiSummary(), v -> post.aiSummary = v);
-        changed |= updateField(post.aiSummaryStatus, request.aiSummaryStatus(), v -> post.aiSummaryStatus = v);
-        changed |= updateField(post.visibility, request.visibility(), v -> post.visibility = v);
+        if (request.summary() != null && !Objects.equals(post.summary, request.summary())) {
+            post.summary = request.summary();
+            changed = true;
+        }
+        if (request.aiSummary() != null && !Objects.equals(post.aiSummary, request.aiSummary())) {
+            post.aiSummary = request.aiSummary();
+            changed = true;
+        }
+        if (request.aiSummaryStatus() != null && !Objects.equals(post.aiSummaryStatus, request.aiSummaryStatus())) {
+            post.aiSummaryStatus = request.aiSummaryStatus();
+            changed = true;
+        }
+        if (request.visibility() != null && !Objects.equals(post.visibility, request.visibility())) {
+            post.visibility = request.visibility();
+            changed = true;
+        }
         // 密码允许设为 null (即清除密码)
         if (request.password() != null || (request.visibility() != null && request.visibility() != 2)) {
             String nextPassword = (request.visibility() != null && request.visibility() != 2) ? null : request.password();
@@ -528,13 +521,25 @@ public class AdminPostApiController {
                 changed = true;
             }
         }
-        changed |= updateField(post.seoTitle, request.seoTitle(), v -> post.seoTitle = v);
-        changed |= updateField(post.seoKeywords, request.seoKeywords(), v -> post.seoKeywords = v);
-        changed |= updateField(post.seoDescription, request.seoDescription(), v -> post.seoDescription = v);
+        if (request.seoTitle() != null && !Objects.equals(post.seoTitle, request.seoTitle())) {
+            post.seoTitle = request.seoTitle();
+            changed = true;
+        }
+        if (request.seoKeywords() != null && !Objects.equals(post.seoKeywords, request.seoKeywords())) {
+            post.seoKeywords = request.seoKeywords();
+            changed = true;
+        }
+        if (request.seoDescription() != null && !Objects.equals(post.seoDescription, request.seoDescription())) {
+            post.seoDescription = request.seoDescription();
+            changed = true;
+        }
 
         if (request.renderType() != null) {
             PostRenderType nextRenderType = requireRenderType(request.renderType());
-            changed |= updateField(post.renderType, nextRenderType, v -> post.renderType = v);
+            if (!Objects.equals(post.renderType, nextRenderType)) {
+                post.renderType = nextRenderType;
+                changed = true;
+            }
         }
 
         if (request.status() != null) {
@@ -571,7 +576,7 @@ public class AdminPostApiController {
             Map<String, String> currentContent = post.currentRevision == null ? Map.of()
                     : post.currentRevision.contentMarkdown;
             Map<String, String> nextContent = request.contentMarkdown() == null ? currentContent
-                    : request.contentMarkdown();
+                    : com.biliwind.blog.common.helper.PostHelper.injectBlockIds(request.contentMarkdown());
             
             short currentEditorType = post.currentRevision == null ? 0 : post.currentRevision.editorType;
             short nextEditorType = request.editorType() == null ? currentEditorType : request.editorType();
@@ -613,7 +618,11 @@ public class AdminPostApiController {
                 Sort.by("revisionNumber").descending(),
                 id
         );
-        return revisions.stream().map(this::toRevisionItem).toList();
+        List<PostRevisionItem> items = new ArrayList<>();
+        for (PostRevision rev : revisions) {
+            items.add(toRevisionItem(rev));
+        }
+        return items;
     }
 
     @GET
@@ -633,9 +642,11 @@ public class AdminPostApiController {
             throw new NotFoundException("版本不存在");
         }
 
-        List<Long> tagIds = PostTag.find("post.id = ?1", post.id).stream()
-                .map(pt -> ((PostTag) pt).tag.id)
-                .toList();
+        List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
+        List<Long> tagIds = new ArrayList<>();
+        for (PostTag pt : postTags) {
+            tagIds.add(pt.tag.id);
+        }
 
         return new AdminPostDetail(
                 post.id,
@@ -655,8 +666,8 @@ public class AdminPostApiController {
                 post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 revision.revisionNumber,
                 post.version,
-                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getExtraPointsPrice(post),
-                jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.service.PostAccessService.class).get().getFreeLines(post),
+                com.biliwind.blog.common.helper.PostHelper.getExtraPointsPrice(post),
+                com.biliwind.blog.common.helper.PostHelper.getFreeLines(post),
                 post.user == null ? null : post.user.id,
                 post.user == null ? null : post.user.username,
                 post.category == null ? null : post.category.id,

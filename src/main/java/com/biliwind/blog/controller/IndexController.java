@@ -76,6 +76,25 @@ public class IndexController {
         long totalPostsCount = postQuery.count();
         List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
 
+        List<Long> postIds = new ArrayList<>();
+        for (Post post : posts) {
+            postIds.add(post.id);
+        }
+
+        Map<Long, List<PostTag>> tagsMap = new java.util.HashMap<>();
+        if (!postIds.isEmpty()) {
+            List<PostTag> allTags = PostTag.find("post.id in ?1", postIds).list();
+            for (PostTag pt : allTags) {
+                Long pId = pt.post.id;
+                List<PostTag> list = tagsMap.get(pId);
+                if (list == null) {
+                    list = new ArrayList<>();
+                    tagsMap.put(pId, list);
+                }
+                list.add(pt);
+            }
+        }
+
         long totalPages;
         if (totalPostsCount == 0) {
             totalPages = 1;
@@ -85,7 +104,11 @@ public class IndexController {
 
         List<IndexPostItem> postItems = new ArrayList<>();
         for (Post post : posts) {
-            IndexPostItem postItem = toIndexItem(post, language);
+            List<PostTag> tagsForPost = tagsMap.get(post.id);
+            if (tagsForPost == null) {
+                tagsForPost = new ArrayList<>();
+            }
+            IndexPostItem postItem = toIndexItem(post, language, tagsForPost);
             postItems.add(postItem);
         }
 
@@ -109,7 +132,7 @@ public class IndexController {
                 .data("posts", postItems);
     }
 
-    private IndexPostItem toIndexItem(Post post, String language) {
+    private IndexPostItem toIndexItem(Post post, String language, List<PostTag> postTags) {
         String title = LanguageHelper.resolveLocalizedValue(post.title, language);
         String summary = LanguageHelper.resolveLocalizedValue(post.summary, language);
 
@@ -133,7 +156,6 @@ public class IndexController {
             categoryName = "未分类";
         }
 
-        List<PostTag> postTags = PostTag.find("post", post).list();
         List<TagItem> tags = new ArrayList<>();
         for (PostTag postTag : postTags) {
             String tagName = LanguageHelper.resolveLocalizedValue(postTag.tag.name, language);

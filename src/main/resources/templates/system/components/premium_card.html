@@ -1,0 +1,25 @@
+<div class="md-region-premium-card {fullHide ? 'full-hide' : ''}">
+    <div class="premium-card-body">
+        <div class="premium-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+        </div>
+        <div class="premium-text">
+            <p class="premium-title">{title}</p>
+            <p class="premium-desc">{desc}</p>
+        </div>
+        {#if showButton}
+            <button class="btn-action-primary buy-post-btn"{#if postId} data-post-id="{postId}"{/if}{#if price} data-price="{price}"{/if}{#if blockId} data-block-id="{blockId}"{/if}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.5">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                {buttonText}
+            </button>
+        {/if}
+    </div>
+</div>
