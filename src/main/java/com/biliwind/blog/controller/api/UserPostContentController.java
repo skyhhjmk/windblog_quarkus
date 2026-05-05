@@ -105,6 +105,69 @@ public class UserPostContentController {
                                 "content", postBody.body(),
                                 "contentHtml", postBody.html(),
                                 "renderType", postBody.renderType() != null ? postBody.renderType().name() : null,
+                                "attachments", attachments,
+                                "hasPurchased", hasPurchased
+                        )
+                ))
+                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                .header("Pragma", "no-cache")
+                .header("Expires", "0")
+                .build();
+    }
+
+    /**
+     * 安全获取当前用户已解锁的文章区块内容
+     */
+    @GET
+    @Path("/blocks/{postId}")
+    @Operation(summary = "获取文章已解锁区块（安全端点）")
+    public Response getUnlockedBlocks(@PathParam("postId") Long postId, @Context HttpHeaders headers) {
+        Long userId = resolveUserId(headers);
+        if (userId == null) {
+            return Response.ok(Map.of("success", true, "data", Map.of("blocks", Map.of(), "hasPurchased", false))).build();
+        }
+
+        Post post = Post.findById(postId);
+        if (post == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+
+        long postPrice = postAccessService.getPostPrice(post);
+        boolean isAuthor = post.user != null && userId.equals(post.user.id);
+        long maxPointsPaid = postAccessService.getMaxPointsPaid(userId, postId);
+
+        String resolvedLang = languageContext.getLang();
+        String localizedContent = resolveContent(post.currentRevision, resolvedLang);
+
+        java.util.Map<String, String> unlockedBlocks = postAccessService.getUnlockedBlocks(localizedContent, maxPointsPaid, isAuthor, postId, postPrice, userId);
+
+        // 渲染 Markdown
+        java.util.Map<String, String> renderedBlocks = new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, String> entry : unlockedBlocks.entrySet()) {
+            PostBodyView postBody = resolvePostBody(post.renderType, entry.getValue());
+            renderedBlocks.put(entry.getKey(), postBody.body());
+        }
+
+        boolean hasPurchased = isAuthor
+                || (postPrice > 0 && maxPointsPaid >= postPrice)
+                || (postPrice == 0 && maxPointsPaid >= 0);
+
+        List<AttachmentView> attachments = hasPurchased ? PostMedia.<PostMedia>list("post.id = ?1", postId).stream()
+                .filter(pm -> pm.usageType == 3)
+                .map(pm -> {
+                    long bytes = pm.media.size != null ? pm.media.size : 0;
+                    String formattedSize = bytes < 1024 * 1024
+                            ? (bytes / 1024) + " KB"
+                            : String.format("%.2f MB", bytes / (1024.0 * 1024.0));
+                    return new AttachmentView(pm.media.fileName, pm.media.url, formattedSize);
+                })
+                .collect(Collectors.toList()) : List.of();
+
+        return Response.ok(Map.of(
+                        "success", true,
+                        "data", Map.of(
+                                "blocks", renderedBlocks,
+                                "hasPurchased", hasPurchased,
                                 "attachments", attachments
                         )
                 ))

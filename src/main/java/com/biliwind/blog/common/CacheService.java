@@ -1,6 +1,5 @@
 package com.biliwind.blog.common;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.redis.datasource.RedisDataSource;
@@ -51,8 +50,8 @@ public class CacheService {
         try {
             String json = objectMapper.writeValueAsString(value);
             valueCommands.set(CACHE_PREFIX + key, json, new SetArgs().ex(ttl.toSeconds()));
-        } catch (JsonProcessingException e) {
-            LOG.warnf("Failed to serialize cache value: %s", e.getMessage());
+        } catch (Exception e) {
+            LOG.warnf("Failed to set cache value: %s", e.getMessage());
         }
     }
 

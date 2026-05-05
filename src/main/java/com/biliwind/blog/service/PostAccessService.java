@@ -24,6 +24,9 @@ public class PostAccessService {
     @io.quarkus.qute.Location("system/components/store_item_card.html")
     io.quarkus.qute.Template storeItemCardTemplate;
 
+    @jakarta.inject.Inject
+    com.biliwind.blog.common.CacheService cacheService;
+
     public Post findBySlug(String slug) {
         return Post.find("slug = ?1 and deletedAt is null", slug)
                 .firstResult();
@@ -279,13 +282,61 @@ public class PostAccessService {
         attachMatcher.appendTail(sb);
         filtered = sb.toString();
 
-        // 处理 [store-item id=XXX]
+        return processStoreItems(filtered);
+    }
+
+    /**
+     * 获取用户在当前文章中已解锁的区块内容字典。
+     */
+    public java.util.Map<String, String> getUnlockedBlocks(String rawContent, long maxPointsPaid, boolean isAuthor, Long postId, long postPrice, Long userId) {
+        java.util.Map<String, String> unlockedBlocks = new java.util.HashMap<>();
+        if (rawContent == null || rawContent.isEmpty()) return unlockedBlocks;
+
+        boolean fullUnlocked = isAuthor || (postPrice > 0 && maxPointsPaid >= postPrice);
+
+        // 处理 [hide-text]
+        java.util.regex.Pattern textPattern = java.util.regex.Pattern.compile(
+                "\\[\\s*hide-text(.*?)\\](.*?)\\[\\s*/hide-text\\s*\\]",
+                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
+        );
+        java.util.regex.Matcher textMatcher = textPattern.matcher(rawContent);
+        while (textMatcher.find()) {
+            String attrStr = textMatcher.group(1);
+            String content = textMatcher.group(2);
+            String idAttr = extractAttribute(attrStr, "id");
+            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
+            if (fullUnlocked || hasPurchasedBlock(userId, postId, blockId)) {
+                unlockedBlocks.put(blockId, content);
+            }
+        }
+
+        // 处理 [hide-attachment]
+        java.util.regex.Pattern attachPattern = java.util.regex.Pattern.compile(
+                "\\[\\s*hide-attachment(.*?)\\](.*?)\\[\\s*/hide-attachment\\s*\\]",
+                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
+        );
+        java.util.regex.Matcher attachMatcher = attachPattern.matcher(rawContent);
+        while (attachMatcher.find()) {
+            String attrStr = attachMatcher.group(1);
+            String content = attachMatcher.group(2);
+            String idAttr = extractAttribute(attrStr, "id");
+            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
+            if (fullUnlocked || hasPurchasedBlock(userId, postId, blockId)) {
+                unlockedBlocks.put(blockId, content);
+            }
+        }
+
+        return unlockedBlocks;
+    }
+
+    // 处理 [store-item id=XXX]
+    public String processStoreItems(String filtered) {
         java.util.regex.Pattern storePattern = java.util.regex.Pattern.compile(
                 "\\[\\s*store-item\\s+id\\s*=\\s*(?:\"([^\"]*)\"|([^\\s\\]]+))\\s*\\]",
                 java.util.regex.Pattern.CASE_INSENSITIVE
         );
         java.util.regex.Matcher storeMatcher = storePattern.matcher(filtered);
-        sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         while (storeMatcher.find()) {
             String idStr = storeMatcher.group(1) != null ? storeMatcher.group(1) : storeMatcher.group(2);
             try {
@@ -339,6 +390,26 @@ public class PostAccessService {
 
     public int getFreeLines(Post post) {
         return com.biliwind.blog.common.helper.PostHelper.getFreeLines(post);
+    }
+
+    /**
+     * 获取带缓存的静态预览内容。使用 Redis 缓存，防止每次访问都进行正则替换。
+     * 只有在管理员后台更新文章产生新的 revision 时才会自然失效（因为 revision id 变了）。
+     */
+    public String getCachedPreviewContent(Post post, String lang, String localizedContent, long postPrice) {
+        String revisionStr = post.currentRevision != null ? String.valueOf(post.currentRevision.id) : "0";
+        String cacheKey = "post:preview:" + post.id + ":" + lang + ":" + revisionStr;
+
+        java.util.Optional<String> cached = cacheService.get(cacheKey, String.class);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        int freeLines = getFreeLines(post);
+        String previewContent = getPreviewOnlyContent(localizedContent, freeLines, postPrice > 0, post.id, postPrice, null);
+
+        cacheService.set(cacheKey, previewContent, java.time.Duration.ofDays(7));
+        return previewContent;
     }
 
     /**

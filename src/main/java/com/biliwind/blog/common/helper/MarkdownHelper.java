@@ -21,14 +21,22 @@ public final class MarkdownHelper {
 
     // 文章内容允许的标签（比评论更宽松，允许图片、表格等）
     private static final Safelist POST_SAFE_LIST = Safelist.relaxed()
-            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div")
+            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "button", "svg", "path", "rect", "line", "polyline")
             .addAttributes("code", "class")
             .addAttributes("pre", "class")
             .addAttributes("span", "class", "style")
             .addAttributes("div", "class", "id", "style")
             .addAttributes("table", "class")
             .addAttributes("th", "align")
-            .addAttributes("td", "align");
+            .addAttributes("td", "align")
+            // 允许卡片购买按钮属性
+            .addAttributes("button", "class", "data-post-id", "data-price", "data-block-id")
+            // 允许卡片内联 SVG 属性
+            .addAttributes("svg", "xmlns", "viewBox", "fill", "stroke", "stroke-width", "class", "width", "height")
+            .addAttributes("rect", "x", "y", "width", "height", "rx", "ry")
+            .addAttributes("path", "d")
+            .addAttributes("line", "x1", "y1", "x2", "y2")
+            .addAttributes("polyline", "points");
 
     private MarkdownHelper() {
     }

@@ -317,10 +317,10 @@
                     }
                 }
 
-                // 加载完整付费内容
+                // 加载完整付费内容（或区块内容）
                 async function loadFullPostContent(unlockedBlockId) {
                     try {
-                        const response = await fetch('/api/user/post/content/' + currentPostId, {
+                        const response = await fetch('/api/user/post/blocks/' + currentPostId, {
                             method: 'GET',
                             headers: {
                                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -330,65 +330,59 @@
                             credentials: 'same-origin'
                         });
 
-                        if (response.status === 403) {
-                            window.showToast('您尚未购买此文章', 'error');
+                        if (response.status === 403 || response.status === 401) {
                             return;
                         }
 
                         const result = await response.json();
                         if (result.success && result.data) {
                             const contentData = result.data;
-                            updatePostContent(contentData);
+                            updateUnlockedBlocks(contentData);
 
-                            // 只有当文章整体价格支付完成（或者本身免费）时，才认为“已解锁全文”
-                            // 这里通过判断返回的 data 是否包含完整的 hasPurchased 状态（或者简单点，如果没传 blockId 且成功，就是全文）
-                            // 修正：后端接口如果返回了完整的 hasPurchased 标志更准确
                             const isFullUnlock = !unlockedBlockId || contentData.hasPurchased;
                             updatePurchaseStatus(isFullUnlock);
-                        } else {
-                            window.showToast(result.message || '加载内容失败', 'error');
                         }
                     } catch (e) {
                         console.error('加载内容失败:', e);
-                        window.showToast('加载内容失败', 'error');
                     }
                 }
 
-                // 更新文章内容
-                function updatePostContent(contentData) {
-                    const contentSection = document.getElementById('post-content-section');
-                    const renderType = contentData.renderType;
+                // 局部更新文章解锁区块
+                function updateUnlockedBlocks(contentData) {
+                    const renderType = contentData.renderType || 'MARKDOWN';
+                    const blocks = contentData.blocks || {};
 
-                    if (renderType === 'VDITOR') {
-                        // Vditor 渲染
-                        const vditorPreview = document.getElementById('vditor-preview');
-                        if (vditorPreview && typeof Vditor !== 'undefined') {
-                            vditorPreview.innerHTML = '';
-                            Vditor.preview(vditorPreview, contentData.content, {
-                                cdn: '/webjars/vditor',
-                                mode: 'both'
-                            });
-                        }
-                    } else if (contentData.contentHtml) {
-                        // HTML 渲染
-                        const contentDiv = document.getElementById('post-body-content');
-                        if (contentDiv) {
-                            contentDiv.innerHTML = contentData.content;
-                        } else {
-                            contentSection.innerHTML = '<div class="break-words">' + contentData.content + '</div>';
-                        }
-                    } else {
-                        // 普通文本渲染
-                        const contentDiv = document.getElementById('post-body-content');
-                        if (contentDiv) {
-                            contentDiv.textContent = contentData.content;
-                        } else {
-                            contentSection.innerHTML = '<pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm">' +
-                                escapeHtml(contentData.content) + '</pre>';
-                        }
-                    }
+                    // 收集所有购买按钮
+                    const allButtons = document.querySelectorAll('.buy-post-btn');
 
-                    // 更新附件
+                    allButtons.forEach(btn => {
+                        const blockId = btn.dataset.blockId;
+                        // 如果后端返回了该区块的内容，则替换
+                        if (blockId && blocks[blockId]) {
+                            const blockContent = blocks[blockId];
+                            const card = btn.closest('.md-region-premium-card');
+                            if (card) {
+                                if (renderType === 'VDITOR' && typeof Vditor !== 'undefined') {
+                                    const tempDiv = document.createElement('div');
+                                    Vditor.preview(tempDiv, blockContent, {
+                                        mode: 'light',
+                                        hljs: {style: 'github'}
+                                    }).then(() => {
+                                        card.outerHTML = tempDiv.innerHTML;
+                                    });
+                                } else {
+                                    card.outerHTML = blockContent;
+                                }
+                                return; // 替换成功，直接返回
+                            }
+                        }
+
+                        // 如果没有被替换（说明未授权或授权失败），恢复按钮原始状态
+                        if (window.setLoading) {
+                            window.setLoading(btn, false);
+                        }
+                    });
+
                     if (contentData.attachments) {
                         updateAttachments(contentData.attachments);
                     }
@@ -486,20 +480,50 @@
                     });
                 }
 
-                // 如果用户已购买且是付费文章，立即加载完整内容
-                if (isPaidArticle && userHasPurchased) {
-                    if (document.readyState === 'loading') {
-                        document.addEventListener('DOMContentLoaded', loadFullPostContent);
-                    } else {
+                // 工具：获取 Cookie
+                function getCookie(name) {
+                    const value = "; " + document.cookie;
+                    const parts = value.split("; " + name + "=");
+                    if (parts.length === 2) return parts.pop().split(';').shift();
+                    return null;
+                }
+
+                // 是否登录
+                function isLoggedIn() {
+                    return !!getCookie('user_token');
+                }
+
+                // Pjax 加载完成后初始化
+                function initPostUI() {
+                    initBuyButtons();
+
+                    const loggedIn = isLoggedIn();
+                    const buttons = document.querySelectorAll('.buy-post-btn');
+
+                    if (loggedIn && buttons.length > 0) {
+                        // 已登录：显示“验证授权中”并尝试拉取内容
+                        buttons.forEach(btn => {
+                            if (window.setLoading) {
+                                const opt = {};
+                                opt['text'] = '验证授权中...';
+                                window.setLoading(btn, true, opt);
+                            }
+                        });
                         loadFullPostContent();
+                    } else {
+                        // 未登录或无区块：仅在有历史记录或后端标记已买时加载
+                        const hasLocalPurchaseRecord = localStorage.getItem('purchased_' + currentPostId);
+                        if (hasLocalPurchaseRecord || {hasPurchased}) {
+                            loadFullPostContent();
+                        }
                     }
                 }
 
-                // 初始化购买按钮
+                // 初始化
                 if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', initBuyButtons);
+                    document.addEventListener('DOMContentLoaded', initPostUI);
                 } else {
-                    initBuyButtons();
+                    initPostUI();
                 }
             </script>
         </article>
