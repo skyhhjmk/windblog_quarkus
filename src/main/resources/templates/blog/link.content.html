@@ -23,14 +23,11 @@
                 <div class="flex items-center gap-3">
                     <span class="text-xs meta-mono text-gray-600">筛选：</span>
                     <select id="linkGrepSelect" class="bg-card border border-border px-4 py-1.5 rounded-md text-sm text-main outline-none focus:border-accent transition-colors">
-                        <select id="linkGrepSelect"
-                                class="bg-card border border-border px-4 py-1.5 rounded-md text-sm text-main outline-none focus:border-accent transition-colors">
-                            <option value="All" {#if currentType == 'All' || ! currentType}selected{/if}>所有资源
-                            </option>
-                            {#for type in linkTypes}
-                                <option value="{type.name}"
-                                        {#if currentType == type.name}selected{/if}>{type.description}</option>
-                            {/for}
+                        <option value="All" {#if currentType == 'All' || ! currentType}selected{/if}>所有资源</option>
+                        {#for type in linkTypes}
+                            <option value="{type.name}"
+                                    {#if currentType == type.name}selected{/if}>{type.description}</option>
+                        {/for}
                     </select>
                 </div>
                 <button id="linkFilterApplyBtn" class="btn-minimal px-6 py-1.5 bg-accent text-white font-bold border-none rounded-md">

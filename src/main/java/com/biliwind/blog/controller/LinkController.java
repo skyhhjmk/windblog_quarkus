@@ -35,6 +35,9 @@ public class LinkController {
         @Inject
         LanguageContext languageContext;
 
+    @Inject
+    jakarta.persistence.EntityManager entityManager;
+
         @GET
         @Produces(MediaType.TEXT_HTML)
         public TemplateInstance index(
@@ -58,11 +61,16 @@ public class LinkController {
                                 links = Link.list("status = ?1 order by sortOrder asc, createdAt desc", (short) 1);
                         }
                 }
+
+            // 只获取当前数据库中已存在的链接分类
+            List<LinkType> activeTypes = entityManager.createQuery(
+                            "SELECT DISTINCT l.type FROM Link l WHERE l.status = 1", LinkType.class)
+                    .getResultList();
                 
                 return template
                         .data("pageTitle", "友情链接")
                                 .data("language", languageContext.getLang())
-                        .data("linkTypes", LinkType.values())
+                        .data("linkTypes", activeTypes)
                         .data("currentType", type)
                                 .data("links", links);
         }
