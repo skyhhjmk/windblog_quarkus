@@ -6,6 +6,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportResult;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.TestConnectionRequest;
 import com.biliwind.blog.service.ImportService;
+import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Multi;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -14,6 +15,9 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.resteasy.reactive.RestStreamElementType;
+
+import java.time.Duration;
+import java.util.function.Function;
 
 @Path("/api/admin/import")
 @Produces(MediaType.APPLICATION_JSON)
@@ -37,6 +41,7 @@ public class AdminImportApiController {
     }
 
     @POST
+    @Blocking
     @Operation(summary = "执行数据导入")
     public ImportResult doImport(ImportRequest req) {
         if (!adminRequestContext.isSuperAdmin()) {
@@ -52,6 +57,15 @@ public class AdminImportApiController {
     @RestStreamElementType(MediaType.APPLICATION_JSON)
     @Operation(summary = "获取导入进度 SSE 流")
     public Multi<ImportProgressEvent> stream() {
-        return importService.getEventStream();
+        Multi<ImportProgressEvent> events = importService.getEventStream();
+        // 每 15 秒发送一个心跳包，防止网络连接超时断开
+        Multi<ImportProgressEvent> ticks = Multi.createFrom().ticks().every(Duration.ofSeconds(15))
+                .map(new Function<Long, ImportProgressEvent>() {
+                    @Override
+                    public ImportProgressEvent apply(Long tick) {
+                        return new ImportProgressEvent("ping", "keep-alive", null);
+                    }
+                });
+        return Multi.createBy().merging().streams(events, ticks);
     }
 }

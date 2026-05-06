@@ -24,14 +24,14 @@ public class SidebarTemplateData {
 
     public static List<PostView> recentPosts(int limit) {
         String lang = languageContext().getLang();
-        List<Post> posts = Post.find("deletedAt is null and visibility = 0", Sort.descending("publishedAt"))
+        List<Post> posts = Post.find("deletedAt is null and visibility = 0", Sort.descending("publishedAt").and("createdAt").descending())
                 .page(0, limit)
                 .list();
 
         List<PostView> result = new ArrayList<>();
         for (Post p : posts) {
             String title = LanguageHelper.resolveLocalizedValue(p.title, lang);
-            result.add(new PostView(p.id, title, p.slug, p.publishedAt));
+            result.add(new PostView(p.id, title, p.slug, p.publishedAt, p.createdAt));
         }
         return result;
     }
@@ -69,7 +69,8 @@ public class SidebarTemplateData {
         return new StatsView(postCount, categoryCount, tagCount, commentCount);
     }
 
-    public record PostView(Long id, String title, String slug, java.time.OffsetDateTime publishedAt) {
+    public record PostView(Long id, String title, String slug, java.time.OffsetDateTime publishedAt,
+                           java.time.OffsetDateTime createdAt) {
     }
 
     public record CategoryView(Long id, String name, String slug, Long count) {

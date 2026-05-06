@@ -6,16 +6,17 @@ import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportProgress
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportResult;
 import com.biliwind.blog.model.*;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.transaction.Transactional;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +48,6 @@ public class ImportService {
     /**
      * 执行数据导入
      */
-    @Transactional
     public ImportResult doImport(ImportRequest req, Long operatorId) {
         emit("info", "准备开始导入数据...", null);
         try (Connection conn = DriverManager.getConnection(req.url(), req.username(), req.password())) {
@@ -97,9 +97,10 @@ public class ImportService {
     private int importCategories(Connection conn) throws SQLException {
         int count = 0;
         Map<Long, Long> idMap = new HashMap<>();
-        String sql = "SELECT id, name, slug, parent_id, description FROM categories ORDER BY id";
+        String sql = "SELECT * FROM categories ORDER BY id";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
+            List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 long oldId = rs.getLong("id");
                 String categoryName = rs.getString("name");
@@ -112,20 +113,38 @@ public class ImportService {
                     continue;
                 }
 
-                Category c = new Category();
+                final Category c = new Category();
                 c.slug = slug;
                 emit("info", "处理分类: " + categoryName, slug);
                 c.name = Map.of("zh", categoryName);
-                String desc = rs.getString("description");
-                if (desc != null) c.description = Map.of("zh", desc);
-
-                long oldParentId = rs.getLong("parent_id");
-                if (!rs.wasNull() && idMap.containsKey(oldParentId)) {
-                    c.parent = Category.findById(idMap.get(oldParentId));
+                if (columnExists(cols, "description")) {
+                    String desc = rs.getString("description");
+                    if (desc != null) c.description = Map.of("zh", desc);
                 }
 
-                c.createdAt = OffsetDateTime.now();
-                c.persist();
+                final Long parentIdToSearch;
+                if (columnExists(cols, "parent_id")) {
+                    long oldParentId = rs.getLong("parent_id");
+                    if (!rs.wasNull() && idMap.containsKey(oldParentId)) {
+                        parentIdToSearch = idMap.get(oldParentId);
+                    } else {
+                        parentIdToSearch = null;
+                    }
+                } else {
+                    parentIdToSearch = null;
+                }
+
+                QuarkusTransaction.requiringNew().run(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (parentIdToSearch != null) {
+                            c.parent = Category.findById(parentIdToSearch);
+                        }
+                        c.createdAt = OffsetDateTime.now();
+                        c.persist();
+                    }
+                });
+
                 idMap.put(oldId, c.id);
                 count++;
             }
@@ -135,9 +154,10 @@ public class ImportService {
 
     private int importTags(Connection conn) throws SQLException {
         int count = 0;
-        String sql = "SELECT name, slug, description FROM tags";
+        String sql = "SELECT * FROM tags";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
+            List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 String tagName = rs.getString("name");
                 String slug = sanitizeImportSlug(rs.getString("slug"), tagName, "tag-", System.currentTimeMillis());
@@ -148,13 +168,21 @@ public class ImportService {
                 }
 
                 emit("info", "处理标签: " + tagName, slug);
-                Tag t = new Tag();
+                final Tag t = new Tag();
                 t.slug = slug;
                 t.name = Map.of("zh", tagName);
-                String desc = rs.getString("description");
-                if (desc != null) t.description = Map.of("zh", desc);
+                if (columnExists(cols, "description")) {
+                    String desc = rs.getString("description");
+                    if (desc != null) t.description = Map.of("zh", desc);
+                }
                 t.createdAt = OffsetDateTime.now();
-                t.persist();
+
+                QuarkusTransaction.requiringNew().run(new Runnable() {
+                    @Override
+                    public void run() {
+                        t.persist();
+                    }
+                });
                 count++;
             }
         }
@@ -166,6 +194,7 @@ public class ImportService {
         String sql = "SELECT * FROM posts WHERE deleted_at IS NULL";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
+            List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 String title = rs.getString("title");
                 String slug = sanitizeImportSlug(rs.getString("slug"), title, "post-", rs.getLong("id"));
@@ -176,49 +205,72 @@ public class ImportService {
                 }
 
                 emit("info", "处理文章: " + title, slug);
-                Post p = new Post();
+                final Post p = new Post();
                 p.slug = slug;
                 p.title = Map.of("zh", title);
-                String excerpt = rs.getString("excerpt");
-                if (excerpt != null) p.summary = Map.of("zh", excerpt);
+                String excerptVal = null;
+                if (columnExists(cols, "excerpt")) {
+                    excerptVal = rs.getString("excerpt");
+                } else if (columnExists(cols, "summary")) {
+                    excerptVal = rs.getString("summary");
+                }
+                if (excerptVal != null) p.summary = Map.of("zh", excerptVal);
 
-                String aiSummary = rs.getString("ai_summary");
-                if (aiSummary != null) p.aiSummary = Map.of("zh", aiSummary);
+                if (columnExists(cols, "ai_summary")) {
+                    String aiSummary = rs.getString("ai_summary");
+                    if (aiSummary != null) p.aiSummary = Map.of("zh", aiSummary);
+                }
 
-                p.status = mapStatus(rs.getString("status"));
-                p.visibility = mapVisibility(rs.getString("visibility"));
-                p.password = rs.getString("password");
-                p.featured = rs.getBoolean("featured");
-                p.allowComment = rs.getBoolean("allow_comments");
-                p.viewCount = rs.getLong("view_count");
+                p.status = mapStatus(columnExists(cols, "status") ? rs.getString("status") : null);
+                p.visibility = mapVisibility(columnExists(cols, "visibility") ? rs.getString("visibility") : null);
+                p.password = columnExists(cols, "password") ? rs.getString("password") : null;
+                p.featured = columnExists(cols, "featured") && rs.getBoolean("featured");
+                p.allowComment = true;
+                if (columnExists(cols, "allow_comments")) {
+                    p.allowComment = rs.getBoolean("allow_comments");
+                } else if (columnExists(cols, "allow_comment")) {
+                    p.allowComment = rs.getBoolean("allow_comment");
+                }
 
-                p.renderType = mapRenderType(rs.getString("content_type"));
+                if (columnExists(cols, "view_count")) {
+                    p.viewCount = rs.getLong("view_count");
+                }
+
+                p.renderType = mapRenderType(columnExists(cols, "content_type") ? rs.getString("content_type") : null);
                 p.user = operator;
 
-                Timestamp publishedAt = rs.getTimestamp("published_at");
-                if (publishedAt != null)
-                    p.publishedAt = OffsetDateTime.ofInstant(publishedAt.toInstant(), ZoneId.systemDefault());
+                Timestamp publishedAtTs = rs.getTimestamp("published_at");
+                if (publishedAtTs != null)
+                    p.publishedAt = OffsetDateTime.ofInstant(publishedAtTs.toInstant(), ZoneId.systemDefault());
 
-                Timestamp createdAt = rs.getTimestamp("created_at");
-                if (createdAt != null)
-                    p.createdAt = OffsetDateTime.ofInstant(createdAt.toInstant(), ZoneId.systemDefault());
+                Timestamp createdAtTs = rs.getTimestamp("created_at");
+                if (createdAtTs != null)
+                    p.createdAt = OffsetDateTime.ofInstant(createdAtTs.toInstant(), ZoneId.systemDefault());
 
                 p.updatedAt = OffsetDateTime.now();
-                p.persist();
 
-                // Create revision
-                PostRevision rev = new PostRevision();
-                rev.post = p;
-                rev.title = p.title;
-                rev.contentMarkdown = Map.of("zh", rs.getString("content"));
-                rev.editorType = (short) (p.renderType == PostRenderType.HTML ? 1 : 0);
-                rev.revisionNumber = 1;
-                rev.createdBy = operator;
-                rev.createdAt = p.createdAt != null ? p.createdAt : OffsetDateTime.now();
-                rev.persist();
+                final String contentMarkdown = rs.getString("content");
 
-                p.currentRevision = rev;
-                p.persist();
+                QuarkusTransaction.requiringNew().run(new Runnable() {
+                    @Override
+                    public void run() {
+                        p.persist();
+
+                        // Create revision
+                        PostRevision rev = new PostRevision();
+                        rev.post = p;
+                        rev.title = p.title;
+                        rev.contentMarkdown = Map.of("zh", contentMarkdown);
+                        rev.editorType = (short) (p.renderType == PostRenderType.HTML ? 1 : 0);
+                        rev.revisionNumber = 1;
+                        rev.createdBy = operator;
+                        rev.createdAt = p.createdAt != null ? p.createdAt : OffsetDateTime.now();
+                        rev.persist();
+
+                        p.currentRevision = rev;
+                        p.persist();
+                    }
+                });
 
                 count++;
             }
@@ -231,23 +283,30 @@ public class ImportService {
         String sql = "SELECT * FROM links";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
+            List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 String url = rs.getString("url");
                 if (Link.count("url = ?1", url) > 0) continue;
 
-                Link l = new Link();
+                final Link l = new Link();
                 l.url = url;
                 l.name = rs.getString("name");
-                l.description = rs.getString("description");
-                l.image = rs.getString("image");
-                l.icon = rs.getString("icon");
-                l.sortOrder = rs.getInt("sort_order");
+                if (columnExists(cols, "description")) l.description = rs.getString("description");
+                if (columnExists(cols, "image")) l.image = rs.getString("image");
+                if (columnExists(cols, "icon")) l.icon = rs.getString("icon");
+                if (columnExists(cols, "sort_order")) l.sortOrder = rs.getInt("sort_order");
                 l.status = 1; // Default visible
                 l.target = "_blank";
                 l.redirectType = 1; // Direct
                 l.type = LinkType.FRIENDLY_LINK;
                 l.createdAt = OffsetDateTime.now();
-                l.persist();
+
+                QuarkusTransaction.requiringNew().run(new Runnable() {
+                    @Override
+                    public void run() {
+                        l.persist();
+                    }
+                });
                 count++;
             }
         }
@@ -305,5 +364,22 @@ public class ImportService {
             slug = fallbackPrefix + fallbackId;
         }
         return slug;
+    }
+
+    private List<String> getAvailableColumns(ResultSet rs) throws SQLException {
+        List<String> columns = new ArrayList<>();
+        ResultSetMetaData meta = rs.getMetaData();
+        int count = meta.getColumnCount();
+        for (int i = 1; i <= count; i++) {
+            columns.add(meta.getColumnLabel(i).toLowerCase());
+        }
+        return columns;
+    }
+
+    private boolean columnExists(List<String> columns, String columnName) {
+        if (columnName == null) {
+            return false;
+        }
+        return columns.contains(columnName.toLowerCase());
     }
 }

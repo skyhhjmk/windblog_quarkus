@@ -15,8 +15,12 @@
                         {post.title}
                     </h4>
                     <span class="text-[10px] text-meta font-mono tracking-tighter uppercase">
-                    {post.publishedAt.toLocalDate()}
-                </span>
+                        {#if post.publishedAt}
+                            {post.publishedAt.toLocalDate()}
+                        {#else}
+                            {post.createdAt.toLocalDate()}
+                        {/if}
+                    </span>
                 </div>
             </a>
         {/for}
