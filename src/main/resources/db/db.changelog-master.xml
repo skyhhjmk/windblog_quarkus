@@ -56,4 +56,5 @@
     <include file="migration/052-add-ai-audit-settings.sql" relativeToChangelogFile="true"/>
     <include file="migration/053-add-comment-ai-score.sql" relativeToChangelogFile="true"/>
     <include file="migration/054-optimize-comment-ai-audit.sql" relativeToChangelogFile="true"/>
+    <include file="migration/055-fix-ltree-slug-sanitization.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>
