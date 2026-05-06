@@ -29,14 +29,8 @@
                             <div class="flex-1">
                                 <!-- Meta Information -->
                                 <div class="flex items-center gap-4 text-[11px] font-mono text-meta mb-3 tracking-widest uppercase">
-                                    <span class="text-accent font-semibold">{post.categoryName}</span>
-                                    <span class="opacity-30">/</span>
                                     <span class="text-main">{post.authorName}</span>
                                     <time class="timestamp" data-timestamp="{post.publishedAt}">{post.publishedAt}</time>
-                                    {#if post.aiSummaryStatus != 2 && post.aiSummary && ! post.aiSummary.isEmpty}
-                                        <span class="hidden sm:inline opacity-30">/</span>
-                                        <span class="text-accent/70">AI 摘要</span>
-                                    {/if}
                                 </div>
 
                                 <!-- Title -->
@@ -48,7 +42,19 @@
 
                                 <!-- AI Summary (Optional) -->
                                 {#if post.aiSummaryStatus != 2 && post.aiSummary && ! post.aiSummary.isEmpty}
-                                    <p class="mt-4 text-sm italic text-body border-l-2 border-accent/30 pl-4 py-1 line-clamp-2">
+                                    <div class="mt-4 mb-2">
+                                        <span class="badge-ai">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path
+                                                        d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8"
+                                                                                   rx="2"></rect><path
+                                                        d="M2 14h2"></path><path d="M20 14h2"></path><path
+                                                        d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+                                            AI 摘要
+                                        </span>
+                                    </div>
+                                    <p class="text-sm italic text-body border-l-2 border-accent/30 pl-4 py-1 line-clamp-2">
                                         {LanguageHelper.resolveLocalizedValue(post.aiSummary, language)}
                                     </p>
                                 {/if}
@@ -60,10 +66,27 @@
 
                                 <!-- Footer -->
                                 <div class="mt-8 flex items-center justify-between border-t border-border pt-6">
-                                    <div class="flex flex-wrap gap-2">
-                                        <span class="text-[10px] text-meta border border-border px-2.5 py-0.5 rounded font-mono">Slug: {post.slug}</span>
+                                    <div class="flex flex-wrap gap-3">
+                                        <a href="/category/{post.categorySlug}" class="badge-category relative z-10">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                                 stroke-linejoin="round">
+                                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                            </svg>
+                                            {post.categoryName}
+                                        </a>
                                         {#for tag in post.tags}
-                                            <a href="/tag/{tag.slug}" class="text-[10px] text-accent border border-accent/20 px-2.5 py-0.5 rounded font-mono hover:bg-accent/5 transition-colors">#{tag.name}</a>
+                                            <a href="/tag/{tag.slug}" class="badge-tag relative z-10">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                                     stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                                     stroke-linejoin="round">
+                                                    <line x1="4" y1="9" x2="20" y2="9"></line>
+                                                    <line x1="4" y1="15" x2="20" y2="15"></line>
+                                                    <line x1="10" y1="3" x2="8" y2="21"></line>
+                                                    <line x1="16" y1="3" x2="14" y2="21"></line>
+                                                </svg>
+                                                {tag.name}
+                                            </a>
                                         {/for}
                                     </div>
 

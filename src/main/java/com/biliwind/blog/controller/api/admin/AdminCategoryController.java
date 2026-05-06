@@ -37,8 +37,15 @@ public class AdminCategoryController {
     @Transactional
     @Operation(summary = "创建分类")
     public AdminCategoryItem create(CategoryCreateRequest req) {
+        String slug = req.slug();
+        if (slug == null || slug.isBlank()) {
+            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(req.name());
+        } else {
+            slug = slug.trim();
+        }
+
         Category c = new Category();
-        c.slug = req.slug();
+        c.slug = slug;
         c.name = req.name();
         c.description = req.description();
         if (req.parentId() != null) {
@@ -57,7 +64,15 @@ public class AdminCategoryController {
     public AdminCategoryItem update(@PathParam("id") Long id, CategoryCreateRequest req) {
         Category c = Category.findById(id);
         if (c == null) throw new NotFoundException();
-        c.slug = req.slug();
+
+        String slug = req.slug();
+        if (slug == null || slug.isBlank()) {
+            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(req.name());
+        } else {
+            slug = slug.trim();
+        }
+
+        c.slug = slug;
         c.name = req.name();
         c.description = req.description();
         if (req.parentId() != null) {

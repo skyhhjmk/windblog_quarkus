@@ -1,6 +1,5 @@
 package com.biliwind.blog.controller.api.admin.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
@@ -14,7 +13,7 @@ public final class AdminPostDtos {
         }
 
         public record PostCreateRequest(
-                        @NotBlank(message = "slug 不能为空") String slug,
+                String slug,
                         @NotEmpty(message = "title 不能为空") Map<String, String> title,
                         Map<String, String> summary,
                         Map<String, String> aiSummary,

@@ -2,6 +2,10 @@
     'use strict';
 
     let currentReply = null;
+    let currentPage = 0;
+    const pageSize = 10;
+    let hasMore = true;
+    const commentIndex = new Map();
 
     function ready(fn) {
         if (document.readyState !== 'loading') fn();
@@ -76,47 +80,79 @@
         return (nodes || []).reduce((total, node) => total + 1 + countComments(node.replies || []), 0);
     }
 
-    function renderComment(node) {
-        const children = (node.replies || []).map(renderComment).join('');
+    function renderComment(node, depth = 0) {
         const userName = escapeHtml(node.userName || 'Guest');
         const body = node.contentHtml || '';
+        const replies = node.replies || [];
 
-        return `
-            <article class="comment-item card card-static">
+        let childrenHtml = '';
+        let expandBtnHtml = '';
+
+        const nextDepth = depth + 1;
+        const isMini = depth > 0;
+
+        // Add to global index for reply functionality
+        commentIndex.set(String(node.id), node);
+
+        if (replies.length > 0) {
+            // Apply truncation for any comment with many direct replies
+            if (replies.length > 2) {
+                const visible = replies.slice(0, 2);
+                const hidden = replies.slice(2);
+
+                childrenHtml = visible.map(n => renderComment(n, nextDepth)).join('');
+                childrenHtml += `
+                    <div class="hidden-replies hidden" id="replies-${node.id}">
+                        ${hidden.map(n => renderComment(n, nextDepth)).join('')}
+                    </div>
+                `;
+                expandBtnHtml = `
+                    <button type="button" class="expand-replies-btn" onclick="window.toggleReplies(${node.id}, this)">
+                        展开 ${hidden.length} 条回复
+                    </button>
+                `;
+            } else {
+                childrenHtml = replies.map(n => renderComment(n, nextDepth)).join('');
+            }
+        }
+
+        const commentHtml = `
+            <article class="comment-item card card-static ${isMini ? 'comment-mini' : ''}" id="comment-${node.id}">
                 <div class="comment-meta">
                     <div class="flex items-center gap-3">
                         <strong class="text-[var(--accent)]">${userName}</strong>
                         <time class="timestamp text-xs opacity-70" data-timestamp="${escapeHtml(node.createdAt)}">${escapeHtml(node.createdAt)}</time>
                     </div>
+                </div>
+                <div class="comment-body prose max-w-none">${body}</div>
+                <div class="comment-footer">
                     <button
                         type="button"
-                        class="comment-reply-btn text-sm text-[var(--warning)] hover:underline"
+                        class="comment-reply-btn"
                         data-comment-id="${node.id}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
                         ${window.i18n.reply || 'Reply'}
                     </button>
                 </div>
-                <div class="comment-body prose max-w-none">${body}</div>
-                ${children ? `<div class="comment-children space-y-4">${children}</div>` : ''}
             </article>
         `;
+
+        if (childrenHtml) {
+            // Strict visual cap at 2 levels of indentation
+            if (depth < 2) {
+                return commentHtml + `<div class="comment-children space-y-4">${childrenHtml}${expandBtnHtml}</div>`;
+            } else {
+                return commentHtml + childrenHtml + expandBtnHtml;
+            }
+        }
+        return commentHtml;
     }
 
-    function bindReplyButtons(root, nodes) {
+    function bindReplyButtons(root) {
         const buttons = root.querySelectorAll('.comment-reply-btn');
-        const index = new Map();
-
-        function walk(list) {
-            (list || []).forEach(node => {
-                index.set(String(node.id), node);
-                walk(node.replies || []);
-            });
-        }
-
-        walk(nodes);
-
         buttons.forEach(button => {
             button.onclick = () => {
-                const node = index.get(button.dataset.commentId);
+                const node = commentIndex.get(button.dataset.commentId);
                 if (!node) return;
                 currentReply = { id: node.id, userName: node.userName || 'Guest' };
                 updateReplyUi(root);
@@ -126,33 +162,57 @@
         });
     }
 
-    async function loadComments(root) {
+    async function loadComments(root, isAppend = false) {
         const slug = root.dataset.postSlug;
         const list = root.querySelector('#comment-list');
         const count = root.querySelector('#comment-count');
+        const loadMoreBox = root.querySelector('#comment-load-more');
+        const loadMoreBtn = root.querySelector('#btn-load-more');
 
         if (!slug || !list || !count) return;
 
-        list.innerHTML = `<div class="comment-empty">${window.i18n.loading_comments || 'Loading comments...'}</div>`;
+        if (!isAppend) {
+            currentPage = 0;
+            commentIndex.clear();
+            list.innerHTML = `<div class="comment-empty">${window.i18n.loading_comments || '正在加载评论...'}</div>`;
+        }
+
+        if (loadMoreBtn) window.setLoading(loadMoreBtn, true);
 
         try {
-            const response = await fetch('/api/comments/post/' + encodeURIComponent(slug));
+            const url = `/api/comments/post/${encodeURIComponent(slug)}?page=${currentPage}&size=${pageSize}`;
+            const response = await fetch(url);
             const result = await response.json();
             const nodes = result && result.success && Array.isArray(result.data) ? result.data : [];
-            const total = countComments(nodes);
+            const totalRoots = result.total || 0;
 
-            count.textContent = total + ' ' + (window.i18n.comments_unit || 'comments');
+            if (!isAppend) {
+                count.textContent = totalRoots + ' ' + (window.i18n.comments_unit || '条讨论');
+                list.innerHTML = '';
+            }
 
-            if (!nodes.length) {
-                list.innerHTML = `<div class="comment-empty">${window.i18n.no_comments_yet || 'No comments yet. Be the first to write one.'}</div>`;
+            if (!nodes.length && !isAppend) {
+                list.innerHTML = `<div class="comment-empty">${window.i18n.no_comments_yet || '暂无评论。'}</div>`;
+                if (loadMoreBox) loadMoreBox.classList.add('hidden');
                 return;
             }
 
-            list.innerHTML = nodes.map(renderComment).join('');
-            bindReplyButtons(root, nodes);
+            const html = nodes.map(n => renderComment(n, 0)).join('');
+            list.insertAdjacentHTML('beforeend', html);
+            bindReplyButtons(root);
+
+            hasMore = (currentPage + 1) * pageSize < totalRoots;
+            if (loadMoreBox) {
+                if (hasMore) loadMoreBox.classList.remove('hidden');
+                else loadMoreBox.classList.add('hidden');
+            }
         } catch (error) {
-            count.textContent = '0 comments';
-            list.innerHTML = `<div class="comment-empty">${window.i18n.load_comments_failed || 'Failed to load comments.'}</div>`;
+            if (!isAppend) {
+                count.textContent = '0 条讨论';
+                list.innerHTML = `<div class="comment-empty">${window.i18n.load_comments_failed || '加载评论失败。'}</div>`;
+            }
+        } finally {
+            if (loadMoreBtn) window.setLoading(loadMoreBtn, false);
         }
     }
 
@@ -276,9 +336,33 @@
         currentReply = null;
         updateReplyUi(root);
         bindForm(root);
+
+        const loadMoreBtn = root.querySelector('#btn-load-more');
+        if (loadMoreBtn) {
+            loadMoreBtn.onclick = () => {
+                currentPage++;
+                loadComments(root, true);
+            };
+        }
+
         await syncLoginState(root);
         await loadComments(root);
     }
+
+    window.toggleReplies = function (commentId, btn) {
+        const container = document.getElementById(`replies-${commentId}`);
+        if (!container || !btn) return;
+
+        const isHidden = container.classList.contains('hidden');
+        if (isHidden) {
+            container.classList.remove('hidden');
+            btn.textContent = '收起回复';
+        } else {
+            container.classList.add('hidden');
+            const count = container.querySelectorAll('.comment-item').length;
+            btn.textContent = `展开 ${count} 条回复`;
+        }
+    };
 
     ready(() => {
         initComments();

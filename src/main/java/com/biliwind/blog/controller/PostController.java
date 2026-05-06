@@ -152,6 +152,7 @@ public class PostController {
                 .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)
                 .data("postBodyJson", escapeJavaScript(postBody.body()))
                 .data("postCategory", postEntity.category != null ? LanguageHelper.resolveLocalizedValue(postEntity.category.name, resolvedLang) : "未分类")
+                .data("postCategorySlug", postEntity.category != null ? postEntity.category.slug : "uncategorized")
                 .data("postPrice", postPrice)
                 .data("hasPurchased", hasPurchased)
                 .data("postTags", postTags)

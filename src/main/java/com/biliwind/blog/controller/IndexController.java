@@ -173,6 +173,11 @@ public class IndexController {
             authorName = post.user.username;
         }
 
+        String categorySlug = "uncategorized";
+        if (category != null) {
+            categorySlug = category.slug;
+        }
+
         return new IndexPostItem(
                 post.id,
                 post.slug,
@@ -183,6 +188,7 @@ public class IndexController {
                 post.publishedAt,
                 post.createdAt,
                 categoryName,
+                categorySlug,
                 authorName,
                 tags
         );
@@ -200,6 +206,7 @@ public class IndexController {
             OffsetDateTime publishedAt,
             OffsetDateTime createdAt,
             String categoryName,
+            String categorySlug,
             String authorName,
             List<TagItem> tags
     ) {

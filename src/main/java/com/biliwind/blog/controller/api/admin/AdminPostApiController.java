@@ -75,7 +75,7 @@ public class AdminPostApiController {
         Long userId = adminRequestContext.getUserId();
         aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
                 post.id,
-                rev.contentMarkdown,
+                com.biliwind.blog.common.helper.PostHelper.prepareContentForAi(rev.contentMarkdown),
                 1, // Medium priority
                 userId
         ));
@@ -140,7 +140,14 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "200", description = "创建成功")
     @APIResponse(responseCode = "409", description = "slug 冲突")
     public AdminPostDetail create(@Valid PostCreateRequest request) {
-        if (Post.count("slug = ?1", request.slug().trim()) > 0) {
+        String slug = request.slug();
+        if (slug == null || slug.isBlank()) {
+            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(request.title());
+        } else {
+            slug = slug.trim();
+        }
+
+        if (Post.count("slug = ?1", slug) > 0) {
             throw conflict("slug 已存在");
         }
 
@@ -148,7 +155,7 @@ public class AdminPostApiController {
         OffsetDateTime now = OffsetDateTime.now();
 
         Post post = new Post();
-        post.slug = request.slug().trim();
+        post.slug = slug;
         post.title = request.title();
         post.summary = request.summary();
         post.aiSummary = request.aiSummary();
@@ -178,7 +185,7 @@ public class AdminPostApiController {
         if (post.aiSummaryStatus == 0 && request.contentMarkdown() != null && !request.contentMarkdown().isEmpty()) {
             aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
                     post.id,
-                    request.contentMarkdown(),
+                    com.biliwind.blog.common.helper.PostHelper.prepareContentForAi(request.contentMarkdown()),
                     1,
                     operator.id
             ));
@@ -262,7 +269,7 @@ public class AdminPostApiController {
                 Long userId = adminRequestContext.getUserId();
                 aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
                         post.id,
-                        rev.contentMarkdown,
+                        com.biliwind.blog.common.helper.PostHelper.prepareContentForAi(rev.contentMarkdown),
                         1,
                         userId
                 ));
@@ -486,8 +493,12 @@ public class AdminPostApiController {
     private boolean updateBasicFields(Post post, PostUpdateRequest request) {
         boolean changed = false;
 
-        if (request.slug() != null && !request.slug().isBlank()) {
+        if (request.slug() != null) {
             String nextSlug = request.slug().trim();
+            if (nextSlug.isBlank()) {
+                nextSlug = com.biliwind.blog.common.helper.SlugHelper.slugify(request.title() != null ? request.title() : post.title);
+            }
+
             if (!nextSlug.equals(post.slug) && Post.count("slug = ?1", nextSlug) > 0) {
                 throw conflict("slug 已存在");
             }

@@ -42,37 +42,71 @@ public class CommentApiController {
     @GET
     @Path("/post/{slug}")
     @Transactional
-    public Response listByPost(@PathParam("slug") String slug) {
+    public Response listByPost(
+            @PathParam("slug") String slug,
+            @QueryParam("page") @DefaultValue("0") int page,
+            @QueryParam("size") @DefaultValue("10") int size) {
         Post post = findPublicPost(slug);
-        List<Comment> comments = Comment.list(
+
+        // 1. 分页查询根评论
+        io.quarkus.hibernate.orm.panache.PanacheQuery<Comment> rootQuery = Comment.find(
+                "post = ?1 and parent is null and status = ?2 and deletedAt is null order by createdAt desc",
+                post, STATUS_APPROVED);
+        List<Comment> roots = rootQuery.page(page, size).list();
+        long totalRoots = rootQuery.count();
+
+        if (roots.isEmpty()) {
+            return Response.ok(Map.of(
+                    "success", true,
+                    "data", List.of(),
+                    "total", 0,
+                    "page", page,
+                    "size", size
+            )).build();
+        }
+
+        // 2. 为了构建树，我们需要获取这些根评论的所有后代。
+        // 由于评论通常按时间排序且量级在文章维度受限，我们查出文章下所有通过的评论并在内存构建树。
+        // 但为了性能，我们只返回选定的根评论。
+        List<Comment> allApproved = Comment.list(
                 "post = ?1 and status = ?2 and deletedAt is null order by createdAt asc",
                 post, STATUS_APPROVED);
 
         Map<Long, CommentNode> nodeIndex = new HashMap<>();
-        List<CommentNode> roots = new ArrayList<>();
+        List<CommentNode> resultRoots = new ArrayList<>();
+        Set<Long> targetRootIds = new HashSet<>();
+        for (Comment r : roots) {
+            targetRootIds.add(r.id);
+        }
 
-        for (Comment comment : comments) {
+        for (Comment comment : allApproved) {
             CommentNode node = toNode(comment);
             nodeIndex.put(comment.id, node);
 
             Long parentId = comment.parent != null ? comment.parent.id : null;
             if (parentId == null) {
-                roots.add(node);
+                if (targetRootIds.contains(comment.id)) {
+                    resultRoots.add(node);
+                }
                 continue;
             }
 
             CommentNode parentNode = nodeIndex.get(parentId);
-            if (parentNode == null) {
-                roots.add(node);
-                continue;
+            if (parentNode != null) {
+                parentNode.replies().add(node);
             }
-
-            parentNode.replies().add(node);
         }
 
-        roots.sort(Comparator.comparing(CommentNode::createdAt));
+        // 恢复根评论的倒序排列（因为 roots 是倒序查出的）
+        resultRoots.sort((a, b) -> b.createdAt().compareTo(a.createdAt()));
 
-        return Response.ok(Map.of("success", true, "data", roots)).build();
+        return Response.ok(Map.of(
+                "success", true,
+                "data", resultRoots,
+                "total", totalRoots,
+                "page", page,
+                "size", size
+        )).build();
     }
 
     @POST

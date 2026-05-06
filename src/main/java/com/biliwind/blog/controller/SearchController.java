@@ -189,7 +189,10 @@ public class SearchController {
                     post.publishedAt() != null ? OffsetDateTime.parse(post.publishedAt()) : null,
                     post.publishedAt() != null ? formatDate(OffsetDateTime.parse(post.publishedAt())) : "unknown",
                     "author: " + post.authorName() + " | views: " + post.viewCount(),
-                    "[Read More]"
+                        "[Read More]",
+                        post.categoryName(),
+                        post.categorySlug(),
+                        List.of() // ES might not return tags in this DTO yet
                 );
                 hits.add(hit);
             }
@@ -219,6 +222,20 @@ public class SearchController {
             summary = "No summary available.";
         }
 
+        String categoryName = "未分类";
+        String categorySlug = "uncategorized";
+        if (post.category != null) {
+            categoryName = LanguageHelper.resolveLocalizedValue(post.category.name, lang);
+            categorySlug = post.category.slug;
+        }
+
+        List<IndexController.TagItem> tags = new ArrayList<>();
+        List<PostTag> postTags = PostTag.find("post", post).list();
+        for (PostTag pt : postTags) {
+            String tagName = LanguageHelper.resolveLocalizedValue(pt.tag.name, lang);
+            tags.add(new IndexController.TagItem(tagName, pt.tag.slug));
+        }
+
         OffsetDateTime displayDate = effectiveDate(post);
         return new SearchHit(
                 "post",
@@ -229,7 +246,10 @@ public class SearchController {
                 displayDate,
                 formatDate(displayDate),
                 "slug: " + post.slug,
-                "[Read More]"
+                "[Read More]",
+                categoryName,
+                categorySlug,
+                tags
         );
     }
 
@@ -253,7 +273,10 @@ public class SearchController {
                 tag.createdAt,
                 formatDate(tag.createdAt),
                 "posts: " + postCount + " | slug: " + tag.slug,
-                "[Browse Tag]"
+                "[Browse Tag]",
+                null,
+                null,
+                List.of()
         );
     }
 
@@ -277,7 +300,10 @@ public class SearchController {
                 category.createdAt,
                 formatDate(category.createdAt),
                 "children: " + childCount + " | path: " + safe(category.path),
-                "[Browse Category]"
+                "[Browse Category]",
+                null,
+                null,
+                List.of()
         );
     }
 
@@ -432,7 +458,10 @@ public class SearchController {
             OffsetDateTime date,
             String dateText,
             String meta,
-            String actionLabel
+            String actionLabel,
+            String categoryName,
+            String categorySlug,
+            List<IndexController.TagItem> tags
     ) {
     }
 

@@ -80,12 +80,8 @@
                                 <!-- Meta Information -->
                                 <div class="flex items-center justify-between mb-3">
                                     <div class="flex items-center gap-4 text-[11px] font-mono text-meta tracking-widest uppercase">
-                                        <span class="text-accent font-semibold">{hit.typeLabel}</span>
                                         <time class="timestamp" data-timestamp="{hit.dateText}">{hit.dateText}</time>
                                     </div>
-                                    {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
-                                        <span class="tag-pill border-accent/20 text-accent/70 text-[9px]">AI 优化</span>
-                                    {/if}
                                 </div>
 
                                 <!-- Title -->
@@ -95,6 +91,18 @@
 
                                 <!-- AI Summary (Optional) -->
                                 {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
+                                    <div class="mt-4 mb-2">
+                                        <span class="badge-ai">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path
+                                                        d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8"
+                                                                                   rx="2"></rect><path
+                                                        d="M2 14h2"></path><path d="M20 14h2"></path><path
+                                                        d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+                                            AI 摘要
+                                        </span>
+                                    </div>
                                     <p class="mt-4 text-sm italic text-gray-400 border-l-2 border-accent/30 pl-4 py-1 line-clamp-2">
                                         {hit.aiSummary}
                                     </p>
@@ -107,8 +115,32 @@
 
                                 <!-- Footer -->
                                 <div class="mt-8 flex items-center justify-between border-t border-border pt-6">
-                                    <div class="flex gap-2">
-                                        <span class="text-[10px] text-meta border border-border px-2.5 py-0.5 rounded font-mono">Slug: {hit.slug ?: (hit.url.contains('/post/') ? hit.url.substring(6) : hit.meta)}</span>
+                                    <div class="flex flex-wrap gap-3">
+                                        {#if hit.categoryName}
+                                            <a href="/category/{hit.categorySlug}" class="badge-category relative z-10">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                                     stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                                     stroke-linejoin="round">
+                                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                                </svg>
+                                                {hit.categoryName}
+                                            </a>
+                                        {/if}
+                                        {#if hit.tags}
+                                            {#for tag in hit.tags}
+                                                <a href="/tag/{tag.slug}" class="badge-tag relative z-10">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                         fill="none" stroke="currentColor" stroke-width="2.5"
+                                                         stroke-linecap="round" stroke-linejoin="round">
+                                                        <line x1="4" y1="9" x2="20" y2="9"></line>
+                                                        <line x1="4" y1="15" x2="20" y2="15"></line>
+                                                        <line x1="10" y1="3" x2="8" y2="21"></line>
+                                                        <line x1="16" y1="3" x2="14" y2="21"></line>
+                                                    </svg>
+                                                    {tag.name}
+                                                </a>
+                                            {/for}
+                                        {/if}
                                     </div>
 
                                     <a href="{hit.url}" class="flex items-center gap-2 text-xs font-medium text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">

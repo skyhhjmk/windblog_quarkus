@@ -97,6 +97,23 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text-body);
 }
 
+.comment-list-header {
+    font-size: 1.125rem !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.05em !important;
+    color: var(--text-main) !important;
+    text-transform: uppercase;
+}
+
+#comment-count {
+    font-size: 0.875rem !important;
+    font-weight: 900 !important;
+    color: var(--accent) !important;
+    background: var(--accent-line);
+    padding: 4px 12px;
+    border-radius: 8px;
+}
+
 /* Components */
 .card {
     background: var(--card-bg);
@@ -145,6 +162,29 @@ h1, h2, h3, h4, h5, h6 {
     width: 18px;
     height: 18px;
     stroke-width: 2.5;
+}
+
+.btn-minimal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.625rem 1.25rem;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-main);
+    font-size: 0.875rem;
+    font-weight: 700;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.btn-minimal:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.2);
 }
 
 .btn-minimal:active {
@@ -324,6 +364,128 @@ input::placeholder {
 /* Comments */
 .comment-item {
     padding: 1.5rem;
+    position: relative;
+}
+
+.comment-mini {
+    padding: 1rem !important;
+    margin-top: 0.5rem !important;
+    background: rgba(var(--bg-rgb), 0.3) !important;
+}
+
+.comment-mini .comment-body {
+    font-size: 13.5px !important;
+}
+
+.comment-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
+}
+
+.comment-children {
+    margin-left: 1.5rem;
+    padding-left: 1.5rem;
+    border-left: 1px solid var(--border);
+    margin-top: 1rem;
+    transition: all 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .comment-children {
+        margin-left: 0.5rem;
+        padding-left: 0.5rem;
+    }
+
+    .comment-item {
+        padding: 1rem !important;
+    }
+
+    .comment-mini {
+        padding: 0.75rem !important;
+    }
+}
+
+.comment-reply-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--accent-line);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.comment-reply-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+    transform: scale(1.05);
+}
+
+.comment-reply-btn svg {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+}
+
+.expand-replies-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 0.75rem;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px dashed var(--accent-dim);
+    border-radius: 6px;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.expand-replies-btn:hover {
+    background: var(--accent-line);
+    border-style: solid;
+    border-color: var(--accent);
+}
+
+.load-more-container {
+    display: flex;
+    justify-content: center;
+    padding: 2rem 0;
+}
+
+.btn-load-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 2rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-main);
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-load-more:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-line);
+}
+
+.btn-load-more:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .comment-shell {
@@ -717,5 +879,91 @@ kbd {
     background: rgba(59, 130, 246, 0.1);
     color: #3b82f6;
     border-color: rgba(59, 130, 246, 0.2);
+}
+
+/* AI Summary Badge (GitHub Flat Style) */
+.badge-ai {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 10px;
+    background: rgba(56, 139, 253, 0.15);
+    border: 1px solid rgba(56, 139, 253, 0.4);
+    border-radius: 2em;
+    color: #58a6ff;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 22px;
+    cursor: default;
+    user-select: none;
+    transition: none;
+}
+
+.badge-ai svg {
+    width: 14px;
+    height: 14px;
+}
+
+.light .badge-ai {
+    background: #ddf4ff;
+    border-color: rgba(9, 105, 218, 0.2);
+    color: #0969da;
+}
+
+/* Category and Tag Badges */
+.badge-category, .badge-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 12px;
+    border-radius: 2em;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 20px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    user-select: none;
+    text-decoration: none !important;
+}
+
+.badge-category {
+    background: rgba(56, 139, 253, 0.1);
+    color: #58a6ff;
+    border: 1px solid rgba(56, 139, 253, 0.2);
+}
+
+.badge-category:hover {
+    background: rgba(56, 139, 253, 0.2);
+    border-color: rgba(56, 139, 253, 0.4);
+}
+
+.badge-tag {
+    background: #f8fafc;
+    color: #7c3aed;
+    border: 1px solid #e2e8f0;
+}
+
+.badge-tag:hover {
+    background: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.badge-category svg, .badge-tag svg {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+}
+
+.light .badge-category {
+    background: #ddf4ff;
+    color: #0969da;
+    border-color: rgba(9, 105, 218, 0.2);
+}
+
+.light .badge-tag {
+    background: #ffffff;
+    color: #7c3aed;
+    border-color: #e2e8f0;
 }
 

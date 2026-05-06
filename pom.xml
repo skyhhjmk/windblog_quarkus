@@ -144,6 +144,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-logging-json</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.ibm.icu</groupId>
+            <artifactId>icu4j</artifactId>
+            <version>76.1</version>
+        </dependency>
     </dependencies>
 
     <build>

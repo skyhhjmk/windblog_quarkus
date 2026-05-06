@@ -108,4 +108,57 @@ public class PostHelper {
         m.appendTail(sb);
         return sb.toString();
     }
+
+    /**
+     * 为 AI 摘要准备内容，移除隐藏块中的敏感内容，但保留标识信息
+     */
+    public static Map<String, String> prepareContentForAi(Map<String, String> localizedContent) {
+        if (localizedContent == null || localizedContent.isEmpty()) {
+            return localizedContent;
+        }
+
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, String> entry : localizedContent.entrySet()) {
+            result.put(entry.getKey(), prepareSingleContentForAi(entry.getValue()));
+        }
+        return result;
+    }
+
+    private static String prepareSingleContentForAi(String content) {
+        if (content == null || content.isEmpty()) {
+            return content;
+        }
+
+        // 处理 [hide-text ...]...[/hide-text]
+        Pattern textPattern = Pattern.compile(
+                "\\[\\s*hide-text(.*?)\\](.*?)\\[\\s*/hide-text\\s*\\]",
+                Pattern.DOTALL | Pattern.CASE_INSENSITIVE
+        );
+        Matcher textMatcher = textPattern.matcher(content);
+        StringBuilder sb = new StringBuilder();
+        while (textMatcher.find()) {
+            String attrs = textMatcher.group(1);
+            // 替换为只保留标签对，中间内容清空
+            String replacement = "[hide-text" + attrs + "][/hide-text]";
+            textMatcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        }
+        textMatcher.appendTail(sb);
+        String filtered = sb.toString();
+
+        // 处理 [hide-attachment ...]...[/hide-attachment]
+        Pattern attachPattern = Pattern.compile(
+                "\\[\\s*hide-attachment(.*?)\\](.*?)\\[\\s*/hide-attachment\\s*\\]",
+                Pattern.DOTALL | Pattern.CASE_INSENSITIVE
+        );
+        Matcher attachMatcher = attachPattern.matcher(filtered);
+        sb = new StringBuilder();
+        while (attachMatcher.find()) {
+            String attrs = attachMatcher.group(1);
+            String replacement = "[hide-attachment" + attrs + "][/hide-attachment]";
+            attachMatcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        }
+        attachMatcher.appendTail(sb);
+
+        return sb.toString();
+    }
 }

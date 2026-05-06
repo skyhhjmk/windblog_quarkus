@@ -35,8 +35,15 @@ public class AdminTagController {
     @Transactional
     @Operation(summary = "创建标签")
     public AdminTagItem create(TagCreateRequest req) {
+        String slug = req.slug();
+        if (slug == null || slug.isBlank()) {
+            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(req.name());
+        } else {
+            slug = slug.trim();
+        }
+
         com.biliwind.blog.model.Tag t = new com.biliwind.blog.model.Tag();
-        t.slug = req.slug();
+        t.slug = slug;
         t.name = req.name();
         t.description = req.description();
         t.createdAt = OffsetDateTime.now();
@@ -52,7 +59,15 @@ public class AdminTagController {
         com.biliwind.blog.model.Tag t = com.biliwind.blog.model.Tag.findById(id);
         if (t == null)
             throw new NotFoundException();
-        t.slug = req.slug();
+
+        String slug = req.slug();
+        if (slug == null || slug.isBlank()) {
+            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(req.name());
+        } else {
+            slug = slug.trim();
+        }
+
+        t.slug = slug;
         t.name = req.name();
         t.description = req.description();
         auditService.log("tag", t.id, "update", null, java.util.Map.of("name", t.name, "slug", t.slug));

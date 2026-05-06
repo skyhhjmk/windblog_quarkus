@@ -218,6 +218,7 @@ public class ElasticsearchPostSearchService {
                         "authorName": { "type": "keyword" },
                         "categoryId": { "type": "long" },
                         "categoryName": { "type": "keyword" },
+                            "categorySlug": { "type": "keyword" },
                         "categoryPath": { "type": "keyword" },
                         "tags": { "type": "keyword" },
                         "viewCount": { "type": "long" },
@@ -329,6 +330,7 @@ public class ElasticsearchPostSearchService {
         document.put("categoryId", post.category != null ? post.category.id : 0);
         document.put("categoryName", post.category != null && post.category.name != null ?
                 LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "");
+        document.put("categorySlug", post.category != null ? post.category.slug : "");
         document.put("categoryPath", post.category != null && post.category.path != null ? post.category.path : "");
         document.put("seoTitle", post.seoTitle != null ? post.seoTitle : "");
         document.put("seoKeywords", post.seoKeywords != null ? post.seoKeywords : "");
@@ -537,6 +539,7 @@ public class ElasticsearchPostSearchService {
                 source.path("slug").asText(""),
                 source.path("authorName").asText(""),
                 source.path("categoryName").asText(""),
+                    source.path("categorySlug").asText(""),
                 source.path("categoryPath").asText(""),
                     tagList,
                 source.path("viewCount").asInt(0),
@@ -671,6 +674,7 @@ public class ElasticsearchPostSearchService {
         String slug,
         String authorName,
         String categoryName,
+        String categorySlug,
         String categoryPath,
         List<String> tags,
         int viewCount,
