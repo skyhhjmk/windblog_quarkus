@@ -71,7 +71,7 @@ public class UserPostContentController {
 
         // 判定逻辑：如果是作者，或者已经支付过（哪怕是0积分），允许进入安全端点
         // 安全端点内部会根据 maxPointsPaid 进一步过滤每个区块
-        if (!isAuthor && maxPointsPaid < 0) {
+        if (!isAuthor && maxPointsPaid < 0 && postPrice > 0) {
             return Response.status(Response.Status.FORBIDDEN)
                     .entity(Map.of("success", false, "message", "请先解锁本文"))
                     .build();

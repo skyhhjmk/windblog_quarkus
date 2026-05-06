@@ -276,7 +276,18 @@ public class AiTaskConsumer {
 
                 // 如果状态为锁定(1)或禁用(2)，不覆盖
                 if (post.aiSummaryStatus != null && post.aiSummaryStatus > 0) {
-                    log.info("{} AI 摘要已锁定/禁用（status={}），跳过，postId={}", MQ_TAG, post.aiSummaryStatus, postId);
+                    log.info("{} AI 摘要已锁定/禁用（status={}），跳过并记录审计日志，postId={}", MQ_TAG, post.aiSummaryStatus, postId);
+
+                    com.biliwind.blog.model.AuditLog skipLog = new com.biliwind.blog.model.AuditLog();
+                    skipLog.entityType = "post";
+                    skipLog.entityId = postId.toString();
+                    skipLog.action = "ai_summary_skipped";
+                    skipLog.extInfo = Map.of(
+                            "reason", "status_locked_or_disabled",
+                            "status", post.aiSummaryStatus,
+                            "message", "AI generated content but it was not saved due to post settings"
+                    );
+                    skipLog.persist();
                     return;
                 }
 

@@ -1,0 +1,30 @@
+{#include "base.html"}
+    {#title}
+        {pageTitle ?: '资源详情'}
+    {/title}
+
+    {#head}
+        {#if seoDescription}
+        <meta name="description" content="{seoDescription}"/>
+        {/if}
+        {#if seoKeywords}
+        <meta name="keywords" content="{seoKeywords}"/>
+        {/if}
+    {/head}
+
+    {#navPath}
+        ~/windblog / links / {link.name}
+    {/navPath}
+
+    {#content}
+        {#include "blog/link-detail.content.html" /}
+    {/content}
+
+    {#sidebar}
+    <div class="sticky top-32 space-y-8">
+        {#include sidebar/stats.html /}
+        {#include sidebar/recent_posts.html /}
+        {#include sidebar/tags.html /}
+    </div>
+    {/sidebar}
+{/include}

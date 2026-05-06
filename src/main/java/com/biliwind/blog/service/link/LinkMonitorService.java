@@ -27,6 +27,9 @@ public class LinkMonitorService {
 
     private static final Logger LOG = Logger.getLogger(LinkMonitorService.class);
 
+    @jakarta.inject.Inject
+    com.biliwind.blog.service.ConfigManager configManager;
+
     /**
      * 提取所有潜在可点击的元素
      */
@@ -205,8 +208,8 @@ public class LinkMonitorService {
                 if (log.ok) {
                     String content = response.readEntity(String.class);
 
-                    String target = "biliwind.com";
-                    // TODO: 改为从配置表中读取
+                    String target = configManager.getString("website_url", "biliwind.com");
+                    // 已改为从配置中读取
                     log.backlinkFound = this.checkHtmlDom(content, target);
                 } else {
                     log.backlinkFound = false;
@@ -234,14 +237,17 @@ public class LinkMonitorService {
         log.persist();
         LOG.debug(String.format("Link Monitor Log saved for link [%s]", link.id));
 
-        // TODO: 更新链接状态
+        // 已更新链接状态到 settings 扩展字段中
         if (!readOnly) {
-//            link.lastCheckTime = log.checkTime;
-//            link.lastStatusCode = log.statusCode;
-//            link.isAvailable = log.ok;
-//            link.lastLoadTimeMs = log.loadTimeMs;
-//            link.persist(); // 更新链接状态到数据库
-            LOG.debug(String.format("Link [%s] status updated: Available=%s", link.id, log.ok));
+            if (link.settings == null) {
+                link.settings = new java.util.HashMap<>();
+            }
+            link.settings.put("lastCheckTime", log.checkTime.toString());
+            link.settings.put("lastStatusCode", log.statusCode);
+            link.settings.put("isAvailable", log.ok);
+            link.settings.put("lastLoadTimeMs", log.loadTimeMs);
+            link.persist(); // 更新链接状态到数据库
+            LOG.debug(String.format("Link [%s] status updated in settings: Available=%s", link.id, log.ok));
         }
     }
 

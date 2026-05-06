@@ -84,21 +84,21 @@ public class CommentApiController {
             nodeIndex.put(comment.id, node);
 
             Long parentId = comment.parent != null ? comment.parent.id : null;
-            if (parentId == null) {
-                if (targetRootIds.contains(comment.id)) {
-                    resultRoots.add(node);
+            if (parentId != null) {
+                CommentNode parentNode = nodeIndex.get(parentId);
+                if (parentNode != null) {
+                    parentNode.replies().add(node);
                 }
-                continue;
-            }
-
-            CommentNode parentNode = nodeIndex.get(parentId);
-            if (parentNode != null) {
-                parentNode.replies().add(node);
             }
         }
 
-        // 恢复根评论的倒序排列（因为 roots 是倒序查出的）
-        resultRoots.sort((a, b) -> b.createdAt().compareTo(a.createdAt()));
+        // 按分页查询出的 roots 顺序（desc）组装结果
+        for (Comment r : roots) {
+            CommentNode rootNode = nodeIndex.get(r.id);
+            if (rootNode != null) {
+                resultRoots.add(rootNode);
+            }
+        }
 
         return Response.ok(Map.of(
                 "success", true,

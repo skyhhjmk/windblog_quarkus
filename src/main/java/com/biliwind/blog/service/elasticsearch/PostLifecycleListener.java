@@ -102,7 +102,7 @@ public class PostLifecycleListener {
     }
 
     private void processPostUpdate(Long postId) throws Exception {
-        log.info(">>>>>>>>>> [processPostUpdate] 开始处理, postId=" + postId);
+        log.debugf("开始处理文章同步, postId=%d", postId);
 
         if (!connectionManager.isAvailable()) {
             log.warnf("Elasticsearch 不可用，跳过文章索引: %d", postId);
@@ -116,14 +116,14 @@ public class PostLifecycleListener {
             return;
         }
 
-        log.info(">>>>>>>>>> [processPostUpdate] 准备从数据库加载文章: " + postId);
+        log.debugf("准备从数据库加载文章: %d", postId);
         Post refreshedPost = entityManager.find(Post.class, postId);
         if (refreshedPost == null) {
             log.warnf("文章不存在: %d，跳过索引", postId);
             return;
         }
 
-        log.info(">>>>>>>>>> [processPostUpdate] 文章已加载, id=" + postId + ", status=" + refreshedPost.status + ", deletedAt=" + refreshedPost.deletedAt + ", title=" + refreshedPost.title);
+        log.debugf("文章已加载, id=%d, status=%s", postId, refreshedPost.status);
 
         if (refreshedPost.deletedAt != null) {
             log.debugf("文章已软删除，删除索引: %d", postId);
@@ -133,14 +133,11 @@ public class PostLifecycleListener {
         }
 
         if (refreshedPost.status == PostStatus.PUBLISHED) {
-            log.info(">>>>>>>>>> [processPostUpdate] 文章状态为 PUBLISHED，准备索引: " + postId);
             List<String> tags = postSearchService.getPostTags(postId);
-            log.info(">>>>>>>>>> [processPostUpdate] 标签获取完成: " + tags);
-            log.info(">>>>>>>>>> [processPostUpdate] 调用 indexPost, post.title=" + refreshedPost.title);
             postSearchService.indexPost(refreshedPost, tags);
             log.infof("文章已同步到 Elasticsearch: %d (包含 %d 个标签)", postId, tags.size());
         } else {
-            log.info(">>>>>>>>>> [processPostUpdate] 文章状态不是 PUBLISHED: " + refreshedPost.status + "，删除索引");
+            log.debugf("文章状态不是 PUBLISHED (%s)，删除索引: %d", refreshedPost.status, postId);
             postSearchService.deletePostIndex(postId);
             log.infof("文章索引已删除: %d", postId);
         }

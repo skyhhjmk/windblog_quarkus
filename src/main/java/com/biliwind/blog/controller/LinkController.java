@@ -8,10 +8,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -31,6 +28,14 @@ public class LinkController {
         @Inject
         @Location("blog/link.content.html")
         Template linkContent;
+
+    @Inject
+    @Location("blog/link-detail.html")
+    Template linkDetail;
+
+    @Inject
+    @Location("blog/link-detail.content.html")
+    Template linkDetailContent;
 
         @Inject
         LanguageContext languageContext;
@@ -99,4 +104,31 @@ public class LinkController {
                 }
             }
         }
+
+    @GET
+    @Path("/{id}")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance detail(
+            @Context HttpHeaders httpHeaders,
+            @PathParam("id") Long id) {
+        Link linkEntity = Link.findById(id);
+        if (linkEntity == null) {
+            throw new WebApplicationException(404);
+        }
+
+        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? linkDetailContent : linkDetail;
+
+        String pageTitle = linkEntity.seoTitle;
+        if (pageTitle == null || pageTitle.isBlank()) {
+            pageTitle = linkEntity.name + " - 资源详情";
+        }
+
+        return template
+                .data("pageTitle", pageTitle)
+                .data("language", languageContext.getLang())
+                .data("seoTitle", linkEntity.seoTitle)
+                .data("seoKeywords", linkEntity.seoKeywords)
+                .data("seoDescription", linkEntity.seoDescription)
+                .data("link", linkEntity);
+    }
 }

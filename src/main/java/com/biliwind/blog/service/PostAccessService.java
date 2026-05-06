@@ -47,7 +47,10 @@ public class PostAccessService {
         if (submittedPassword == null || post.password == null) {
             return false;
         }
-        return submittedPassword.equals(post.password);
+        return java.security.MessageDigest.isEqual(
+                submittedPassword.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                post.password.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
     }
 
     /**
@@ -204,8 +207,8 @@ public class PostAccessService {
             String priceStr = extractAttribute(attrStr, "price");
             long requiredPrice = (priceStr != null && !priceStr.isEmpty()) ? Long.parseLong(priceStr) : 0;
 
-            // 解锁逻辑：或者是全站买断（fullUnlocked），或者已经购买过这个特定的 blockId
-            boolean isUnlocked = fullUnlocked || hasPurchasedBlock(userId, postId, blockId);
+            // 解锁逻辑：或者是全站买断（fullUnlocked），或者已经购买过这个特定的 blockId，或者是免费区块
+            boolean isUnlocked = fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId);
 
             if (isUnlocked) {
                 // 已解锁：只保留内容，删掉标签
@@ -253,8 +256,8 @@ public class PostAccessService {
             String priceStr = extractAttribute(attrStr, "price");
             long requiredPrice = (priceStr != null && !priceStr.isEmpty()) ? Long.parseLong(priceStr) : 0;
 
-            // 附件也支持区块解锁
-            boolean isUnlocked = fullUnlocked || hasPurchasedBlock(userId, postId, blockId);
+            // 附件也支持区块解锁，免费附件直接解锁
+            boolean isUnlocked = fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId);
 
             if (isUnlocked) {
                 // 已购买：只保留内容，删掉标签

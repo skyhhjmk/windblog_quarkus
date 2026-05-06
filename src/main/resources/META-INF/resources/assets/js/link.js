@@ -28,7 +28,6 @@
         const cards = document.querySelectorAll('.link-card');
         cards.forEach(card => {
             card.onclick = function (e) {
-                // If clicked on the direct link anchor, don't show modal
                 if (e.target.closest('.link-anchor')) return;
 
                 const id = card.dataset.id;
@@ -36,6 +35,22 @@
                 const url = card.dataset.url;
                 const icon = card.dataset.icon;
                 const description = card.dataset.description;
+                const redirectType = parseInt(card.dataset.redirectType) || 1;
+
+                if (redirectType === 4) {
+                    const detailUrl = '/link/' + id;
+                    if (window.pjax && window.pjax.loadUrl) {
+                        window.pjax.loadUrl(detailUrl);
+                    } else {
+                        window.location.href = detailUrl;
+                    }
+                    return;
+                }
+
+                if (redirectType === 1 || redirectType === 2) {
+                    window.open(url, '_blank');
+                    return;
+                }
 
                 let iconHtml = icon
                     ? `<img src="${icon}" class="w-16 h-16 rounded-xl border border-border mx-auto mb-4" />`

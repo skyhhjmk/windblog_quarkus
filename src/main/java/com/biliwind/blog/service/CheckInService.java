@@ -30,6 +30,9 @@ public class CheckInService {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    GamificationService gamificationService;
+
     /**
      * 检查用户今天是否已签到
      *
@@ -64,11 +67,11 @@ public class CheckInService {
             }
         }
 
-        // 奖励类型 2: 经验 (后续扩展)
+        // 奖励类型 2: 经验 (已实现)
         if (rewardConfig.has("experience")) {
             long exp = rewardConfig.get("experience").asLong();
             if (exp > 0) {
-                // TODO: 调用经验服务
+                gamificationService.addExp(userId, (int) exp, "CHECK_IN");
                 LOG.infof("用户 %d 获得经验: %d", userId, exp);
             }
         }
