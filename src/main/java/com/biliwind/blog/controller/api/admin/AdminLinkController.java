@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkAudit;
 import com.biliwind.blog.model.LinkMonitorLog;
+import com.biliwind.blog.model.LinkType;
 import com.biliwind.blog.service.link.LinkMonitorService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
@@ -15,6 +16,9 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -166,6 +170,72 @@ public class AdminLinkController {
     }
 
     @POST
+    @Path("/parse-meta")
+    @Operation(summary = "Parse URL metadata")
+    public LinkMetaResponse parseMeta(java.util.Map<String, String> body) {
+        String url = body.get("url");
+        if (url == null || url.isBlank()) {
+            throw new BadRequestException("url cannot be empty");
+        }
+
+        try {
+            Document doc = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .timeout(5000)
+                    .get();
+
+            String title = doc.title();
+            if (title != null && title.length() > 255) {
+                title = title.substring(0, 255);
+            }
+
+            String description = "";
+            Element descMeta = doc.selectFirst("meta[name=description]");
+            if (descMeta != null) {
+                description = descMeta.attr("content");
+            } else {
+                Element ogDescMeta = doc.selectFirst("meta[property=og:description]");
+                if (ogDescMeta != null) {
+                    description = ogDescMeta.attr("content");
+                }
+            }
+            if (description != null && description.length() > 500) {
+                description = description.substring(0, 500);
+            }
+
+            String icon = "";
+            Element iconLink = doc.selectFirst("link[rel~=(?i)^(shortcut )?icon]");
+            if (iconLink != null) {
+                icon = iconLink.attr("href");
+                if (!icon.startsWith("http")) {
+                    if (icon.startsWith("//")) {
+                        icon = "https:" + icon;
+                    } else if (icon.startsWith("/")) {
+                        java.net.URL parsedUrl = new java.net.URL(url);
+                        icon = parsedUrl.getProtocol() + "://" + parsedUrl.getHost() + icon;
+                    } else {
+                        java.net.URL parsedUrl = new java.net.URL(url);
+                        String path = parsedUrl.getPath();
+                        if (path.isEmpty() || path.equals("/")) {
+                            icon = parsedUrl.getProtocol() + "://" + parsedUrl.getHost() + "/" + icon;
+                        } else {
+                            icon = parsedUrl.getProtocol() + "://" + parsedUrl.getHost() + path.substring(0, path.lastIndexOf("/") + 1) + icon;
+                        }
+                    }
+                }
+            } else {
+                // Fallback to default favicon.ico
+                java.net.URI uri = java.net.URI.create(url);
+                icon = uri.getScheme() + "://" + uri.getHost() + "/favicon.ico";
+            }
+
+            return new LinkMetaResponse(title, description, icon);
+        } catch (Exception e) {
+            throw new WebApplicationException("Failed to parse URL metadata: " + e.getMessage(), 400);
+        }
+    }
+
+    @POST
     @Transactional
     @Operation(summary = "创建友链")
     public AdminLinkItem create(LinkCreateRequest req) {
@@ -182,7 +252,7 @@ public class AdminLinkController {
         l.showUrl = req.showUrl() == null || req.showUrl();
         l.email = req.email();
         l.note = req.note();
-//        l.category = req.category();
+        l.type = req.type() == null ? LinkType.FRIENDLY_LINK : LinkType.fromCode(req.type());
         l.seoTitle = req.seoTitle();
         l.seoKeywords = req.seoKeywords();
         l.seoDescription = req.seoDescription();
@@ -227,8 +297,8 @@ public class AdminLinkController {
             l.email = req.email();
         if (req.note() != null)
             l.note = req.note();
-//        if (req.category() != null)
-//            l.category = req.category();
+        if (req.type() != null)
+            l.type = LinkType.fromCode(req.type());
         if (req.seoTitle() != null)
             l.seoTitle = req.seoTitle();
         if (req.seoKeywords() != null)
@@ -267,7 +337,7 @@ public class AdminLinkController {
                 l.showUrl,
                 l.email,
                 l.note,
-//                l.category,
+                l.type != null ? l.type.code() : 0,
                 l.seoTitle,
                 l.seoKeywords,
                 l.seoDescription,

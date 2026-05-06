@@ -18,7 +18,7 @@ public class AdminLinkDtos {
                         boolean showUrl,
                         String email,
                         String note,
-//                        String category,
+                        Short type,
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription,
@@ -38,7 +38,7 @@ public class AdminLinkDtos {
                         Boolean showUrl,
                         String email,
                         String note,
-//                        String category,
+                        Short type,
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription) {
@@ -57,7 +57,7 @@ public class AdminLinkDtos {
                         Boolean showUrl,
                         String email,
                         String note,
-//                        String category,
+                        Short type,
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription) {
@@ -84,4 +84,10 @@ public class AdminLinkDtos {
                         Boolean autoApproved,
                         OffsetDateTime createdAt) {
         }
+
+    public record LinkMetaResponse(
+            String title,
+            String description,
+            String icon) {
+    }
 }

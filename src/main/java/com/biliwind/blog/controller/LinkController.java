@@ -47,7 +47,7 @@ public class LinkController {
                 Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? linkContent : link;
                 
                 List<Link> links;
-                if (type == null || type.equals("All")) {
+            if (type == null || type.isBlank() || type.equalsIgnoreCase("All")) {
                         links = Link.list("status = ?1 order by sortOrder asc, createdAt desc", (short) 1);
                 } else {
                         LinkType linkType = parseLinkType(type);
@@ -60,17 +60,35 @@ public class LinkController {
                 }
                 
                 return template
-                                .data("pageTitle", "Links")
+                        .data("pageTitle", "友情链接")
                                 .data("language", languageContext.getLang())
+                        .data("linkTypes", LinkType.values())
+                        .data("currentType", type)
                                 .data("links", links);
         }
         
         private LinkType parseLinkType(String type) {
-                if ("friend_links".equals(type)) {
-                        return LinkType.FRIENDLY_LINK;
-                } else if ("other_links".equals(type)) {
-                        return LinkType.OTHER;
-                }
+            if (type == null || type.isBlank()) {
                 return null;
+            }
+            // Try by enum name
+            try {
+                return LinkType.valueOf(type);
+            } catch (IllegalArgumentException e) {
+                // Fallback: search by code or legacy names
+                if ("friend_links".equals(type)) {
+                    return LinkType.FRIENDLY_LINK;
+                } else if ("other_links".equals(type)) {
+                    return LinkType.OTHER;
+                }
+
+                // Try parsing as code
+                try {
+                    short code = Short.parseShort(type);
+                    return LinkType.fromCode(code);
+                } catch (Exception ex) {
+                    return null;
+                }
+            }
         }
 }
