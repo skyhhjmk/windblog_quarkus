@@ -3,7 +3,6 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.panache.common.Page;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -23,6 +22,9 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -294,6 +296,123 @@ public class MediaManagementService {
     }
 
     /**
+     * 从 URL 导入外部媒体文件
+     *
+     * @param operator 操作用户
+     * @param fileUrl  外部文件 URL
+     * @return 导入成功的媒体对象
+     * @throws IOException 下载或存储失败时抛出
+     */
+    @Transactional
+    public Media importFromUrl(User operator, String fileUrl) throws IOException {
+        String currentUrl = fileUrl;
+        HttpURLConnection conn = null;
+        int redirectCount = 0;
+
+        // 手动处理重定向，主要为了支持跨协议（HTTP -> HTTPS）
+        while (redirectCount < 5) {
+            URL url = URI.create(currentUrl).toURL();
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            // 允许自动重定向（同协议下）
+            conn.setInstanceFollowRedirects(true);
+            // 增加 User-Agent 伪装，防止被部分服务器拦截
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+            conn.connect();
+            int code = conn.getResponseCode();
+
+            // 检查重定向
+            if (code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_MOVED_TEMP
+                    || code == 307 || code == 308) {
+                String location = conn.getHeaderField("Location");
+                if (location != null) {
+                    if (!location.startsWith("http")) {
+                        // 处理相对路径重定向
+                        location = URI.create(currentUrl).resolve(location).toString();
+                    }
+                    currentUrl = location;
+                    redirectCount++;
+                    conn.disconnect();
+                    continue;
+                }
+            }
+
+            if (code != HttpURLConnection.HTTP_OK) {
+                throw new IOException("下载文件失败，HTTP 状态码: " + code + " URL: " + currentUrl);
+            }
+            break;
+        }
+
+        String contentType = conn.getContentType();
+        // 校验 Content-Type，如果下载到的是 HTML，通常是防盗链拦截、授权页或自定义 404
+        if (contentType != null && contentType.toLowerCase().contains("text/html")) {
+            throw new IOException("下载内容疑似为 HTML 页面而非媒体文件，已拦截。URL: " + currentUrl);
+        }
+
+        String fileName = extractFileNameFromUrl(currentUrl);
+        long contentLength = conn.getContentLengthLong();
+
+        try (InputStream is = conn.getInputStream()) {
+            return storeUploadedMedia(operator, is, fileName, contentType, contentLength);
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    /**
+     * 创建一个标记为“导入失败”的占位媒体记录
+     *
+     * @param operator  操作用户
+     * @param sourceUrl 原始来源 URL
+     * @param error     错误描述
+     * @return 媒体对象
+     */
+    @Transactional
+    public Media markAsImportFailed(User operator, String sourceUrl, String error) {
+        Media media = new Media();
+        media.storageKey = "FAILED_" + UUID.randomUUID().toString();
+        media.url = sourceUrl; // 保留原始 URL 以便后续显示或重试
+        media.mediaType = 2; // 其他
+        media.fileName = extractFileNameFromUrl(sourceUrl);
+        media.size = 0L;
+        media.uploadedBy = operator.id;
+        media.createdAt = OffsetDateTime.now();
+
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("importStatus", "failed");
+        metadata.put("sourceUrl", sourceUrl);
+        metadata.put("importError", error);
+        media.metadata = metadata;
+
+        media.persist();
+        return media;
+    }
+
+    /**
+     * 从 URL 中提取文件名
+     */
+    private String extractFileNameFromUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return "unknown";
+        }
+        int lastSlash = url.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < url.length() - 1) {
+            String name = url.substring(lastSlash + 1);
+            int queryParam = name.indexOf('?');
+            if (queryParam > 0) {
+                return name.substring(0, queryParam);
+            }
+            return name;
+        }
+        return "file";
+    }
+
+    /**
      * 构建公共访问 URL
      * @param storageKey 存储键
      * @return 公共访问 URL
@@ -402,7 +521,8 @@ public class MediaManagementService {
                 references == null ? Collections.emptyList()
                         : references.stream()
                         .map(this::toReferenceDto)
-                        .collect(Collectors.toList())
+                        .collect(Collectors.toList()),
+                media.metadata
         );
     }
 

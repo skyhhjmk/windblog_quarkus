@@ -10,6 +10,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -20,36 +21,23 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class ImportService {
 
     private final BroadcastProcessor<ImportProgressEvent> eventProcessor = BroadcastProcessor.create();
 
-    public Multi<ImportProgressEvent> getEventStream() {
-        return eventProcessor;
-    }
-
-    private void emit(String type, String message, Object data) {
-        eventProcessor.onNext(new ImportProgressEvent(type, message, data));
-    }
-
-    /**
-     * 测试外部数据库连接
-     */
-    public boolean testConnection(String driver, String url, String username, String password) {
-        try (Connection conn = DriverManager.getConnection(url, username, password)) {
-            return conn.isValid(5);
-        } catch (SQLException e) {
-            return false;
-        }
-    }
+    @Inject
+    MediaManagementService mediaService;
 
     /**
      * 执行数据导入
      */
     public ImportResult doImport(ImportRequest req, Long operatorId) {
         emit("info", "准备开始导入数据...", null);
+        ImportContext ctx = new ImportContext();
         try (Connection conn = DriverManager.getConnection(req.url(), req.username(), req.password())) {
             int categories = 0, tags = 0, posts = 0, links = 0, comments = 0;
 
@@ -69,11 +57,23 @@ public class ImportService {
                 tags = importTags(conn);
                 emit("progress", "标签导入完成", Map.of("count", tags));
             }
+            if (types.contains("media")) {
+                emit("info", "正在导入媒体库...", null);
+                importMedia(conn, req.assetPrefix(), operator, ctx);
+                emit("progress", "媒体库导入主体完成", null);
+            }
             if (types.contains("posts")) {
-                emit("info", "正在导入文章...", null);
-                posts = importPosts(conn, operator);
+                emit("info", "正在导入文章并处理附件...", null);
+                posts = importPosts(conn, operator, req.assetPrefix(), ctx);
                 emit("progress", "文章导入完成", Map.of("count", posts));
             }
+
+            // 执行一次重试
+            if (!ctx.retryQueue().isEmpty()) {
+                emit("info", "正在执行附件重试任务 (" + ctx.retryQueue().size() + " 个)...", null);
+                processRetryQueue(operator, ctx);
+            }
+
             if (types.contains("links")) {
                 emit("info", "正在导入友情链接...", null);
                 links = importLinks(conn);
@@ -116,10 +116,10 @@ public class ImportService {
                 final Category c = new Category();
                 c.slug = slug;
                 emit("info", "处理分类: " + categoryName, slug);
-                c.name = Map.of("zh", categoryName);
+                c.name = Map.of("zh-cn", categoryName);
                 if (columnExists(cols, "description")) {
                     String desc = rs.getString("description");
-                    if (desc != null) c.description = Map.of("zh", desc);
+                    if (desc != null) c.description = Map.of("zh-cn", desc);
                 }
 
                 final Long parentIdToSearch;
@@ -152,6 +152,25 @@ public class ImportService {
         return count;
     }
 
+    public Multi<ImportProgressEvent> getEventStream() {
+        return eventProcessor;
+    }
+
+    private void emit(String type, String message, Object data) {
+        eventProcessor.onNext(new ImportProgressEvent(type, message, data));
+    }
+
+    /**
+     * 测试外部数据库连接
+     */
+    public boolean testConnection(String driver, String url, String username, String password) {
+        try (Connection conn = DriverManager.getConnection(url, username, password)) {
+            return conn.isValid(5);
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
     private int importTags(Connection conn) throws SQLException {
         int count = 0;
         String sql = "SELECT * FROM tags";
@@ -170,10 +189,10 @@ public class ImportService {
                 emit("info", "处理标签: " + tagName, slug);
                 final Tag t = new Tag();
                 t.slug = slug;
-                t.name = Map.of("zh", tagName);
+                t.name = Map.of("zh-cn", tagName);
                 if (columnExists(cols, "description")) {
                     String desc = rs.getString("description");
-                    if (desc != null) t.description = Map.of("zh", desc);
+                    if (desc != null) t.description = Map.of("zh-cn", desc);
                 }
                 t.createdAt = OffsetDateTime.now();
 
@@ -189,7 +208,37 @@ public class ImportService {
         return count;
     }
 
-    private int importPosts(Connection conn, User operator) throws SQLException {
+    private void importMedia(Connection conn, String assetPrefix, User operator, ImportContext ctx) throws SQLException {
+        String sql = "SELECT * FROM media WHERE deleted_at IS NULL";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            List<String> cols = getAvailableColumns(rs);
+            while (rs.next()) {
+                String filePath = rs.getString("file_path");
+                if (filePath == null) continue;
+
+                // 统一路径格式
+                String oldRelUrl = "/uploads/" + filePath;
+                String fullUrl = formatUrl(assetPrefix, oldRelUrl);
+
+                emit("info", "下载媒体: " + filePath, fullUrl);
+                try {
+                    Media m = mediaService.importFromUrl(operator, fullUrl);
+                    ctx.urlMap().put(oldRelUrl, m.url);
+                    ctx.urlMap().put(fullUrl, m.url); // 记录完整 URL 的映射
+                } catch (Exception e) {
+                    emit("error", "下载媒体失败，加入重试队列: " + filePath, e.getMessage());
+                    // 检查是否已经在重试队列中
+                    boolean alreadyInQueue = ctx.retryQueue().stream().anyMatch(t -> t.sourceUrl().equals(fullUrl));
+                    if (!alreadyInQueue) {
+                        ctx.retryQueue().add(new DownloadTask(fullUrl, filePath, null));
+                    }
+                }
+            }
+        }
+    }
+
+    private int importPosts(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
         int count = 0;
         String sql = "SELECT * FROM posts WHERE deleted_at IS NULL";
         try (PreparedStatement ps = conn.prepareStatement(sql);
@@ -207,18 +256,18 @@ public class ImportService {
                 emit("info", "处理文章: " + title, slug);
                 final Post p = new Post();
                 p.slug = slug;
-                p.title = Map.of("zh", title);
+                p.title = Map.of("zh-cn", title);
                 String excerptVal = null;
                 if (columnExists(cols, "excerpt")) {
                     excerptVal = rs.getString("excerpt");
                 } else if (columnExists(cols, "summary")) {
                     excerptVal = rs.getString("summary");
                 }
-                if (excerptVal != null) p.summary = Map.of("zh", excerptVal);
+                if (excerptVal != null) p.summary = Map.of("zh-cn", excerptVal);
 
                 if (columnExists(cols, "ai_summary")) {
                     String aiSummary = rs.getString("ai_summary");
-                    if (aiSummary != null) p.aiSummary = Map.of("zh", aiSummary);
+                    if (aiSummary != null) p.aiSummary = Map.of("zh-cn", aiSummary);
                 }
 
                 p.status = mapStatus(columnExists(cols, "status") ? rs.getString("status") : null);
@@ -249,7 +298,8 @@ public class ImportService {
 
                 p.updatedAt = OffsetDateTime.now();
 
-                final String contentMarkdown = rs.getString("content");
+                final String contentMarkdownRaw = rs.getString("content");
+                final String contentMarkdown = processContentLinks(contentMarkdownRaw, assetPrefix, operator, ctx);
 
                 QuarkusTransaction.requiringNew().run(new Runnable() {
                     @Override
@@ -260,7 +310,7 @@ public class ImportService {
                         PostRevision rev = new PostRevision();
                         rev.post = p;
                         rev.title = p.title;
-                        rev.contentMarkdown = Map.of("zh", contentMarkdown);
+                        rev.contentMarkdown = Map.of("zh-cn", contentMarkdown);
                         rev.editorType = (short) (p.renderType == PostRenderType.HTML ? 1 : 0);
                         rev.revisionNumber = 1;
                         rev.createdBy = operator;
@@ -276,6 +326,43 @@ public class ImportService {
             }
         }
         return count;
+    }
+
+    /**
+     * 格式化 URL，补全前缀并合并双斜杠（忽略协议部分的 //）
+     */
+    private String formatUrl(String prefix, String path) {
+        if (prefix == null) prefix = "";
+        if (path == null) path = "";
+
+        String combined = prefix + (prefix.endsWith("/") || path.startsWith("/") ? "" : "/") + path;
+
+        // 使用正则处理非协议部分的双斜杠
+        // 匹配 http:// 或 https:// 之后的所有 // 并替换为 /
+        if (combined.contains("://")) {
+            String protocol = combined.substring(0, combined.indexOf("://") + 3);
+            String rest = combined.substring(combined.indexOf("://") + 3);
+            return protocol + rest.replaceAll("/+", "/");
+        }
+        return combined.replaceAll("/+", "/");
+    }
+
+    private void processRetryQueue(User operator, ImportContext ctx) {
+        List<DownloadTask> currentQueue = new ArrayList<>(ctx.retryQueue());
+        ctx.retryQueue().clear();
+
+        for (DownloadTask task : currentQueue) {
+            emit("info", "重试下载: " + task.sourceUrl, null);
+            try {
+                Media m = mediaService.importFromUrl(operator, task.sourceUrl);
+                ctx.urlMap().put(task.sourceUrl, m.url);
+            } catch (Exception e) {
+                emit("error", "重试仍然失败: " + task.sourceUrl, e.getMessage());
+                // 最终失败，标记为导入失败，并记录在映射表中防止后续重复尝试
+                Media failedMedia = mediaService.markAsImportFailed(operator, task.sourceUrl, e.getMessage());
+                ctx.urlMap().put(task.sourceUrl, failedMedia.url);
+            }
+        }
     }
 
     private int importLinks(Connection conn) throws SQLException {
@@ -381,5 +468,88 @@ public class ImportService {
             return false;
         }
         return columns.contains(columnName.toLowerCase());
+    }
+
+    private String processContentLinks(String content, String assetPrefix, User operator, ImportContext ctx) {
+        if (content == null || content.isBlank()) return content;
+
+        // 匹配 HTML <img> 和 Markdown ![]() 以及 []()
+        // 1. Markdown 图片: ![]()
+        Pattern mdImgPattern = Pattern.compile("(!\\[.*?\\])\\((.*?)\\)");
+        Matcher mdImgMatcher = mdImgPattern.matcher(content);
+        StringBuilder sb = new StringBuilder();
+        int lastEnd = 0;
+        while (mdImgMatcher.find()) {
+            sb.append(content, lastEnd, mdImgMatcher.start());
+            String prefix = mdImgMatcher.group(1);
+            String url = mdImgMatcher.group(2);
+            String newUrl = resolveAndDownload(url, assetPrefix, operator, ctx);
+            sb.append(prefix).append("(").append(newUrl).append(")");
+            lastEnd = mdImgMatcher.end();
+        }
+        sb.append(content.substring(lastEnd));
+        content = sb.toString();
+
+        // 2. HTML <img>: <img src="...">
+        Pattern htmlImgPattern = Pattern.compile("(<img[^>]+src=[\"'])(.*?)([\"'])");
+        Matcher htmlImgMatcher = htmlImgPattern.matcher(content);
+        sb = new StringBuilder();
+        lastEnd = 0;
+        while (htmlImgMatcher.find()) {
+            sb.append(content, lastEnd, htmlImgMatcher.start());
+            String prefix = htmlImgMatcher.group(1);
+            String url = htmlImgMatcher.group(2);
+            String suffix = htmlImgMatcher.group(3);
+            String newUrl = resolveAndDownload(url, assetPrefix, operator, ctx);
+            sb.append(prefix).append(newUrl).append(suffix);
+            lastEnd = htmlImgMatcher.end();
+        }
+        sb.append(content.substring(lastEnd));
+
+        return sb.toString();
+    }
+
+    private String resolveAndDownload(String url, String assetPrefix, User operator, ImportContext ctx) {
+        if (url == null || url.isBlank()) return url;
+
+        // 如果在映射表中，直接返回
+        if (ctx.urlMap().containsKey(url)) return ctx.urlMap().get(url);
+
+        // 如果是相对路径或属于旧系统的路径
+        if (!url.startsWith("http") || (assetPrefix != null && !assetPrefix.isBlank() && url.contains(assetPrefix))) {
+            String fullUrl = url.startsWith("http") ? url : formatUrl(assetPrefix, url);
+
+            // 再次检查拼接后的完整 URL 是否在映射中
+            if (ctx.urlMap().containsKey(fullUrl)) return ctx.urlMap().get(fullUrl);
+
+            try {
+                Media m = mediaService.importFromUrl(operator, fullUrl);
+                ctx.urlMap().put(url, m.url);
+                ctx.urlMap().put(fullUrl, m.url);
+                return m.url;
+            } catch (Exception e) {
+                // 下载失败，检查是否已经在重试队列中
+                boolean alreadyInQueue = ctx.retryQueue().stream().anyMatch(t -> t.sourceUrl().equals(fullUrl));
+                if (!alreadyInQueue) {
+                    ctx.retryQueue().add(new DownloadTask(fullUrl, url, null));
+                }
+                return fullUrl;
+            }
+        }
+
+        return url;
+    }
+
+    private record DownloadTask(String sourceUrl, String targetName, Post relatedPost) {
+    }
+
+    // 导入上下文，用于在方法间传递状态
+    private record ImportContext(
+            Map<String, String> urlMap,
+            List<DownloadTask> retryQueue
+    ) {
+        public ImportContext() {
+            this(new HashMap<>(), new ArrayList<>());
+        }
     }
 }

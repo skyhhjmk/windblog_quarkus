@@ -33,7 +33,8 @@ public final class AdminMediaDtos {
             String uploadedByName,
             OffsetDateTime createdAt,
             boolean referenced,
-            List<MediaReferenceItem> references) {
+            List<MediaReferenceItem> references,
+            java.util.Map<String, Object> metadata) {
     }
 
     public record MediaListResult(

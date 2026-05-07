@@ -11,7 +11,7 @@ public class LanguageConstant {
     /**
      * 简体中文
      */
-    public static final String LANG_ZH_CN = "zh-CN"; // 简体中文
+    public static final String LANG_ZH_CN = "zh-cn"; // 简体中文
     /**
      * 美式英语
      */

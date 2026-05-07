@@ -1,9 +1,9 @@
-<div id="pjax-content-root" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
+﻿<div id="pjax-content-root" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
     <div id="pjax-nav-path" class="hidden">
         home {#if subPage && subPage > 1}/ page-{subPage}{/if}
     </div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="sticky top-32 space-y-8">
+        <div class="space-y-8">
 
                 {#include sidebar/stats.html /}
                 {#include sidebar/recent_posts.html /}
