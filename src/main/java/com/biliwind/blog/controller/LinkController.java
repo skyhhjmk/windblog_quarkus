@@ -43,6 +43,10 @@ public class LinkController {
     @Inject
     jakarta.persistence.EntityManager entityManager;
 
+    @Inject
+    @Location("system/go.html")
+    Template goTemplate;
+
         @GET
         @Produces(MediaType.TEXT_HTML)
         public TemplateInstance index(
@@ -56,20 +60,23 @@ public class LinkController {
                 
                 List<Link> links;
             if (type == null || type.isBlank() || type.equalsIgnoreCase("All")) {
-                        links = Link.list("status = ?1 order by sortOrder asc, createdAt desc", (short) 1);
+                links = Link.list("status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
+                        (short) 1, LinkType.EXTERNAL_ARTICLE);
                 } else {
                         LinkType linkType = parseLinkType(type);
-                        if (linkType != null) {
+                if (linkType != null && linkType != LinkType.EXTERNAL_ARTICLE) {
                                 links = Link.list("status = ?1 and type = ?2 order by sortOrder asc, createdAt desc",
                                                 (short) 1, linkType);
                         } else {
-                                links = Link.list("status = ?1 order by sortOrder asc, createdAt desc", (short) 1);
+                    links = Link.list("status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
+                            (short) 1, LinkType.EXTERNAL_ARTICLE);
                         }
                 }
 
-            // 只获取当前数据库中已存在的链接分类
+            // 只获取当前数据库中已存在的链接分类，且排除文章外部链接
             List<LinkType> activeTypes = entityManager.createQuery(
-                            "SELECT DISTINCT l.type FROM Link l WHERE l.status = 1", LinkType.class)
+                            "SELECT DISTINCT l.type FROM Link l WHERE l.status = 1 AND l.type != :extType", LinkType.class)
+                    .setParameter("extType", LinkType.EXTERNAL_ARTICLE)
                     .getResultList();
                 
                 return template
@@ -130,5 +137,27 @@ public class LinkController {
                 .data("seoKeywords", linkEntity.seoKeywords)
                 .data("seoDescription", linkEntity.seoDescription)
                 .data("link", linkEntity);
+    }
+
+    @GET
+    @Path("/go/{id}")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance go(@PathParam("id") Long id) {
+        Link linkEntity = Link.findById(id);
+        if (linkEntity == null) {
+            throw new WebApplicationException(404);
+        }
+
+        // 如果是直接跳转类型，则执行 302
+        if (linkEntity.redirectType == 1) {
+            throw new RedirectionException(jakarta.ws.rs.core.Response.Status.SEE_OTHER, java.net.URI.create(linkEntity.url));
+        }
+
+        // 默认显示中间页
+        return goTemplate
+                .data("pageTitle", "正在离开 " + (linkEntity.name != null ? linkEntity.name : "本站"))
+                .data("language", languageContext.getLang())
+                .data("targetUrl", linkEntity.url)
+                .data("linkName", linkEntity.name);
     }
 }

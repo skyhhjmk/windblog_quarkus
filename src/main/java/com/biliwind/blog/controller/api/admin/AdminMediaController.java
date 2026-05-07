@@ -7,7 +7,6 @@ import com.biliwind.blog.service.MediaManagementService;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
@@ -39,8 +38,9 @@ public class AdminMediaController {
     public AdminMediaDtos.MediaListResult list(
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("pageSize") @DefaultValue("20") int pageSize,
-            @QueryParam("unreferenced") @DefaultValue("false") boolean unreferenced) {
-        return mediaService.listMedia(page, pageSize, unreferenced);
+            @QueryParam("unreferenced") @DefaultValue("false") boolean unreferenced,
+            @QueryParam("failedOnly") @DefaultValue("false") boolean failedOnly) {
+        return mediaService.listMedia(page, pageSize, unreferenced, failedOnly);
     }
 
     @POST
@@ -71,6 +71,29 @@ public class AdminMediaController {
     public AdminMediaDtos.MediaScanResult scan() {
         mustFindOperator();
         return mediaService.rebuildReferences();
+    }
+
+    @POST
+    @Path("/{id}/retry")
+    @Transactional
+    @Operation(summary = "重试导入失败的媒体")
+    public AdminMediaDtos.MediaItem retry(@PathParam("id") Long id) {
+        mustFindOperator();
+        try {
+            Media media = mediaService.retryImport(id);
+            return mediaService.toDto(media, List.of());
+        } catch (IOException e) {
+            throw new BadRequestException("重试失败: " + e.getMessage());
+        }
+    }
+
+    @POST
+    @Path("/batch-retry")
+    @Transactional
+    @Operation(summary = "批量重试导入失败的媒体")
+    public AdminMediaDtos.BatchRetryResult batchRetry() {
+        mustFindOperator();
+        return mediaService.batchRetryFailedImports();
     }
 
 

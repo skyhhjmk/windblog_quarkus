@@ -52,7 +52,8 @@ public class AdminImportDtos {
     public record ImportProgressEvent(
             String type,      // info, error, progress, end
             String message,   // 描述信息
-            Object data       // 附加数据
+            Object data,      // 附加数据 (Map or String)
+            String status     // 状态标识 (success, failed, processing)
     ) {
     }
 }

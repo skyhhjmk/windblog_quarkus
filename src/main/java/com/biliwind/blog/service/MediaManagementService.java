@@ -61,6 +61,47 @@ public class MediaManagementService {
     private String normalizedPublicPath;
 
     /**
+     * 批量重试导入失败的媒体
+     * 查询所有 metadata 中 importStatus="failed" 的媒体并逐个重试
+     * @return 批量重试结果
+     */
+    @Transactional
+    public AdminMediaDtos.BatchRetryResult batchRetryFailedImports() {
+        String nativeQuery = "select * from media where deleted_at is null and metadata->>'importStatus' = 'failed' order by created_at desc";
+        List<Media> failedMedias = Media.getEntityManager()
+                .createNativeQuery(nativeQuery, Media.class)
+                .getResultList();
+        int totalCount = failedMedias.size();
+        int successCount = 0;
+        int failedCount = 0;
+        List<AdminMediaDtos.BatchRetryItemResult> results = new ArrayList<>();
+        for (Media media : failedMedias) {
+            Long mediaId = media.id;
+            String fileName = media.fileName;
+            boolean success = false;
+            String errorMessage = null;
+            try {
+                retryImport(mediaId);
+                success = true;
+                successCount++;
+            } catch (IOException e) {
+                failedCount++;
+                errorMessage = e.getMessage();
+            } catch (Exception e) {
+                failedCount++;
+                errorMessage = e.getMessage();
+            }
+            AdminMediaDtos.BatchRetryItemResult itemResult = new AdminMediaDtos.BatchRetryItemResult(
+                    mediaId,
+                    fileName,
+                    success,
+                    errorMessage);
+            results.add(itemResult);
+        }
+        return new AdminMediaDtos.BatchRetryResult(totalCount, successCount, failedCount, results);
+    }
+
+    /**
      * 初始化媒体存储目录和公共访问路径
      */
     @PostConstruct
@@ -84,7 +125,7 @@ public class MediaManagementService {
      * @return 媒体列表结果
      */
     @Transactional
-    public AdminMediaDtos.MediaListResult listMedia(int page, int pageSize, boolean unreferencedOnly) {
+    public AdminMediaDtos.MediaListResult listMedia(int page, int pageSize, boolean unreferencedOnly, boolean failedOnly) {
         // 确保页码和每页数量在有效范围内
         int safePage = Math.max(page, 1);
         int safeSize = Math.max(1, Math.min(pageSize, 100));
@@ -93,9 +134,32 @@ public class MediaManagementService {
         if (unreferencedOnly) {
             where += " and id not in (select pm.media.id from PostMedia pm)";
         }
-        var query = Media.find(where + " order by createdAt desc");
-        long total = query.count();
-        List<Media> medias = query.page(Page.of(safePage - 1, safeSize)).list();
+        List<Media> medias;
+        long total;
+        if (failedOnly) {
+            // 使用原生 SQL 处理 JSONB 查询，因为 HQL 对 JSONB 支持有限
+            String nativeWhere = "deleted_at is null and metadata->>'importStatus' = 'failed'";
+            if (unreferencedOnly) {
+                nativeWhere += " and id not in (select media_id from post_media)";
+            }
+
+            // 执行计数查询
+            total = ((Number) Media.getEntityManager()
+                    .createNativeQuery("select count(*) from media where " + nativeWhere)
+                    .getSingleResult()).longValue();
+
+            // 执行分页查询
+            medias = Media.getEntityManager()
+                    .createNativeQuery("select * from media where " + nativeWhere + " order by created_at desc", Media.class)
+                    .setFirstResult((safePage - 1) * safeSize)
+                    .setMaxResults(safeSize)
+                    .getResultList();
+        } else {
+            var query = Media.find(where + " order by createdAt desc");
+            total = query.count();
+            medias = query.page(Page.of(safePage - 1, safeSize)).list();
+        }
+
         List<Long> ids = medias.stream().map(m -> m.id).collect(Collectors.toList());
         Map<Long, List<PostMedia>> referencesByMedia;
         // 批量查询引用关系，避免 N+1 查询
@@ -391,6 +455,110 @@ public class MediaManagementService {
 
         media.persist();
         return media;
+    }
+
+    /**
+     * 重试导入失败的媒体
+     *
+     * @param mediaId 媒体 ID
+     * @return 导入成功的媒体对象
+     * @throws IOException 导入失败时抛出
+     */
+    @Transactional
+    public Media retryImport(Long mediaId) throws IOException {
+        Media media = Media.findById(mediaId);
+        if (media == null) {
+            throw new BadRequestException("媒体不存在");
+        }
+
+        Map<String, Object> metadata = media.metadata != null ? new HashMap<>(media.metadata) : new HashMap<>();
+        String status = String.valueOf(metadata.get("importStatus"));
+        if (!"failed".equals(status)) {
+            throw new BadRequestException("该媒体并未处于导入失败状态");
+        }
+
+        String sourceUrl = String.valueOf(metadata.get("sourceUrl"));
+        if (sourceUrl == null || sourceUrl.isBlank() || sourceUrl.equals("null")) {
+            // 如果 metadata 中没有 sourceUrl，尝试使用 media.url
+            sourceUrl = media.url;
+        }
+
+        if (sourceUrl == null || sourceUrl.isBlank()) {
+            throw new BadRequestException("找不到原始来源 URL");
+        }
+
+        User operator = User.findById(media.uploadedBy);
+        if (operator == null) {
+            operator = User.find("roleName = ?1", RoleConstant.SUPER_ADMIN).firstResult();
+        }
+
+        try {
+            Media newMedia = importFromUrl(operator, sourceUrl);
+            // 导入成功，更新原记录
+            String oldUrl = media.url;
+            String newUrl = newMedia.url;
+
+            media.storageKey = newMedia.storageKey;
+            media.url = newUrl;
+            media.mediaType = newMedia.mediaType;
+            media.mimeType = newMedia.mimeType;
+            media.fileName = newMedia.fileName;
+            media.size = newMedia.size;
+            media.width = newMedia.width;
+            media.height = newMedia.height;
+            media.metadata = newMedia.metadata; // 包含预览图等
+            media.persist();
+
+            // 全局替换文章中的引用地址
+            if (oldUrl != null && !oldUrl.equals(newUrl)) {
+                updatePostReferences(oldUrl, newUrl);
+            }
+
+            return media;
+        } catch (Exception e) {
+            metadata.put("importError", e.getMessage());
+            metadata.put("lastRetryAt", OffsetDateTime.now().toString());
+            media.metadata = metadata;
+            media.persist();
+            throw new IOException("重试导入仍然失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 全局替换文章内容中的媒体引用地址
+     */
+    @Transactional
+    protected void updatePostReferences(String oldUrl, String newUrl) {
+        if (oldUrl == null || newUrl == null || oldUrl.equals(newUrl)) {
+            return;
+        }
+
+        // 查找所有包含 oldUrl 的版本
+        // 使用原生 SQL 查找 ID 提高效率（PostgreSQL 语法）
+        List<Object> revisionIds = Media.getEntityManager()
+                .createNativeQuery("SELECT id FROM post_revisions WHERE content_markdown::text LIKE :url")
+                .setParameter("url", "%" + oldUrl + "%")
+                .getResultList();
+
+        for (Object rawId : revisionIds) {
+            Long id = ((Number) rawId).longValue();
+            PostRevision revision = PostRevision.findById(id);
+            if (revision != null && revision.contentMarkdown != null) {
+                boolean changed = false;
+                Map<String, String> newContent = new HashMap<>(revision.contentMarkdown);
+                for (Map.Entry<String, String> entry : newContent.entrySet()) {
+                    String val = entry.getValue();
+                    if (val != null && val.contains(oldUrl)) {
+                        newContent.put(entry.getKey(), val.replace(oldUrl, newUrl));
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    revision.contentMarkdown = newContent;
+                    revision.persist();
+                }
+            }
+        }
     }
 
     /**

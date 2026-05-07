@@ -49,4 +49,18 @@ public final class AdminMediaDtos {
             long referencesCreated,
             long unreferenced) {
     }
+
+    public record BatchRetryResult(
+            int totalCount,
+            int successCount,
+            int failedCount,
+            List<BatchRetryItemResult> results) {
+    }
+
+    public record BatchRetryItemResult(
+            Long mediaId,
+            String fileName,
+            boolean success,
+            String errorMessage) {
+    }
 }

@@ -49,12 +49,12 @@ public class ImportService {
             List<String> types = req.types();
             if (types.contains("categories")) {
                 emit("info", "正在导入分类...", null);
-                categories = importCategories(conn);
+                categories = importCategories(conn, ctx);
                 emit("progress", "分类导入完成", Map.of("count", categories));
             }
             if (types.contains("tags")) {
                 emit("info", "正在导入标签...", null);
-                tags = importTags(conn);
+                tags = importTags(conn, ctx);
                 emit("progress", "标签导入完成", Map.of("count", tags));
             }
             if (types.contains("media")) {
@@ -62,10 +62,19 @@ public class ImportService {
                 importMedia(conn, req.assetPrefix(), operator, ctx);
                 emit("progress", "媒体库导入主体完成", null);
             }
+
+            // 尝试导入作者以便建立文章关联
+            emit("info", "正在处理作者/用户映射...", null);
+            importUsers(conn, ctx);
+
             if (types.contains("posts")) {
                 emit("info", "正在导入文章并处理附件...", null);
                 posts = importPosts(conn, operator, req.assetPrefix(), ctx);
-                emit("progress", "文章导入完成", Map.of("count", posts));
+                emit("progress", "文章基本数据导入完成", Map.of("count", posts));
+
+                emit("info", "正在重建文章关联关系（分类、标签、作者）...", null);
+                importPostRelations(conn, ctx);
+                emit("progress", "关联关系重建完成", null);
             }
 
             // 执行一次重试
@@ -81,7 +90,7 @@ public class ImportService {
             }
             if (types.contains("comments")) {
                 emit("info", "正在导入评论...", null);
-                comments = importComments(conn);
+                comments = importComments(conn, ctx);
                 emit("progress", "评论导入完成", Map.of("count", comments));
             }
 
@@ -94,9 +103,8 @@ public class ImportService {
         }
     }
 
-    private int importCategories(Connection conn) throws SQLException {
+    private int importCategories(Connection conn, ImportContext ctx) throws SQLException {
         int count = 0;
-        Map<Long, Long> idMap = new HashMap<>();
         String sql = "SELECT * FROM categories ORDER BY id";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -109,7 +117,7 @@ public class ImportService {
                 Category existing = Category.find("slug = ?1", slug).firstResult();
                 if (existing != null) {
                     emit("info", "跳过已存在的分类: " + categoryName, slug);
-                    idMap.put(oldId, existing.id);
+                    ctx.categoryMap().put(oldId, existing.id);
                     continue;
                 }
 
@@ -125,8 +133,8 @@ public class ImportService {
                 final Long parentIdToSearch;
                 if (columnExists(cols, "parent_id")) {
                     long oldParentId = rs.getLong("parent_id");
-                    if (!rs.wasNull() && idMap.containsKey(oldParentId)) {
-                        parentIdToSearch = idMap.get(oldParentId);
+                    if (!rs.wasNull() && ctx.categoryMap().containsKey(oldParentId)) {
+                        parentIdToSearch = ctx.categoryMap().get(oldParentId);
                     } else {
                         parentIdToSearch = null;
                     }
@@ -145,7 +153,7 @@ public class ImportService {
                     }
                 });
 
-                idMap.put(oldId, c.id);
+                ctx.categoryMap().put(oldId, c.id);
                 count++;
             }
         }
@@ -157,7 +165,11 @@ public class ImportService {
     }
 
     private void emit(String type, String message, Object data) {
-        eventProcessor.onNext(new ImportProgressEvent(type, message, data));
+        eventProcessor.onNext(new ImportProgressEvent(type, message, data, null));
+    }
+
+    private void emit(String type, String message, Object data, String status) {
+        eventProcessor.onNext(new ImportProgressEvent(type, message, data, status));
     }
 
     /**
@@ -171,18 +183,21 @@ public class ImportService {
         }
     }
 
-    private int importTags(Connection conn) throws SQLException {
+    private int importTags(Connection conn, ImportContext ctx) throws SQLException {
         int count = 0;
         String sql = "SELECT * FROM tags";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
+                long oldId = rs.getLong("id");
                 String tagName = rs.getString("name");
                 String slug = sanitizeImportSlug(rs.getString("slug"), tagName, "tag-", System.currentTimeMillis());
 
-                if (Tag.count("slug = ?1", slug) > 0) {
+                Tag existing = Tag.find("slug = ?1", slug).firstResult();
+                if (existing != null) {
                     emit("info", "跳过已存在的标签: " + tagName, slug);
+                    ctx.tagMap().put(oldId, existing.id);
                     continue;
                 }
 
@@ -202,6 +217,7 @@ public class ImportService {
                         t.persist();
                     }
                 });
+                ctx.tagMap().put(oldId, t.id);
                 count++;
             }
         }
@@ -209,33 +225,105 @@ public class ImportService {
     }
 
     private void importMedia(Connection conn, String assetPrefix, User operator, ImportContext ctx) throws SQLException {
-        String sql = "SELECT * FROM media WHERE deleted_at IS NULL";
-        try (PreparedStatement ps = conn.prepareStatement(sql);
+        // 发现池，Key 是探测到的各种路径形式，Value 是对应的下载 URL
+        Map<String, String> discoveryMap = new HashMap<>();
+
+        // 1. 从 media 表中发现
+        String mediaSql = "SELECT * FROM media WHERE deleted_at IS NULL";
+        try (PreparedStatement ps = conn.prepareStatement(mediaSql);
              ResultSet rs = ps.executeQuery()) {
-            List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 String filePath = rs.getString("file_path");
                 if (filePath == null) continue;
 
-                // 统一路径格式
-                String oldRelUrl = "/uploads/" + filePath;
+                String oldRelUrl = normalizeOldRelUrl(filePath);
                 String fullUrl = formatUrl(assetPrefix, oldRelUrl);
 
-                emit("info", "下载媒体: " + filePath, fullUrl);
-                try {
-                    Media m = mediaService.importFromUrl(operator, fullUrl);
-                    ctx.urlMap().put(oldRelUrl, m.url);
-                    ctx.urlMap().put(fullUrl, m.url); // 记录完整 URL 的映射
-                } catch (Exception e) {
-                    emit("error", "下载媒体失败，加入重试队列: " + filePath, e.getMessage());
-                    // 检查是否已经在重试队列中
-                    boolean alreadyInQueue = ctx.retryQueue().stream().anyMatch(t -> t.sourceUrl().equals(fullUrl));
-                    if (!alreadyInQueue) {
-                        ctx.retryQueue().add(new DownloadTask(fullUrl, filePath, null));
-                    }
+                discoveryMap.put(oldRelUrl, fullUrl);
+                discoveryMap.put(filePath, fullUrl);
+                if (!filePath.startsWith("/")) discoveryMap.put("/" + filePath, fullUrl);
+            }
+        } catch (SQLException e) {
+            emit("info", "读取 media 表失败，将仅依赖文章内容分析: " + e.getMessage(), null);
+        }
+
+        // 2. 从 posts 表中通过内容分析发现
+        extractUrlsFromPosts(conn, assetPrefix, discoveryMap);
+
+        // 3. 执行去重后的下载任务
+        // 我们需要按 fullUrl 进行分组，避免同一个文件因为不同的引用路径被下载多次
+        Map<String, List<String>> reverseMap = new HashMap<>();
+        for (Map.Entry<String, String> entry : discoveryMap.entrySet()) {
+            reverseMap.computeIfAbsent(entry.getValue(), k -> new ArrayList<>()).add(entry.getKey());
+        }
+
+        for (Map.Entry<String, List<String>> entry : reverseMap.entrySet()) {
+            String fullUrl = entry.getKey();
+            List<String> refPaths = entry.getValue();
+
+            emit("info", "同步媒体资源: " + fullUrl, null);
+            try {
+                Media m = mediaService.importFromUrl(operator, fullUrl);
+                // 将所有关联的引用路径都指向新 URL
+                for (String path : refPaths) {
+                    ctx.urlMap().put(path, m.url);
+                }
+                ctx.urlMap().put(fullUrl, m.url);
+            } catch (Exception e) {
+                emit("error", "同步失败，创建占位记录: " + fullUrl, e.getMessage());
+                Media failedMedia = mediaService.markAsImportFailed(operator, fullUrl, e.getMessage());
+                for (String path : refPaths) {
+                    ctx.urlMap().put(path, failedMedia.url);
+                }
+                ctx.urlMap().put(fullUrl, failedMedia.url);
+            }
+        }
+    }
+
+    private void extractUrlsFromPosts(Connection conn, String assetPrefix, Map<String, String> discoveryMap) throws SQLException {
+        String sql = "SELECT content FROM posts WHERE deleted_at IS NULL";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String content = rs.getString("content");
+                if (content == null || content.isBlank()) continue;
+
+                // 使用正则提取所有可能的 URL
+                // Markdown ![]() or []()
+                Pattern mdPattern = Pattern.compile("!?\\[.*?\\]\\((.*?)\\)");
+                Matcher mdMatcher = mdPattern.matcher(content);
+                while (mdMatcher.find()) {
+                    addDiscoveredUrl(mdMatcher.group(1), assetPrefix, discoveryMap);
+                }
+
+                // HTML src="..."
+                Pattern htmlPattern = Pattern.compile("src=[\"'](.*?)([\"'])");
+                Matcher htmlMatcher = htmlPattern.matcher(content);
+                while (htmlMatcher.find()) {
+                    addDiscoveredUrl(htmlMatcher.group(1), assetPrefix, discoveryMap);
                 }
             }
         }
+    }
+
+    private void addDiscoveredUrl(String url, String assetPrefix, Map<String, String> discoveryMap) {
+        if (url == null || url.isBlank() || url.startsWith("http") || url.startsWith("data:")) return;
+
+        String oldRelUrl = normalizeOldRelUrl(url);
+        String fullUrl = formatUrl(assetPrefix, oldRelUrl);
+        discoveryMap.put(url, fullUrl);
+        discoveryMap.put(oldRelUrl, fullUrl);
+    }
+
+    private String normalizeOldRelUrl(String path) {
+        if (path == null) return "";
+        String p = path.replace("#", "%23"); // 处理特殊字符
+        if (p.startsWith("uploads/")) return "/" + p;
+        if (p.startsWith("/uploads/")) return p;
+        if (p.startsWith("/")) return p;
+        // 如果既不是以 / 开头，也不是以 uploads/ 开头，假设它是在 uploads 目录下的相对路径
+        // 这是为了兼容一些直接使用 2023/05/abc.jpg 的引用
+        return "/uploads/" + p;
     }
 
     private int importPosts(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
@@ -286,7 +374,21 @@ public class ImportService {
                 }
 
                 p.renderType = mapRenderType(columnExists(cols, "content_type") ? rs.getString("content_type") : null);
-                p.user = operator;
+
+                // 尝试映射作者，如果映射不存在则默认为当前操作者
+                User postAuthor = operator;
+                if (columnExists(cols, "author_id")) {
+                    long oldAuthId = rs.getLong("author_id");
+                    if (!rs.wasNull() && ctx.userMap().containsKey(oldAuthId)) {
+                        postAuthor = User.findById(ctx.userMap().get(oldAuthId));
+                    }
+                } else if (columnExists(cols, "user_id")) {
+                    long oldUserId = rs.getLong("user_id");
+                    if (!rs.wasNull() && ctx.userMap().containsKey(oldUserId)) {
+                        postAuthor = User.findById(ctx.userMap().get(oldUserId));
+                    }
+                }
+                p.user = postAuthor != null ? postAuthor : operator;
 
                 Timestamp publishedAtTs = rs.getTimestamp("published_at");
                 if (publishedAtTs != null)
@@ -301,6 +403,7 @@ public class ImportService {
                 final String contentMarkdownRaw = rs.getString("content");
                 final String contentMarkdown = processContentLinks(contentMarkdownRaw, assetPrefix, operator, ctx);
 
+                final long oldPostId = rs.getLong("id");
                 QuarkusTransaction.requiringNew().run(new Runnable() {
                     @Override
                     public void run() {
@@ -322,6 +425,7 @@ public class ImportService {
                     }
                 });
 
+                ctx.postMap().put(oldPostId, p.id);
                 count++;
             }
         }
@@ -358,9 +462,8 @@ public class ImportService {
                 ctx.urlMap().put(task.sourceUrl, m.url);
             } catch (Exception e) {
                 emit("error", "重试仍然失败: " + task.sourceUrl, e.getMessage());
-                // 最终失败，标记为导入失败，并记录在映射表中防止后续重复尝试
-                Media failedMedia = mediaService.markAsImportFailed(operator, task.sourceUrl, e.getMessage());
-                ctx.urlMap().put(task.sourceUrl, failedMedia.url);
+                // 最终失败时，resolveAndDownload 已创建失败记录，直接使用已有记录的 URL
+                ctx.urlMap().put(task.sourceUrl, task.sourceUrl);
             }
         }
     }
@@ -400,17 +503,181 @@ public class ImportService {
         return count;
     }
 
-    private int importComments(Connection conn) throws SQLException {
-        int count = 0;
-        String sql = "SELECT * FROM comments";
+    private void importUsers(Connection conn, ImportContext ctx) throws SQLException {
+        // 在 windblog_webman 中，作者表通常是 wa_users
+        String sql = "SELECT id, username, nickname, email FROM wa_users";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                // Comments are tricky because of post_id and parent_id mapping.
-                // For now, let's just do a basic import if post exists.
-                // In a real scenario, we'd need a mapping table for IDs.
+                long oldId = rs.getLong("id");
+                String username = rs.getString("username");
+                String nickname = rs.getString("nickname");
+                String email = rs.getString("email");
+
+                // 尝试通过用户名或邮箱查找现有用户
+                User existing = User.find("username = ?1 or email = ?2", username, email).firstResult();
+                if (existing != null) {
+                    ctx.userMap().put(oldId, existing.id);
+                } else {
+                    // 如果不存在，可以考虑自动创建，但目前为了安全，仅做映射
+                    // 也可以映射给当前操作者，或者映射给超级管理员
+                }
+            }
+        } catch (SQLException e) {
+            emit("info", "未找到旧系统的用户表 (wa_users)，将跳过作者映射: " + e.getMessage(), null);
+        }
+    }
+
+    private void importPostRelations(Connection conn, ImportContext ctx) throws SQLException {
+        // 1. 迁移分类关联 (post_category)
+        // 注意：新系统 Post 实体目前仅支持一个 category_id
+        String catSql = "SELECT post_id, category_id FROM post_category";
+        try (PreparedStatement ps = conn.prepareStatement(catSql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                long oldPostId = rs.getLong("post_id");
+                long oldCatId = rs.getLong("category_id");
+
+                Long newPostId = ctx.postMap().get(oldPostId);
+                Long newCatId = ctx.categoryMap().get(oldCatId);
+
+                if (newPostId != null && newCatId != null) {
+                    QuarkusTransaction.requiringNew().run(() -> {
+                        Post p = Post.findById(newPostId);
+                        Category c = Category.findById(newCatId);
+                        if (p != null && c != null && p.category == null) {
+                            p.category = c;
+                            p.persist();
+                        }
+                    });
+                }
+            }
+        } catch (SQLException e) {
+            emit("info", "处理分类关联时跳过 (可能表不存在): " + e.getMessage(), null);
+        }
+
+        // 2. 迁移标签关联 (post_tag)
+        String tagSql = "SELECT post_id, tag_id FROM post_tag";
+        try (PreparedStatement ps = conn.prepareStatement(tagSql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                long oldPostId = rs.getLong("post_id");
+                long oldTagId = rs.getLong("tag_id");
+
+                Long newPostId = ctx.postMap().get(oldPostId);
+                Long newTagId = ctx.tagMap().get(oldTagId);
+
+                if (newPostId != null && newTagId != null) {
+                    QuarkusTransaction.requiringNew().run(() -> {
+                        Post p = Post.findById(newPostId);
+                        Tag t = Tag.findById(newTagId);
+                        if (p != null && t != null) {
+                            if (PostTag.count("id.postId = ?1 and id.tagId = ?2", p.id, t.id) == 0) {
+                                PostTag pt = new PostTag();
+                                pt.id = new PostTagId(p.id, t.id);
+                                pt.post = p;
+                                pt.tag = t;
+                                pt.persist();
+                            }
+                        }
+                    });
+                }
+            }
+        } catch (SQLException e) {
+            emit("info", "处理标签关联时跳过 (可能表不存在): " + e.getMessage(), null);
+        }
+
+        // 3. 迁移作者关联 (post_author)
+        String authSql = "SELECT post_id, author_id FROM post_author WHERE is_primary = true";
+        try (PreparedStatement ps = conn.prepareStatement(authSql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                long oldPostId = rs.getLong("post_id");
+                long oldAuthId = rs.getLong("author_id");
+
+                Long newPostId = ctx.postMap().get(oldPostId);
+                Long newAuthId = ctx.userMap().get(oldAuthId);
+
+                if (newPostId != null && newAuthId != null) {
+                    QuarkusTransaction.requiringNew().run(() -> {
+                        Post p = Post.findById(newPostId);
+                        User u = User.findById(newAuthId);
+                        if (p != null && u != null) {
+                            p.user = u;
+                            p.persist();
+                        }
+                    });
+                }
+            }
+        } catch (SQLException e) {
+            // 可能没有 post_author 表，或者是 wa_posts 里直接带 author_id
+        }
+    }
+
+    private int importComments(Connection conn, ImportContext ctx) throws SQLException {
+        int count = 0;
+        Map<Long, Long> commentIdMap = new HashMap<>();
+        // 按 ID 排序以确保父评论先被处理（或者后续处理层级）
+        String sql = "SELECT * FROM comments ORDER BY id ASC";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            List<String> cols = getAvailableColumns(rs);
+            while (rs.next()) {
+                long oldId = rs.getLong("id");
+                long oldPostId = rs.getLong("post_id");
+                Long newPostId = ctx.postMap().get(oldPostId);
+
+                if (newPostId == null) {
+                    continue; // 文章不存在，跳过评论
+                }
+
+                Comment c = new Comment();
+                c.content = rs.getString("content");
+                c.status = 1; // 默认通过
+                c.auditStatus = 2; // 默认通过
+
+                Timestamp createdAtTs = rs.getTimestamp("created_at");
+                if (createdAtTs != null)
+                    c.createdAt = OffsetDateTime.ofInstant(createdAtTs.toInstant(), ZoneId.systemDefault());
+
+                c.updatedAt = OffsetDateTime.now();
+
+                // 处理父评论映射
+                Long oldParentId = null;
+                if (columnExists(cols, "parent_id")) {
+                    long pid = rs.getLong("parent_id");
+                    if (!rs.wasNull() && pid > 0) {
+                        oldParentId = pid;
+                    }
+                }
+                final Long finalParentId = oldParentId != null ? commentIdMap.get(oldParentId) : null;
+
+                // 处理用户映射
+                Long oldUserId = null;
+                if (columnExists(cols, "user_id")) {
+                    long uid = rs.getLong("user_id");
+                    if (!rs.wasNull() && uid > 0) {
+                        oldUserId = uid;
+                    }
+                }
+                final Long finalUserId = oldUserId != null ? ctx.userMap().get(oldUserId) : null;
+
+                QuarkusTransaction.requiringNew().run(() -> {
+                    c.post = Post.findById(newPostId);
+                    if (finalParentId != null) {
+                        c.parent = Comment.findById(finalParentId);
+                    }
+                    if (finalUserId != null) {
+                        c.user = User.findById(finalUserId);
+                    }
+                    c.persist();
+                });
+
+                commentIdMap.put(oldId, c.id);
                 count++;
             }
+        } catch (SQLException e) {
+            emit("error", "导入评论失败: " + e.getMessage(), null);
         }
         return count;
     }
@@ -473,12 +740,14 @@ public class ImportService {
     private String processContentLinks(String content, String assetPrefix, User operator, ImportContext ctx) {
         if (content == null || content.isBlank()) return content;
 
-        // 匹配 HTML <img> 和 Markdown ![]() 以及 []()
+        StringBuilder sb;
+        int lastEnd;
+
         // 1. Markdown 图片: ![]()
         Pattern mdImgPattern = Pattern.compile("(!\\[.*?\\])\\((.*?)\\)");
         Matcher mdImgMatcher = mdImgPattern.matcher(content);
-        StringBuilder sb = new StringBuilder();
-        int lastEnd = 0;
+        sb = new StringBuilder();
+        lastEnd = 0;
         while (mdImgMatcher.find()) {
             sb.append(content, lastEnd, mdImgMatcher.start());
             String prefix = mdImgMatcher.group(1);
@@ -490,7 +759,23 @@ public class ImportService {
         sb.append(content.substring(lastEnd));
         content = sb.toString();
 
-        // 2. HTML <img>: <img src="...">
+        // 2. Markdown 普通链接: [text](url) - 排除图片
+        Pattern mdLinkPattern = Pattern.compile("(?<!!)(\\[(.*?)\\])\\((.*?)\\)");
+        Matcher mdLinkMatcher = mdLinkPattern.matcher(content);
+        sb = new StringBuilder();
+        lastEnd = 0;
+        while (mdLinkMatcher.find()) {
+            sb.append(content, lastEnd, mdLinkMatcher.start());
+            String text = mdLinkMatcher.group(2);
+            String url = mdLinkMatcher.group(3);
+            String newUrl = resolveExternalLink(url, text, assetPrefix, ctx);
+            sb.append("[").append(text).append("](").append(newUrl).append(")");
+            lastEnd = mdLinkMatcher.end();
+        }
+        sb.append(content.substring(lastEnd));
+        content = sb.toString();
+
+        // 3. HTML <img>: <img src="...">
         Pattern htmlImgPattern = Pattern.compile("(<img[^>]+src=[\"'])(.*?)([\"'])");
         Matcher htmlImgMatcher = htmlImgPattern.matcher(content);
         sb = new StringBuilder();
@@ -505,22 +790,104 @@ public class ImportService {
             lastEnd = htmlImgMatcher.end();
         }
         sb.append(content.substring(lastEnd));
+        content = sb.toString();
+
+        // 4. HTML <a>: <a href="...">
+        Pattern htmlLinkPattern = Pattern.compile("(<a[^>]+href=[\"'])(.*?)([\"'])");
+        Matcher htmlLinkMatcher = htmlLinkPattern.matcher(content);
+        sb = new StringBuilder();
+        lastEnd = 0;
+        while (htmlLinkMatcher.find()) {
+            sb.append(content, lastEnd, htmlLinkMatcher.start());
+            String prefix = htmlLinkMatcher.group(1);
+            String url = htmlLinkMatcher.group(2);
+            String suffix = htmlLinkMatcher.group(3);
+            String newUrl = resolveExternalLink(url, null, assetPrefix, ctx);
+            sb.append(prefix).append(newUrl).append(suffix);
+            lastEnd = htmlLinkMatcher.end();
+        }
+        sb.append(content.substring(lastEnd));
 
         return sb.toString();
     }
 
+    private String resolveExternalLink(String url, String text, String assetPrefix, ImportContext ctx) {
+        if (url == null || url.isBlank() || url.startsWith("#") || url.startsWith("javascript:") || url.startsWith("mailto:")) {
+            return url;
+        }
+
+        // 如果是站内资源或附件，保持原样（或已经处理过的本地路径）
+        if (url.startsWith("/") || (assetPrefix != null && url.startsWith(assetPrefix))) {
+            return url;
+        }
+
+        // 查找映射表
+        if (ctx.urlMap().containsKey(url)) {
+            return ctx.urlMap().get(url);
+        }
+
+        // 转存为外部链接记录
+        final String linkName = (text != null && !text.isBlank()) ? text : url;
+        final Long[] linkId = new Long[1];
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Link existing = Link.find("url = ?1", url).firstResult();
+            if (existing == null) {
+                Link l = new Link();
+                l.url = url;
+                l.name = linkName;
+                l.type = LinkType.EXTERNAL_ARTICLE;
+                l.redirectType = (short) 2; // goto
+                l.status = 1;
+                l.target = "_blank";
+                l.sortOrder = 99;
+                l.createdAt = OffsetDateTime.now();
+                l.persist();
+                linkId[0] = l.id;
+            } else {
+                linkId[0] = existing.id;
+                // 如果类型不是外部链接，可以考虑更新或保持
+                if (existing.type != LinkType.EXTERNAL_ARTICLE) {
+                    // 保持原有类型，通常是友情链接
+                }
+            }
+        });
+
+        String redirectUrl = "/go/" + linkId[0];
+        ctx.urlMap().put(url, redirectUrl);
+        return redirectUrl;
+    }
+
     private String resolveAndDownload(String url, String assetPrefix, User operator, ImportContext ctx) {
-        if (url == null || url.isBlank()) return url;
+        if (url == null || url.isBlank()) {
+            return url;
+        }
 
         // 如果在映射表中，直接返回
-        if (ctx.urlMap().containsKey(url)) return ctx.urlMap().get(url);
+        String cachedUrl = ctx.urlMap().get(url);
+        if (cachedUrl != null) {
+            return cachedUrl;
+        }
 
         // 如果是相对路径或属于旧系统的路径
-        if (!url.startsWith("http") || (assetPrefix != null && !assetPrefix.isBlank() && url.contains(assetPrefix))) {
-            String fullUrl = url.startsWith("http") ? url : formatUrl(assetPrefix, url);
+        boolean isRelativeOrOldSystem = false;
+        if (!url.startsWith("http")) {
+            isRelativeOrOldSystem = true;
+        } else if (assetPrefix != null && !assetPrefix.isBlank() && url.contains(assetPrefix)) {
+            isRelativeOrOldSystem = true;
+        }
+
+        if (isRelativeOrOldSystem) {
+            String fullUrl = url;
+            if (!url.startsWith("http")) {
+                fullUrl = formatUrl(assetPrefix, url);
+            }
 
             // 再次检查拼接后的完整 URL 是否在映射中
-            if (ctx.urlMap().containsKey(fullUrl)) return ctx.urlMap().get(fullUrl);
+            String cachedFullUrl = ctx.urlMap().get(fullUrl);
+            if (cachedFullUrl != null) {
+                return cachedFullUrl;
+            }
 
             try {
                 Media m = mediaService.importFromUrl(operator, fullUrl);
@@ -528,12 +895,11 @@ public class ImportService {
                 ctx.urlMap().put(fullUrl, m.url);
                 return m.url;
             } catch (Exception e) {
-                // 下载失败，检查是否已经在重试队列中
-                boolean alreadyInQueue = ctx.retryQueue().stream().anyMatch(t -> t.sourceUrl().equals(fullUrl));
-                if (!alreadyInQueue) {
-                    ctx.retryQueue().add(new DownloadTask(fullUrl, url, null));
-                }
-                return fullUrl;
+                // 下载失败时立即创建失败占位记录，避免后续重复尝试
+                Media failedMedia = mediaService.markAsImportFailed(operator, fullUrl, e.getMessage());
+                ctx.urlMap().put(url, failedMedia.url);
+                ctx.urlMap().put(fullUrl, failedMedia.url);
+                return failedMedia.url;
             }
         }
 
@@ -546,10 +912,14 @@ public class ImportService {
     // 导入上下文，用于在方法间传递状态
     private record ImportContext(
             Map<String, String> urlMap,
-            List<DownloadTask> retryQueue
+            List<DownloadTask> retryQueue,
+            Map<Long, Long> categoryMap,
+            Map<Long, Long> tagMap,
+            Map<Long, Long> userMap,
+            Map<Long, Long> postMap
     ) {
         public ImportContext() {
-            this(new HashMap<>(), new ArrayList<>());
+            this(new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
         }
     }
 }

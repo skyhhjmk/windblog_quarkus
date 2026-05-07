@@ -74,19 +74,19 @@ public class AdminCommentController {
             params.put("status", status);
         }
 
-        String queryStr = where.toString() + " order by createdAt desc";
+        String queryStr = "from Comment c left join fetch c.post left join fetch c.user where " + where.toString().replace("deletedAt", "c.deletedAt").replace("status", "c.status") + " order by c.createdAt desc";
         PanacheQuery<Comment> query = Comment.find(queryStr, params);
 
         Page pageObj = Page.of(safePage - 1, safePageSize);
         List<Comment> comments = query.page(pageObj).list();
+
+        long totalCount = query.count();
 
         List<AdminCommentItem> items = new ArrayList<AdminCommentItem>();
         for (Comment comment : comments) {
             AdminCommentItem item = toItem(comment);
             items.add(item);
         }
-
-        long totalCount = query.count();
 
         return new PageResult<AdminCommentItem>(
                 items,
@@ -185,21 +185,18 @@ public class AdminCommentController {
     }
 
     private AdminCommentItem toItem(Comment comment) {
-        String postTitle = null;
-        if (comment.post != null) {
-            postTitle = resolveLocalizedTitle(comment.post.title);
-        }
-
         String displayTitle = "Deleted Post";
         if (comment.post != null) {
-            if (postTitle != null) {
-                if (!postTitle.isBlank()) {
+            try {
+                String postTitle = resolveLocalizedTitle(comment.post.title);
+                if (postTitle != null && !postTitle.isBlank()) {
                     displayTitle = postTitle;
                 } else {
                     displayTitle = comment.post.slug;
                 }
-            } else {
-                displayTitle = comment.post.slug;
+            } catch (jakarta.persistence.EntityNotFoundException e) {
+                // 如果文章被物理删除但评论残留（孤儿数据），捕获异常并显示为已删除
+                displayTitle = "Deleted Post (ID: " + comment.post.id + ")";
             }
         }
 

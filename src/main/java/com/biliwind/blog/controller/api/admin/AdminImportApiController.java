@@ -63,7 +63,7 @@ public class AdminImportApiController {
                 .map(new Function<Long, ImportProgressEvent>() {
                     @Override
                     public ImportProgressEvent apply(Long tick) {
-                        return new ImportProgressEvent("ping", "keep-alive", null);
+                        return new ImportProgressEvent("ping", "keep-alive", null, null);
                     }
                 });
         return Multi.createBy().merging().streams(events, ticks);
