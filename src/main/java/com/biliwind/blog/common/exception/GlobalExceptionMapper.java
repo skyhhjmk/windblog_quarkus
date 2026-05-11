@@ -2,6 +2,7 @@ package com.biliwind.blog.common.exception;
 
 import com.biliwind.blog.common.dto.ErrorResponse;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
@@ -21,18 +22,21 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         // 优先处理自定义业务异常，确保更具体的异常类型优先匹配
         if (exception instanceof ConflictException) {
             return Response.status(Response.Status.CONFLICT)
+                    .type(MediaType.APPLICATION_JSON)
                     .entity(new ErrorResponse(exception.getMessage(), "ConflictError"))
                     .build();
         }
 
         if (exception instanceof ConcurrentModificationException) {
             return Response.status(Response.Status.CONFLICT)
+                    .type(MediaType.APPLICATION_JSON)
                     .entity(new ErrorResponse(exception.getMessage(), "ConcurrentUpdateError"))
                     .build();
         }
 
         if (exception instanceof BadRequestException) {
             return Response.status(Response.Status.BAD_REQUEST)
+                    .type(MediaType.APPLICATION_JSON)
                     .entity(new ErrorResponse(exception.getMessage(), "BadRequestError"))
                     .build();
         }
@@ -41,6 +45,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
             jakarta.validation.ConstraintViolationException violationEx = (jakarta.validation.ConstraintViolationException) exception;
             String message = violationEx.getMessage();
             return Response.status(Response.Status.BAD_REQUEST)
+                    .type(MediaType.APPLICATION_JSON)
                     .entity(new ErrorResponse(message, "ValidationError"))
                     .build();
         }
@@ -56,6 +61,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
             }
 
             return Response.fromResponse(response)
+                    .type(MediaType.APPLICATION_JSON)
                     .entity(new ErrorResponse(message, "WebException"))
                     .build();
         }
@@ -64,6 +70,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         LOGGER.error("未捕获的全局异常: ", exception);
 
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .type(MediaType.APPLICATION_JSON)
                 .entity(new ErrorResponse("服务器内部错误，请联系管理员", "InternalServerError"))
                 .build();
     }
