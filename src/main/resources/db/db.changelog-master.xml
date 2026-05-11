@@ -58,4 +58,5 @@
     <include file="migration/054-optimize-comment-ai-audit.sql" relativeToChangelogFile="true"/>
     <include file="migration/055-fix-ltree-slug-sanitization.sql" relativeToChangelogFile="true"/>
     <include file="migration/056-fix-post-revisions-fk.sql" relativeToChangelogFile="true"/>
+    <include file="migration/057-create-temp-data-table.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

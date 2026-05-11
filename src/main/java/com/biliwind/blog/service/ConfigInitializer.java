@@ -29,7 +29,6 @@ public class ConfigInitializer {
         LOG.info("Syncing system setting definitions...");
         List<SettingDefinition> definitions = getDefinitions();
 
-        boolean changed = false;
         for (SettingDefinition def : definitions) {
             SystemSetting setting = SystemSetting.findByKey(def.key);
             if (setting == null) {
@@ -42,23 +41,18 @@ public class ConfigInitializer {
                 setting.description = def.description;
                 setting.persist();
                 LOG.infof("Added missing setting: %s", def.key);
-                changed = true;
             } else {
-                // Check if uiSchema or other metadata needs update
-                if (!setting.uiSchema.equals(def.uiSchema) || !setting.groupName.equals(def.group)) {
+                if (!setting.uiSchema.equals(def.uiSchema) || !setting.groupName.equals(def.group) || !setting.description.equals(def.description)) {
                     setting.uiSchema = def.uiSchema;
                     setting.groupName = def.group;
                     setting.description = def.description;
                     setting.persist();
                     LOG.infof("Updated metadata for setting: %s", def.key);
-                    changed = true;
                 }
             }
         }
 
-        if (changed) {
-            configManager.refreshAll();
-        }
+        configManager.refreshAll();
     }
 
     private List<SettingDefinition> getDefinitions() {
@@ -71,13 +65,15 @@ public class ConfigInitializer {
         siteInfoFields.addObject().put("key", "title").put("label", "站点标题").put("widget", "input").put("required", true);
         siteInfoFields.addObject().put("key", "subtitle").put("label", "站点副标题").put("widget", "input");
         siteInfoFields.addObject().put("key", "keywords").put("label", "SEO关键词").put("widget", "tag_input");
-        siteInfoFields.addObject().put("key", "description").put("label", "SEO描述").put("widget", "input");
+        siteInfoFields.addObject().put("key", "description").put("label", "SEO描述").put("widget", "textarea");
+        siteInfoFields.addObject().put("key", "author").put("label", "站点作者").put("widget", "input");
 
         ObjectNode siteInfoValue = mapper.createObjectNode();
         siteInfoValue.put("title", "WindBlog");
         siteInfoValue.put("subtitle", "极简主义者的技术博客");
-        siteInfoValue.putArray("keywords").add("blog").add("tech");
-        siteInfoValue.put("description", "基于 Quarkus 和 Flutter 构建的极简博客系统");
+        siteInfoValue.putArray("keywords").add("blog").add("tech").add("quarkus");
+        siteInfoValue.put("description", "基于 Quarkus 和 Flutter 构建的极简博客系统，支持 AI 摘要与多端同步。");
+        siteInfoValue.put("author", "BiliWind");
 
         list.add(new SettingDefinition("site_info", siteInfoValue, "object", "basic", siteInfoSchema, "网站基础信息设置"));
 
@@ -87,7 +83,7 @@ public class ConfigInitializer {
         com.fasterxml.jackson.databind.node.ArrayNode footerFields = footerSchema.putArray("fields");
         footerFields.addObject().put("key", "copyright").put("label", "版权信息").put("widget", "input");
         footerFields.addObject().put("key", "icp").put("label", "备案信息").put("widget", "input");
-        footerFields.addObject().put("key", "custom_html").put("label", "自定义页脚HTML").put("widget", "input");
+        footerFields.addObject().put("key", "custom_html").put("label", "自定义页脚HTML").put("widget", "textarea");
 
         ObjectNode footerValue = mapper.createObjectNode();
         footerValue.put("copyright", "© 2026 WindBlog. All rights reserved.");

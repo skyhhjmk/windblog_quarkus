@@ -7,6 +7,7 @@ import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.biliwind.blog.service.SafeModeWatchdog;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -17,6 +18,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -110,8 +112,8 @@ public class AdminSystemSettingsController {
         watchdog.watch(key, 3);
 
         auditService.log("system_setting", String.valueOf(setting.id), "update",
-                Map.of("key", key, "value", setting.configValue, "version", setting.version - 1),
-                Map.of("key", key, "value", newValue, "version", setting.version));
+                sanitizeForAudit(key, setting.configValue),
+                sanitizeForAudit(key, newValue));
 
         return Response.ok(Map.of("success", true, "message", "配置已更新，进入3分钟验证期", "data", setting)).build();
     }
@@ -204,5 +206,33 @@ public class AdminSystemSettingsController {
                 Map.of("key", key, "value", newValue, "version", setting.version));
 
         return Response.ok(Map.of("success", true, "message", "已应用配置并进入验证期")).build();
+    }
+
+    private Map<String, Object> sanitizeForAudit(String key, JsonNode value) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("key", key);
+        result.put("version", value.has("version") ? value.get("version").asInt() : null);
+
+        if (isSensitiveKey(key)) {
+            ObjectNode sanitized = mapper.createObjectNode();
+            if (value.isObject()) {
+                value.fieldNames().forEachRemaining(fieldName -> {
+                    if (fieldName.contains("key") || fieldName.contains("secret") || fieldName.contains("password")) {
+                        sanitized.put(fieldName, "***REDACTED***");
+                    } else {
+                        sanitized.set(fieldName, value.get(fieldName));
+                    }
+                });
+            }
+            result.put("value", sanitized);
+        } else {
+            result.put("value", value);
+        }
+
+        return result;
+    }
+
+    private boolean isSensitiveKey(String key) {
+        return key.contains("key") || key.contains("secret") || key.contains("password") || key.contains("token");
     }
 }
