@@ -130,6 +130,21 @@ public class AdminSystemController {
         return healthSection;
     }
 
+    @Inject
+    com.biliwind.blog.common.helper.RsaHelper rsaHelper;
+
+    @jakarta.ws.rs.POST
+    @Path("/decrypt-error")
+    @Operation(summary = "解密错误追踪文本", description = "使用私钥解密加密的错误追踪信息")
+    public Map<String, String> decryptError(Map<String, String> body) {
+        String trackingText = body.get("trackingText");
+        String decrypted = rsaHelper.decrypt(trackingText);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("decrypted", decrypted);
+        return response;
+    }
+
     private List<HealthCheckResponse> collectAllHealthCheckResponses() {
         List<HealthCheckResponse> responses = new ArrayList<>();
         for (HealthCheck healthCheck : allHealthChecks) {

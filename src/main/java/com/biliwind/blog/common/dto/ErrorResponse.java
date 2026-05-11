@@ -9,9 +9,15 @@ public record ErrorResponse(
         boolean success,
         String message,
         String errorType,
-        OffsetDateTime timestamp
+        OffsetDateTime timestamp,
+        String trackingId,
+        String trackingText
 ) {
     public ErrorResponse(String message, String errorType) {
-        this(false, message, errorType, OffsetDateTime.now());
+        this(false, message, errorType, OffsetDateTime.now(), null, null);
+    }
+
+    public ErrorResponse(String message, String errorType, String trackingId, String trackingText) {
+        this(false, message, errorType, OffsetDateTime.now(), trackingId, trackingText);
     }
 }
