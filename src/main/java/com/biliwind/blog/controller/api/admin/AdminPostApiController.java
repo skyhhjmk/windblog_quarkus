@@ -51,6 +51,9 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.service.PostAccessService postAccessService;
 
+    @Inject
+    com.biliwind.blog.repository.PostRepository postRepository;
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -60,16 +63,12 @@ public class AdminPostApiController {
     public Response triggerAiSummary(@PathParam("id") Long id) {
         Post post = mustFindPost(id);
         if (post.aiSummaryStatus != null && post.aiSummaryStatus > 0) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(java.util.Map.of("success", false, "message", "当前文章 AI 摘要已被锁定或禁用，无法手动触发"))
-                    .build();
+            throw badRequest("当前文章 AI 摘要已被锁定或禁用，无法手动触发");
         }
 
         PostRevision rev = post.currentRevision;
         if (rev == null || rev.contentMarkdown == null || rev.contentMarkdown.isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(java.util.Map.of("success", false, "message", "文章暂无内容"))
-                    .build();
+            throw badRequest("文章暂无内容");
         }
 
         Long userId = adminRequestContext.getUserId();
@@ -96,23 +95,7 @@ public class AdminPostApiController {
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(1, Math.min(pageSize, 100));
 
-        StringBuilder where = new StringBuilder("deletedAt is null");
-        Map<String, Object> parameters = new HashMap<>();
-
-        if (status != null) {
-            where.append(" and status = :status");
-            parameters.put("status", status);
-        }
-        if (categoryId != null) {
-            where.append(" and category.id = :categoryId");
-            parameters.put("categoryId", categoryId);
-        }
-        if (keyword != null && !keyword.isBlank()) {
-            where.append(" and lower(slug) like :keyword");
-            parameters.put("keyword", "%" + keyword.trim().toLowerCase() + "%");
-        }
-
-        io.quarkus.hibernate.orm.panache.PanacheQuery<Post> query = Post.find(where + " order by updatedAt desc", parameters);
+        io.quarkus.hibernate.orm.panache.PanacheQuery<Post> query = postRepository.findAdminPosts(status, categoryId, keyword);
         long total = query.count();
         List<Post> entities = query.page(Page.of(safePage - 1, safePageSize)).list();
 
@@ -318,7 +301,7 @@ public class AdminPostApiController {
     }
 
     private Post mustFindPost(Long id) {
-        Post post = Post.find("id = ?1 and deletedAt is null", id).firstResult();
+        Post post = postRepository.findVisiblePostById(id);
         if (post == null) {
             throw new NotFoundException("文章不存在");
         }
@@ -345,16 +328,12 @@ public class AdminPostApiController {
         return latest.revisionNumber + 1;
     }
 
-    private WebApplicationException conflict(String message) {
-        return new WebApplicationException(Response.status(Response.Status.CONFLICT)
-                .entity(Map.of("success", false, "message", message))
-                .build());
+    private RuntimeException conflict(String message) {
+        return new com.biliwind.blog.common.exception.ConflictException(message);
     }
 
-    private WebApplicationException badRequest(String message) {
-        return new WebApplicationException(Response.status(Response.Status.BAD_REQUEST)
-                .entity(Map.of("success", false, "message", message))
-                .build());
+    private RuntimeException badRequest(String message) {
+        return new com.biliwind.blog.common.exception.BadRequestException(message);
     }
 
     private PostRenderType resolveRenderType(Short renderTypeCode) {

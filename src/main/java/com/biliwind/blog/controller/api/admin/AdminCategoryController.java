@@ -13,7 +13,6 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Path("/api/admin/categories")
 @Produces(MediaType.APPLICATION_JSON)
@@ -27,10 +26,12 @@ public class AdminCategoryController {
     @GET
     @Operation(summary = "所有分类")
     public List<AdminCategoryItem> list() {
-        return Category.listAll(Sort.by("path")).stream()
-                .map(c -> (Category) c)
-                .map(this::toItem)
-                .collect(Collectors.toList());
+        List<Category> categories = Category.listAll(Sort.by("path"));
+        List<AdminCategoryItem> items = new java.util.ArrayList<>();
+        for (Category c : categories) {
+            items.add(toItem(c));
+        }
+        return items;
     }
 
     @POST

@@ -27,4 +27,32 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
         return list("status = ?1 and visibility = 0 and deletedAt is null order by publishedAt desc", com.biliwind.blog.model.PostStatus.PUBLISHED);
     }
 
+
+    /**
+     * 根据管理后台条件查询文章。
+     *
+     * @param status     状态
+     * @param categoryId 分类ID
+     * @param keyword    关键词（匹配 slug）
+     * @return 文章查询对象
+     */
+    public io.quarkus.hibernate.orm.panache.PanacheQuery<Post> findAdminPosts(Short status, Long categoryId, String keyword) {
+        StringBuilder where = new StringBuilder("deletedAt is null");
+        java.util.Map<String, Object> parameters = new java.util.HashMap<>();
+
+        if (status != null) {
+            where.append(" and status = :status");
+            parameters.put("status", status);
+        }
+        if (categoryId != null) {
+            where.append(" and category.id = :categoryId");
+            parameters.put("categoryId", categoryId);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            where.append(" and lower(slug) like :keyword");
+            parameters.put("keyword", "%" + keyword.trim().toLowerCase() + "%");
+        }
+
+        return find(where.toString(), io.quarkus.panache.common.Sort.by("updatedAt").descending(), parameters);
+    }
 }

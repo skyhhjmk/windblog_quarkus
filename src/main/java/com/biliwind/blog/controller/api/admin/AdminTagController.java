@@ -11,7 +11,6 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Path("/api/admin/tags")
 @Produces(MediaType.APPLICATION_JSON)
@@ -25,10 +24,12 @@ public class AdminTagController {
     @GET
     @Operation(summary = "所有标签")
     public List<AdminTagItem> list() {
-        return com.biliwind.blog.model.Tag.listAll(Sort.by("createdAt").descending()).stream()
-                .map(t -> (com.biliwind.blog.model.Tag) t)
-                .map(this::toItem)
-                .collect(Collectors.toList());
+        List<com.biliwind.blog.model.Tag> tags = com.biliwind.blog.model.Tag.listAll(Sort.by("createdAt").descending());
+        List<AdminTagItem> items = new java.util.ArrayList<>();
+        for (com.biliwind.blog.model.Tag t : tags) {
+            items.add(toItem(t));
+        }
+        return items;
     }
 
     @POST
