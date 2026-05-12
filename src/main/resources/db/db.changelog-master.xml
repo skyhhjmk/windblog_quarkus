@@ -59,4 +59,8 @@
     <include file="migration/055-fix-ltree-slug-sanitization.sql" relativeToChangelogFile="true"/>
     <include file="migration/056-fix-post-revisions-fk.sql" relativeToChangelogFile="true"/>
     <include file="migration/057-create-temp-data-table.sql" relativeToChangelogFile="true"/>
+    <include file="db/migration/058-create-storage-provider.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/059-create-image-processing-config.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/060-add-media-storage-nodes.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/061-add-visibility-regions.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>
