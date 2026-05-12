@@ -25,6 +25,8 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -32,6 +34,8 @@ import java.nio.file.StandardOpenOption;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -47,6 +51,11 @@ public class MediaManagementService {
     );
     // 需要手动加载原图的大小阈值（5MB）
     private static final long MANUAL_LOAD_THRESHOLD_BYTES = 5L * 1024L * 1024L;
+
+    // 识别 Markdown 和 HTML 中 URL 的正则表达式
+    private static final Pattern URL_PATTERN = Pattern.compile(
+            "(?i)(?:src|href|url|data-src)=['\"]([^'\"\\s>]+)['\"]|!\\[.*?\\]\\(([^)\\s]+)\\)|\\[.*?\\]\\(([^)\\s]+)\\)"
+    );
 
     @ConfigProperty(name = "media.upload.dir")
     String mediaUploadDir;
@@ -186,35 +195,50 @@ public class MediaManagementService {
     public AdminMediaDtos.MediaScanResult rebuildReferences() {
         // 删除所有现有引用关系
         PostMedia.deleteAll();
+
         List<Post> posts = Post.list("deletedAt is null");
         List<Media> medias = Media.list("deletedAt is null");
+
+        // 构建媒体索引，提高匹配效率
+        Map<String, List<Media>> mediaByPathKey = new HashMap<>();
+        for (Media m : medias) {
+            Set<String> keys = getMediaIdentityKeys(m);
+            for (String key : keys) {
+                mediaByPathKey.computeIfAbsent(key, k -> new ArrayList<>()).add(m);
+            }
+        }
+
         long postsScanned = 0;
         long referencesCreated = 0;
-        Set<Long> referenced = new HashSet<>();
-        // 遍历所有文章，检查内容中是否引用了媒体
+        Set<Long> referencedMediaIds = new HashSet<>();
+
+        // 遍历所有文章
         for (Post post : posts) {
             PostRevision revision = post.currentRevision;
-            if (revision == null || (revision.contentMarkdown == null || revision.contentMarkdown.isEmpty())) {
+            if (revision == null || revision.contentMarkdown == null || revision.contentMarkdown.isEmpty()) {
                 continue;
             }
             postsScanned++;
-            
-            StringBuilder sb = new StringBuilder();
-            if (revision.contentMarkdown != null) {
-                sb.append(normalizeContent(revision.contentMarkdown)).append("\n");
-            }
-            String normalizedContent = sb.toString();
-            // 检查每个媒体是否在文章中被引用
-            for (Media media : medias) {
-                if (containsReference(normalizedContent, media)) {
-                    persistReference(post, media);
-                    referencesCreated++;
-                    referenced.add(media.id);
+
+            String content = normalizeContent(revision.contentMarkdown);
+            Set<String> extractedKeys = extractReferenceKeys(content);
+
+            Set<Long> matchedInPost = new HashSet<>();
+            for (String key : extractedKeys) {
+                List<Media> matches = mediaByPathKey.get(key);
+                if (matches != null) {
+                    for (Media m : matches) {
+                        if (matchedInPost.add(m.id)) {
+                            persistReference(post, m);
+                            referencesCreated++;
+                            referencedMediaIds.add(m.id);
+                        }
+                    }
                 }
             }
         }
-        // 计算未引用的媒体数量
-        long unreferenced = medias.size() - referenced.size();
+
+        long unreferenced = medias.size() - referencedMediaIds.size();
         return new AdminMediaDtos.MediaScanResult(postsScanned, referencesCreated, Math.max(0, unreferenced));
     }
 
@@ -229,28 +253,34 @@ public class MediaManagementService {
         if (post == null || post.id == null) {
             return;
         }
-        // 删除旧的引用关系
+        // 删除旧引用
         PostMedia.delete("post.id = ?1", post.id);
-        
-        boolean hasMarkdown = contentMap != null && !contentMap.isEmpty();
-        if (!hasMarkdown) {
+
+        if (contentMap == null || contentMap.isEmpty()) {
             return;
         }
-        
+
         List<Media> medias = Media.list("deletedAt is null");
-        if (medias.isEmpty()) {
-            return;
+        Map<String, List<Media>> mediaByPathKey = new HashMap<>();
+        for (Media m : medias) {
+            Set<String> keys = getMediaIdentityKeys(m);
+            for (String key : keys) {
+                mediaByPathKey.computeIfAbsent(key, k -> new ArrayList<>()).add(m);
+            }
         }
-        
-        // 标准化内容并检查引用
-        StringBuilder sb = new StringBuilder();
-        if (hasMarkdown) {
-            sb.append(normalizeContent(contentMap)).append("\n");
-        }
-        String normalizedContent = sb.toString();
-        for (Media media : medias) {
-            if (containsReference(normalizedContent, media)) {
-                persistReference(post, media);
+
+        String content = normalizeContent(contentMap);
+        Set<String> extractedKeys = extractReferenceKeys(content);
+
+        Set<Long> matchedInPost = new HashSet<>();
+        for (String key : extractedKeys) {
+            List<Media> matches = mediaByPathKey.get(key);
+            if (matches != null) {
+                for (Media m : matches) {
+                    if (matchedInPost.add(m.id)) {
+                        persistReference(post, m);
+                    }
+                }
             }
         }
     }
@@ -963,6 +993,117 @@ public class MediaManagementService {
         try {
             Files.deleteIfExists(target);
         } catch (IOException ignored) {
+        }
+    }
+
+    /**
+     * 根据 URL 查找媒体记录
+     */
+    public Media findByUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+
+        // 1. 尝试直接通过 URL 匹配
+        Media media = Media.find("url = ?1 and deletedAt is null", url).firstResult();
+        if (media != null) {
+            return media;
+        }
+
+        // 2. 归一化路径后尝试查找
+        String pathKey = normalizeUrlToPath(url);
+        if (pathKey.isEmpty()) {
+            return null;
+        }
+
+        // 遍历所有媒体进行模糊路径匹配（如果媒体数量特别大，此步可能需要优化，但通常 findByUrl 调用频率较低）
+        List<Media> medias = Media.list("deletedAt is null");
+        for (Media m : medias) {
+            if (getMediaIdentityKeys(m).contains(pathKey)) {
+                return m;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取媒体的唯一识别特征集合
+     */
+    private Set<String> getMediaIdentityKeys(Media media) {
+        Set<String> keys = new HashSet<>();
+        if (media.url != null) {
+            keys.add(normalizeUrlToPath(media.url));
+        }
+        if (media.storageKey != null) {
+            keys.add(media.storageKey.toLowerCase());
+        }
+        if (media.fileName != null) {
+            keys.add(media.fileName.toLowerCase());
+        }
+        keys.remove("");
+        return keys;
+    }
+
+    /**
+     * 从内容中提取归一化的特征 Key 集合
+     */
+    private Set<String> extractReferenceKeys(String content) {
+        Set<String> keys = new HashSet<>();
+        if (content == null || content.isBlank()) {
+            return keys;
+        }
+
+        Matcher matcher = URL_PATTERN.matcher(content);
+        while (matcher.find()) {
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                String rawUrl = matcher.group(i);
+                if (rawUrl != null && !rawUrl.isBlank()) {
+                    keys.add(normalizeUrlToPath(rawUrl));
+                }
+            }
+        }
+
+        return keys;
+    }
+
+    /**
+     * 归一化 URL/路径：解码、移除协议域名、转小写、移除前导斜杠
+     */
+    private String normalizeUrlToPath(String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            return "";
+        }
+        try {
+            // 1. URL 解码
+            String decoded = URLDecoder.decode(rawUrl, StandardCharsets.UTF_8);
+
+            // 2. 剥离协议和域名
+            if (decoded.contains("://")) {
+                try {
+                    decoded = new URI(decoded).getPath();
+                } catch (Exception e) {
+                    int slashIdx = decoded.indexOf("/", decoded.indexOf("://") + 3);
+                    if (slashIdx != -1) {
+                        decoded = decoded.substring(slashIdx);
+                    }
+                }
+            }
+
+            // 3. 移除查询参数
+            int queryIdx = decoded.indexOf("?");
+            if (queryIdx != -1) {
+                decoded = decoded.substring(0, queryIdx);
+            }
+
+            // 4. 标准化格式
+            String path = decoded.toLowerCase().trim();
+            while (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            return path;
+        } catch (Exception e) {
+            return rawUrl.toLowerCase().trim();
         }
     }
 }

@@ -43,6 +43,20 @@ public class AdminMediaController {
         return mediaService.listMedia(page, pageSize, unreferenced, failedOnly);
     }
 
+    @GET
+    @Path("/find")
+    @Operation(summary = "根据 URL 查找媒体详情")
+    public AdminMediaDtos.MediaItem find(@QueryParam("url") String url) {
+        mustFindOperator();
+        Media media = mediaService.findByUrl(url);
+        if (media == null) {
+            throw new NotFoundException("未找到匹配的媒体资源: " + url);
+        }
+        // 加载引用列表
+        List<com.biliwind.blog.model.PostMedia> references = com.biliwind.blog.model.PostMedia.find("media.id = ?1", media.id).list();
+        return mediaService.toDto(media, references);
+    }
+
     @POST
     @Path("/upload")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
