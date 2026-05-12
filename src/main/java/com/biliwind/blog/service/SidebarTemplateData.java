@@ -16,21 +16,12 @@ import java.util.List;
 
 public class SidebarTemplateData {
 
-    private static volatile LanguageContext languageContext;
-    private static volatile CacheService cacheService;
-
     private static LanguageContext getLanguageContext() {
-        if (languageContext == null) {
-            languageContext = io.quarkus.arc.Arc.container().instance(LanguageContext.class).get();
-        }
-        return languageContext;
+        return jakarta.enterprise.inject.spi.CDI.current().select(LanguageContext.class).get();
     }
 
     private static CacheService getCacheService() {
-        if (cacheService == null) {
-            cacheService = io.quarkus.arc.Arc.container().instance(CacheService.class).get();
-        }
-        return cacheService;
+        return jakarta.enterprise.inject.spi.CDI.current().select(CacheService.class).get();
     }
 
     @TemplateExtension(namespace = "sidebar")
