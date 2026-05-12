@@ -3,6 +3,9 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.storage.StorageService;
+import com.biliwind.blog.service.storage.VariantType;
+import io.quarkus.logging.Log;
 import io.quarkus.panache.common.Page;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,12 +15,7 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ForbiddenException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
-import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,10 +31,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.OffsetDateTime;
 import java.util.*;
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * 媒体文件管理服务
@@ -65,6 +61,15 @@ public class MediaManagementService {
 
     @Inject
     UploadRoleService uploadRoleService;
+
+    @Inject
+    ImageProcessingService imageProcessingService;
+
+    @Inject
+    VideoProcessingService videoProcessingService;
+
+    @Inject
+    StorageService storageService;
 
     private Path uploadRoot;
     private String normalizedPublicPath;
@@ -164,25 +169,40 @@ public class MediaManagementService {
                     .setMaxResults(safeSize)
                     .getResultList();
         } else {
-            var query = Media.find(where + " order by createdAt desc");
+            io.quarkus.hibernate.orm.panache.PanacheQuery<Media> query = Media.find(where + " order by createdAt desc");
             total = query.count();
             medias = query.page(Page.of(safePage - 1, safeSize)).list();
         }
 
-        List<Long> ids = medias.stream().map(m -> m.id).collect(Collectors.toList());
+        List<Long> ids = new ArrayList<>();
+        for (Media media : medias) {
+            ids.add(media.id);
+        }
         Map<Long, List<PostMedia>> referencesByMedia;
-        // 批量查询引用关系，避免 N+1 查询
         if (!ids.isEmpty()) {
             List<PostMedia> references = PostMedia.list("media.id in ?1", ids);
-            referencesByMedia = references.stream()
-                    .collect(Collectors.groupingBy(pm -> pm.media.id));
+            referencesByMedia = new HashMap<>();
+            for (PostMedia pm : references) {
+                Long mediaId = pm.media.id;
+                List<PostMedia> list = referencesByMedia.get(mediaId);
+                if (list == null) {
+                    list = new ArrayList<>();
+                    referencesByMedia.put(mediaId, list);
+                }
+                list.add(pm);
+            }
         } else {
             referencesByMedia = new HashMap<>();
         }
-        // 转换为 DTO 对象
-        List<AdminMediaDtos.MediaItem> items = medias.stream()
-                .map(media -> toDto(media, referencesByMedia.getOrDefault(media.id, Collections.emptyList())))
-                .collect(Collectors.toList());
+        List<AdminMediaDtos.MediaItem> items = new ArrayList<>();
+        for (Media media : medias) {
+            List<PostMedia> refs = referencesByMedia.get(media.id);
+            if (refs == null) {
+                refs = Collections.emptyList();
+            }
+            AdminMediaDtos.MediaItem item = toDto(media, refs);
+            items.add(item);
+        }
         return new AdminMediaDtos.MediaListResult(items, total, safePage, safeSize);
     }
 
@@ -373,20 +393,75 @@ public class MediaManagementService {
         media.metadata = metadata;
         media.createdAt = OffsetDateTime.now();
         media.deletedAt = null;
-        // 如果是图片，提取尺寸信息并生成预览图
+        media.version = 0;
+        media.storageNodes = new LinkedHashMap<>();
+        // 如果是图片，提取尺寸信息并生成占位图和 WebP
         if (normalizedMime.startsWith("image/")) {
-            try {
-                BufferedImage image = ImageIO.read(target.toFile());
-                if (image != null) {
-                    media.width = image.getWidth();
-                    media.height = image.getHeight();
-                    generateImageVariants(image, storageKey, metadata);
-                }
-            } catch (IOException ignored) {
-            }
+            processImage(media, target, metadata);
+        }
+        // 如果是视频，提取封面
+        if (normalizedMime.startsWith("video/")) {
+            processVideo(media, target, storageKey, metadata);
         }
         media.persist();
         return media;
+    }
+
+    private void processImage(Media media, Path target, Map<String, Object> metadata) {
+        try {
+            BufferedImage image = ImageIO.read(target.toFile());
+            if (image == null) {
+                return;
+            }
+            media.width = image.getWidth();
+            media.height = image.getHeight();
+
+            String baseName = media.storageKey;
+            int idx = media.storageKey.lastIndexOf('.');
+            if (idx > 0) {
+                baseName = media.storageKey.substring(0, idx);
+            }
+
+            String placeholderKey = baseName + "_placeholder.jpg";
+            Path placeholderPath = uploadRoot.resolve(placeholderKey);
+            Path placeholderOutput = imageProcessingService.generatePlaceholder(target, placeholderPath);
+            String placeholderUrl = buildPublicUrl(placeholderKey);
+            metadata.put("placeholderUrl", placeholderUrl);
+
+            String webpKey = baseName + ".webp";
+            Path webpPath = uploadRoot.resolve(webpKey);
+            Path webpOutput = imageProcessingService.convertToWebp(target, webpPath);
+            String webpUrl = buildPublicUrl(webpKey);
+            metadata.put("webpUrl", webpUrl);
+
+            int[] dimensions = imageProcessingService.extractDimensions(target);
+            metadata.put("width", dimensions[0]);
+            metadata.put("height", dimensions[1]);
+        } catch (IOException e) {
+            Log.warn("图片处理失败: " + e.getMessage());
+        }
+    }
+
+    private void processVideo(Media media, Path target, String storageKey, Map<String, Object> metadata) {
+        try {
+            String baseName = storageKey;
+            int idx = storageKey.lastIndexOf('.');
+            if (idx > 0) {
+                baseName = storageKey.substring(0, idx);
+            }
+
+            String coverKey = baseName + "_cover.jpg";
+            Path coverPath = uploadRoot.resolve(coverKey);
+            Path coverOutput = videoProcessingService.extractCoverFrame(target, coverPath);
+            String coverUrl = buildPublicUrl(coverKey);
+            metadata.put("coverUrl", coverUrl);
+
+            int[] dimensions = imageProcessingService.extractDimensions(coverOutput);
+            media.width = dimensions[0];
+            media.height = dimensions[1];
+        } catch (IOException e) {
+            Log.warn("视频封面提取失败: " + e.getMessage());
+        }
     }
 
     /**
@@ -645,10 +720,14 @@ public class MediaManagementService {
      * @return 标准化后的内容字符串
      */
     private String normalizeContent(Map<String, String> content) {
-        return content.values().stream()
-                .filter(Objects::nonNull)
-                .map(String::toLowerCase)
-                .collect(Collectors.joining("\n"));
+        StringBuilder sb = new StringBuilder();
+        for (String value : content.values()) {
+            if (value != null) {
+                sb.append(value.toLowerCase());
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -698,13 +777,51 @@ public class MediaManagementService {
      * @return 媒体 DTO 对象
      */
     public AdminMediaDtos.MediaItem toDto(Media media, List<PostMedia> references) {
-        long referencedBy = references == null ? 0 : references.size();
+        long referencedBy = 0;
+        if (references != null) {
+            referencedBy = references.size();
+        }
+        List<AdminMediaDtos.MediaReferenceItem> refItems;
+        if (references == null) {
+            refItems = Collections.emptyList();
+        } else {
+            refItems = new ArrayList<>();
+            for (PostMedia pm : references) {
+                AdminMediaDtos.MediaReferenceItem item = toReferenceDto(pm);
+                refItems.add(item);
+            }
+        }
+
+        String originalUrl = media.url;
+        if (media.storageNodes != null) {
+            String bestOriginalUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
+            if (bestOriginalUrl != null && !bestOriginalUrl.isBlank()) {
+                originalUrl = bestOriginalUrl;
+            }
+        }
+
+        String thumbnailUrl = metadataString(media, "thumbnailUrl");
+        if (media.storageNodes != null) {
+            String bestThumbnailUrl = storageService.getBestAccessUrl(media, VariantType.WEBP);
+            if (bestThumbnailUrl != null && !bestThumbnailUrl.isBlank()) {
+                thumbnailUrl = bestThumbnailUrl;
+            }
+        }
+
+        String previewUrl = metadataString(media, "previewUrl");
+        if (media.storageNodes != null) {
+            String bestPreviewUrl = storageService.getBestAccessUrl(media, VariantType.PLACEHOLDER);
+            if (bestPreviewUrl != null && !bestPreviewUrl.isBlank()) {
+                previewUrl = bestPreviewUrl;
+            }
+        }
+
         return new AdminMediaDtos.MediaItem(
                 media.id,
                 media.storageKey,
-                media.url,
-                metadataString(media, "thumbnailUrl"),
-                metadataString(media, "previewUrl"),
+                originalUrl,
+                thumbnailUrl,
+                previewUrl,
                 requiresManualOriginal(media),
                 media.fileName,
                 media.mimeType,
@@ -716,10 +833,7 @@ public class MediaManagementService {
                 findUploaderName(media.uploadedBy),
                 media.createdAt,
                 referencedBy > 0,
-                references == null ? Collections.emptyList()
-                        : references.stream()
-                        .map(this::toReferenceDto)
-                        .collect(Collectors.toList()),
+                refItems,
                 media.metadata
         );
     }
@@ -753,10 +867,12 @@ public class MediaManagementService {
         if (titles.containsKey("zh-cn")) {
             return titles.get("zh-cn");
         }
-        return titles.values().stream()
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse("");
+        for (String title : titles.values()) {
+            if (title != null) {
+                return title;
+            }
+        }
+        return "";
     }
 
     /**
@@ -770,91 +886,6 @@ public class MediaManagementService {
         }
         User user = User.findById(userId);
         return user == null ? null : user.username;
-    }
-
-    /**
-     * 生成图像变体（预览图和缩略图）
-     * @param source 原始图像
-     * @param storageKey 存储键
-     * @param metadata 元数据映射
-     */
-    private void generateImageVariants(BufferedImage source, String storageKey, Map<String, Object> metadata) {
-        String baseName = storageKey;
-        int idx = storageKey.lastIndexOf('.');
-        if (idx > 0) {
-            baseName = storageKey.substring(0, idx);
-        }
-
-        String previewKey = baseName + "_preview.jpg";
-        String thumbKey = baseName + "_thumb.jpg";
-        Path previewPath = uploadRoot.resolve(previewKey);
-        Path thumbPath = uploadRoot.resolve(thumbKey);
-        try {
-            // 生成预览图（最大 48px，质量 0.35）和缩略图（最大 360px，质量 0.82）
-            writeJpegVariant(source, previewPath, 48, 0.35f);
-            writeJpegVariant(source, thumbPath, 360, 0.82f);
-            metadata.put("previewUrl", buildPublicUrl(previewKey));
-            metadata.put("thumbnailUrl", buildPublicUrl(thumbKey));
-        } catch (IOException e) {
-            // 生成失败时清理临时文件
-            deleteTarget(previewPath);
-            deleteTarget(thumbPath);
-        }
-    }
-
-    /**
-     * 写入 JPEG 格式的变体图像
-     * @param source 源图像
-     * @param target 目标路径
-     * @param maxEdge 最大边长
-     * @param quality 压缩质量（0.0-1.0）
-     * @throws IOException IO 异常
-     */
-    private void writeJpegVariant(BufferedImage source, Path target, int maxEdge, float quality) throws IOException {
-        int srcWidth = source.getWidth();
-        int srcHeight = source.getHeight();
-        if (srcWidth <= 0 || srcHeight <= 0) {
-            throw new IOException("invalid image dimensions");
-        }
-        // 计算缩放比例，保持宽高比
-        double scale = Math.min(1.0d, Math.min((double) maxEdge / srcWidth, (double) maxEdge / srcHeight));
-        int dstWidth = Math.max(1, (int) Math.round(srcWidth * scale));
-        int dstHeight = Math.max(1, (int) Math.round(srcHeight * scale));
-
-        // 创建 RGB 图像，白色背景
-        BufferedImage output = new BufferedImage(dstWidth, dstHeight, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = output.createGraphics();
-        try {
-            // 设置高质量渲染提示
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(Color.WHITE);
-            g.fillRect(0, 0, dstWidth, dstHeight);
-            g.drawImage(source, 0, 0, dstWidth, dstHeight, null);
-        } finally {
-            g.dispose();
-        }
-
-        // 使用 ImageWriter 写入 JPEG，控制压缩质量
-        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").hasNext()
-                ? ImageIO.getImageWritersByFormatName("jpg").next()
-                : null;
-        if (writer == null) {
-            throw new IOException("no jpeg writer available");
-        }
-        try (OutputStream os = Files.newOutputStream(target, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-             ImageOutputStream ios = ImageIO.createImageOutputStream(os)) {
-            writer.setOutput(ios);
-            ImageWriteParam param = writer.getDefaultWriteParam();
-            if (param.canWriteCompressed()) {
-                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-                param.setCompressionQuality(Math.max(0.05f, Math.min(1.0f, quality)));
-            }
-            writer.write(null, new IIOImage(output, null, null), param);
-        } finally {
-            writer.dispose();
-        }
     }
 
     /**

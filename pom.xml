@@ -149,6 +149,11 @@
             <artifactId>icu4j</artifactId>
             <version>76.1</version>
         </dependency>
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>alibabacloud-oss-v2</artifactId>
+            <version>0.4.0</version>
+        </dependency>
     </dependencies>
 
     <build>
