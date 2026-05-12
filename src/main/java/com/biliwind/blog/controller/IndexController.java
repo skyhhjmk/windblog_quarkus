@@ -45,6 +45,9 @@ public class IndexController {
     @Inject
     LanguageContext languageContext;
 
+    @Inject
+    com.biliwind.blog.common.CacheService cacheService;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance index(@Context HttpHeaders httpHeaders) {
@@ -64,52 +67,75 @@ public class IndexController {
         }
 
         String language = languageContext.getLang();
+        String cacheKey = com.biliwind.blog.common.CacheService.Keys.indexPage(subPage, language);
 
-        // 替换已弃用的 Parameters.with，直接使用 Map.of
-        Map<String, Object> parameters = Map.of("status", PostStatus.PUBLISHED);
-
-        PanacheQuery<Post> postQuery = Post.find(
-                "status = :status and deletedAt is null order by publishedAt desc nulls last, createdAt desc",
-                parameters
-        );
-
-        long totalPostsCount = postQuery.count();
-        List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
-
-        List<Long> postIds = new ArrayList<>();
-        for (Post post : posts) {
-            postIds.add(post.id);
-        }
-
-        Map<Long, List<PostTag>> tagsMap = new java.util.HashMap<>();
-        if (!postIds.isEmpty()) {
-            List<PostTag> allTags = PostTag.find("post.id in ?1", postIds).list();
-            for (PostTag pt : allTags) {
-                Long pId = pt.post.id;
-                List<PostTag> list = tagsMap.get(pId);
-                if (list == null) {
-                    list = new ArrayList<>();
-                    tagsMap.put(pId, list);
-                }
-                list.add(pt);
-            }
-        }
-
+        long totalPostsCount;
         long totalPages;
-        if (totalPostsCount == 0) {
-            totalPages = 1;
-        } else {
-            totalPages = (long) Math.ceil((double) totalPostsCount / PAGE_SIZE);
+        List<IndexPostItem> postItems;
+
+        // 仅缓存前 5 页
+        java.util.Optional<IndexPageCache> cached = java.util.Optional.empty();
+        if (subPage <= 5) {
+            cached = cacheService.get(cacheKey, IndexPageCache.class);
         }
 
-        List<IndexPostItem> postItems = new ArrayList<>();
-        for (Post post : posts) {
-            List<PostTag> tagsForPost = tagsMap.get(post.id);
-            if (tagsForPost == null) {
-                tagsForPost = new ArrayList<>();
+        if (cached.isPresent()) {
+            IndexPageCache cache = cached.get();
+            postItems = cache.postItems;
+            totalPostsCount = cache.totalPostsCount;
+            totalPages = cache.totalPages;
+        } else {
+            // 替换已弃用的 Parameters.with，直接使用 Map.of
+            Map<String, Object> parameters = Map.of("status", PostStatus.PUBLISHED);
+
+            PanacheQuery<Post> postQuery = Post.find(
+                    "status = :status and deletedAt is null order by publishedAt desc nulls last, createdAt desc",
+                    parameters
+            );
+
+            totalPostsCount = postQuery.count();
+            List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
+
+            List<Long> postIds = new ArrayList<>();
+            for (Post post : posts) {
+                postIds.add(post.id);
             }
-            IndexPostItem postItem = toIndexItem(post, language, tagsForPost);
-            postItems.add(postItem);
+
+            Map<Long, List<PostTag>> tagsMap = new java.util.HashMap<>();
+            if (!postIds.isEmpty()) {
+                List<PostTag> allTags = PostTag.find("post.id in ?1", postIds).list();
+                for (PostTag pt : allTags) {
+                    Long pId = pt.post.id;
+                    List<PostTag> list = tagsMap.get(pId);
+                    if (list == null) {
+                        list = new ArrayList<>();
+                        tagsMap.put(pId, list);
+                    }
+                    list.add(pt);
+                }
+            }
+
+            if (totalPostsCount == 0) {
+                totalPages = 1;
+            } else {
+                totalPages = (long) Math.ceil((double) totalPostsCount / PAGE_SIZE);
+            }
+
+            postItems = new ArrayList<>();
+            for (Post post : posts) {
+                List<PostTag> tagsForPost = tagsMap.get(post.id);
+                if (tagsForPost == null) {
+                    tagsForPost = new ArrayList<>();
+                }
+                IndexPostItem postItem = toIndexItem(post, language, tagsForPost);
+                postItems.add(postItem);
+            }
+
+            // 存入缓存
+            if (subPage <= 5) {
+                IndexPageCache cacheData = new IndexPageCache(postItems, totalPostsCount, totalPages);
+                cacheService.set(cacheKey, cacheData, java.time.Duration.ofMinutes(30));
+            }
         }
 
         Template template;
@@ -209,6 +235,13 @@ public class IndexController {
             String categorySlug,
             String authorName,
             List<TagItem> tags
+    ) {
+    }
+
+    private record IndexPageCache(
+            List<IndexPostItem> postItems,
+            long totalPostsCount,
+            long totalPages
     ) {
     }
 }

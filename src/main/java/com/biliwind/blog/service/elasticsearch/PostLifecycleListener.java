@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.service.TempDataService;
@@ -36,6 +37,18 @@ public class PostLifecycleListener {
 
     @Inject
     TempDataService tempDataService;
+
+    @Inject
+    CacheService cacheService;
+
+    private void invalidatePostCaches() {
+        // 清理首页缓存 (1-5页)
+        cacheService.deletePattern(CacheService.Keys.INDEX_PAGE_PREFIX + "*");
+        // 清理侧边栏最新文章 (按语言)
+        cacheService.deletePattern(CacheService.Keys.SIDEBAR_RECENT_POSTS + "*");
+        // 清理侧边栏统计
+        cacheService.delete(CacheService.Keys.SIDEBAR_STATS);
+    }
 
     void onStart(@Observes StartupEvent event) {
         log.info("========================================");
@@ -100,11 +113,14 @@ public class PostLifecycleListener {
             log.debugf("文章状态为 %s，确保索引已删除: %d", refreshedPost.status, postId);
             postSearchService.deletePostIndex(postId);
         }
+
+        invalidatePostCaches();
     }
 
     public void processPostDelete(Long postId) throws Exception {
         log.infof("检测到文章硬删除事件: %d", postId);
         postSearchService.deletePostIndex(postId);
+        invalidatePostCaches();
     }
 
     private void sendToQueue(Long postId, String actionType) {

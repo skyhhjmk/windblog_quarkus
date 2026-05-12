@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.redis.datasource.RedisDataSource;
 import io.quarkus.redis.datasource.keys.KeyCommands;
+import io.quarkus.redis.datasource.keys.KeyScanArgs;
+import io.quarkus.redis.datasource.keys.KeyScanCursor;
 import io.quarkus.redis.datasource.value.SetArgs;
 import io.quarkus.redis.datasource.value.ValueCommands;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -93,11 +95,19 @@ public class CacheService {
     }
 
     public void deletePattern(String pattern) {
-        if (!redisAvailable) return;
+        if (!redisAvailable) {
+            return;
+        }
         try {
-            var keys = keyCommands.keys(CACHE_PREFIX + pattern);
-            for (String key : keys) {
-                valueCommands.getdel(key);
+            KeyScanArgs args = new KeyScanArgs().match(CACHE_PREFIX + pattern);
+            KeyScanCursor<String> cursor = keyCommands.scan(args);
+            while (cursor.hasNext()) {
+                java.util.Set<String> keys = cursor.next();
+                if (keys.isEmpty()) {
+                    continue;
+                }
+                // 使用批量删除减少网络往返
+                keyCommands.del(keys.toArray(new String[0]));
             }
         } catch (Exception e) {
             LOG.warnf("Failed to delete cache pattern: %s", e.getMessage());
@@ -109,10 +119,32 @@ public class CacheService {
     }
 
     public static class Keys {
+        public static final String SIDEBAR_RECENT_POSTS = "sidebar:recentPosts:";
+        public static final String SIDEBAR_CATEGORIES = "sidebar:categories:";
+        public static final String SIDEBAR_TAGS = "sidebar:tags:";
+        public static final String SIDEBAR_STATS = "sidebar:stats";
+        public static final String INDEX_PAGE_PREFIX = "index:page:";
+        
         public static final String ALL_CATEGORIES = "categories:all";
         public static final String ALL_TAGS = "tags:all";
         public static final String TAG_POST_COUNT_PREFIX = "tags:postCount:";
         public static final String CATEGORY_POST_COUNT_PREFIX = "categories:postCount:";
         public static final String ALL_POSTS = "posts:all";
+
+        public static String indexPage(int page, String lang) {
+            return INDEX_PAGE_PREFIX + page + ":lang:" + lang;
+        }
+
+        public static String recentPosts(String lang, int limit) {
+            return SIDEBAR_RECENT_POSTS + lang + ":" + limit;
+        }
+
+        public static String categories(String lang) {
+            return SIDEBAR_CATEGORIES + lang;
+        }
+
+        public static String tags(String lang) {
+            return SIDEBAR_TAGS + lang;
+        }
     }
 }

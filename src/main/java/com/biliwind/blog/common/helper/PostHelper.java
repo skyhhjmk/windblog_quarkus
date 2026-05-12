@@ -17,8 +17,13 @@ public class PostHelper {
     public static Long getExtraPointsPrice(Post post) {
         if (post.extraInfo != null) {
             try {
-                JsonNode extraNode = MAPPER.convertValue(post.extraInfo, JsonNode.class);
-                if (extraNode.has("points_price")) {
+                JsonNode extraNode;
+                if (post.extraInfo instanceof String) {
+                    extraNode = MAPPER.readTree((String) post.extraInfo);
+                } else {
+                    extraNode = MAPPER.convertValue(post.extraInfo, JsonNode.class);
+                }
+                if (extraNode != null && extraNode.has("points_price")) {
                     return extraNode.get("points_price").asLong(0);
                 }
             } catch (Exception e) {
@@ -31,8 +36,13 @@ public class PostHelper {
     public static int getFreeLines(Post post) {
         if (post.extraInfo != null) {
             try {
-                JsonNode extraNode = MAPPER.convertValue(post.extraInfo, JsonNode.class);
-                if (extraNode.has("free_lines")) {
+                JsonNode extraNode;
+                if (post.extraInfo instanceof String) {
+                    extraNode = MAPPER.readTree((String) post.extraInfo);
+                } else {
+                    extraNode = MAPPER.convertValue(post.extraInfo, JsonNode.class);
+                }
+                if (extraNode != null && extraNode.has("free_lines")) {
                     return extraNode.get("free_lines").asInt(0);
                 }
             } catch (Exception e) {
@@ -48,8 +58,13 @@ public class PostHelper {
             extra = new HashMap<>((Map<String, Object>) post.extraInfo);
         } else if (post.extraInfo != null) {
             try {
-                extra = MAPPER.convertValue(post.extraInfo, new TypeReference<Map<String, Object>>() {
-                });
+                if (post.extraInfo instanceof String) {
+                    extra = MAPPER.readValue((String) post.extraInfo, new TypeReference<Map<String, Object>>() {
+                    });
+                } else {
+                    extra = MAPPER.convertValue(post.extraInfo, new TypeReference<Map<String, Object>>() {
+                    });
+                }
             } catch (Exception e) {
                 extra = new HashMap<>();
             }

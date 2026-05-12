@@ -21,6 +21,16 @@ public class AdminTagController {
     @jakarta.inject.Inject
     com.biliwind.blog.service.AuditService auditService;
 
+    @jakarta.inject.Inject
+    com.biliwind.blog.common.CacheService cacheService;
+
+    private void invalidateTagCaches() {
+        // 清理侧边栏标签
+        cacheService.deletePattern(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_TAGS + "*");
+        // 清理侧边栏统计
+        cacheService.delete(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_STATS);
+    }
+
     @GET
     @Operation(summary = "所有标签")
     public List<AdminTagItem> list() {
@@ -50,6 +60,7 @@ public class AdminTagController {
         t.createdAt = OffsetDateTime.now();
         t.persist();
         auditService.log("tag", t.id, "create", null, java.util.Map.of("name", t.name, "slug", t.slug));
+        invalidateTagCaches();
         return toItem(t);
     }
 
@@ -72,6 +83,7 @@ public class AdminTagController {
         t.name = req.name();
         t.description = req.description();
         auditService.log("tag", t.id, "update", null, java.util.Map.of("name", t.name, "slug", t.slug));
+        invalidateTagCaches();
         return toItem(t);
     }
 
@@ -81,6 +93,7 @@ public class AdminTagController {
         if (t != null) {
             auditService.log("tag", t.id, "delete", java.util.Map.of("name", t.name), null);
             com.biliwind.blog.model.Tag.deleteById(id);
+            invalidateTagCaches();
         }
     }
 

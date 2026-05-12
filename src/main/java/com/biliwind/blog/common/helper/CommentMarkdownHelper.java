@@ -1,10 +1,13 @@
 package com.biliwind.blog.common.helper;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.safety.Safelist;
 
 public final class CommentMarkdownHelper {
+
+    private static final String BLOG_URL = ConfigProvider.getConfig().getOptionalValue("blog.url", String.class).orElse("http://localhost:8080");
 
     private static final Safelist COMMENT_SAFE_LIST = Safelist.none()
             .addTags(
@@ -25,6 +28,6 @@ public final class CommentMarkdownHelper {
 
         String unsafeHtml = MarkdownHelper.toHtml(markdown);
         Document.OutputSettings outputSettings = new Document.OutputSettings().prettyPrint(false);
-        return Jsoup.clean(unsafeHtml, "", COMMENT_SAFE_LIST, outputSettings);
+        return Jsoup.clean(unsafeHtml, BLOG_URL, COMMENT_SAFE_LIST, outputSettings);
     }
 }

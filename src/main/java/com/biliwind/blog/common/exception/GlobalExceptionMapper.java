@@ -16,6 +16,8 @@ import jakarta.ws.rs.ext.Provider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -86,7 +88,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         if (family == Response.Status.Family.SERVER_ERROR) {
             UUID uuid = UUID.randomUUID();
             trackingId = uuid.toString();
-            trackingText = generateTrackingText();
+            trackingText = generateTrackingText(exception);
         }
 
         // 根据客户端期望的类型返回响应
@@ -122,7 +124,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         return false;
     }
 
-    private String generateTrackingText() {
+    private String generateTrackingText(Throwable exception) {
         StringBuilder sb = new StringBuilder();
         OffsetDateTime now = OffsetDateTime.now();
         sb.append("Timestamp: ").append(now.toString()).append("\n");
@@ -135,7 +137,17 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
             sb.append("User-Agent: ").append(userAgent).append("\n");
         }
 
+        // 包含完整的堆栈轨迹
+        if (exception != null) {
+            sb.append("\n--- Stack Trace ---\n");
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            exception.printStackTrace(pw);
+            sb.append(sw.toString());
+        }
+
         String trackingData = sb.toString();
+        // 使用 RsaHelper 的混合加密 (RSA + AES)
         return rsaHelper.encrypt(trackingData);
     }
 }

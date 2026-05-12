@@ -40,6 +40,14 @@ public class AdminCommentController {
     @Inject
     AdminRequestContext adminRequestContext;
 
+    @Inject
+    com.biliwind.blog.common.CacheService cacheService;
+
+    private void invalidateCommentCaches() {
+        // 清理侧边栏统计
+        cacheService.delete(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_STATS);
+    }
+
     @GET
     @Transactional
     @Operation(summary = "评论列表")
@@ -137,6 +145,7 @@ public class AdminCommentController {
         }
 
         auditService.log("comment", String.valueOf(comment.id), "update", oldVal, newVal);
+        invalidateCommentCaches();
 
         return toItem(comment);
     }
@@ -150,6 +159,7 @@ public class AdminCommentController {
         if (comment != null) {
             comment.deletedAt = OffsetDateTime.now();
             auditService.log("comment", String.valueOf(id), "delete", null, null);
+            invalidateCommentCaches();
         }
     }
 

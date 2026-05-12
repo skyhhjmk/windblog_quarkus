@@ -14,17 +14,18 @@ import jakarta.enterprise.context.ApplicationScoped;
 public class PostRepository implements PanacheRepositoryBase<Post, Long> {
 
     public Post findVisiblePostById(Long id) {
-        return find("id = :id and deletedAt is null", id)
+        return find("id = :id and deletedAt is null", java.util.Map.of("id", id))
                 .firstResult();
     }
 
     public Post findVisiblePostBySlug(String slug) {
-        return find("slug = :slug and deletedAt is null", slug)
+        return find("slug = :slug and deletedAt is null", java.util.Map.of("slug", slug))
                 .firstResult();
     }
 
     public java.util.List<Post> findAllPublished() {
-        return list("status = ?1 and visibility = 0 and deletedAt is null order by publishedAt desc", com.biliwind.blog.model.PostStatus.PUBLISHED);
+        return list("status = :status and visibility = 0 and deletedAt is null order by publishedAt desc",
+                java.util.Map.of("status", com.biliwind.blog.model.PostStatus.PUBLISHED));
     }
 
 

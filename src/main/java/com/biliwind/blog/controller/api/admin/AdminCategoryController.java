@@ -23,6 +23,16 @@ public class AdminCategoryController {
     @jakarta.inject.Inject
     com.biliwind.blog.service.AuditService auditService;
 
+    @jakarta.inject.Inject
+    com.biliwind.blog.common.CacheService cacheService;
+
+    private void invalidateCategoryCaches() {
+        // 清理侧边栏分类
+        cacheService.deletePattern(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_CATEGORIES + "*");
+        // 清理侧边栏统计
+        cacheService.delete(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_STATS);
+    }
+
     @GET
     @Operation(summary = "所有分类")
     public List<AdminCategoryItem> list() {
@@ -55,6 +65,7 @@ public class AdminCategoryController {
         c.createdAt = OffsetDateTime.now();
         c.persist();
         auditService.log("category", c.id, "create", null, java.util.Map.of("name", c.name, "slug", c.slug));
+        invalidateCategoryCaches();
         return toItem(c);
     }
 
@@ -83,6 +94,7 @@ public class AdminCategoryController {
         }
         c.persist();
         auditService.log("category", c.id, "update", null, java.util.Map.of("name", c.name, "slug", c.slug));
+        invalidateCategoryCaches();
         return toItem(c);
     }
 
@@ -96,6 +108,7 @@ public class AdminCategoryController {
         // 处理子分类或关联文章的逻辑通常由业务决定，这里简单处理
         auditService.log("category", c.id, "delete", java.util.Map.of("name", c.name), null);
         Category.deleteById(id);
+        invalidateCategoryCaches();
     }
 
     @POST
@@ -110,6 +123,7 @@ public class AdminCategoryController {
             c.postCount = com.biliwind.blog.model.Post.count("category.id = ?1 and deletedAt is null", c.id);
             c.persist();
         }
+        invalidateCategoryCaches();
         return Response.ok(java.util.Map.of("success", true, "message", "扫描完成")).build();
     }
 

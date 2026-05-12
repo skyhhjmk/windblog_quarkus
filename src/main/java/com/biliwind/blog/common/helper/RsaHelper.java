@@ -6,7 +6,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -77,33 +82,103 @@ public class RsaHelper {
     }
 
     /**
-     * 使用公钥加密文本
+     * 使用 RSA+AES 混合加密文本。
+     * RSA 加密随机生成的 AES 密钥，AES 加密实际数据。
+     * 解决了 RSA 直接加密的长度限制问题。
      */
     public String encrypt(String plainText) {
+        if (plainText == null) {
+            return null;
+        }
+
         try {
-            Cipher cipher = Cipher.getInstance("RSA");
-            cipher.init(Cipher.ENCRYPT_MODE, publicKey);
-            byte[] inputBytes = plainText.getBytes();
-            byte[] encryptedBytes = cipher.doFinal(inputBytes);
+            // 1. 生成 128 位随机 AES 密钥
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+            keyGen.init(128);
+            SecretKey aesKey = keyGen.generateKey();
+
+            // 2. 使用 RSA 公钥加密该 AES 密钥
+            Cipher rsaCipher = Cipher.getInstance("RSA");
+            rsaCipher.init(Cipher.ENCRYPT_MODE, publicKey);
+            byte[] encryptedAesKey = rsaCipher.doFinal(aesKey.getEncoded());
+
+            // 3. 使用 AES 加密实际数据 (CBC 模式 + 随机 IV)
+            Cipher aesCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            byte[] iv = new byte[16];
+            new SecureRandom().nextBytes(iv);
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
+            aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec);
+            byte[] encryptedData = aesCipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
+
+            // 4. 组合结果并使用 Base64 编码
+            // 格式: H1:Base64(EncAesKey).Base64(IV).Base64(EncData)
             Base64.Encoder encoder = Base64.getEncoder();
-            return encoder.encodeToString(encryptedBytes);
+            return "H1:" + encoder.encodeToString(encryptedAesKey) + "." +
+                    encoder.encodeToString(iv) + "." +
+                    encoder.encodeToString(encryptedData);
         } catch (Exception e) {
-            LOGGER.error("RSA 加密失败: " + e.getMessage());
+            LOGGER.error("混合加密失败: " + e.getMessage());
             return "EncryptionError: " + e.getMessage();
         }
     }
 
     /**
-     * 使用私钥解密文本
+     * 解密文本，支持 H1 混合加密格式和旧的纯 RSA 格式。
      */
     public String decrypt(String encryptedText) {
+        if (encryptedText == null || encryptedText.isEmpty()) {
+            return encryptedText;
+        }
+
+        // 判断是否为 H1 混合加密格式
+        if (encryptedText.startsWith("H1:")) {
+            return decryptHybrid(encryptedText);
+        }
+
+        // 回退到旧的 RSA 直接解密
+        return decryptRsaOnly(encryptedText);
+    }
+
+    private String decryptHybrid(String encryptedText) {
+        try {
+            String content = encryptedText.substring(3);
+            String[] parts = content.split("\\.");
+            if (parts.length != 3) {
+                throw new Exception("混合加密格式错误");
+            }
+
+            Base64.Decoder decoder = Base64.getDecoder();
+            byte[] encryptedAesKey = decoder.decode(parts[0]);
+            byte[] iv = decoder.decode(parts[1]);
+            byte[] encryptedData = decoder.decode(parts[2]);
+
+            // 1. 使用 RSA 私钥解密 AES 密钥
+            Cipher rsaCipher = Cipher.getInstance("RSA");
+            rsaCipher.init(Cipher.DECRYPT_MODE, privateKey);
+            byte[] aesKeyBytes = rsaCipher.doFinal(encryptedAesKey);
+            SecretKeySpec aesKeySpec = new SecretKeySpec(aesKeyBytes, "AES");
+
+            // 2. 使用解出的密钥解密数据
+            Cipher aesCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
+            aesCipher.init(Cipher.DECRYPT_MODE, aesKeySpec, ivSpec);
+            byte[] decryptedBytes = aesCipher.doFinal(encryptedData);
+
+            return new String(decryptedBytes, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            LOGGER.error("混合解密失败: " + e.getMessage());
+            return "DecryptionError: " + e.getMessage();
+        }
+    }
+
+    private String decryptRsaOnly(String encryptedText) {
         try {
             Cipher cipher = Cipher.getInstance("RSA");
             cipher.init(Cipher.DECRYPT_MODE, privateKey);
             Base64.Decoder decoder = Base64.getDecoder();
             byte[] inputBytes = decoder.decode(encryptedText);
             byte[] decryptedBytes = cipher.doFinal(inputBytes);
-            return new String(decryptedBytes);
+            return new String(decryptedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
             LOGGER.error("RSA 解密失败: " + e.getMessage());
             return "DecryptionError: " + e.getMessage();

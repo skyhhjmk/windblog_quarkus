@@ -39,6 +39,9 @@ public class CommentApiController {
     @Inject
     com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
 
+    @Inject
+    com.biliwind.blog.common.CacheService cacheService;
+
     @GET
     @Path("/post/{slug}")
     @Transactional
@@ -161,6 +164,9 @@ public class CommentApiController {
         if (result.isReviewing) {
             aiTaskProducer.sendAuditTask(result.id, result.content);
         }
+
+        // 清理侧边栏统计
+        cacheService.delete(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_STATS);
 
         return Response.status(Response.Status.CREATED)
                 .entity(Map.of(

@@ -45,3 +45,4 @@ nb-configuration.xml
 .certs/
 /uploads/
 /logs/
+/rsa_keys/*

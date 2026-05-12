@@ -5,6 +5,7 @@ import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
 import io.quarkus.qute.TemplateData;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.safety.Safelist;
@@ -13,6 +14,7 @@ import java.util.Collections;
 
 @TemplateData
 public final class MarkdownHelper {
+    private static final String BLOG_URL = ConfigProvider.getConfig().getOptionalValue("blog.url", String.class).orElse("http://localhost:8080");
 
     private static final MutableDataSet OPTIONS = new MutableDataSet()
             .set(Parser.EXTENSIONS, Collections.singletonList(MdProtocolExtension.create()))
@@ -49,9 +51,9 @@ public final class MarkdownHelper {
         }
         String unsafeHtml = HTML_RENDERER.render(PARSER.parse(markdown));
 
-        // 执行 HTML 净化
+        // 执行 HTML 净化，并提供基础 URL 以补全相对路径
         Document.OutputSettings outputSettings = new Document.OutputSettings().prettyPrint(false);
-        return Jsoup.clean(unsafeHtml, "", POST_SAFE_LIST, outputSettings);
+        return Jsoup.clean(unsafeHtml, BLOG_URL, POST_SAFE_LIST, outputSettings);
     }
 
     public String toHtml(Object markdown) {
