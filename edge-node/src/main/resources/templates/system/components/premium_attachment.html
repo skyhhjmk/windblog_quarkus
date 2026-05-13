@@ -1,0 +1,21 @@
+<div !=null} blockId class="md-region md-region-info buy-post-placeholder" data-block-id="{blockId}" { {#if/if}>
+<div class="md-region-icon"></div>
+<div class="md-region-content">
+    <strong>{title}</strong>：{desc}
+    {#if showButton}
+    <div class="mt-4 flex items-center gap-3">
+        <button !=null} class="btn-action-primary buy-post-btn !py-2.5 !px-6 !text-xs !rounded-lg" data-post-id="{postId}" postId
+                { {#if
+        /if}{#if price != null} data-price="{price}"{/if}{#if blockId != null} data-block-id="{blockId}"{/if}>
+        <svg fill="none" height="14" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"
+             width="14" xmlns="http://www.w3.org/2000/svg">
+            <rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span>{buttonText}</span>
+        </button>
+        <p class="text-[10px] text-gray-500 opacity-60 font-medium">解锁后立即显示下载链接</p>
+    </div>
+    {/if}
+</div>
+</div>

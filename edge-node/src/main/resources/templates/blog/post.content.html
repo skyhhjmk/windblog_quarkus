@@ -1,0 +1,338 @@
+﻿<div data-page-title="{postTitle ?: '文章信息'}" id="pjax-content-root">
+    <div class="hidden" id="pjax-nav-path">
+        post / {postSlug ?: 'unknown'}
+    </div>
+    <div class="hidden" id="pjax-sidebar-html">
+        <div class="space-y-8">
+            <!-- 1. 内容权限与价格 (最优先) -->
+            {#if postPrice > 0}
+            <section
+                    class="sidebar-widget bg-card/40 backdrop-blur-md border border-accent/20 rounded-xl p-6 transition-all duration-300">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-1.5 h-6 bg-accent rounded-full shadow-[0_0_12px_rgba(6,182,212,0.5)]"></div>
+                    <h3 class="text-sm font-bold tracking-wider text-main uppercase">内容权限</h3>
+                </div>
+                <div class="sidebar-price-tag group !p-4 !bg-accent/[0.03]">
+                    <div class="sidebar-price-unit">解锁全文需支付</div>
+                    <div class="sidebar-price-value">{postPrice}</div>
+                    <div class="sidebar-price-unit">积分</div>
+
+                    <div class="sidebar-status-badge mt-4">
+                        {#if hasPurchased}
+                        <svg class="w-4 h-4 text-green-500" fill="none"
+                             stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 6L9 17l-5-5"></path>
+                        </svg>
+                        <span class="text-green-500 font-bold">已解锁全文</span>
+                        {#else}
+                        <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor"
+                             stroke-width="3" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        <span class="text-accent/80">等待解锁内容</span>
+                        {/if}
+                    </div>
+                </div>
+            </section>
+            {/if}
+
+            <!-- 2. 文章目录 (TOC) -->
+            {#include sidebar/toc.html /}
+
+            <!-- 3. 附件信息 (如果有) -->
+            {#if attachments && ! attachments.isEmpty}
+            <section
+                    class="sidebar-widget bg-card/40 backdrop-blur-md border border-border rounded-xl p-6 transition-all duration-300"
+                    data-attachments-section="true">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-1.5 h-6 bg-accent rounded-full"></div>
+                    <h3 class="text-sm font-bold tracking-wider text-main uppercase">专属资源</h3>
+                </div>
+                {#if hasPurchased}
+                <div class="space-y-3">
+                    {#for media in attachments}
+                    <div class="card card-static p-4 flex items-center gap-4 group/file hover:border-accent/40 transition-all border-border/60 bg-card-bg/50">
+                        <div class="w-10 h-10 rounded-lg bg-card-bg border border-border flex items-center justify-center text-accent group-hover/file:scale-110 transition-transform">
+                            <svg fill="none" height="18" stroke="currentColor"
+                                 stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs text-main font-bold truncate mb-0.5"
+                               title="{media.fileName}">{media.fileName}</p>
+                            <p class="text-[10px] text-gray-500 font-mono opacity-80">{media.formattedSize}</p>
+                        </div>
+                        {#if hasPurchased && media.url}
+                        <a class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all" download
+                           href="{media.url}">
+                            <svg fill="none" height="18" stroke="currentColor"
+                                 stroke-width="2.5" viewBox="0 0 24 24" width="18"
+                                 xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" x2="12" y1="15" y2="3"></line>
+                            </svg>
+                        </a>
+                        {/if}
+                    </div>
+                    {/for}
+                </div>
+                {#else}
+                <div class="card card-static p-6 border-border/40 bg-card-bg/20 flex flex-col items-center text-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-accent/5 flex items-center justify-center text-accent/40">
+                        <svg fill="none" height="24" stroke="currentColor" stroke-width="2"
+                             viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <rect height="2" rx="1" width="8" x="8" y="13"></rect>
+                            <rect height="2" rx="1" width="4" x="8" y="17"></rect>
+                        </svg>
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-xs font-bold text-main">包含 {attachments.size} 个付费附件</p>
+                        <p class="text-[10px] text-gray-500">解锁文章后即可获取下载链接</p>
+                    </div>
+                </div>
+                {/if}
+            </section>
+            {/if}
+
+            <!-- 4. 作者信息 -->
+
+
+            <!-- 5. 关联商品 -->
+            {#if relatedStoreItems && ! relatedStoreItems.isEmpty}
+            <section
+                    class="sidebar-widget bg-card/40 backdrop-blur-md border border-border rounded-xl p-6 transition-all duration-300">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-1.5 h-6 bg-accent rounded-full"></div>
+                    <h3 class="text-sm font-bold tracking-wider text-main uppercase">推荐商品</h3>
+                </div>
+                <div class="space-y-5">
+                    {#for item in relatedStoreItems}
+                    <div class="card card-static overflow-hidden group/item border-border/60 hover:border-accent/40 transition-all bg-card-bg/30">
+                        <div class="p-5 space-y-4">
+                            <div class="flex justify-between items-start gap-4">
+                                <h4 class="text-sm font-black text-main line-clamp-2 leading-relaxed">{item.name}</h4>
+                                <div class="px-2.5 py-1 bg-accent/10 text-accent text-xs font-black rounded-lg border border-accent/20 font-mono shadow-sm">
+                                    {item.price}P
+                                </div>
+                            </div>
+                            {#if item.description}
+                            <p class="text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90">
+                                {item.description}</p>
+                            {/if}
+                            <a class="flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]"
+                               href="/user/store">
+                                进店详情
+                                <svg class="ml-2" fill="none" height="14" stroke="currentColor"
+                                     stroke-width="2.5" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg">
+                                    <line x1="7" x2="17" y1="17" y2="7"></line>
+                                    <polyline points="7 7 17 7 17 17"></polyline>
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                    {/for}
+                </div>
+            </section>
+            {/if}
+
+            <!-- 6. 其他小部件 -->
+            {#include sidebar/recent_posts.html /}
+            {#include sidebar/tags.html /}
+        </div>
+    </div>
+
+
+    <div class="card card-static p-8 md:p-12">
+        <article class="space-y-16">
+            <header class="space-y-12 mb-16">
+                <div class="space-y-6">
+                    <div class="flex items-center gap-4">
+                        <a class="badge-category" href="/category/{postCategorySlug}">
+                            <svg fill="none" height="14" stroke="currentColor" stroke-linecap="round"
+                                 stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24" width="14"
+                                 xmlns="http://www.w3.org/2000/svg">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            {postCategory}
+                        </a>
+                        <div class="h-[1px] flex-1 bg-gradient-to-r from-accent/20 to-transparent"></div>
+                    </div>
+                    <h1 class="text-6xl font-black text-main tracking-tight leading-[1.1]">{postTitle ?:
+                        '文章信息'}</h1>
+                </div>
+
+                <div class="flex items-center gap-12 py-6 border-y border-border/40">
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">作者</span>
+                        <div class="flex items-center gap-2">
+                            <img alt="{authorName}" class="w-6 h-6 rounded-full ring-2 ring-accent/20"
+                                 src="{authorAvatar}">
+                            <span class="post-meta-value">{authorName}</span>
+                        </div>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">发布时间</span>
+                        <time class="timestamp post-meta-value" data-timestamp="{publishedAt}">{publishedAt}</time>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">资源状态</span>
+                        <span class="post-meta-value flex items-center gap-2" data-purchase-status="true">
+                            {#if postPrice > 0}
+                                <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-green-500' : 'bg-accent'}"></span>
+                                {hasPurchased ? '已解锁' : '付费专享'}
+                            {#else}
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span> 免费阅读
+                            {/if}
+                        </span>
+                    </div>
+                </div>
+            </header>
+
+            {#if config:toggle('enable_ai_summary') && aiSummaryStatus != 2 && aiSummary && ! aiSummary.isEmpty}
+            <section class="card card-static p-8 bg-accent/[0.02] border-accent/20 group">
+                <div class="flex items-center gap-4 mb-6">
+                        <span class="badge-ai">
+                            <svg fill="none" height="14" stroke="currentColor" stroke-linecap="round"
+                                 stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24" width="14"
+                                 xmlns="http://www.w3.org/2000/svg"><path d="M12 8V4H8"></path><rect height="12" rx="2" width="16"
+                                                                                          x="4" y="8"></rect><path
+                                    d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path
+                                    d="M9 13v2"></path></svg>
+                            AI 摘要
+                        </span>
+                    <div class="decorative-line flex-1"></div>
+                </div>
+                <div class="text-lg text-body leading-relaxed italic">
+                    "{aiSummary}"
+                </div>
+            </section>
+            {/if}
+
+
+            <!-- 付费内容安全加载：初始只显示预览内容 -->
+            <section class="prose dark:prose-invert max-w-none" data-has-purchased="{hasPurchased}"
+                     data-post-id="{postId}"
+                     data-post-price="{postPrice}"
+                     id="post-content-section">
+                {#if postBody && ! postBody.isEmpty()}
+                {#if postBodyHtml}
+                <div class="break-words" id="post-body-content">{postBody.raw}</div>
+                {#else}
+                <pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm"
+                     id="post-body-content">{postBody}</pre>
+                {/if}
+                {#else}
+                <p class="text-gray-500 italic">该语言下暂无内容。</p>
+                {/if}
+            </section>
+
+            <!-- 附件区域容器（动态更新） -->
+            <div id="attachments-container">
+                <!-- 初始附件信息已在侧边栏显示 -->
+            </div>
+
+            <div class="mt-12 pt-8 border-t border-border flex flex-wrap gap-3">
+                {#for tag in postTags}
+                <a class="badge-tag" href="/tag/{tag.slug}">
+                    <svg fill="none" height="12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+                         stroke-width="2.5" viewBox="0 0 24 24" width="12" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="4" x2="20" y1="9" y2="9"></line>
+                        <line x1="4" x2="20" y1="15" y2="15"></line>
+                        <line x1="10" x2="8" y1="3" y2="21"></line>
+                        <line x1="16" x2="14" y1="3" y2="21"></line>
+                    </svg>
+                    {tag.name}
+                </a>
+                {/for}
+            </div>
+
+            <!-- 安全的付费内容加载脚本 -->
+            <script defer src="/assets/js/post-premium.js"></script>
+        </article>
+    </div>
+
+    <div class="card card-static p-8 md:p-12 mt-16">
+        {#if config:toggle('enable_comment')}
+        <section class="space-y-12" data-post-slug="{postSlug}" id="comment-section">
+            <div class="space-y-2">
+                <h2 class="text-3xl font-bold text-main tracking-tight">评论</h2>
+                <div class="decorative-line w-16"></div>
+            </div>
+
+            <div class="card card-static p-8 space-y-8">
+                <div class="flex items-center justify-between py-6 border-b border-border/60">
+                    <div class="space-y-1">
+                        <h2 class="text-2xl font-black text-main">参与讨论</h2>
+                        <p class="text-xs text-gray-500">请保持友善，共同维护良好的讨论环境。</p>
+                    </div>
+                    <div id="comment-login-hint">
+                        <!-- 登录状态信息将由 JS 动态注入 -->
+                    </div>
+                </div>
+
+                <div class="hidden rounded-md border px-4 py-3 text-sm" id="comment-feedback"></div>
+
+                <div class="comment-form-container">
+                    <div class="comment-auth-overlay hidden" id="comment-auth-overlay">
+                        <p>您需要登录后才能发表评论</p>
+                        <a class="btn-action-primary" href="/user/login?redirect={postSlug}">立即登录</a>
+                    </div>
+
+                    <form class="space-y-6" data-no-debounce="true" id="comment-form">
+                        <div class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center"
+                             id="comment-replying">
+                                <span class="text-sm">正在回复 <span class="font-bold text-main"
+                                                                     id="comment-replying-user"></span></span>
+                            <button class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors" id="comment-cancel-reply"
+                                    type="button">取消
+                            </button>
+                        </div>
+
+                        <input id="comment-parent-id" name="parentId" type="hidden" value="">
+
+                        <div class="space-y-2">
+                                <textarea
+                                        class="w-full"
+                                        id="comment-content"
+                                        maxlength="4000"
+                                        name="content"
+                                        placeholder="分享你的想法..."
+                                        rows="5"></textarea>
+                        </div>
+
+                        <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                            <p class="text-xs text-gray-500 max-w-md">
+                                支持 Markdown 语法。
+                            </p>
+                            <button class="btn-minimal min-w-[140px]" id="comment-submit" type="submit">
+                                <span class="btn-text">发表评论</span>
+                                <span class="spinner hidden"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="space-y-8">
+                <div class="flex items-center justify-between">
+                    <h3 class="comment-list-header">讨论列表</h3>
+                    <span class="text-xs meta-mono text-gray-500" id="comment-count">0 条评论</span>
+                </div>
+                <div class="space-y-6" id="comment-list"></div>
+                <div class="load-more-container hidden" id="comment-load-more">
+                    <button class="btn-load-more" id="btn-load-more" type="button">
+                        <span>加载更多</span>
+                        <span class="spinner hidden"></span>
+                    </button>
+                </div>
+            </div>
+        </section>
+        {/if}
+    </div>
+</div>

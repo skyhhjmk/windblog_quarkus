@@ -1,0 +1,27 @@
+<div class="sidebar-widget bg-card/40 backdrop-blur-md border border-border rounded-xl p-6 transition-all duration-300 hover:border-accent/30 group">
+    <div class="flex items-center gap-3 mb-6">
+        <div class="w-1.5 h-6 bg-accent rounded-full"></div>
+        <h3 class="text-sm font-bold tracking-wider text-main uppercase">站点统计</h3>
+    </div>
+
+    {#let stats = sidebar:stats}
+    <div class="grid grid-cols-2 gap-4">
+        <div class="flex flex-col gap-1">
+            <span class="text-2xl font-bold text-main">{stats.posts}</span>
+            <span class="text-[10px] uppercase tracking-widest text-meta font-medium">文章总数</span>
+        </div>
+        <div class="flex flex-col gap-1">
+            <span class="text-2xl font-bold text-main">{stats.comments}</span>
+            <span class="text-[10px] uppercase tracking-widest text-meta font-medium">累计评论</span>
+        </div>
+        <div class="flex flex-col gap-1">
+            <span class="text-2xl font-bold text-main">{stats.categories}</span>
+            <span class="text-[10px] uppercase tracking-widest text-meta font-medium">全部分类</span>
+        </div>
+        <div class="flex flex-col gap-1">
+            <span class="text-2xl font-bold text-main">{stats.tags}</span>
+            <span class="text-[10px] uppercase tracking-widest text-meta font-medium">标签云集</span>
+        </div>
+    </div>
+    {/let}
+</div>

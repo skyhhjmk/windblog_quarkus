@@ -1,0 +1,96 @@
+﻿<div data-page-title="{postTitle ?: '文章详情'}" id="pjax-content-root">
+    <div class="hidden" id="pjax-nav-path">
+        ~/windblog / post / {postSlug ?: 'unknown'}
+    </div>
+    <div class="hidden" id="pjax-sidebar-html">
+        <div class="space-y-4">
+            <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+                <h3 class="font-bold mb-2">文章信息</h3>
+                <p class="text-sm">Slug: {postSlug}</p>
+                <p class="text-sm">语言：{language ?: 'zh-CN'}</p>
+                <p class="text-sm">渲染类型：Vditor</p>
+            </section>
+        </div>
+    </div>
+
+    <article class="space-y-4">
+        <header>
+            <h1 class="text-3xl font-bold">{postTitle ?: '文章详情'}</h1>
+            <p class="text-sm opacity-80">Slug: {postSlug}</p>
+        </header>
+
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+            {#if postBody && !postBody.isEmpty}
+            <link href="/webjars/vditor/dist/index.css" rel="stylesheet">
+            <style>
+                .vditor-reset {
+                    color: #e6e6e6 !important;
+                }
+
+                .vditor-reset h1,
+                .vditor-reset h2,
+                .vditor-reset h3,
+                .vditor-reset h4,
+                .vditor-reset h5,
+                .vditor-reset h6 {
+                    color: #ffffff !important;
+                }
+
+                .vditor-reset p,
+                .vditor-reset li,
+                .vditor-reset td,
+                .vditor-reset th {
+                    color: #e6e6e6 !important;
+                }
+
+                .vditor-reset a {
+                    color: #58a6ff !important;
+                }
+
+                .vditor-reset code,
+                .vditor-reset pre {
+                    background: rgba(110, 118, 129, 0.4) !important;
+                    color: #e6e6e6 !important;
+                }
+
+                .vditor-reset blockquote {
+                    border-left-color: #3b434b !important;
+                    color: #8b949e !important;
+                }
+
+                .vditor-reset strong {
+                    color: #ffffff !important;
+                }
+
+                .vditor-reset table tr {
+                    background-color: rgba(110, 118, 129, 0.2) !important;
+                }
+
+                .vditor-reset table td,
+                .vditor-reset table th {
+                    border-color: #3b434b !important;
+                }
+            </style>
+            <script src="/webjars/vditor/dist/index.min.js"></script>
+            <div class="vditor-reset" id="vditor-preview"></div>
+            <script>
+                {
+                    #if
+                    postBodyJson && !postBodyJson.isEmpty
+                }
+                document.addEventListener('DOMContentLoaded', function () {
+                    const markdownContent = "{postBodyJson}";
+                    Vditor.preview(document.getElementById('vditor-preview'), markdownContent, {
+                        cdn: '/webjars/vditor',
+                        mode: 'both'
+                    });
+                });
+                {
+                    /if}
+            </script>
+            {#else}
+            <p>暂无该语言内容，且默认语言内容也不可用。</p>
+            {/if}
+        </section>
+    </article>
+</div>

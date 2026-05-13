@@ -1,0 +1,26 @@
+{#include "base.html"}
+{#title}
+用户注册
+{/title}
+
+{#navPath}
+~/windblog / user / register
+{/navPath}
+
+{#content}
+{#include "user/register.content.html"}{/include}
+{/content}
+
+{#sidebar}
+<div class="space-y-4">
+    <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+        <h3 class="font-bold mb-2">注册须知</h3>
+        <ul class="text-sm space-y-1 list-disc list-inside">
+            <li>用户名唯一且不可修改</li>
+            <li>邮箱用于找回密码</li>
+            <li>注册即表示同意用户协议</li>
+        </ul>
+    </section>
+</div>
+{/sidebar}
+{/include}

@@ -1,0 +1,23 @@
+<div class="card card-static overflow-hidden group/item border-border/60 hover:border-accent/40 transition-all bg-card-bg/30 my-6">
+    <div class="p-5 space-y-4">
+        <div class="flex justify-between items-start gap-4">
+            <div>
+                <h4 class="text-sm font-black text-main line-clamp-1 leading-relaxed">{name}</h4>
+                <p class="text-[10px] text-gray-500 uppercase tracking-wider mt-1">商店专供物品</p>
+            </div>
+            <div class="px-2.5 py-1 bg-accent/10 text-accent text-xs font-black rounded-lg border border-accent/20 font-mono shadow-sm">
+                {price}P
+            </div>
+        </div>
+        <p class="text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90">{desc}</p>
+        <a class="flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]"
+           href="/user/store">
+            进店详情
+            <svg class="ml-2" fill="none" height="14" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
+                 width="14" xmlns="http://www.w3.org/2000/svg">
+                <line x1="7" x2="17" y1="17" y2="7"></line>
+                <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+        </a>
+    </div>
+</div>

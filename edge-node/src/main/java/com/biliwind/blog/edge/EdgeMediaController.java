@@ -7,7 +7,7 @@ import jakarta.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Path("/uploads")
+@Path("/")
 public class EdgeMediaController {
     private static final Logger log = LoggerFactory.getLogger(EdgeMediaController.class);
 
@@ -15,12 +15,18 @@ public class EdgeMediaController {
     EdgeRoutingService routingService;
 
     @GET
-    @Path("/{fileName}")
-    @Produces(MediaType.WILDCARD)
-    public Response getFile(@PathParam("fileName") String fileName) {
-        log.info("Edge node receiving request for: {}", fileName);
+    @Produces(MediaType.TEXT_PLAIN)
+    public String status() {
+        return "WindBlog Edge Node is running and ready to serve media.";
+    }
 
-        String bestUrl = routingService.getBestAccessUrl(fileName, "original");
+    @GET
+    @Path("/uploads/{path: .*}")
+    @Produces(MediaType.WILDCARD)
+    public Response getFile(@PathParam("path") String path) {
+        log.info("Edge node receiving request for path: {}", path);
+
+        String bestUrl = routingService.getBestAccessUrl(path, "original");
 
         if (bestUrl != null) {
             return Response.status(Response.Status.FOUND)
@@ -28,7 +34,6 @@ public class EdgeMediaController {
                     .build();
         }
 
-        // Fallback or 404
         return Response.status(Response.Status.NOT_FOUND).build();
     }
 }

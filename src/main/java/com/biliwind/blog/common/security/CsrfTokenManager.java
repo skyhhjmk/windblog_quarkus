@@ -11,7 +11,6 @@ import java.util.Base64;
 @ApplicationScoped
 public class CsrfTokenManager {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
     private static final int TOKEN_LENGTH = 32;
 
     /**
@@ -19,7 +18,8 @@ public class CsrfTokenManager {
      */
     public String generateToken() {
         byte[] bytes = new byte[TOKEN_LENGTH];
-        RANDOM.nextBytes(bytes);
+        // 动态获取实例，避免在堆中留下状态
+        new java.security.SecureRandom().nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 

@@ -1,0 +1,23 @@
+﻿{#include "base.html"}
+{#title}
+首页
+{/title}
+
+{#navPath}
+~/windblog / 首页{#if subPage && subPage > 1} / page-{subPage}{/if}
+{/navPath}
+
+{#content}
+{#include "blog/index.content.html"}{/include}
+{/content}
+
+{#sidebar}
+<div class="space-y-8">
+
+    {#include sidebar/stats.html /}
+    {#include sidebar/recent_posts.html /}
+    {#include sidebar/categories.html /}
+    {#include sidebar/tags.html /}
+</div>
+{/sidebar}
+{/include}

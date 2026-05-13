@@ -1,0 +1,256 @@
+<div class="max-w-4xl mx-auto space-y-12">
+    <!-- Profile Header -->
+    <header class="flex items-center justify-between p-8 border border-[var(--border)] bg-[var(--panel-bg)]">
+        <div class="flex items-center gap-6">
+            <div class="w-20 h-20 bg-gradient-to-br from-[var(--accent)] to-cyan-500 rounded-full flex items-center justify-center text-3xl font-bold text-[var(--bg)]">
+                {user.username.substring(0, 1).toUpperCase()}
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold">{user.username}</h1>
+                <p class="text-gray-400">{user.email}</p>
+                <div class="mt-2 flex gap-2">
+                    <span class="text-[10px] px-2 py-0.5 border border-[var(--border)] rounded uppercase tracking-wider">{user.roleName}</span>
+                </div>
+            </div>
+        </div>
+        <button class="btn-minimal px-6 py-2 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded"
+                id="logoutBtn">
+            退出登录
+        </button>
+    </header>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div class="md:col-span-2 space-y-8">
+            <!-- Gamification Status Bar (Level & EXP) -->
+            <section
+                    class="border border-[var(--border)] bg-[var(--panel-bg)] p-6 flex flex-col sm:flex-row items-center gap-6">
+                <div class="flex flex-col items-center justify-center w-24 h-24 rounded-full border-4 border-[var(--border)] bg-[var(--bg)] shadow-[0_0_15px_rgba(var(--accent-rgb),0.2)]">
+                    <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Level</span>
+                    <span class="text-3xl font-black text-[var(--accent)]">{level}</span>
+                </div>
+                <div class="flex-grow w-full">
+                    <div class="flex justify-between text-sm mb-2 font-mono">
+                        <span class="text-gray-400">EXP: {currentLevelExp} / {currentLevelMaxExp}</span>
+                        <span class="text-[var(--accent)] font-bold">{expPercent}%</span>
+                    </div>
+                    <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+                        <div class="h-full bg-[var(--accent)] transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(var(--accent-rgb),0.8)]"
+                             style="width: {expPercent}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2 text-right">总经验值: {exp}</p>
+                </div>
+            </section>
+            <!-- Wallet Card -->
+            <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-8 overflow-hidden relative group">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)]/10 blur-3xl -mr-16 -mt-16 group-hover:bg-[var(--accent)]/20 transition-all"></div>
+
+                <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                        <h2 class="text-sm uppercase tracking-widest text-gray-400 mb-1">我的余额</h2>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-4xl font-bold text-[var(--accent)]"
+                                  id="userPointsBalance">{pointsBalance ?: 0}</span>
+                            <span class="text-gray-500">积分</span>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        {#if hasCheckedIn}
+                        <button class="px-8 py-3 bg-gray-500/20 text-gray-500 border border-gray-500/30 rounded cursor-not-allowed flex items-center gap-2"
+                                disabled>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round"
+                                 stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"
+                                 xmlns="http://www.w3.org/2000/svg">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            今日已签到
+                        </button>
+                        {#else}
+                        <button class="px-8 py-3 bg-[var(--accent)] text-[var(--bg)] font-bold rounded hover:shadow-[0_0_20px_rgba(var(--accent-rgb),0.4)] transition-all flex items-center gap-2"
+                                id="checkInBtn">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round"
+                                 stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"
+                                 xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            立即签到
+                        </button>
+                        {/if}
+                        <button class="px-6 py-3 border border-[var(--border)] hover:bg-[var(--border)]/20 rounded transition-all"
+                                id="showHistoryBtn">
+                            积分记录
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
+                <h2 class="text-lg font-bold mb-4">账户</h2>
+                <div class="space-y-4">
+                    <div class="flex justify-between py-3 border-b border-[var(--border)]/50">
+                        <span class="text-gray-400">用户名</span>
+                        <span>{user.username}</span>
+                    </div>
+                    <div class="flex justify-between py-3 border-b border-[var(--border)]/50">
+                        <span class="text-gray-400">邮箱</span>
+                        <span>{user.email}</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2D Backpack -->
+            <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-bold flex items-center gap-2">
+                        <svg class="w-5 h-5 text-[var(--accent)]" fill="none" stroke="currentColor"
+                             stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" x2="21" y1="6" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                        </svg>
+                        我的背包
+                    </h2>
+                    <span class="text-xs font-mono text-gray-500">{backpackCapacity} 格容量</span>
+                </div>
+
+                <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 gap-2">
+                    {#for item in backpackItems}
+                    {#if item}
+                    <div class="aspect-square bg-[var(--bg)] border border-gray-700/50 rounded-md relative group cursor-pointer overflow-hidden transition-all duration-300 hover:scale-105 hover:z-10"
+                         onclick="showItemDetails('{item.id}', '{item.name}', '{item.description}', '{item.rarity}', '{item.type}')"
+                         style="box-shadow: inset 0 0 10px {item.rarity}20, 0 0 0 1px {item.rarity}50;"
+                         title="{item.name} ({item.type})">
+                        <div class="absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity"
+                             style="background-color: {item.rarity}"></div>
+                        <div class="absolute inset-0 flex items-center justify-center p-2 text-xs font-bold text-center drop-shadow-md z-10"
+                             style="color: {item.rarity}">
+                            {item.name.substring(0, 2)}
+                        </div>
+                        <div class="absolute bottom-0 inset-x-0 h-1"
+                             style="background-color: {item.rarity}"></div>
+                    </div>
+                    {#else}
+                    <div class="aspect-square bg-gray-900/50 border border-gray-800 rounded-md shadow-inner flex items-center justify-center opacity-50">
+                        <div class="w-1.5 h-1.5 rounded-full bg-gray-800"></div>
+                    </div>
+                    {/if}
+                    {/for}
+                </div>
+            </section>
+        </div>
+
+        <aside class="space-y-8">
+            <!-- Points History Modal -->
+            <div class="fixed inset-0 z-[100] hidden" id="historyModal">
+                <div class="absolute inset-0 bg-bg/60 backdrop-blur-md modal-overlay transition-opacity duration-300"></div>
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-2xl max-h-[85vh] bg-card border border-border shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] rounded-xl overflow-hidden flex flex-col transition-all duration-300 scale-95 opacity-0 modal-container">
+                    <!-- Header -->
+                    <div class="p-6 border-b border-border flex justify-between items-center bg-bg/30 backdrop-blur-sm">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-6 bg-accent rounded-full"></div>
+                            <h2 class="text-xl font-bold text-main tracking-tight">积分变动记录</h2>
+                        </div>
+                        <button class="modal-close p-2 hover:bg-accent/10 hover:text-accent rounded-lg transition-all">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-linecap="round"
+                                 stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24"
+                                 xmlns="http://www.w3.org/2000/svg">
+                                <line x1="18" x2="6" y1="6" y2="18"></line>
+                                <line x1="6" x2="18" y1="6" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="flex-grow overflow-y-auto p-6 scroll-smooth" id="historyContent">
+                        <div class="space-y-4" id="transactions-list">
+                            <div class="flex flex-col items-center justify-center py-20 gap-4">
+                                <span class="spinner w-8 h-8 text-accent"></span>
+                                <p class="text-sm text-meta animate-pulse">正在获取数据...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer / Pagination -->
+                    <div class="p-4 border-t border-border bg-bg/30 backdrop-blur-sm flex justify-between items-center px-8">
+                        <button class="group flex items-center gap-2 px-4 py-2 text-sm font-medium text-main border border-border hover:border-accent/50 hover:bg-accent/5 rounded-lg transition-all disabled:opacity-20 disabled:pointer-events-none"
+                                id="prevPage">
+                            <svg class="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none"
+                                 stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"
+                                      stroke-width="2"/>
+                            </svg>
+                            上一页
+                        </button>
+
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs font-bold text-accent tracking-[0.2em] uppercase" id="pageInfo">Page 1 / 1</span>
+                            <div class="flex gap-1 mt-1.5" id="pageDots">
+                                <div class="w-1 h-1 rounded-full bg-accent"></div>
+                            </div>
+                        </div>
+
+                        <button class="group flex items-center gap-2 px-4 py-2 text-sm font-medium text-main border border-border hover:border-accent/50 hover:bg-accent/5 rounded-lg transition-all disabled:opacity-20 disabled:pointer-events-none"
+                                id="nextPage">
+                            下一页
+                            <svg class="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none"
+                                 stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Item Details Modal (Simple) -->
+            <div class="fixed inset-0 z-[100] hidden" id="itemModal">
+                <div class="absolute inset-0 bg-bg/60 backdrop-blur-md item-modal-overlay"></div>
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm bg-card border border-border shadow-2xl rounded-xl p-6 transition-all duration-300 scale-95 opacity-0 item-modal-container">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-xl font-bold" id="itemModalName"></h3>
+                        <button class="item-modal-close p-1 hover:text-[var(--accent)]">✕</button>
+                    </div>
+                    <div class="text-xs uppercase tracking-widest text-gray-500 mb-4 font-mono"
+                         id="itemModalType"></div>
+                    <p class="text-sm text-gray-300 mb-6" id="itemModalDesc"></p>
+                    <button class="w-full py-2 bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 rounded hover:bg-[var(--accent)]/20">
+                        使用 / 查看
+                    </button>
+                </div>
+            </div>
+
+            <style>
+                #historyModal.show .modal-container {
+                    transform: translate(-50%, -50%) scale(1);
+                    opacity: 1;
+                }
+            </style>
+        </aside>
+    </div>
+</div>
+
+<!-- PJAX 数据 -->
+<div class="hidden" data-page-title="个人中心"></div>
+<div class="hidden" id="pjax-nav-path">~/windblog / user / center</div>
+<div class="hidden" id="pjax-sidebar-html">
+    <div class="space-y-4">
+        {#if user}
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+            <h3 class="font-bold mb-2">快捷操作</h3>
+            <ul class="text-sm space-y-2">
+                <li><a class="hover:text-[var(--accent)]" href="#">→ 发布文章</a></li>
+                <li><a class="hover:text-[var(--accent)]" href="#">→ 我的收藏</a></li>
+                <li><a class="hover:text-[var(--accent)]" href="#">→ 消息通知</a></li>
+            </ul>
+        </section>
+        {/if}
+
+        <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+            <h3 class="font-bold mb-2">用户中心</h3>
+            <p class="text-sm text-gray-400">
+                管理您的账号信息、查看发布的内容和互动记录。
+            </p>
+        </section>
+    </div>
+</div>

@@ -1,0 +1,21 @@
+﻿{#include "base.html"}
+{#title}
+{pageTitle ?: '分类'}
+{/title}
+
+{#navPath}
+{navPath ?: '~/windblog / categories'}
+{/navPath}
+
+{#content}
+{#include "blog/category.content.html"}{/include}
+{/content}
+
+{#sidebar}
+<div class="space-y-8">
+    {#include sidebar/categories.html /}
+    {#include sidebar/tags.html /}
+    {#include sidebar/stats.html /}
+</div>
+{/sidebar}
+{/include}

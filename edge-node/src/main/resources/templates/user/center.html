@@ -1,0 +1,35 @@
+{#include "base.html"}
+{#title}
+个人中心
+{/title}
+
+{#navPath}
+~/windblog / user / center
+{/navPath}
+
+{#content}
+{#include "user/center.content.html"}{/include}
+{/content}
+
+{#sidebar}
+<div class="space-y-4">
+    {#if user}
+    <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+        <h3 class="font-bold mb-2">快捷操作</h3>
+        <ul class="text-sm space-y-2">
+            <li><a class="hover:text-[var(--accent)]" href="#">→ 发布文章</a></li>
+            <li><a class="hover:text-[var(--accent)]" href="#">→ 我的收藏</a></li>
+            <li><a class="hover:text-[var(--accent)]" href="#">→ 消息通知</a></li>
+        </ul>
+    </section>
+    {/if}
+
+    <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
+        <h3 class="font-bold mb-2">用户中心</h3>
+        <p class="text-sm text-gray-400">
+            管理您的账号信息、查看发布的内容和互动记录。
+        </p>
+    </section>
+</div>
+{/sidebar}
+{/include}

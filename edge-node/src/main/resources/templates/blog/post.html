@@ -1,0 +1,22 @@
+﻿{#include "base.html"}
+{#title}
+{postTitle ?: '文章详情'}
+{/title}
+
+{#navPath}
+~/windblog / post / {postSlug ?: '未知'}
+{/navPath}
+
+{#content}
+{#include "blog/post.content.html"}{/include}
+{/content}
+
+{#sidebar}
+<div class="space-y-8">
+    {#include sidebar/toc.html /}
+
+    {#include sidebar/recent_posts.html /}
+    {#include sidebar/tags.html /}
+</div>
+{/sidebar}
+{/include}

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=5.0" name="viewport"/>
+    <script>
+        window.i18n = {
+            reply: "回复",
+            loading_comments: "正在加载评论...",
+            no_comments_yet: "暂无评论。来发表第一条评论吧。",
+            load_comments_failed: "加载评论失败。",
+            signed_in_as: "已登录为",
+            login_required: "提交评论前请先登录。",
+            submit_comment: "提交评论",
+            content_required: "评论内容不能为空。",
+            login_before_submit: "请先登录后再提交评论。",
+            submit_failed: "提交评论失败。",
+            comment_submitted: "评论已提交，正在等待审核。",
+            login_required_btn: "请先登录",
+            comments_unit: "条评论",
+            logout_title: "退出登录",
+            logout_confirm: "确定要退出登录吗？",
+            login_success: "登录成功",
+            login_failed: "登录失败",
+            network_error: "网络错误，请稍后重试",
+            register_success: "注册成功",
+            register_failed: "注册失败",
+            password_mismatch: "两次输入的密码不一致"
+        };
+    </script>
+    <title>{#insert title}{page_title ?: config:siteTitle}{/insert}</title>
+    {#insert head/}
+    <meta content="{config:siteDescription}" name="description"/>
+    <meta content="{config:siteKeywords}" name="keywords"/>
+    <link href="{config:faviconUrl}" rel="icon"/>
+
+    <!-- Theme & SEO -->
+    <meta content="{config:themeColor}" name="theme-color"/>
+    <meta content="dark" name="color-scheme"/>
+    <meta content="{csrfToken ?: ''}" name="csrf-token">
+
+    <!-- Font Awesome 7.0.1 -->
+    <link crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+          integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw=="
+          referrerpolicy="no-referrer" rel="stylesheet"/>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        bg: 'var(--bg)',
+                        card: 'var(--card-bg)',
+                        border: 'var(--border)',
+                        'border-hover': 'var(--border-hover)',
+                        accent: 'var(--accent)',
+                        main: 'var(--text-main)',
+                        body: 'var(--text-body)',
+                        meta: 'var(--text-meta)',
+                    },
+                    maxWidth: {
+                        '1400': '1400px',
+                    }
+                }
+            }
+        }
+    </script>
+    <script>
+        (function () {
+            const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+            if (theme === 'light') {
+                document.documentElement.classList.add('light');
+            }
+        })();
+    </script>
+
+    <!-- Custom Theme Styles -->
+    <link href="/assets/css/theme.css" rel="stylesheet"/>
+    <link href="/assets/css/ui.css" rel="stylesheet"/>
+</head>
+
+<body class="min-h-screen flex flex-col bg-bg text-body font-sans">
+<!-- Header -->
+<header class="sticky top-0 z-50 bg-bg/80 backdrop-blur-md border-b border-border">
+    <div class="max-w-1400 mx-auto px-6 h-16 flex items-center justify-between">
+        <!-- Logo / Brand -->
+        <a class="flex items-center gap-3 group" href="/">
+            <div class="w-8 h-8 bg-accent rounded-sm flex items-center justify-center transform group-hover:rotate-12 transition-transform duration-300">
+                <span class="text-bg font-bold text-lg">{config:siteTitle.substring(0, 1)}</span>
+            </div>
+            <span class="text-main font-bold tracking-tight text-lg">{config:siteTitle}</span>
+        </a>
+
+        <!-- Navigation -->
+        <nav class="hidden md:flex items-center gap-8">
+            <div class="flex items-center gap-6">
+                <a class="text-sm font-medium text-body hover:text-main transition-colors" href="/">首页</a>
+                <a class="text-sm font-medium text-body hover:text-main transition-colors" href="/link">友链</a>
+                <a class="text-sm font-medium text-body hover:text-main transition-colors" href="/tag">标签</a>
+                <a class="text-sm font-medium text-body hover:text-main transition-colors" href="/category">分类</a>
+            </div>
+
+            <div class="h-4 w-[1px] bg-border"></div>
+
+            <!-- Search -->
+            <form action="/search" class="relative group" method="get">
+                <input
+                        class="pl-10 pr-4 py-1.5 text-sm w-48 bg-card border border-border rounded-md text-main placeholder:text-meta"
+                        name="q"
+                        placeholder="搜索文章..."
+                        type="text"/>
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round"
+                          stroke-width="2"/>
+                </svg>
+            </form>
+
+            <div class="h-4 w-[1px] bg-border"></div>
+
+            <!-- Theme Toggle -->
+            <button class="theme-toggle p-2 rounded-md hover:bg-accent/5 transition-colors border border-transparent hover:border-border text-meta hover:text-main"
+                    title="切换主题">
+                <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" stroke-linecap="round" stroke-linejoin="round"
+                          stroke-width="2"/>
+                </svg>
+                <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"
+                          stroke-width="2"/>
+                </svg>
+            </button>
+
+            <!-- User -->
+            <div class="relative" id="userMenuContainer">
+                <button class="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-accent/5 transition-colors border border-transparent hover:border-border"
+                        id="userMenuBtn">
+                    <span class="text-sm font-medium">账户</span>
+                    <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                    </svg>
+                </button>
+                <div class="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-2xl hidden p-1.5 z-50 overflow-hidden"
+                     id="userDropdown">
+                    <div class="space-y-0.5" id="userNotLoggedIn">
+                        <a class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors"
+                           href="/user/login">登录</a>
+                        <a class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors"
+                           href="/user/register">注册</a>
+                    </div>
+                    <div class="hidden space-y-0.5" id="userLoggedIn">
+                        <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-border/50 mb-1"
+                             id="userNickname">User
+                        </div>
+                        <a class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors"
+                           href="/user/center">个人中心</a>
+                        <a class="block px-3 py-2 text-sm rounded-md hover:bg-red-500/10 text-red-500/80 hover:text-red-600 transition-colors" href="#"
+                           id="logoutLink">退出登录</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Mobile Toggle -->
+        <button class="md:hidden p-2 text-meta hover:text-main" id="mobileMenuBtn">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M4 6h16M4 12h16m-7 6h7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Mobile Menu -->
+    <div class="hidden md:hidden bg-bg border-t border-border px-6 py-4 space-y-4 shadow-xl" id="mobileMenu">
+        <div class="flex flex-col gap-3">
+            <a class="text-sm py-2 text-body hover:text-main transition-colors font-medium" href="/">首页</a>
+            <a class="text-sm py-2 text-body hover:text-main transition-colors font-medium" href="/link">友链</a>
+            <a class="text-sm py-2 text-body hover:text-main transition-colors font-medium" href="/tag">标签</a>
+            <a class="text-sm py-2 text-body hover:text-main transition-colors font-medium" href="/category">分类</a>
+        </div>
+        <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">
+            <div class="flex items-center justify-between py-2">
+                <span class="text-sm font-medium">外观</span>
+                <button class="theme-toggle p-2 rounded-md hover:bg-accent/5 transition-colors border border-border text-meta hover:text-main"
+                        title="切换主题">
+                    <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" stroke-linecap="round" stroke-linejoin="round"
+                              stroke-width="2"/>
+                    </svg>
+                    <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"
+                              stroke-width="2"/>
+                    </svg>
+                </button>
+            </div>
+            <a class="text-sm py-2 text-body hover:text-main transition-colors font-medium" href="/user/login">登录</a>
+            <a class="text-sm py-2 text-body hover:text-main transition-colors font-medium"
+               href="/user/register">注册</a>
+        </div>
+    </div>
+</header>
+
+<!-- Main Content -->
+<main class="flex-grow max-w-1400 mx-auto w-full px-6 py-16">
+    <div class="flex flex-col md:flex-row gap-20">
+        <!-- Primary Column -->
+        <div class="flex-1 min-w-0" id="pjax-container">
+            {#insert content}
+            <div class="flex items-center justify-center h-64 border border-dashed border-border rounded-lg">
+                <p class="text-sm text-gray-600 uppercase tracking-widest font-mono">Content Placeholder</p>
+            </div>
+            {/insert}
+        </div>
+
+        <!-- Sidebar Column (Asymmetric 3:1 approx) -->
+        <aside class="w-full md:w-[320px] shrink-0" id="sidebar-container">
+            {#insert sidebar}
+            <div class="space-y-12">
+                {#insert sidebar-content}
+                <p class="meta-mono">Sidebar</p>
+                {/insert}
+            </div>
+            {/insert}
+        </aside>
+    </div>
+</main>
+
+<!-- Footer -->
+<footer class="border-t border-border py-12 mt-32">
+    <div class="max-w-1400 mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div class="flex flex-col gap-2">
+            <span class="meta-mono">{config:copyright}</span>
+            {#if config:icp}
+            <span class="text-xs text-meta">{config:icp}</span>
+            {/if}
+        </div>
+        <div class="flex gap-6 items-center">
+            {#if config:social('github')}
+            <a class="meta-mono hover:text-accent transition-colors" href="{config:social('github')}"
+               target="_blank">GitHub</a>
+            {/if}
+            <a class="meta-mono hover:text-accent transition-colors" href="/feed">RSS 订阅</a>
+            <a class="meta-mono hover:text-accent transition-colors" href="/sitemap.xml">站点地图</a>
+        </div>
+    </div>
+    {#if config:footerHtml}
+    <div class="max-w-1400 mx-auto px-6 mt-8">
+        {config:footerHtml.raw}
+    </div>
+    {/if}
+</footer>
+
+<!-- Progress Bar -->
+<div class="fixed top-0 left-0 h-0.5 w-0 z-[9999] bg-accent shadow-[0_0_10px_rgba(6,182,212,0.5)] transition-all"
+     id="pjax-progress"></div>
+
+<!-- UI Components -->
+{#include system/ui.html /}
+
+<!-- JS Scripts -->
+<script defer src="/assets/js/ui.js"></script>
+<script defer src="/assets/js/main.js"></script>
+<script defer src="/assets/js/user.js"></script>
+<script defer src="/assets/js/comment.js"></script>
+<script defer src="/assets/js/ads.js"></script>
+<script defer src="/assets/js/link.js"></script>
+</body>
+</html>
