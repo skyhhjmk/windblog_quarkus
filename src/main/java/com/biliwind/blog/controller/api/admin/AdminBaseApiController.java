@@ -35,7 +35,7 @@ public class AdminBaseApiController {
     public Map<String, Object> ping() {
         return Map.of(
                 "success", true,
-                "time", OffsetDateTime.now(),
+                "time", OffsetDateTime.now(java.time.ZoneOffset.UTC),
                 "userId", adminRequestContext.getUserId(),
                 "username", adminRequestContext.getUsername()
         );

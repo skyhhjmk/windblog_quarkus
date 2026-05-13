@@ -14,10 +14,10 @@ public record ErrorResponse(
         String trackingText
 ) {
     public ErrorResponse(String message, String errorType) {
-        this(false, message, errorType, OffsetDateTime.now(), null, null);
+        this(false, message, errorType, OffsetDateTime.now(java.time.ZoneOffset.UTC), null, null);
     }
 
     public ErrorResponse(String message, String errorType, String trackingId, String trackingText) {
-        this(false, message, errorType, OffsetDateTime.now(), trackingId, trackingText);
+        this(false, message, errorType, OffsetDateTime.now(java.time.ZoneOffset.UTC), trackingId, trackingText);
     }
 }

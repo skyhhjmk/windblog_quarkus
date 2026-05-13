@@ -278,7 +278,7 @@ public class EdgeSearchController {
     }
 
     private OffsetDateTime dateThreshold(String date) {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(java.time.ZoneOffset.UTC);
         return switch (date) {
             case "7d" -> now.minusDays(7);
             case "30d" -> now.minusDays(30);

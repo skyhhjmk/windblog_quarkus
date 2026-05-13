@@ -43,7 +43,7 @@ public class EdgeNodeRegistry {
             node.persist();
         }
 
-        node.lastHeartbeat = OffsetDateTime.now();
+        node.lastHeartbeat = OffsetDateTime.now(java.time.ZoneOffset.UTC);
         node.metrics = metrics;
         node.status = "ONLINE";
     }
@@ -68,7 +68,7 @@ public class EdgeNodeRegistry {
     @Scheduled(every = "60s")
     @Transactional
     void checkNodeHealth() {
-        OffsetDateTime threshold = OffsetDateTime.now().minusSeconds(90);
+        OffsetDateTime threshold = OffsetDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(90);
         List<EdgeNode> nodes = EdgeNode.list("status = 'ONLINE'");
         for (EdgeNode node : nodes) {
             if (node.lastHeartbeat != null && node.lastHeartbeat.isBefore(threshold)) {
@@ -127,7 +127,7 @@ public class EdgeNodeRegistry {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node != null) {
             node.status = "ONLINE";
-            node.lastHeartbeat = OffsetDateTime.now();
+            node.lastHeartbeat = OffsetDateTime.now(java.time.ZoneOffset.UTC);
             node.metrics = metrics;
         }
     }
