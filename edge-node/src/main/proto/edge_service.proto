@@ -1,0 +1,90 @@
+syntax = "proto3";
+package windblog.edge;
+
+option java_multiple_files = false;
+option java_package = "com.biliwind.blog.edge";
+option java_outer_classname = "EdgeServiceProto";
+
+service EdgeNodeService {
+
+  // 心跳注册 + 状态上报 + 附带最新配置
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // 拉取最新存储权重配置表
+  rpc GetStorageConfig(ConfigRequest) returns (StorageConfigResponse);
+
+  // 回源查询单个媒体的完整元数据和存储状态
+  rpc GetMediaMetadata(MediaQueryRequest) returns (MediaMetadataResponse);
+
+  // 回源流式下载文件（用于边缘节点无缓存时的 fallback）
+  rpc DownloadMedia(MediaDownloadRequest) returns (stream DownloadChunk);
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  string region = 2;
+  int64 timestamp = 3;
+  map<string, string> metrics = 4;
+}
+
+message HeartbeatResponse {
+  bool accepted = 1;
+  int32 heartbeat_interval_seconds = 2;
+  StorageConfigResponse config = 3;
+}
+
+message ConfigRequest {
+  string node_id = 1;
+}
+
+message StorageConfigResponse {
+  repeated StorageNodeConfig nodes = 1;
+  int64 config_version = 2;
+}
+
+message StorageNodeConfig {
+  string name = 1;
+  bool is_primary = 2;
+  string role = 3;
+  int32 priority = 4;
+  string cdn_domain = 5;
+  bool cdn_enabled = 6;
+  repeated string supported_types = 7;
+}
+
+message MediaQueryRequest {
+  string node_id = 1;
+  int64 media_id = 2;
+}
+
+message MediaMetadataResponse {
+  int64 media_id = 1;
+  string storage_key = 2;
+  string mime_type = 3;
+  map<string, VariantInfo> variants = 4;
+  int64 version = 5;
+}
+
+message VariantInfo {
+  string best_url = 1;
+  map<string, NodeVariantStatus> nodes = 2;
+}
+
+message NodeVariantStatus {
+  string path = 1;
+  string status = 2;
+  int64 size = 3;
+}
+
+message MediaDownloadRequest {
+  string node_id = 1;
+  int64 media_id = 2;
+  string provider_name = 3;
+  string variant_type = 4;
+}
+
+message DownloadChunk {
+  bytes data = 1;
+  int64 offset = 2;
+  bool is_last = 3;
+}

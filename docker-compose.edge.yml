@@ -1,0 +1,74 @@
+services:
+  # 边缘节点专用数据库 (用于存储逻辑复制的只读副本)
+  edge-db:
+    container_name: windblog-edge-db
+    image: postgres:18
+    restart: unless-stopped
+    networks:
+      - app-network
+    environment:
+      POSTGRES_USER: ${EDGE_DB_USER}
+      POSTGRES_PASSWORD: ${EDGE_DB_PASSWORD}
+      POSTGRES_DB: ${EDGE_DB_NAME}
+    ports:
+      - "${EDGE_DB_PORT}:5432"
+    volumes:
+      - edge-db-data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${EDGE_DB_USER} -d ${EDGE_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 边缘节点专用缓存
+  edge-redis:
+    container_name: windblog-edge-redis
+    image: redis:8-alpine
+    restart: unless-stopped
+    networks:
+      - app-network
+    ports:
+      - "${EDGE_REDIS_PORT}:6379"
+    volumes:
+      - edge-redis-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 边缘节点应用
+  edge-node:
+    container_name: windblog-edge-node
+    build:
+      context: ./edge-node
+      dockerfile: Dockerfile.native
+    restart: unless-stopped
+    networks:
+      - app-network
+    env_file:
+      - .env.edge
+    environment:
+      - QUARKUS_DATASOURCE_JDBC_URL=${EDGE_DATASOURCE_URL}
+      - QUARKUS_DATASOURCE_USERNAME=${EDGE_DB_USER}
+      - QUARKUS_DATASOURCE_PASSWORD=${EDGE_DB_PASSWORD}
+      - QUARKUS_REDIS_HOSTS=${EDGE_REDIS_URL}
+      - QUARKUS_HTTP_PORT=8081
+    ports:
+      - "${EDGE_APP_PORT}:8081"
+    depends_on:
+      edge-db:
+        condition: service_healthy
+      edge-redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  app-network:
+    name: windblog_quarkus_app-network
+    external: true
+
+volumes:
+  edge-db-data:
+  edge-redis-data:

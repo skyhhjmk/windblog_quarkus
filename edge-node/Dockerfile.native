@@ -1,0 +1,23 @@
+####
+# 此 Dockerfile 用于运行 Quarkus 原生可执行文件（无 JVM 模式）。
+# 参考主项目 src/main/docker/Dockerfile.native-micro 编写。
+#
+# 在构建镜像之前，请先在 edge-node 目录下运行：
+# ../mvnw package -Dnative
+#
+# 构建镜像：
+# docker build -f Dockerfile.native -t quarkus/windblog-edge-node .
+####
+FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0
+WORKDIR /work/
+RUN chown 1001 /work \
+    && chmod "g+rwX" /work \
+    && chown 1001:root /work
+
+# 复制生成的 runner。注意：由于 context 是 ./edge-node，所以路径是 target/
+COPY --chown=1001:root --chmod=0755 target/*-runner /work/application
+
+EXPOSE 8081
+USER 1001
+
+ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]

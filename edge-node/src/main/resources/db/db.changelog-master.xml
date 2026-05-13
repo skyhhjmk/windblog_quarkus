@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
+
+    <include file="./migration/001-create-users.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/002-create-posts.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/003-create-post-revisions.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/004-create-media.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/005-create-post-media.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/006-create-tags.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/007-create-post-tags.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/008-create-categories.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/009-create-comments.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/010-create-audit-logs.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/011-add-foreign-keys.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/012-add-indexes.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/013-add-constraints.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/016-categories-ltree-triggers.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/017-create-links.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/018-create-link-audit.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/019-create-link-monitor-log.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/020-add-post-render-type.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/021-add-post-password.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/022-add-post-seo-fields.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/023-create-ai-provider-config.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/024-add-media-uploader.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/025-create-upload-roles.sql" relativeToChangelogFile="true"/>
+    <include file="./migration/026-add-media-info-fields.sql" relativeToChangelogFile="true"/>
+    <include file="migration/027-add-table-created-at-fields.sql" relativeToChangelogFile="true"/>
+    <include file="migration/029-create-link-tags.sql" relativeToChangelogFile="true"/>
+    <include file="migration/030-create-link-tag-relations.sql" relativeToChangelogFile="true"/>
+    <include file="migration/031-add-link-tag-foreign-keys.sql" relativeToChangelogFile="true"/>
+    <include file="migration/032-add-link-type.sql" relativeToChangelogFile="true"/>
+    <include file="migration/033-add-tags-updated-at.sql" relativeToChangelogFile="true"/>
+    <include file="migration/034-add-post-category.sql" relativeToChangelogFile="true"/>
+    <include file="migration/035-extend-users-and-create-wallet.sql" relativeToChangelogFile="true"/>
+    <include file="migration/036-create-dead-letter-messages.sql" relativeToChangelogFile="true"/>
+    <include file="migration/037-add-post-stats-fields.sql" relativeToChangelogFile="true"/>
+    <include file="migration/038-add-post-ai-summary-status.sql" relativeToChangelogFile="true"/>
+    <include file="migration/040-refactor-ai-provider-configs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/041-add-audit-log-ai-fields.sql" relativeToChangelogFile="true"/>
+    <include file="migration/042-add-tutorial-level-defs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/043-add-category-post-count.sql" relativeToChangelogFile="true"/>
+    <include file="migration/044-del-tutorial-level-defs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/045-create-system-settings-center.sql" relativeToChangelogFile="true"/>
+    <include file="migration/046-refactor-audit-logs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/047-create-user-check-ins.sql" relativeToChangelogFile="true"/>
+    <include file="migration/048-add-gamification-and-store.sql" relativeToChangelogFile="true"/>
+    <include file="migration/049-add-purchase-record-block-id.sql" relativeToChangelogFile="true"/>
+    <include file="migration/050-add-comment-audit-fields.sql" relativeToChangelogFile="true"/>
+    <include file="migration/051-add-comment-ai-metrics.sql" relativeToChangelogFile="true"/>
+    <include file="migration/052-add-ai-audit-settings.sql" relativeToChangelogFile="true"/>
+    <include file="migration/053-add-comment-ai-score.sql" relativeToChangelogFile="true"/>
+    <include file="migration/054-optimize-comment-ai-audit.sql" relativeToChangelogFile="true"/>
+    <include file="migration/055-fix-ltree-slug-sanitization.sql" relativeToChangelogFile="true"/>
+    <include file="migration/056-fix-post-revisions-fk.sql" relativeToChangelogFile="true"/>
+    <include file="migration/057-create-temp-data-table.sql" relativeToChangelogFile="true"/>
+    <include file="db/migration/058-create-storage-provider.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/059-create-image-processing-config.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/060-add-media-storage-nodes.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/061-add-visibility-regions.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/062-rename-storage-nodes-to-providers.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/063-add-media-processing-fields.sql" relativeToChangelogFile="false"/>
+</databaseChangeLog>
