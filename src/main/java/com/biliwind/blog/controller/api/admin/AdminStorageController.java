@@ -230,14 +230,15 @@ public class AdminStorageController {
 
     @GET
     @Path("/sync/status")
-    public Response getSyncStatus() {
+    public Response getSyncStatus(@QueryParam("page") @DefaultValue("0") int page,
+                                  @QueryParam("size") @DefaultValue("20") int size) {
+        // 计算全量统计信息 (这里可以优化为原生 SQL 以提高性能，目前先保持逻辑简单)
         List<Media> allMedia = Media.listAll();
         int totalMedia = allMedia.size();
         int totalVariants = 0;
         int syncedCount = 0;
         int pendingCount = 0;
         int failedCount = 0;
-        ArrayList<MediaSyncDetailResponse> details = new ArrayList<>();
 
         for (Media media : allMedia) {
             if (media.storageProviders != null) {
@@ -267,14 +268,23 @@ public class AdminStorageController {
                     }
                 }
             }
+        }
 
+        // 分页获取详情列表
+        io.quarkus.panache.common.Page panachePage = io.quarkus.panache.common.Page.of(page, size);
+        List<Media> paginatedMedia = Media.find("order by createdAt desc").page(panachePage).list();
+        long totalDetails = Media.count();
+
+        ArrayList<MediaSyncDetailResponse> details = new ArrayList<>();
+        for (Media media : paginatedMedia) {
             MediaSyncDetailResponse detail = new MediaSyncDetailResponse(
                     media.id, media.fileName, media.mimeType, media.storageProviders);
             details.add(detail);
         }
 
         SyncStatusResponse response = new SyncStatusResponse(
-                totalMedia, totalVariants, syncedCount, pendingCount, failedCount, details);
+                totalMedia, totalVariants, syncedCount, pendingCount, failedCount,
+                details, totalDetails, page, size);
         return Response.ok(response).build();
     }
 

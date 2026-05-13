@@ -101,6 +101,8 @@ public class AliyunOssStorageProvider implements StorageProvider {
         return path;
     }
 
+    private java.util.List<String> supportedTypes;
+
     @Override
     public void initialize(StorageProviderConfig config) {
         JsonNode json = config.getConfigJson();
@@ -144,6 +146,7 @@ public class AliyunOssStorageProvider implements StorageProvider {
         }
 
         this.ossClient = clientBuilder.build();
+        this.supportedTypes = config.getSupportedTypes();
     }
 
     @Override
@@ -151,9 +154,9 @@ public class AliyunOssStorageProvider implements StorageProvider {
         try {
             ListObjectsRequest request = ListObjectsRequest.newBuilder()
                     .bucket(this.bucketName)
-                    .maxKeys(Long.valueOf(1))
+                    .maxKeys(Long.valueOf(1L))
                     .build();
-            ListObjectsResult result = ossClient.listObjects(request);
+            ossClient.listObjects(request);
             return true;
         } catch (Exception e) {
             log.error("Aliyun OSS is not available", e);
@@ -163,7 +166,21 @@ public class AliyunOssStorageProvider implements StorageProvider {
 
     @Override
     public boolean supportsVariant(String mimeType, String variantType) {
-        return true;
+        if (supportedTypes == null || supportedTypes.isEmpty() || supportedTypes.contains("*")) {
+            return true;
+        }
+        for (String type : supportedTypes) {
+            if (type.equals(mimeType)) {
+                return true;
+            }
+            if (type.endsWith("/*")) {
+                String prefix = type.substring(0, type.length() - 2);
+                if (mimeType.startsWith(prefix)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

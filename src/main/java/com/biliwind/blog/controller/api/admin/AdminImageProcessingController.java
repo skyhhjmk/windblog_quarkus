@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.Response;
 
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 @Path("/api/admin/storage/image-processing/configs")
@@ -96,6 +97,58 @@ public class AdminImageProcessingController {
 
         TestToolResult result = new TestToolResult("ffmpeg", exists && executable, message);
         return Response.ok(result).build();
+    }
+
+    @GET
+    @Path("/metadata")
+    public Response getMetadata() {
+        List<Map<String, Object>> metadata = List.of(
+                Map.of(
+                        "key", "cwebp_path",
+                        "label", "cwebp 工具路径",
+                        "type", "text",
+                        "description", "Google WebP 转换工具的绝对路径",
+                        "testUrl", "/api/admin/storage/image-processing/configs/test-webp"
+                ),
+                Map.of(
+                        "key", "ffmpeg_path",
+                        "label", "FFmpeg 工具路径",
+                        "type", "text",
+                        "description", "FFmpeg 视频处理工具的绝对路径",
+                        "testUrl", "/api/admin/storage/image-processing/configs/test-ffmpeg"
+                ),
+                Map.of(
+                        "key", "webp_quality",
+                        "label", "WebP 转换质量",
+                        "type", "number",
+                        "min", 0.0,
+                        "max", 1.0,
+                        "description", "WebP 图片压缩质量 (0.0 - 1.0)"
+                ),
+                Map.of(
+                        "key", "webp_method",
+                        "label", "WebP 压缩强度",
+                        "type", "number",
+                        "min", 0,
+                        "max", 6,
+                        "description", "WebP 压缩方法 (0最快, 6最慢质量最好)"
+                ),
+                Map.of(
+                        "key", "placeholder_max_width",
+                        "label", "占位图最大宽度",
+                        "type", "number",
+                        "description", "生成的占位图片最大宽度 (px)"
+                ),
+                Map.of(
+                        "key", "placeholder_quality",
+                        "label", "占位图质量",
+                        "type", "number",
+                        "min", 0.0,
+                        "max", 1.0,
+                        "description", "占位图 JPEG 压缩质量"
+                )
+        );
+        return Response.ok(metadata).build();
     }
 
     public record TestToolResult(String tool, boolean available, String message) {

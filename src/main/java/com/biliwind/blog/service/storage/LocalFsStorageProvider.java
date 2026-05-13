@@ -28,6 +28,22 @@ public class LocalFsStorageProvider implements StorageProvider {
         this.name = name;
     }
 
+    private java.util.List<String> supportedTypes;
+
+    @Override
+    public boolean isAvailable() {
+        if (rootPath == null) {
+            return false;
+        }
+        if (!Files.exists(rootPath)) {
+            return false;
+        }
+        if (!Files.isWritable(rootPath)) {
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public void initialize(StorageProviderConfig config) {
         JsonNode json = config.getConfigJson();
@@ -50,25 +66,26 @@ public class LocalFsStorageProvider implements StorageProvider {
         } catch (Exception e) {
             throw new StorageException("Failed to initialize LocalFsStorageProvider: " + e.getMessage(), e);
         }
-    }
-
-    @Override
-    public boolean isAvailable() {
-        if (rootPath == null) {
-            return false;
-        }
-        if (!Files.exists(rootPath)) {
-            return false;
-        }
-        if (!Files.isWritable(rootPath)) {
-            return false;
-        }
-        return true;
+        this.supportedTypes = config.getSupportedTypes();
     }
 
     @Override
     public boolean supportsVariant(String mimeType, String variantType) {
-        return true;
+        if (supportedTypes == null || supportedTypes.isEmpty() || supportedTypes.contains("*")) {
+            return true;
+        }
+        for (String type : supportedTypes) {
+            if (type.equals(mimeType)) {
+                return true;
+            }
+            if (type.endsWith("/*")) {
+                String prefix = type.substring(0, type.length() - 2);
+                if (mimeType.startsWith(prefix)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

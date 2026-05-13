@@ -99,6 +99,24 @@ public class Media extends PanacheEntityBase {
     public OffsetDateTime deletedAt;
 
     /**
+     * 处理状态：PENDING, PROCESSING, COMPLETED, FAILED
+     */
+    @Column(name = "processing_status", length = 50)
+    public String processingStatus;
+
+    /**
+     * 处理进度百分比 (0-100)
+     */
+    @Column(name = "processing_progress")
+    public Integer processingProgress;
+
+    /**
+     * 处理失败时的详细错误信息
+     */
+    @Column(name = "processing_error", columnDefinition = "text")
+    public String processingError;
+
+    /**
      * @return size
      */
     public Long getSize() {
