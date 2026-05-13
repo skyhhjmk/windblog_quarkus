@@ -1,6 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
-import com.biliwind.blog.service.edge.EdgeNodeInfo;
+import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.service.edge.EdgeNodeRegistry;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -18,7 +18,7 @@ public class AdminEdgeNodeController {
     EdgeNodeRegistry registry;
 
     @GET
-    public List<EdgeNodeInfo> listNodes() {
+    public List<EdgeNode> listNodes() {
         return registry.getAllNodes();
     }
 }

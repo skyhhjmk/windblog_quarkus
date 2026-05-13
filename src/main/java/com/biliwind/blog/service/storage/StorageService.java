@@ -5,6 +5,7 @@ import com.biliwind.blog.model.StorageProviderEntity;
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.arc.Unremovable;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -19,6 +20,7 @@ import java.io.InputStream;
 import java.util.*;
 
 @ApplicationScoped
+@Unremovable
 public class StorageService {
 
     private static final Logger log = LoggerFactory.getLogger(StorageService.class);

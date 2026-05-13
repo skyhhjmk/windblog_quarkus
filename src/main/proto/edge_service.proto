@@ -18,6 +18,20 @@ service EdgeNodeService {
 
   // 回源流式下载文件（用于边缘节点无缓存时的 fallback）
   rpc DownloadMedia(MediaDownloadRequest) returns (stream DownloadChunk);
+
+  // 主动轮询接口：主节点调用从节点，推送配置并获取状态
+  rpc Poll(PollRequest) returns (PollResponse);
+}
+
+message PollRequest {
+  string main_node_id = 1;
+  StorageConfigResponse config = 2;
+}
+
+message PollResponse {
+  string node_id = 1;
+  string region = 2;
+  map<string, string> metrics = 3;
 }
 
 message HeartbeatRequest {

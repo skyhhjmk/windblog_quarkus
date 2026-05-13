@@ -1,6 +1,6 @@
 package com.biliwind.blog.service.edge;
 
-import com.biliwind.blog.edge.*;
+import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageProviderEntity;
@@ -10,10 +10,11 @@ import com.biliwind.blog.service.storage.VariantType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.grpc.GrpcService;
+import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
-import io.smallrye.common.annotation.Blocking;
+import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @GrpcService
+@Singleton
 @Blocking
 public class EdgeNodeGrpcService implements EdgeNodeService {
     private static final Logger log = LoggerFactory.getLogger(EdgeNodeGrpcService.class);
@@ -32,10 +34,11 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
     EdgeNodeRegistry registry;
 
     @Inject
-    StorageService storageService;
-
-    @Inject
     ObjectMapper objectMapper;
+
+    private StorageService getStorageService() {
+        return io.quarkus.arc.Arc.container().instance(StorageService.class).get();
+    }
 
     @Override
     public Uni<HeartbeatResponse> heartbeat(HeartbeatRequest request) {
@@ -51,7 +54,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Override
     public Uni<StorageConfigResponse> getStorageConfig(ConfigRequest request) {
-        List<StorageProviderEntity> entities = storageService.getAllProviderEntities();
+        List<StorageProviderEntity> entities = StorageProviderEntity.list("isEnabled = true ORDER BY priority ASC");
 
         List<StorageNodeConfig> configs = entities.stream().map(e -> StorageNodeConfig.newBuilder()
                 .setName(e.name)
@@ -107,7 +110,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
             // Get all possible variants
             for (VariantType vt : VariantType.values()) {
                 String variantName = vt.name().toLowerCase();
-                String bestUrl = storageService.getBestAccessUrl(media, vt);
+                String bestUrl = getStorageService().getBestAccessUrl(media, vt);
 
                 VariantInfo.Builder variantBuilder = VariantInfo.newBuilder();
                 if (bestUrl != null) {
@@ -149,7 +152,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                 .onItem().transformToMulti(req -> {
                     Multi<DownloadChunk> multi;
                     try {
-                        StorageProvider provider = storageService.getPrimaryProvider();
+                        StorageProvider provider = getStorageService().getPrimaryProvider();
                         if (provider == null) {
                             multi = Multi.createFrom().failure(new Exception("Primary provider not found"));
                         } else {
@@ -158,7 +161,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                                 multi = Multi.createFrom().failure(new Exception("Media not found: " + req.getMediaId()));
                             } else {
                                 String variantName = req.getVariantType().toLowerCase();
-                                Object providerDataObj = media.storageProviders.get(storageService.getPrimaryProviderName());
+                                Object providerDataObj = media.storageProviders.get(getStorageService().getPrimaryProviderName());
                                 if (!(providerDataObj instanceof Map)) {
                                     multi = Multi.createFrom().failure(new Exception("Primary provider data not found"));
                                 } else {
@@ -208,5 +211,11 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                     }
                     return multi;
                 });
+    }
+
+    @Override
+    public Uni<PollResponse> poll(PollRequest request) {
+        // 主节点通常不接受来自他人的轮询，除非是级联部署
+        return Uni.createFrom().failure(new UnsupportedOperationException("Main node does not support being polled."));
     }
 }
