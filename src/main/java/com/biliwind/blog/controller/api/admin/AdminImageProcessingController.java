@@ -10,9 +10,10 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import java.nio.file.Files;
+import java.util.List;
 
 @ApplicationScoped
-@Path("/api/admin/image-processing/config")
+@Path("/api/admin/storage/image-processing/configs")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class AdminImageProcessingController {
@@ -22,20 +23,19 @@ public class AdminImageProcessingController {
 
     @GET
     public Response listConfigs() {
-        java.util.List<ImageProcessingConfig> configs = ImageProcessingConfig.listAll();
+        List<ImageProcessingConfig> configs = ImageProcessingConfig.listAll();
         return Response.ok(configs).build();
     }
 
     @PUT
-    @Path("/{key}")
     @Transactional
-    public Response updateConfig(@PathParam("key") String key, ImageProcessingConfig config) {
-        ImageProcessingConfig existing = ImageProcessingConfig.find("configKey", key).firstResult();
+    public Response updateConfig(ImageProcessingConfigUpdateRequest request) {
+        ImageProcessingConfig existing = ImageProcessingConfig.find("configKey", request.configKey()).firstResult();
         if (existing == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
-        existing.configValue = config.configValue;
+        existing.configValue = request.configValue;
         existing.persist();
         return Response.ok(existing).build();
     }
@@ -99,5 +99,8 @@ public class AdminImageProcessingController {
     }
 
     public record TestToolResult(String tool, boolean available, String message) {
+    }
+
+    public record ImageProcessingConfigUpdateRequest(String configKey, String configValue) {
     }
 }

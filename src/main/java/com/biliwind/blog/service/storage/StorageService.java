@@ -34,7 +34,38 @@ public class StorageService {
     private StorageProvider primaryProvider;
 
     @PostConstruct
+    @Transactional
     void init() {
+        long count = StorageProviderEntity.count();
+        if (count == 0) {
+            log.info("No storage providers found, initializing default local_fs provider...");
+            String rootPath = org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                    .getOptionalValue("storage.path", String.class)
+                    .orElse(org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                            .getOptionalValue("media.upload.dir", String.class).orElse("./uploads"));
+            String baseUrl = org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                    .getOptionalValue("media.upload.path", String.class).orElse("/uploads");
+
+            StorageProviderEntity defaultProvider = new StorageProviderEntity();
+            defaultProvider.name = "local";
+            defaultProvider.displayName = "默认本地存储";
+            defaultProvider.providerType = "local_fs";
+            defaultProvider.isEnabled = true;
+            defaultProvider.isPrimary = true;
+            defaultProvider.role = "primary";
+            defaultProvider.supportedTypes = "[\"*\"]";
+
+            Map<String, String> configMap = new HashMap<>();
+            configMap.put("rootPath", rootPath);
+            configMap.put("baseUrl", baseUrl);
+            try {
+                defaultProvider.configJson = objectMapper.writeValueAsString(configMap);
+            } catch (Exception e) {
+                defaultProvider.configJson = "{\"rootPath\":\"" + rootPath + "\",\"baseUrl\":\"" + baseUrl + "\"}";
+            }
+            defaultProvider.persist();
+        }
+
         List<StorageProviderEntity> entities = StorageProviderEntity.list("isEnabled = true ORDER BY priority ASC");
         for (StorageProviderEntity entity : entities) {
             StorageProvider provider = createProvider(entity);
@@ -212,6 +243,38 @@ public class StorageService {
         }
     }
 
+    public void scheduleSyncForMedia(Long mediaId) {
+        Media media = Media.findById(mediaId);
+        if (media == null) {
+            return;
+        }
+        if (media.storageProviders == null) {
+            return;
+        }
+        HashSet<VariantType> variants = new HashSet<>();
+        for (String providerName : media.storageProviders.keySet()) {
+            Object providerValue = media.storageProviders.get(providerName);
+            if (providerValue instanceof Map) {
+                Map<String, Object> providerData = (Map<String, Object>) providerValue;
+                for (String variantName : providerData.keySet()) {
+                    try {
+                        VariantType variant = VariantType.valueOf(variantName.toUpperCase());
+                        variants.add(variant);
+                    } catch (IllegalArgumentException e) {
+                    }
+                }
+            }
+        }
+        scheduleSync(mediaId, variants);
+    }
+
+    public void scheduleSyncForAllPending() {
+        List<Media> allMedia = Media.listAll();
+        for (Media media : allMedia) {
+            scheduleSyncForMedia(media.id);
+        }
+    }
+
     public SyncResult executeSync(Long mediaId, String providerName, VariantType variant, int retryCount) {
         try {
             Media media = Media.findById(mediaId);
@@ -221,8 +284,8 @@ public class StorageService {
                 return new SyncResult(false, errorMsg);
             }
 
-            if (media.storageNodes == null) {
-                String errorMsg = "Media has no storage_nodes: " + mediaId;
+            if (media.storageProviders == null) {
+                String errorMsg = "Media has no storage_providers: " + mediaId;
                 log.error(errorMsg);
                 return new SyncResult(false, errorMsg);
             }
@@ -245,7 +308,7 @@ public class StorageService {
                 return new SyncResult(false, errorMsg);
             }
 
-            String sourcePath = getSourcePathFromStorageNodes(media, variant);
+            String sourcePath = getSourcePathFromStorageProviders(media, variant);
             if (sourcePath == null || sourcePath.isEmpty()) {
                 String errorMsg = "No source path found for variant: " + variant.name();
                 log.error(errorMsg);
@@ -283,14 +346,14 @@ public class StorageService {
         return null;
     }
 
-    private String getSourcePathFromStorageNodes(Media media, VariantType variant) {
+    private String getSourcePathFromStorageProviders(Media media, VariantType variant) {
         String primaryName = getPrimaryProviderName();
-        Object nodeDataObj = media.storageNodes.get(primaryName);
-        if (!(nodeDataObj instanceof Map)) {
+        Object providerDataObj = media.storageProviders.get(primaryName);
+        if (!(providerDataObj instanceof Map)) {
             return null;
         }
-        Map<String, Object> primaryNodeData = (Map<String, Object>) nodeDataObj;
-        Object variantDataObj = primaryNodeData.get(variant.name().toLowerCase());
+        Map<String, Object> primaryProviderData = (Map<String, Object>) providerDataObj;
+        Object variantDataObj = primaryProviderData.get(variant.name().toLowerCase());
         if (!(variantDataObj instanceof Map)) {
             return null;
         }
@@ -321,8 +384,8 @@ public class StorageService {
         }
 
         String sql = "UPDATE media SET "
-                + "storage_nodes = jsonb_set("
-                + "  jsonb_set(storage_nodes, '{\"$1\"}', COALESCE(storage_nodes->'$1', '{}'::jsonb), true),"
+                + "storage_providers = jsonb_set("
+                + "  jsonb_set(storage_providers, '{\"$1\"}', COALESCE(storage_providers->'$1', '{}'::jsonb), true),"
                 + "  '{\"$1\",\"$2\"}',"
                 + "  '$3'::jsonb"
                 + "), "
@@ -346,19 +409,19 @@ public class StorageService {
     }
 
     public String getBestAccessUrl(Media media, VariantType variant) {
-        if (media == null || media.storageNodes == null) {
+        if (media == null || media.storageProviders == null) {
             return null;
         }
 
         for (StorageProvider provider : enabledProviders) {
             String providerName = provider.getName();
-            Object nodeDataObj = media.storageNodes.get(providerName);
-            if (!(nodeDataObj instanceof Map)) {
+            Object providerDataObj = media.storageProviders.get(providerName);
+            if (!(providerDataObj instanceof Map)) {
                 continue;
             }
-            Map<String, Object> nodeData = (Map<String, Object>) nodeDataObj;
+            Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
             String variantKey = variant.name().toLowerCase();
-            Object variantDataObj = nodeData.get(variantKey);
+            Object variantDataObj = providerData.get(variantKey);
             if (!(variantDataObj instanceof Map)) {
                 continue;
             }
@@ -385,19 +448,19 @@ public class StorageService {
     }
 
     public InputStream fallbackDownload(Media media, VariantType variant) {
-        if (media == null || media.storageNodes == null) {
+        if (media == null || media.storageProviders == null) {
             throw new StorageException("No storage information available for download");
         }
 
         for (StorageProvider provider : enabledProviders) {
             String providerName = provider.getName();
-            Object nodeDataObj = media.storageNodes.get(providerName);
-            if (!(nodeDataObj instanceof Map)) {
+            Object providerDataObj = media.storageProviders.get(providerName);
+            if (!(providerDataObj instanceof Map)) {
                 continue;
             }
-            Map<String, Object> nodeData = (Map<String, Object>) nodeDataObj;
+            Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
             String variantKey = variant.name().toLowerCase();
-            Object variantDataObj = nodeData.get(variantKey);
+            Object variantDataObj = providerData.get(variantKey);
             if (!(variantDataObj instanceof Map)) {
                 continue;
             }
@@ -435,17 +498,17 @@ public class StorageService {
         status.failedCount = 0;
         status.details = new LinkedHashMap<>();
 
-        if (media.storageNodes != null) {
-            for (Map.Entry<String, Object> entry : media.storageNodes.entrySet()) {
+        if (media.storageProviders != null) {
+            for (Map.Entry<String, Object> entry : media.storageProviders.entrySet()) {
                 String providerName = entry.getKey();
-                Object nodeDataObj = entry.getValue();
-                if (!(nodeDataObj instanceof Map)) {
+                Object providerDataObj = entry.getValue();
+                if (!(providerDataObj instanceof Map)) {
                     continue;
                 }
-                Map<String, Object> nodeData = (Map<String, Object>) nodeDataObj;
+                Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
                 Map<String, String> providerVariants = new LinkedHashMap<>();
 
-                for (Map.Entry<String, Object> variantEntry : nodeData.entrySet()) {
+                for (Map.Entry<String, Object> variantEntry : providerData.entrySet()) {
                     String variantKey = variantEntry.getKey();
                     Object variantDataObj = variantEntry.getValue();
                     if (variantDataObj instanceof Map) {

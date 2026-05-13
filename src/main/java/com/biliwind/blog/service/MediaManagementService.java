@@ -394,7 +394,8 @@ public class MediaManagementService {
         media.createdAt = OffsetDateTime.now();
         media.deletedAt = null;
         media.version = 0;
-        media.storageNodes = new LinkedHashMap<>();
+        media.storageProviders = new LinkedHashMap<>();
+
         // 如果是图片，提取尺寸信息并生成占位图和 WebP
         if (normalizedMime.startsWith("image/")) {
             processImage(media, target, metadata);
@@ -403,6 +404,43 @@ public class MediaManagementService {
         if (normalizedMime.startsWith("video/")) {
             processVideo(media, target, storageKey, metadata);
         }
+
+        // 提取生成的变体信息
+        Map<VariantType, String> generatedVariants = new HashMap<>();
+        generatedVariants.put(VariantType.ORIGINAL, storageKey);
+        if (metadata.containsKey("webpUrl")) {
+            String webpUrl = (String) metadata.get("webpUrl");
+            generatedVariants.put(VariantType.WEBP, extractStorageKey(webpUrl));
+        }
+        if (metadata.containsKey("placeholderUrl")) {
+            String placeholderUrl = (String) metadata.get("placeholderUrl");
+            generatedVariants.put(VariantType.PLACEHOLDER, extractStorageKey(placeholderUrl));
+        }
+
+        // 初始化主提供者状态为 synced
+        Map<String, Object> primaryProviderJson = new LinkedHashMap<>();
+        for (Map.Entry<VariantType, String> entry : generatedVariants.entrySet()) {
+            VariantType variant = entry.getKey();
+            String vKey = entry.getValue();
+            Map<String, Object> variantInfo = new LinkedHashMap<>();
+            variantInfo.put("status", "synced");
+            variantInfo.put("path", vKey);
+            primaryProviderJson.put(variant.name().toLowerCase(), variantInfo);
+        }
+        media.storageProviders.put(storageService.getPrimaryProviderName(), primaryProviderJson);
+
+        // 初始化其他提供者状态为 pending
+        for (StorageProviderEntity nonPrimary : storageService.getNonPrimaryProviderEntities()) {
+            Map<String, Object> pendingProviderJson = new LinkedHashMap<>();
+            for (VariantType variant : generatedVariants.keySet()) {
+                Map<String, Object> pendingVariant = new LinkedHashMap<>();
+                pendingVariant.put("status", "pending");
+                pendingVariant.put("path", null);
+                pendingProviderJson.put(variant.name().toLowerCase(), pendingVariant);
+            }
+            media.storageProviders.put(nonPrimary.name, pendingProviderJson);
+        }
+
         media.persist();
         return media;
     }
@@ -715,6 +753,18 @@ public class MediaManagementService {
     }
 
     /**
+     * 从 URL 中提取存储键（文件名部分）
+     */
+    private String extractStorageKey(String url) {
+        if (url == null) return null;
+        int lastSlash = url.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            return url.substring(lastSlash + 1);
+        }
+        return url;
+    }
+
+    /**
      * 标准化内容以便引用检查
      * @param content 内容映射
      * @return 标准化后的内容字符串
@@ -793,7 +843,7 @@ public class MediaManagementService {
         }
 
         String originalUrl = media.url;
-        if (media.storageNodes != null) {
+        if (media.storageProviders != null) {
             String bestOriginalUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
             if (bestOriginalUrl != null && !bestOriginalUrl.isBlank()) {
                 originalUrl = bestOriginalUrl;
@@ -801,7 +851,7 @@ public class MediaManagementService {
         }
 
         String thumbnailUrl = metadataString(media, "thumbnailUrl");
-        if (media.storageNodes != null) {
+        if (media.storageProviders != null) {
             String bestThumbnailUrl = storageService.getBestAccessUrl(media, VariantType.WEBP);
             if (bestThumbnailUrl != null && !bestThumbnailUrl.isBlank()) {
                 thumbnailUrl = bestThumbnailUrl;
@@ -809,7 +859,7 @@ public class MediaManagementService {
         }
 
         String previewUrl = metadataString(media, "previewUrl");
-        if (media.storageNodes != null) {
+        if (media.storageProviders != null) {
             String bestPreviewUrl = storageService.getBestAccessUrl(media, VariantType.PLACEHOLDER);
             if (bestPreviewUrl != null && !bestPreviewUrl.isBlank()) {
                 previewUrl = bestPreviewUrl;

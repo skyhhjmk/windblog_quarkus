@@ -35,6 +35,10 @@ public class AdminDeadLetterApi {
     AiTaskProducer aiTaskProducer;
 
     @Inject
+    @org.eclipse.microprofile.reactive.messaging.Channel("storage-sync-tasks")
+    org.eclipse.microprofile.reactive.messaging.Emitter<com.biliwind.blog.service.storage.dto.StorageSyncMessage> storageSyncEmitter;
+
+    @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     /**
@@ -116,27 +120,44 @@ public class AdminDeadLetterApi {
         try {
             // 从消息内容中重建任务
             Map<String, Object> content = message.messageContent;
-            if (content == null || !content.containsKey("postId")) {
+            if (content == null) {
                 return Response.status(Response.Status.BAD_REQUEST)
-                        .entity(Map.of("success", false, "message", "消息内容格式错误"))
+                        .entity(Map.of("success", false, "message", "消息内容为空"))
                         .build();
             }
-            
-            Long postId = ((Number) content.get("postId")).longValue();
-            Integer priority = content.containsKey("priority") ? 
-                    ((Number) content.get("priority")).intValue() : 1;
-            @SuppressWarnings("unchecked")
-            Map<String, String> postContent = (Map<String, String>) content.get("content");
-            
-            // 创建新任务并发送
-            Long userId = adminRequestContext.getUserId();
-            AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
-            aiTaskProducer.sendSummaryTask(task);
-            
-            // 标记为已处理
-            message.markAsProcessed("手动重试 - 已重新发送到任务队列");
-            
-            log.info("已重试死信消息，id={}, postId={}", id, postId);
+
+            if (content.containsKey("postId")) {
+                // 处理 AI 摘要任务
+                Long postId = ((Number) content.get("postId")).longValue();
+                Integer priority = content.containsKey("priority") ?
+                        ((Number) content.get("priority")).intValue() : 1;
+                @SuppressWarnings("unchecked")
+                Map<String, String> postContent = (Map<String, String>) content.get("content");
+
+                Long userId = adminRequestContext.getUserId();
+                AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
+                aiTaskProducer.sendSummaryTask(task);
+
+                message.markAsProcessed("手动重试 AI 摘要 - 已重新发送");
+                log.info("已重试 AI 死信消息，id={}, postId={}", id, postId);
+            } else if (content.containsKey("mediaId")) {
+                // 处理存储同步任务
+                Long mediaId = ((Number) content.get("mediaId")).longValue();
+                String providerName = (String) content.get("providerName");
+                String variantType = (String) content.get("variantType");
+
+                com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
+                        new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
+                                mediaId, providerName, variantType, 0);
+                storageSyncEmitter.send(syncMsg);
+
+                message.markAsProcessed("手动重试存储同步 - 已重新发送");
+                log.info("已重试存储同步死信消息，id={}, mediaId={}", id, mediaId);
+            } else {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("success", false, "message", "未知消息类型"))
+                        .build();
+            }
             
             return Response.ok(Map.of(
                     "success", true,
@@ -169,7 +190,9 @@ public class AdminDeadLetterApi {
         for (DeadLetterMessage message : unprocessed) {
             try {
                 Map<String, Object> content = message.messageContent;
-                if (content != null && content.containsKey("postId")) {
+                if (content == null) continue;
+
+                if (content.containsKey("postId")) {
                     Long postId = ((Number) content.get("postId")).longValue();
                     Integer priority = content.containsKey("priority") ? 
                             ((Number) content.get("priority")).intValue() : 1;
@@ -179,11 +202,23 @@ public class AdminDeadLetterApi {
                     Long userId = adminRequestContext.getUserId();
                     AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
                     aiTaskProducer.sendSummaryTask(task);
-                    
-                    message.markAsProcessed("批量重试 - 已重新发送到任务队列");
+
+                    message.markAsProcessed("批量重试 AI - 已重新发送");
+                    successCount++;
+                } else if (content.containsKey("mediaId")) {
+                    Long mediaId = ((Number) content.get("mediaId")).longValue();
+                    String providerName = (String) content.get("providerName");
+                    String variantType = (String) content.get("variantType");
+
+                    com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
+                            new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
+                                    mediaId, providerName, variantType, 0);
+                    storageSyncEmitter.send(syncMsg);
+
+                    message.markAsProcessed("批量重试同步 - 已重新发送");
                     successCount++;
                 } else {
-                    message.markAsProcessed("批量重试跳过 - 消息内容格式错误");
+                    message.markAsProcessed("批量重试跳过 - 未知消息类型");
                     failCount++;
                 }
             } catch (Exception e) {

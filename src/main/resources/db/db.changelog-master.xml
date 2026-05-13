@@ -63,4 +63,5 @@
     <include file="db/migration/059-create-image-processing-config.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/060-add-media-storage-nodes.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/061-add-visibility-regions.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/062-rename-storage-nodes-to-providers.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

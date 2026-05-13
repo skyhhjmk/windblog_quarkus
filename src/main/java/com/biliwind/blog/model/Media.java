@@ -69,11 +69,11 @@ public class Media extends PanacheEntityBase {
     public Map<String, Object> metadata;
 
     /**
-     * 多存储节点状态矩阵
+     * 各存储提供者的状态矩阵
      */
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "storage_nodes", columnDefinition = "jsonb")
-    public Map<String, Object> storageNodes;
+    @Column(name = "storage_providers", columnDefinition = "jsonb")
+    public Map<String, Object> storageProviders;
 
     /**
      * 乐观锁版本号

@@ -1,4 +1,4 @@
-﻿<div id="pjax-content-root" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
+<div id="pjax-content-root" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
     <div id="pjax-nav-path" class="hidden">
         home {#if subPage && subPage > 1}/ page-{subPage}{/if}
     </div>
@@ -61,7 +61,7 @@
 
                                 <!-- Summary -->
                                 <p class="mt-4 text-[15px] leading-relaxed text-body line-clamp-2 font-light">
-                                    {post.summary}
+                                    {post.summary.raw}
                                 </p>
 
                                 <!-- Footer -->

@@ -31,7 +31,7 @@ public class UploadFileController {
         try {
             String storageKeyCandidate = extractStorageKey(fileName);
             Media media = Media.find("storageKey = ?1 AND deletedAt IS NULL", storageKeyCandidate).firstResult();
-            if (media != null && media.storageNodes != null) {
+            if (media != null && media.storageProviders != null) {
                 String bestUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
                 if (bestUrl != null && !bestUrl.isBlank()) {
                     return Response.status(Response.Status.FOUND)

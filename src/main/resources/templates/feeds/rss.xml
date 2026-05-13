@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
     <title>{blogTitle}</title>
     <link>{baseUrl}</link>
@@ -10,7 +10,7 @@
     <item>
       <title>{post.title}</title>
       <link>{baseUrl}/post/{post.slug}</link>
-      <description><![CDATA[{post.summary}]]></description>
+        <description><![CDATA[{post.summary.raw}]]></description>
       <pubDate>{post.pubDate}</pubDate>
       <guid isPermaLink="false">{baseUrl}/post/{post.slug}</guid>
       <dc:creator>{post.author}</dc:creator>

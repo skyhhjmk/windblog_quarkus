@@ -1,4 +1,4 @@
-﻿<div id="pjax-content-root" data-page-title="{pageTitle ?: '分类'}">
+<div id="pjax-content-root" data-page-title="{pageTitle ?: '分类'}">
     <div id="pjax-nav-path" class="hidden">{navPath ?: 'categories'}</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-8">
@@ -90,7 +90,7 @@
 
                                         <!-- Summary -->
                                         <p class="mt-4 text-[15px] leading-relaxed text-body line-clamp-2 font-light">
-                                            {post.summary}
+                                            {post.summary.raw}
                                         </p>
 
                                         <!-- Footer -->
