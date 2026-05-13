@@ -139,6 +139,13 @@ public class Post extends PanacheEntityBase {
     @Column(name = "extra_info", columnDefinition = "jsonb")
     public Object extraInfo;
 
+    /**
+     * 区域可见性设置 (JSON数组)，为 null 或包含当前区域时可见
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "visibility_regions", columnDefinition = "jsonb")
+    public java.util.List<String> visibilityRegions;
+
     /** 乐观锁版本号 */
     @Version
     @Column(nullable = false)

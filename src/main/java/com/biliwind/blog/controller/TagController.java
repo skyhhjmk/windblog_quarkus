@@ -3,6 +3,7 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
@@ -40,6 +41,9 @@ public class TagController {
 
     @Inject
     LanguageContext languageContext;
+
+    @Inject
+    RegionContext regionContext;
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -102,9 +106,11 @@ public class TagController {
         String tagName = resolveTagName(entity, lang);
         String tagDescription = resolveTagDescription(entity, lang);
 
-        var query = Post.find("status = ?1 and deletedAt is null and id in "
-                + "(select pt.post.id from PostTag pt where pt.tag.id = ?2) "
-                + "order by publishedAt desc nulls last, createdAt desc", PostStatus.PUBLISHED, entity.id);
+        String currentRegion = regionContext.getCurrentRegion();
+        var query = Post.find("status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like ?3) and id in "
+                        + "(select pt.post.id from PostTag pt where pt.tag.id = ?4) "
+                        + "order by publishedAt desc nulls last, createdAt desc",
+                PostStatus.PUBLISHED, "%\"global\"%", "%\"" + currentRegion + "\"%", entity.id);
 
         long totalCount = query.count();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);

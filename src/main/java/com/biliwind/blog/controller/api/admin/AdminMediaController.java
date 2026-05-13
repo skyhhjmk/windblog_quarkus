@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.exception.BadRequestException;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.User;
@@ -108,6 +109,23 @@ public class AdminMediaController {
     public AdminMediaDtos.BatchRetryResult batchRetry() {
         mustFindOperator();
         return mediaService.batchRetryFailedImports();
+    }
+
+    @PATCH
+    @Path("/{id}")
+    @Transactional
+    @Operation(summary = "更新媒体设置")
+    public AdminMediaDtos.MediaItem update(@PathParam("id") Long id, AdminMediaDtos.MediaUpdateRequest request) {
+        mustFindOperator();
+        Media media = Media.findById(id);
+        if (media == null) {
+            throw new NotFoundException("媒体不存在");
+        }
+        if (request.visibilityRegions() != null) {
+            media.visibilityRegions = request.visibilityRegions();
+        }
+        media.persist();
+        return mediaService.toDto(media, List.of());
     }
 
 

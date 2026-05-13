@@ -30,7 +30,8 @@ public final class AdminPostDtos {
                         Long pointsPrice,
                         Integer freeLines,
                         Long categoryId,
-                        List<Long> tagIds) {
+                List<Long> tagIds,
+                List<String> visibilityRegions) {
         }
 
         public record PostUpdateRequest(
@@ -52,7 +53,8 @@ public final class AdminPostDtos {
                         Long pointsPrice,
                         Integer freeLines,
                         Long categoryId,
-                        List<Long> tagIds) {
+                        List<Long> tagIds,
+                        List<String> visibilityRegions) {
         }
 
         public record AdminPostItem(
@@ -97,6 +99,7 @@ public final class AdminPostDtos {
                         String userName,
                         Long categoryId,
                         List<Long> tagIds,
+                        List<String> visibilityRegions,
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
                         OffsetDateTime updatedAt) {

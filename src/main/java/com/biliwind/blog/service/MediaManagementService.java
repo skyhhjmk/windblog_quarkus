@@ -918,6 +918,7 @@ public class MediaManagementService {
                 media.createdAt,
                 referencedBy > 0,
                 refItems,
+                media.visibilityRegions,
                 media.metadata
         );
     }

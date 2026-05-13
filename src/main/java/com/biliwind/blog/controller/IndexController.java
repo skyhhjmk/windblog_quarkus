@@ -3,6 +3,7 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
@@ -48,6 +49,9 @@ public class IndexController {
     @Inject
     com.biliwind.blog.common.CacheService cacheService;
 
+    @Inject
+    RegionContext regionContext;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance index(@Context HttpHeaders httpHeaders) {
@@ -67,7 +71,8 @@ public class IndexController {
         }
 
         String language = languageContext.getLang();
-        String cacheKey = com.biliwind.blog.common.CacheService.Keys.indexPage(subPage, language);
+        String currentRegion = regionContext.getCurrentRegion();
+        String cacheKey = com.biliwind.blog.common.CacheService.Keys.indexPage(subPage, language + ":" + currentRegion);
 
         long totalPostsCount;
         long totalPages;
@@ -85,11 +90,14 @@ public class IndexController {
             totalPostsCount = cache.totalPostsCount;
             totalPages = cache.totalPages;
         } else {
-            // 替换已弃用的 Parameters.with，直接使用 Map.of
-            Map<String, Object> parameters = Map.of("status", PostStatus.PUBLISHED);
+            Map<String, Object> parameters = Map.of(
+                    "status", PostStatus.PUBLISHED,
+                    "globalPattern", "%\"global\"%",
+                    "regionPattern", "%\"" + currentRegion + "\"%"
+            );
 
             PanacheQuery<Post> postQuery = Post.find(
-                    "status = :status and deletedAt is null order by publishedAt desc nulls last, createdAt desc",
+                    "status = :status and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like :globalPattern or cast(visibilityRegions as String) like :regionPattern) order by publishedAt desc nulls last, createdAt desc",
                     parameters
             );
 

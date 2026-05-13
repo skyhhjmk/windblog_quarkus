@@ -6,6 +6,7 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.MarkdownHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -38,6 +39,9 @@ public class PostController {
     @Inject
     com.biliwind.blog.service.PostAccessService postAccessService;
 
+    @Inject
+    RegionContext regionContext;
+
     @GET
     @Path("/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
@@ -68,8 +72,13 @@ public class PostController {
 
         slug = normalizeSlug(slug);
 
-        Post postEntity = Post.find("slug = ?1 and deletedAt is null", slug)
-                .firstResult();
+        String currentRegion = regionContext.getCurrentRegion();
+
+        // 核心过滤逻辑: visibilityRegions 为空或者是包含当前区域 (或 global)
+        Post postEntity = Post.find(
+                "slug = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like ?3)",
+                slug, "%\"global\"%", "%\"" + currentRegion + "\"%"
+        ).firstResult();
 
         if (postEntity == null) {
             throw new NotFoundException("Post not found: " + slug);

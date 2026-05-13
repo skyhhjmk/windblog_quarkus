@@ -34,7 +34,12 @@ public final class AdminMediaDtos {
             OffsetDateTime createdAt,
             boolean referenced,
             List<MediaReferenceItem> references,
+            List<String> visibilityRegions,
             java.util.Map<String, Object> metadata) {
+    }
+
+    public record MediaUpdateRequest(
+            List<String> visibilityRegions) {
     }
 
     public record MediaListResult(

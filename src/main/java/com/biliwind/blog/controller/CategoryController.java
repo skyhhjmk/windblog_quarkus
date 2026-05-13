@@ -3,21 +3,17 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
+import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -46,6 +42,9 @@ public class CategoryController {
 
     @Inject
     LanguageContext languageContext;
+
+    @Inject
+    RegionContext regionContext;
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -106,8 +105,11 @@ public class CategoryController {
         List<Category> children = Category.list("parent.id = ?1 order by createdAt desc", entity.id);
         List<CategoryListItem> childItems = children.stream().map(c -> toCategoryListItem(c, lang)).toList();
 
-        var query = Post.find("category.id = ?1 and status = ?2 and deletedAt is null "
-                + "order by publishedAt desc nulls last, createdAt desc", entity.id, PostStatus.PUBLISHED);
+        String currentRegion = regionContext.getCurrentRegion();
+        String queryStr = "category = ?1 and status = ?2 and deletedAt is null "
+                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3 or cast(visibilityRegions as String) like ?4) "
+                + "order by publishedAt desc nulls last, createdAt desc";
+        PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, "%\"global\"%", "%\"" + currentRegion + "\"%");
         List<Post> posts = query.list(); // For now, list all. We could add pagination later.
         List<CategoryPostItem> postItems = posts.stream().map(post -> toCategoryPostItem(post, lang)).toList();
 

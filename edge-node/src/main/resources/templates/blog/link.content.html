@@ -1,4 +1,4 @@
-﻿<div data-page-title="{pageTitle ?: '友情链接'}" id="pjax-content-root">
+<div data-page-title="{pageTitle ?: '友情链接'}" id="pjax-content-root">
     <div class="hidden" id="pjax-nav-path">links</div>
     <div class="hidden" id="pjax-sidebar-html">
         <div class="space-y-8">
@@ -22,14 +22,12 @@
             <div class="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
                 <div class="flex items-center gap-3">
                     <span class="text-xs meta-mono text-gray-600">筛选：</span>
-                    <select class="bg-card border border-border px-4 py-1.5 rounded-md text-sm text-main outline-none focus:border-accent transition-colors"
-                            id="linkGrepSelect">
-                        <option currentType== value="All" {#if
-                        'All' || ! currentType}selected{/if}>所有资源</option>
+                    <select id="linkGrepSelect"
+                            class="bg-card border border-border px-4 py-1.5 rounded-md text-sm text-main outline-none focus:border-accent transition-colors">
+                        <option value="All" {#if currentType == 'All' || ! currentType}selected{/if}>所有资源</option>
                         {#for type in linkTypes}
-                        <option currentType==
-                                type.name}selected{ value="{type.name}" {#if
-                        /if}>{type.description}</option>
+                            <option value="{type.name}"
+                                    {#if currentType == type.name}selected{/if}>{type.description}</option>
                         {/for}
                     </select>
                 </div>

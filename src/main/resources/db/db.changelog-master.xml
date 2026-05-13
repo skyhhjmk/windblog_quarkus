@@ -65,4 +65,5 @@
     <include file="db/migration/061-add-visibility-regions.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/062-rename-storage-nodes-to-providers.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/063-add-media-processing-fields.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/064-create-region-rule.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

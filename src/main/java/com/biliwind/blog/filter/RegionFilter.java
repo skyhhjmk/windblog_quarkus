@@ -1,0 +1,45 @@
+package com.biliwind.blog.filter;
+
+import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.service.RegionRuleService;
+import jakarta.annotation.Priority;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.Priorities;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.container.ContainerRequestFilter;
+import jakarta.ws.rs.ext.Provider;
+
+import java.io.IOException;
+import java.util.List;
+
+/**
+ * 区域识别过滤器，在请求进入时解析区域并注入 RegionContext
+ */
+@Provider
+@Priority(Priorities.AUTHENTICATION - 10) // 在认证之前执行
+public class RegionFilter implements ContainerRequestFilter {
+
+    @Inject
+    RegionRuleService regionRuleService;
+
+    @Inject
+    RegionContext regionContext;
+
+    @Override
+    public void filter(ContainerRequestContext requestContext) throws IOException {
+        // 1. 获取域名
+        String host = requestContext.getHeaderString("Host");
+
+        // 2. 获取浏览器语言
+        List<String> languages = requestContext.getAcceptableLanguages()
+                .stream()
+                .map(java.util.Locale::toLanguageTag)
+                .toList();
+
+        // 3. 解析区域
+        String region = regionRuleService.resolveRegion(host, languages);
+
+        // 4. 写入上下文
+        regionContext.setCurrentRegion(region);
+    }
+}
