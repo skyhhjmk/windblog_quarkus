@@ -22,7 +22,6 @@ public class Category extends PanacheEntityBase {
      * 主键 ID
      */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
     /**

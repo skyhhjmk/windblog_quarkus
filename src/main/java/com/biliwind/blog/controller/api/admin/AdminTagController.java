@@ -24,6 +24,9 @@ public class AdminTagController {
     @jakarta.inject.Inject
     com.biliwind.blog.common.CacheService cacheService;
 
+    @jakarta.inject.Inject
+    jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
     private void invalidateTagCaches() {
         // 清理侧边栏标签
         cacheService.deletePattern(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_TAGS + "*");
@@ -61,6 +64,7 @@ public class AdminTagController {
         t.persist();
         auditService.log("tag", t.id, "create", null, java.util.Map.of("name", t.name, "slug", t.slug));
         invalidateTagCaches();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("TAG", t.id, "UPSERT"));
         return toItem(t);
     }
 
@@ -84,6 +88,7 @@ public class AdminTagController {
         t.description = req.description();
         auditService.log("tag", t.id, "update", null, java.util.Map.of("name", t.name, "slug", t.slug));
         invalidateTagCaches();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("TAG", t.id, "UPSERT"));
         return toItem(t);
     }
 
@@ -92,6 +97,7 @@ public class AdminTagController {
         com.biliwind.blog.model.Tag t = com.biliwind.blog.model.Tag.findById(id);
         if (t != null) {
             auditService.log("tag", t.id, "delete", java.util.Map.of("name", t.name), null);
+            dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("TAG", id, "DELETE"));
             com.biliwind.blog.model.Tag.deleteById(id);
             invalidateTagCaches();
         }

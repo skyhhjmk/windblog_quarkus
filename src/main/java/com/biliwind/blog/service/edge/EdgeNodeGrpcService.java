@@ -218,4 +218,9 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
         // 主节点通常不接受来自他人的轮询，除非是级联部署
         return Uni.createFrom().failure(new UnsupportedOperationException("Main node does not support being polled."));
     }
+
+    @Override
+    public Uni<SyncDataResponse> syncData(SyncDataRequest request) {
+        return Uni.createFrom().failure(new UnsupportedOperationException("Main node does not support receiving sync data."));
+    }
 }

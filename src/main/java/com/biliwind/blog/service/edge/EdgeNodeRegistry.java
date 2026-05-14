@@ -92,14 +92,17 @@ public class EdgeNodeRegistry {
         ).await().indefinitely();
 
         for (EdgeNode node : activeNodes) {
-            if (node.address == null || node.address.isEmpty()) {
+            String grpcAddress = node.grpcAddress;
+            if (grpcAddress == null || grpcAddress.isEmpty()) {
+                grpcAddress = node.address;
+            }
+            if (grpcAddress == null || grpcAddress.isEmpty()) {
                 continue;
             }
-            log.info("Polling active edge node {} at {}", node.nodeId, node.address);
+            log.info("Polling active edge node {} at {}", node.nodeId, grpcAddress);
             try {
-                // 动态创建 gRPC 客户端连接从节点
                 MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = MutinyEdgeNodeServiceGrpc.newMutinyStub(
-                        ManagedChannelBuilder.forTarget(node.address).usePlaintext().build()
+                        ManagedChannelBuilder.forTarget(grpcAddress).usePlaintext().build()
                 );
 
                 EdgeServiceProto.PollRequest request = EdgeServiceProto.PollRequest.newBuilder()

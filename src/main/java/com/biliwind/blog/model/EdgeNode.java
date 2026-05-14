@@ -31,8 +31,27 @@ public class EdgeNode extends PanacheEntityBase {
     public String name;
 
     /**
-     * 节点地址 (gRPC 端口，用于 ACTIVE_POLL 模式)
+     * 外部访问地址 (用户浏览器访问的 URL，如 https://edge.example.com)
      */
+    @Column(name = "external_url", length = 255)
+    public String externalUrl;
+
+    /**
+     * API 通信地址 (通常与外部访问地址一致，如 http://edge-node:8081)
+     */
+    @Column(name = "api_url", length = 255)
+    public String apiUrl;
+
+    /**
+     * gRPC 通信地址 (主节点向从节点推送数据使用，如 edge-node:9001)
+     */
+    @Column(name = "grpc_address", length = 255)
+    public String grpcAddress;
+
+    /**
+     * 节点地址 (已废弃，保留向后兼容)
+     */
+    @Deprecated
     @Column(length = 255)
     public String address;
 

@@ -8,7 +8,9 @@ import com.biliwind.blog.model.EdgeRegion;
  */
 public record EdgeNodeUpdateRequest(
         String name,
-        String address,
+        String externalUrl,
+        String apiUrl,
+        String grpcAddress,
         EdgeRegion region,
         EdgeConnectionType connectionType,
         Boolean isEnabled

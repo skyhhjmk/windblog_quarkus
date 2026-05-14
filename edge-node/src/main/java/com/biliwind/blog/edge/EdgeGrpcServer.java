@@ -8,11 +8,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @GrpcService
+@io.smallrye.common.annotation.Blocking
 public class EdgeGrpcServer implements EdgeNodeService {
     private static final Logger log = LoggerFactory.getLogger(EdgeGrpcServer.class);
 
     @Inject
     EdgeGrpcClient edgeGrpcClient;
+
+    @Inject
+    EdgeDataSyncService dataSyncService;
 
     @Override
     public Uni<PollResponse> poll(PollRequest request) {
@@ -29,6 +33,12 @@ public class EdgeGrpcServer implements EdgeNodeService {
                 .setRegion(edgeGrpcClient.getRegion())
                 .putAllMetrics(edgeGrpcClient.getMetrics())
                 .build());
+    }
+
+    @Override
+    public Uni<SyncDataResponse> syncData(SyncDataRequest request) {
+        log.info("Received sync data request: {} {}", request.getEntityType(), request.getAction());
+        return Uni.createFrom().item(dataSyncService.processSync(request));
     }
 
     @Override

@@ -1,0 +1,357 @@
+package com.biliwind.blog.service.edge;
+
+import com.biliwind.blog.edge.EdgeServiceProto;
+import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
+import com.biliwind.blog.model.EdgeNode;
+import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostTag;
+import com.biliwind.blog.model.Tag;
+import com.biliwind.blog.service.elasticsearch.PostSyncedEvent;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.grpc.ManagedChannelBuilder;
+import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.Uni;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.event.TransactionPhase;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+@ApplicationScoped
+public class EdgeDataSyncService {
+    private static final Logger log = LoggerFactory.getLogger(EdgeDataSyncService.class);
+    private final Map<String, SyncProgress> syncProgressMap = new ConcurrentHashMap<>();
+    @Inject
+    EdgeNodeRegistry registry;
+    @Inject
+    ObjectMapper objectMapper;
+    @Inject
+    EntityManager entityManager;
+
+    void onStart(@Observes StartupEvent ev) {
+        log.info("EdgeDataSyncService started");
+    }
+
+    /**
+     * 监听文章同步事件
+     */
+    public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
+        log.info("Detected post change, syncing to edge nodes: {}", event.postId());
+        syncPost(event.postId());
+    }
+
+    /**
+     * 监听通用同步事件（如标签）
+     */
+    public void onDataChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) DataSyncEvent event) {
+        log.info("Detected {} change, action: {}, id: {}", event.entityType(), event.action(), event.entityId());
+
+        if ("TAG".equals(event.entityType())) {
+            syncTag(event.entityId(), event.action());
+        }
+    }
+
+    private void syncTag(Long tagId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            Tag tag = Tag.findById(tagId);
+            if (tag == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(tag);
+            } catch (Exception e) {
+                log.error("Failed to serialize tag: {}", e.getMessage());
+                return;
+            }
+        }
+
+        broadcastSync("TAG", action, tagId.toString(), payload);
+    }
+
+    private void syncPost(Long postId) {
+        Post post = Post.findById(postId);
+        String action = "UPSERT";
+        String payload = "{}";
+
+        if (post == null || post.deletedAt != null) {
+            action = "DELETE";
+        } else {
+            try {
+                // 构建包含关联数据的 Bundle
+                Map<String, Object> bundle = new HashMap<>();
+                bundle.put("post", post);
+
+                // 包含当前版本
+                if (post.currentRevision != null) {
+                    bundle.put("currentRevision", post.currentRevision);
+                }
+
+                // 包含标签关联
+                List<PostTag> postTags = PostTag.find("post.id = ?1", postId).list();
+                List<Tag> tags = postTags.stream().map(pt -> pt.tag).collect(Collectors.toList());
+                bundle.put("tags", tags);
+
+                payload = objectMapper.writeValueAsString(bundle);
+            } catch (Exception e) {
+                log.error("Failed to serialize post bundle: {}", e.getMessage());
+                return;
+            }
+        }
+
+        broadcastSync("POST", action, postId.toString(), payload);
+    }
+
+    private void broadcastSync(String entityType, String action, String entityId, String payload) {
+        List<EdgeNode> nodes = registry.getAllNodes().stream()
+                .filter(n -> n.isEnabled != null && n.isEnabled)
+                .collect(Collectors.toList());
+
+        if (nodes.isEmpty()) {
+            log.debug("No active edge nodes to sync {} {}", entityType, entityId);
+            return;
+        }
+
+        for (EdgeNode node : nodes) {
+            pushToNode(node, entityType, action, entityId, payload);
+        }
+    }
+
+    private final Map<String, MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub> stubCache = new ConcurrentHashMap<>();
+    @Inject
+    jakarta.enterprise.inject.Instance<EdgeDataSyncService> self;
+
+    private MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub getStub(EdgeNode node) {
+        String grpcAddress = node.grpcAddress;
+        if (grpcAddress == null || grpcAddress.isEmpty()) {
+            grpcAddress = node.address;
+        }
+        return stubCache.computeIfAbsent(grpcAddress, addr ->
+                MutinyEdgeNodeServiceGrpc.newMutinyStub(
+                        ManagedChannelBuilder.forTarget(addr).usePlaintext().build()
+                )
+        );
+    }
+
+    private void pushToNode(EdgeNode node, String entityType, String action, String entityId, String payload) {
+        pushToNodeAsync(node, entityType, action, entityId, payload).subscribe().with(
+                success -> {
+                    if (success) {
+                        log.debug("Successfully pushed {} {} to node {}", entityType, entityId, node.nodeId);
+                    }
+                },
+                error -> log.error("Failed to push {} {} to node {}: {}", entityType, entityId, node.nodeId, error.getMessage())
+        );
+    }
+
+    private Uni<Boolean> pushToNodeAsync(EdgeNode node, String entityType, String action, String entityId, String payload) {
+        String grpcAddress = resolveGrpcAddress(node);
+        if (grpcAddress == null || grpcAddress.isEmpty()) {
+            return Uni.createFrom().item(false);
+        }
+
+        try {
+            MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = getStub(node);
+
+            EdgeServiceProto.SyncDataRequest request = EdgeServiceProto.SyncDataRequest.newBuilder()
+                    .setEntityType(entityType)
+                    .setAction(action)
+                    .setPayload(payload)
+                    .build();
+
+            return stub.syncData(request)
+                    .map(response -> {
+                        if (response.getSuccess()) {
+                            return true;
+                        } else {
+                            log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId, response.getMessage());
+                            return false;
+                        }
+                    })
+                    .onFailure().recoverWithItem(error -> {
+                        log.error("Error pushing to node {}: {}", node.nodeId, error.getMessage());
+                        return false;
+                    });
+        } catch (Exception e) {
+            log.error("Failed to initiate sync to node {}: {}", node.nodeId, e.getMessage());
+            return Uni.createFrom().item(false);
+        }
+    }
+
+    /**
+     * 触发指定节点的全量同步
+     */
+    public void triggerFullSync(String nodeId) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node == null) {
+            log.warn("Cannot trigger sync for node {}: not found", nodeId);
+            return;
+        }
+
+        if (resolveGrpcAddress(node) == null || resolveGrpcAddress(node).isEmpty()) {
+            log.warn("Cannot trigger sync for node {}: no gRPC address configured", nodeId);
+            syncProgressMap.put(nodeId, new SyncProgress(0, 0, "FAILED", "gRPC address is missing"));
+            return;
+        }
+
+        log.info("Triggering full sync for node {} ({})", nodeId, resolveGrpcAddress(node));
+
+        // 立即设置进度状态，让前端有反馈
+        syncProgressMap.put(nodeId, new SyncProgress(0, 0, "SYNCING", "Initializing..."));
+
+        // 异步执行同步任务
+        Uni.createFrom().item(nodeId)
+                .emitOn(io.smallrye.mutiny.infrastructure.Infrastructure.getDefaultWorkerPool())
+                .subscribe().with(id -> {
+                    try {
+                        self.get().performFullSyncInternal(id);
+                    } catch (Exception e) {
+                        log.error("Unhandled error in full sync thread for node {}: {}", id, e.getMessage(), e);
+                        syncProgressMap.put(id, new SyncProgress(0, 0, "FAILED", "Internal error: " + e.getMessage()));
+                    }
+                });
+    }
+
+    /**
+     * 实际执行同步的内部方法，运行在独立事务中
+     */
+    @jakarta.enterprise.context.control.ActivateRequestContext
+    @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
+    public void performFullSyncInternal(String nodeId) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node == null) return;
+
+        try {
+            log.info("Performing full sync internal for node {}", nodeId);
+
+            List<Tag> tags = Tag.listAll();
+            List<Post> posts = Post.list("deletedAt is null");
+            int total = tags.size() + posts.size();
+
+            syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Syncing tags..."));
+
+            int processed = 0;
+            int failedCount = 0;
+
+            // 1. 同步标签
+            for (Tag tag : tags) {
+                try {
+                    String tagPayload = objectMapper.writeValueAsString(tag);
+                    boolean success = pushToNodeWithRetry(node, "TAG", "UPSERT", tag.id.toString(), tagPayload, 15);
+
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push tag {} to node {}", tag.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing tag {} to node {}: {}", tag.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing tags (" + processed + "/" + total + ")"));
+            }
+
+            // 2. 同步文章
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing posts..."));
+            for (Post post : posts) {
+                try {
+                    Map<String, Object> bundle = new HashMap<>();
+                    bundle.put("post", post);
+                    if (post.currentRevision != null) {
+                        bundle.put("currentRevision", post.currentRevision);
+                    }
+                    List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
+                    List<Tag> pTags = postTags.stream().map(pt -> pt.tag).collect(Collectors.toList());
+                    bundle.put("tags", pTags);
+
+                    String postPayload = objectMapper.writeValueAsString(bundle);
+                    boolean success = pushToNodeWithRetry(node, "POST", "UPSERT", post.id.toString(), postPayload, 30);
+
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push post {} to node {}", post.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing post {} to node {}: {}", post.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing posts (" + processed + "/" + total + ")"));
+            }
+
+            if (failedCount > 0) {
+                String errorMsg = "Sync completed with " + failedCount + " failures out of " + total + " items";
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "COMPLETED_WITH_ERRORS", errorMsg));
+                log.warn("Full sync completed for node {} with {} failures", nodeId, failedCount);
+            } else {
+                syncProgressMap.put(nodeId, new SyncProgress(total, total, "COMPLETED", null));
+                log.info("Full sync completed for node {} successfully", nodeId);
+            }
+        } catch (Exception e) {
+            log.error("Full sync execution failed for node {}: {}", nodeId, e.getMessage(), e);
+            SyncProgress current = syncProgressMap.get(nodeId);
+            syncProgressMap.put(nodeId, new SyncProgress(current != null ? current.total : 0,
+                    current != null ? current.processed : 0, "FAILED", e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取节点的 gRPC 地址，优先使用 grpcAddress，回退到已废弃的 address 字段
+     */
+    private String resolveGrpcAddress(EdgeNode node) {
+        if (node.grpcAddress != null && !node.grpcAddress.isEmpty()) {
+            return node.grpcAddress;
+        }
+        return node.address;
+    }
+
+    private boolean pushToNodeWithRetry(EdgeNode node, String entityType, String action, String entityId, String payload, int timeoutSeconds) {
+        String grpcAddress = resolveGrpcAddress(node);
+        if (grpcAddress == null || grpcAddress.isEmpty()) {
+            return false;
+        }
+
+        try {
+            MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = getStub(node);
+
+            EdgeServiceProto.SyncDataRequest request = EdgeServiceProto.SyncDataRequest.newBuilder()
+                    .setEntityType(entityType)
+                    .setAction(action)
+                    .setPayload(payload)
+                    .build();
+
+            Boolean result = stub.syncData(request)
+                    .map(response -> {
+                        if (response.getSuccess()) {
+                            return true;
+                        } else {
+                            log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId, response.getMessage());
+                            return false;
+                        }
+                    })
+                    .onFailure().recoverWithItem(error -> {
+                        log.error("Error pushing to node {}: {}", node.nodeId, error.getMessage());
+                        return false;
+                    })
+                    .await().atMost(java.time.Duration.ofSeconds(timeoutSeconds));
+
+            return result != null && result;
+        } catch (Exception e) {
+            log.error("Failed to push {} {} to node {}: {}", entityType, entityId, node.nodeId, e.getMessage());
+            return false;
+        }
+    }
+
+    public SyncProgress getSyncStatus(String nodeId) {
+        return syncProgressMap.get(nodeId);
+    }
+
+    public record SyncProgress(int total, int processed, String status, String lastError) {
+    }
+}

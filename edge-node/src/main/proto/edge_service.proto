@@ -19,8 +19,22 @@ service EdgeNodeService {
   // 回源流式下载文件（用于边缘节点无缓存时的 fallback）
   rpc DownloadMedia(MediaDownloadRequest) returns (stream DownloadChunk);
 
+  // 数据同步接口：主节点向从节点推送数据
+  rpc SyncData(SyncDataRequest) returns (SyncDataResponse);
+
   // 主动轮询接口：主节点调用从节点，推送配置并获取状态
   rpc Poll(PollRequest) returns (PollResponse);
+}
+
+message SyncDataRequest {
+  string action = 1; // UPSERT, DELETE
+  string entity_type = 2; // POST, TAG
+  string payload = 3; // JSON 格式的数据内容
+}
+
+message SyncDataResponse {
+  bool success = 1;
+  string message = 2;
 }
 
 message PollRequest {

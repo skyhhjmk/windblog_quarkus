@@ -6,7 +6,6 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,6 +23,7 @@ public class PostRevision extends PanacheEntityBase {
     public Long id;
 
     /** 所属文章 */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "post_id", nullable = false)
     public Post post;
