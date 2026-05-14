@@ -237,7 +237,8 @@ public class ElasticsearchPostSearchService {
                     },
                         "publishedAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
                         "createdAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
-                        "updatedAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" }
+                            "updatedAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
+                            "visibilityRegions": { "type": "keyword" }
                   }
                 }
               },
@@ -338,6 +339,7 @@ public class ElasticsearchPostSearchService {
         document.put("viewCount", post.viewCount != null ? post.viewCount : 0L);
         document.put("featured", post.featured != null ? post.featured : false);
         document.put("allowComment", post.allowComment != null ? post.allowComment : true);
+        document.put("visibilityRegions", post.visibilityRegions != null ? post.visibilityRegions : List.of());
 
         if (post.publishedAt != null) {
             document.put("publishedAt", post.publishedAt.toString());
@@ -421,7 +423,7 @@ public class ElasticsearchPostSearchService {
      * Throws exception if Elasticsearch is unavailable, caller decides fallback strategy
      */
     public SearchResult searchPosts(String query, int page, int size,
-                                    String status, String category, List<String> tags)
+                                    String status, String category, List<String> tags, String region)
             throws Exception {
 
         if (!connectionManager.isAvailable()) {
@@ -455,7 +457,15 @@ public class ElasticsearchPostSearchService {
                             }
                           ],
                           "filter": [
-                            { "term": { "status": "PUBLISHED" } }
+                            { "term": { "status": "PUBLISHED" } },
+                            {
+                              "bool": {
+                                "should": [
+                                  { "bool": { "must_not": { "exists": { "field": "visibilityRegions" } } } },
+                                  { "term": { "visibilityRegions": "%s" } }
+                                ]
+                              }
+                            }
                           ]
                         }
                       },
@@ -469,7 +479,7 @@ public class ElasticsearchPostSearchService {
                         "post_tags": ["</em>"]
                       }
                     }
-                    """, from, size, escapeJson(query)));
+                    """, from, size, escapeJson(query), region));
         } else {
             searchBody = new StringBuilder(String.format("""
                 {
@@ -484,12 +494,20 @@ public class ElasticsearchPostSearchService {
                             { "match_all": {} }
                       ],
                       "filter": [
-                        { "term": { "status": "PUBLISHED" } }
-                      ]
+                            { "term": { "status": "PUBLISHED" } },
+                            {
+                              "bool": {
+                                "should": [
+                                  { "bool": { "must_not": { "exists": { "field": "visibilityRegions" } } } },
+                                  { "term": { "visibilityRegions": "%s" } }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
                     }
-                  }
-                }
-                    """, from, size));
+                    """, from, size, region));
         }
 
         var request = HttpRequest.newBuilder()

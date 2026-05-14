@@ -74,10 +74,10 @@ public class PostController {
 
         String currentRegion = regionContext.getCurrentRegion();
 
-        // 核心过滤逻辑: visibilityRegions 为空或者是包含当前区域 (或 global)
+        // 核心过滤逻辑: visibilityRegions 为空或者是包含当前区域
         Post postEntity = Post.find(
-                "slug = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like ?3)",
-                slug, "%\"global\"%", "%\"" + currentRegion + "\"%"
+                "slug = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+                slug, "%\"" + currentRegion + "\"%"
         ).firstResult();
 
         if (postEntity == null) {

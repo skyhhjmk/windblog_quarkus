@@ -45,6 +45,9 @@ public class SearchController {
     @Inject
     ElasticsearchPostSearchService postSearchService;
 
+    @Inject
+    com.biliwind.blog.context.RegionContext regionContext;
+
     @QueryParam("use-es")
     @DefaultValue("true")
     boolean useElasticsearch;
@@ -121,7 +124,11 @@ public class SearchController {
         List<SearchHit> hits = new ArrayList<>();
 
         if ("all".equals(type) || "post".equals(type)) {
-            List<Post> posts = Post.find("status = ?1 and deletedAt is null", PostStatus.PUBLISHED).list();
+            String currentRegion = regionContext.getCurrentRegion();
+            List<Post> posts = Post.find(
+                    "status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+                    PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%"
+            ).list();
             posts.stream()
                     .filter(post -> matchesPost(post, lowerKeyword, lang))
                     .map(post -> toPostHit(post, lang))
@@ -163,7 +170,7 @@ public class SearchController {
 
             log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s, page=%d", keyword, type, page);
 
-            var searchResult = postSearchService.searchPosts(keyword, page, PAGE_SIZE, "PUBLISHED", null, null);
+            var searchResult = postSearchService.searchPosts(keyword, page, PAGE_SIZE, "PUBLISHED", null, null, regionContext.getCurrentRegion());
 
             OffsetDateTime threshold = dateThreshold(date);
             List<SearchHit> hits = new ArrayList<>();

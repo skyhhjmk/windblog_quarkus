@@ -107,10 +107,9 @@ public class TagController {
         String tagDescription = resolveTagDescription(entity, lang);
 
         String currentRegion = regionContext.getCurrentRegion();
-        var query = Post.find("status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like ?3) and id in "
-                        + "(select pt.post.id from PostTag pt where pt.tag.id = ?4) "
-                        + "order by publishedAt desc nulls last, createdAt desc",
-                PostStatus.PUBLISHED, "%\"global\"%", "%\"" + currentRegion + "\"%", entity.id);
+        var query = Post.find("status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2) and id in "
+                        + "(select pt.post.id from PostTag pt where pt.tag = ?3) order by publishedAt desc nulls last, createdAt desc",
+                PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%", entity);
 
         long totalCount = query.count();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);

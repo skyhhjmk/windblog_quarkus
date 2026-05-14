@@ -192,6 +192,7 @@ public class AdminElasticsearchController {
     @APIResponse(responseCode = "503", description = "Elasticsearch 服务不可用")
     public Response searchPosts(
             @QueryParam("q") @DefaultValue("") String query,
+            @QueryParam("region") @DefaultValue("global") String region,
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("size") @DefaultValue("10") int size) {
         try {
@@ -210,8 +211,8 @@ public class AdminElasticsearchController {
             if (size < 1 || size > 100) size = 10;
 
             var searchResult = query == null || query.trim().isEmpty()
-                    ? postSearchService.searchPosts("", page, size, null, null, null)
-                    : postSearchService.searchPosts(query, page, size, null, null, null);
+                    ? postSearchService.searchPosts("", page, size, null, null, null, region)
+                    : postSearchService.searchPosts(query, page, size, null, null, null, region);
 
             Map<String, Object> result = new HashMap<>();
             result.put("total", searchResult.total());

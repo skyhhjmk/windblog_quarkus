@@ -107,9 +107,9 @@ public class CategoryController {
 
         String currentRegion = regionContext.getCurrentRegion();
         String queryStr = "category = ?1 and status = ?2 and deletedAt is null "
-                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3 or cast(visibilityRegions as String) like ?4) "
+                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3) "
                 + "order by publishedAt desc nulls last, createdAt desc";
-        PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, "%\"global\"%", "%\"" + currentRegion + "\"%");
+        PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%");
         List<Post> posts = query.list(); // For now, list all. We could add pagination later.
         List<CategoryPostItem> postItems = posts.stream().map(post -> toCategoryPostItem(post, lang)).toList();
 

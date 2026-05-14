@@ -41,6 +41,9 @@ public class EdgeCategoryController {
     @Inject
     LanguageContext languageContext;
 
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "edge.node.region", defaultValue = "global")
+    String region;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance list(@QueryParam("q") String keyword,
@@ -101,7 +104,8 @@ public class EdgeCategoryController {
         List<CategoryListItem> childItems = children.stream().map(c -> toCategoryListItem(c, lang)).toList();
 
         var query = Post.find("category.id = ?1 and status = ?2 and deletedAt is null "
-                + "order by publishedAt desc nulls last, createdAt desc", entity.id, PostStatus.PUBLISHED);
+                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3) "
+                + "order by publishedAt desc nulls last, createdAt desc", entity.id, PostStatus.PUBLISHED, "%\"" + region + "\"%");
         List<Post> posts = query.list(); // For now, list all. We could add pagination later.
         List<CategoryPostItem> postItems = posts.stream().map(post -> toCategoryPostItem(post, lang)).toList();
 

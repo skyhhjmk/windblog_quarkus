@@ -41,6 +41,9 @@ public class EdgeSearchController {
     @Inject
     LanguageContext languageContext;
 
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "edge.node.region", defaultValue = "global")
+    String region;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance index(@QueryParam("q") String keyword,
@@ -104,7 +107,10 @@ public class EdgeSearchController {
         List<SearchHit> hits = new ArrayList<>();
 
         if ("all".equals(type) || "post".equals(type)) {
-            List<Post> posts = Post.find("status = ?1 and deletedAt is null", PostStatus.PUBLISHED).list();
+            List<Post> posts = Post.find(
+                    "status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+                    PostStatus.PUBLISHED, "%\"" + region + "\"%"
+            ).list();
             posts.stream()
                     .filter(post -> matchesPost(post, lowerKeyword, lang))
                     .map(post -> toPostHit(post, lang))

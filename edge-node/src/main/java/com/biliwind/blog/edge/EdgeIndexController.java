@@ -48,6 +48,9 @@ public class EdgeIndexController {
     @Inject
     com.biliwind.blog.common.CacheService cacheService;
 
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "edge.node.region", defaultValue = "global")
+    String region;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance index(@Context HttpHeaders httpHeaders) {
@@ -85,11 +88,13 @@ public class EdgeIndexController {
             totalPostsCount = cache.totalPostsCount;
             totalPages = cache.totalPages;
         } else {
-            // 替换已弃用的 Parameters.with，直接使用 Map.of
-            Map<String, Object> parameters = Map.of("status", PostStatus.PUBLISHED);
+            Map<String, Object> parameters = Map.of(
+                    "status", PostStatus.PUBLISHED,
+                    "regionPattern", "%\"" + region + "\"%"
+            );
 
             PanacheQuery<Post> postQuery = Post.find(
-                    "status = :status and deletedAt is null order by publishedAt desc nulls last, createdAt desc",
+                    "status = :status and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern) order by publishedAt desc nulls last, createdAt desc",
                     parameters
             );
 

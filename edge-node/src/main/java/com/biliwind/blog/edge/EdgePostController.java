@@ -14,10 +14,14 @@ public class EdgePostController {
     @jakarta.inject.Inject
     EdgeCacheService cacheService;
 
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "edge.node.region", defaultValue = "global")
+    String region;
+
     @GET
     public List<Post> list(@QueryParam("page") @DefaultValue("0") int page,
                            @QueryParam("size") @DefaultValue("10") int size) {
-        return Post.find("status = ?1", PostStatus.PUBLISHED).page(page, size).list();
+        return Post.find("status = ?1 and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+                PostStatus.PUBLISHED, "%\"" + region + "\"%").page(page, size).list();
     }
 
     @GET
@@ -27,7 +31,8 @@ public class EdgePostController {
         Post post = cacheService.getPost(slug);
 
         if (post == null) {
-            post = Post.find("slug = ?1 AND status = ?2", slug, PostStatus.PUBLISHED).firstResult();
+            post = Post.find("slug = ?1 AND status = ?2 and (visibilityRegions is null or cast(visibilityRegions as String) like ?3)",
+                    slug, PostStatus.PUBLISHED, "%\"" + region + "\"%").firstResult();
             if (post != null) {
                 cacheService.setPost(post);
             }

@@ -6,7 +6,7 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.MarkdownHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
-import com.biliwind.blog.model.*;
+import com.biliwind.blog.model.Post;
 import com.biliwind.blog.service.PostAccessService;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -42,6 +42,9 @@ public class EdgeBlogController {
     @Inject
     com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "edge.node.region", defaultValue = "global")
+    String region;
+
 
     @GET
     @Path("/post/{slug}")
@@ -72,7 +75,8 @@ public class EdgeBlogController {
             slug = slug.substring(0, slug.length() - 5);
         }
 
-        Post postEntity = Post.find("slug = ?1 and deletedAt is null", slug).firstResult();
+        Post postEntity = Post.find("slug = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+                slug, "%\"" + region + "\"%").firstResult();
 
         if (postEntity == null) {
             throw new NotFoundException("Post not found: " + slug);

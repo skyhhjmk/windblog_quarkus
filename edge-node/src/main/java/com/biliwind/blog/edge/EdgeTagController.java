@@ -41,6 +41,9 @@ public class EdgeTagController {
     @Inject
     LanguageContext languageContext;
 
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "edge.node.region", defaultValue = "global")
+    String region;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance list(@QueryParam("q") String keyword,
@@ -102,9 +105,9 @@ public class EdgeTagController {
         String tagName = resolveTagName(entity, lang);
         String tagDescription = resolveTagDescription(entity, lang);
 
-        var query = Post.find("status = ?1 and deletedAt is null and id in "
-                + "(select pt.post.id from PostTag pt where pt.tag.id = ?2) "
-                + "order by publishedAt desc nulls last, createdAt desc", PostStatus.PUBLISHED, entity.id);
+        var query = Post.find("status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2) and id in "
+                + "(select pt.post.id from PostTag pt where pt.tag.id = ?3) "
+                + "order by publishedAt desc nulls last, createdAt desc", PostStatus.PUBLISHED, "%\"" + region + "\"%", entity.id);
 
         long totalCount = query.count();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
