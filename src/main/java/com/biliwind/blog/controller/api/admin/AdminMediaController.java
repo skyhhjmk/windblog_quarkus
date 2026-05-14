@@ -34,6 +34,9 @@ public class AdminMediaController {
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
+    @Inject
+    jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
     @GET
     @Operation(summary = "列出媒体资源")
     public AdminMediaDtos.MediaListResult list(
@@ -73,6 +76,7 @@ public class AdminMediaController {
         long declaredSize = filePart.size();
         try (InputStream stream = Files.newInputStream(filePart.filePath())) {
             Media media = mediaService.storeUploadedMedia(operator, stream, fileName, mimeType, declaredSize);
+            dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("MEDIA", media.id, "UPSERT"));
             return mediaService.toDto(media, List.of());
         } catch (IOException e) {
             throw new BadRequestException("无法读取上传内容");
@@ -125,6 +129,7 @@ public class AdminMediaController {
             media.visibilityRegions = request.visibilityRegions();
         }
         media.persist();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("MEDIA", media.id, "UPSERT"));
         return mediaService.toDto(media, List.of());
     }
 

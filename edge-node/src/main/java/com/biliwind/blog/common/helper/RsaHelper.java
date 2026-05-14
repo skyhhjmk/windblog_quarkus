@@ -81,6 +81,8 @@ public class RsaHelper {
         LOGGER.info("已生成并保存新的 RSA 密钥对到 " + KEY_DIRECTORY);
     }
 
+    private PublicKey clusterPublicKey;
+
     /**
      * 使用 RSA+AES 混合加密文本。
      * RSA 加密随机生成的 AES 密钥，AES 加密实际数据。
@@ -98,8 +100,15 @@ public class RsaHelper {
             SecretKey aesKey = keyGen.generateKey();
 
             // 2. 使用 RSA 公钥加密该 AES 密钥
-            Cipher rsaCipher = Cipher.getInstance("RSA");
-            rsaCipher.init(Cipher.ENCRYPT_MODE, publicKey);
+            Cipher rsaCipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+
+            // 优先使用集群公钥，实现跨节点解密一致性
+            PublicKey keyToUse = publicKey;
+            if (clusterPublicKey != null) {
+                keyToUse = clusterPublicKey;
+            }
+
+            rsaCipher.init(Cipher.ENCRYPT_MODE, keyToUse);
             byte[] encryptedAesKey = rsaCipher.doFinal(aesKey.getEncoded());
 
             // 3. 使用 AES 加密实际数据 (CBC 模式 + 随机 IV)
@@ -121,6 +130,35 @@ public class RsaHelper {
             return "EncryptionError: " + e.getMessage();
         }
     }
+
+    /**
+     * 获取 Base64 编码的公钥
+     */
+    public String getPublicKeyEncoded() {
+        if (publicKey == null) {
+            return null;
+        }
+        return Base64.getEncoder().encodeToString(publicKey.getEncoded());
+    }
+
+    /**
+     * 设置集群公钥（用于边缘节点加密，主节点解密）
+     */
+    public void setClusterPublicKey(String base64Key) {
+        if (base64Key == null || base64Key.isEmpty()) {
+            return;
+        }
+        try {
+            byte[] keyBytes = Base64.getDecoder().decode(base64Key);
+            X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            this.clusterPublicKey = keyFactory.generatePublic(spec);
+            LOGGER.info("已成功更新集群公钥");
+        } catch (Exception e) {
+            LOGGER.error("更新集群公钥失败: " + e.getMessage());
+        }
+    }
+
 
     /**
      * 解密文本，支持 H1 混合加密格式和旧的纯 RSA 格式。
@@ -148,12 +186,12 @@ public class RsaHelper {
             }
 
             Base64.Decoder decoder = Base64.getDecoder();
-            byte[] encryptedAesKey = decoder.decode(parts[0]);
-            byte[] iv = decoder.decode(parts[1]);
-            byte[] encryptedData = decoder.decode(parts[2]);
+            byte[] encryptedAesKey = decoder.decode(parts[0].trim());
+            byte[] iv = decoder.decode(parts[1].trim());
+            byte[] encryptedData = decoder.decode(parts[2].trim());
 
             // 1. 使用 RSA 私钥解密 AES 密钥
-            Cipher rsaCipher = Cipher.getInstance("RSA");
+            Cipher rsaCipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
             rsaCipher.init(Cipher.DECRYPT_MODE, privateKey);
             byte[] aesKeyBytes = rsaCipher.doFinal(encryptedAesKey);
             SecretKeySpec aesKeySpec = new SecretKeySpec(aesKeyBytes, "AES");
@@ -173,10 +211,10 @@ public class RsaHelper {
 
     private String decryptRsaOnly(String encryptedText) {
         try {
-            Cipher cipher = Cipher.getInstance("RSA");
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
             cipher.init(Cipher.DECRYPT_MODE, privateKey);
             Base64.Decoder decoder = Base64.getDecoder();
-            byte[] inputBytes = decoder.decode(encryptedText);
+            byte[] inputBytes = decoder.decode(encryptedText.trim());
             byte[] decryptedBytes = cipher.doFinal(inputBytes);
             return new String(decryptedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {

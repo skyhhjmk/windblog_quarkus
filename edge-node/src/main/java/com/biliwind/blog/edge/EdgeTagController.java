@@ -138,7 +138,9 @@ public class EdgeTagController {
     private TagListItem toTagListItem(Tag tag, String lang) {
         String name = resolveTagName(tag, lang);
         String description = resolveTagDescription(tag, lang);
-        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, PostStatus.PUBLISHED);
+        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null "
+                        + "and (post.visibilityRegions is null or cast(post.visibilityRegions as String) like ?3)",
+                tag.id, PostStatus.PUBLISHED, "%\"" + region + "\"%");
         return new TagListItem(tag.slug, name, description, postCount, formatDate(tag.createdAt));
     }
 
@@ -235,12 +237,15 @@ public class EdgeTagController {
     public record TagItem(String name, String slug) {
     }
 
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record TagListItem(String slug, String name, String description, long postCount, String createdAtText) {
     }
 
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record TagDetailItem(String slug, String name, String description, long postCount, String createdAtText) {
     }
 
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName,
                               List<TagItem> tags) {
     }

@@ -23,6 +23,8 @@ public class EdgeDataSyncService {
     EntityManager entityManager;
     @Inject
     ObjectMapper objectMapper;
+    @Inject
+    com.biliwind.blog.common.helper.RsaHelper rsaHelper;
 
     @Transactional
     public SyncDataResponse processSync(SyncDataRequest request) {
@@ -35,6 +37,14 @@ public class EdgeDataSyncService {
                 handleTagSync(action, payload);
             } else if ("POST".equals(type)) {
                 handlePostSync(action, payload);
+            } else if ("CATEGORY".equals(type)) {
+                handleCategorySync(action, payload);
+            } else if ("LINK".equals(type)) {
+                handleLinkSync(action, payload);
+            } else if ("MEDIA".equals(type)) {
+                handleMediaSync(action, payload);
+            } else if ("CLUSTER_PUBLIC_KEY".equals(type)) {
+                handleClusterKeySync(payload);
             } else {
                 return SyncDataResponse.newBuilder()
                         .setSuccess(false)
@@ -63,11 +73,16 @@ public class EdgeDataSyncService {
             Tag.deleteById(incomingTag.id);
             log.info("Deleted tag: {}", incomingTag.id);
         } else {
+            if ("FORCE_UPSERT".equals(action)) {
+                Tag.deleteById(incomingTag.id);
+                entityManager.flush();
+            }
             Tag existing = entityManager.find(Tag.class, incomingTag.id);
             if (existing != null) {
                 existing.slug = incomingTag.slug;
                 existing.name = incomingTag.name;
                 existing.description = incomingTag.description;
+                existing.createdAt = incomingTag.createdAt;
                 existing.updatedAt = incomingTag.updatedAt;
             } else {
                 entityManager.merge(incomingTag);
@@ -92,6 +107,11 @@ public class EdgeDataSyncService {
         } else {
             JsonNode postNode = root.get("post");
             Post incomingPost = objectMapper.treeToValue(postNode, Post.class);
+
+            if ("FORCE_UPSERT".equals(action)) {
+                Post.deleteById(incomingPost.id);
+                entityManager.flush();
+            }
 
             // 0. 置空可能引起级联问题的关联字段，修订版在后续独立处理
             incomingPost.currentRevision = null;
@@ -122,6 +142,7 @@ public class EdgeDataSyncService {
                 existingPost.seoDescription = incomingPost.seoDescription;
                 existingPost.renderType = incomingPost.renderType;
                 existingPost.publishedAt = incomingPost.publishedAt;
+                existingPost.createdAt = incomingPost.createdAt;
                 existingPost.updatedAt = incomingPost.updatedAt;
                 existingPost.visibilityRegions = incomingPost.visibilityRegions;
                 existingPost.featured = incomingPost.featured;
@@ -207,10 +228,128 @@ public class EdgeDataSyncService {
         Category existingCat = entityManager.find(Category.class, incomingCategory.id);
         if (existingCat == null) {
             log.warn("Category {} not found on edge node, attempting to sync category first", incomingCategory.id);
+            // 处理父分类依赖
+            if (incomingCategory.parent != null) {
+                incomingCategory.parent = syncCategoryDependency(incomingCategory.parent);
+            }
             entityManager.merge(incomingCategory);
             entityManager.flush();
             existingCat = entityManager.find(Category.class, incomingCategory.id);
         }
         return existingCat;
     }
+
+    private void handleCategorySync(String action, String payload) throws Exception {
+        Category incoming = objectMapper.readValue(payload, Category.class);
+        if ("DELETE".equals(action)) {
+            Category.deleteById(incoming.id);
+            log.info("Deleted category: {}", incoming.id);
+        } else {
+            if ("FORCE_UPSERT".equals(action)) {
+                Category.deleteById(incoming.id);
+                entityManager.flush();
+            }
+            if (incoming.parent != null) {
+                incoming.parent = syncCategoryDependency(incoming.parent);
+            }
+            Category existing = entityManager.find(Category.class, incoming.id);
+            if (existing != null) {
+                existing.slug = incoming.slug;
+                existing.name = incoming.name;
+                existing.description = incoming.description;
+                existing.path = incoming.path;
+                existing.postCount = incoming.postCount;
+                existing.parent = incoming.parent;
+                existing.createdAt = incoming.createdAt;
+                existing.updatedAt = incoming.updatedAt;
+            } else {
+                entityManager.merge(incoming);
+            }
+            log.info("Synced category: {}", incoming.id);
+        }
+    }
+
+    private void handleLinkSync(String action, String payload) throws Exception {
+        Link incoming = objectMapper.readValue(payload, Link.class);
+        if ("DELETE".equals(action)) {
+            Link.deleteById(incoming.id);
+            log.info("Deleted link: {}", incoming.id);
+        } else {
+            if ("FORCE_UPSERT".equals(action)) {
+                Link.deleteById(incoming.id);
+                entityManager.flush();
+            }
+            Link existing = entityManager.find(Link.class, incoming.id);
+            if (existing != null) {
+                existing.name = incoming.name;
+                existing.url = incoming.url;
+                existing.description = incoming.description;
+                existing.image = incoming.image;
+                existing.icon = incoming.icon;
+                existing.sortOrder = incoming.sortOrder;
+                existing.type = incoming.type;
+                existing.status = incoming.status;
+                existing.target = incoming.target;
+                existing.redirectType = incoming.redirectType;
+                existing.showUrl = incoming.showUrl;
+                existing.content = incoming.content;
+                existing.email = incoming.email;
+                existing.callbackUrl = incoming.callbackUrl;
+                existing.note = incoming.note;
+                existing.seoTitle = incoming.seoTitle;
+                existing.seoKeywords = incoming.seoKeywords;
+                existing.seoDescription = incoming.seoDescription;
+                existing.settings = incoming.settings;
+                existing.createdAt = incoming.createdAt;
+                existing.updatedAt = incoming.updatedAt;
+            } else {
+                entityManager.merge(incoming);
+            }
+            log.info("Synced link: {}", incoming.id);
+        }
+    }
+
+    private void handleMediaSync(String action, String payload) throws Exception {
+        Media incoming = objectMapper.readValue(payload, Media.class);
+        if ("DELETE".equals(action)) {
+            Media.deleteById(incoming.id);
+            log.info("Deleted media: {}", incoming.id);
+        } else {
+            if ("FORCE_UPSERT".equals(action)) {
+                Media.deleteById(incoming.id);
+                entityManager.flush();
+            }
+            Media existing = entityManager.find(Media.class, incoming.id);
+            if (existing != null) {
+                existing.storageKey = incoming.storageKey;
+                existing.url = incoming.url;
+                existing.mediaType = incoming.mediaType;
+                existing.mimeType = incoming.mimeType;
+                existing.fileName = incoming.fileName;
+                existing.size = incoming.size;
+                existing.uploadedBy = incoming.uploadedBy;
+                existing.width = incoming.width;
+                existing.height = incoming.height;
+                existing.alt = incoming.alt;
+                existing.metadata = incoming.metadata;
+                existing.storageProviders = incoming.storageProviders;
+                existing.processingStatus = incoming.processingStatus;
+                existing.processingProgress = incoming.processingProgress;
+                existing.processingError = incoming.processingError;
+                existing.visibilityRegions = incoming.visibilityRegions;
+                existing.createdAt = incoming.createdAt;
+                existing.updatedAt = incoming.updatedAt;
+                existing.deletedAt = incoming.deletedAt;
+            } else {
+                entityManager.merge(incoming);
+            }
+            log.info("Synced media: {}", incoming.id);
+        }
+    }
+
+    private void handleClusterKeySync(String payload) {
+        log.info("Received cluster public key update");
+        rsaHelper.setClusterPublicKey(payload);
+    }
 }
+

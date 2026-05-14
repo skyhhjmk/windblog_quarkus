@@ -6,6 +6,9 @@ import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.model.Tag;
+import com.biliwind.blog.model.Category;
+import com.biliwind.blog.model.Link;
+import com.biliwind.blog.model.Media;
 import com.biliwind.blog.service.elasticsearch.PostSyncedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.grpc.ManagedChannelBuilder;
@@ -35,10 +38,28 @@ public class EdgeDataSyncService {
     ObjectMapper objectMapper;
     @Inject
     EntityManager entityManager;
+    @Inject
+    com.biliwind.blog.common.helper.RsaHelper rsaHelper;
 
     void onStart(@Observes StartupEvent ev) {
         log.info("EdgeDataSyncService started");
+        // 启动时尝试同步一次公钥到所有节点
+        syncClusterKeyToAll();
     }
+
+    /**
+     * 将主节点的公钥同步到所有边缘节点
+     */
+    public void syncClusterKeyToAll() {
+        String publicKey = rsaHelper.getPublicKeyEncoded();
+        if (publicKey == null) {
+            log.warn("Main node public key is not initialized, skipping cluster key sync");
+            return;
+        }
+        log.info("Broadcasting cluster public key to all nodes");
+        broadcastSync("CLUSTER_PUBLIC_KEY", "UPDATE", "MAIN", publicKey);
+    }
+
 
     /**
      * 监听文章同步事件
@@ -56,7 +77,58 @@ public class EdgeDataSyncService {
 
         if ("TAG".equals(event.entityType())) {
             syncTag(event.entityId(), event.action());
+        } else if ("CATEGORY".equals(event.entityType())) {
+            syncCategory(event.entityId(), event.action());
+        } else if ("LINK".equals(event.entityType())) {
+            syncLink(event.entityId(), event.action());
+        } else if ("MEDIA".equals(event.entityType())) {
+            syncMedia(event.entityId(), event.action());
         }
+    }
+
+    private void syncCategory(Long categoryId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            Category category = Category.findById(categoryId);
+            if (category == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(category);
+            } catch (Exception e) {
+                log.error("Failed to serialize category: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("CATEGORY", action, categoryId.toString(), payload);
+    }
+
+    private void syncLink(Long linkId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            Link link = Link.findById(linkId);
+            if (link == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(link);
+            } catch (Exception e) {
+                log.error("Failed to serialize link: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("LINK", action, linkId.toString(), payload);
+    }
+
+    private void syncMedia(Long mediaId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            Media media = Media.findById(mediaId);
+            if (media == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(media);
+            } catch (Exception e) {
+                log.error("Failed to serialize media: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("MEDIA", action, mediaId.toString(), payload);
     }
 
     private void syncTag(Long tagId, String action) {
@@ -187,7 +259,7 @@ public class EdgeDataSyncService {
     /**
      * 触发指定节点的全量同步
      */
-    public void triggerFullSync(String nodeId) {
+    public void triggerFullSync(String nodeId, boolean force) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) {
             log.warn("Cannot trigger sync for node {}: not found", nodeId);
@@ -210,7 +282,7 @@ public class EdgeDataSyncService {
                 .emitOn(io.smallrye.mutiny.infrastructure.Infrastructure.getDefaultWorkerPool())
                 .subscribe().with(id -> {
                     try {
-                        self.get().performFullSyncInternal(id);
+                        self.get().performFullSyncInternal(id, force);
                     } catch (Exception e) {
                         log.error("Unhandled error in full sync thread for node {}: {}", id, e.getMessage(), e);
                         syncProgressMap.put(id, new SyncProgress(0, 0, "FAILED", "Internal error: " + e.getMessage()));
@@ -223,7 +295,7 @@ public class EdgeDataSyncService {
      */
     @jakarta.enterprise.context.control.ActivateRequestContext
     @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
-    public void performFullSyncInternal(String nodeId) {
+    public void performFullSyncInternal(String nodeId, boolean force) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) return;
 
@@ -231,8 +303,11 @@ public class EdgeDataSyncService {
             log.info("Performing full sync internal for node {}", nodeId);
 
             List<Tag> tags = Tag.listAll();
+            List<Category> categories = Category.listAll();
+            List<Link> links = Link.listAll();
+            List<Media> mediaList = Media.listAll();
             List<Post> posts = Post.list("deletedAt is null");
-            int total = tags.size() + posts.size();
+            int total = tags.size() + categories.size() + links.size() + mediaList.size() + posts.size();
 
             syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Syncing tags..."));
 
@@ -243,7 +318,8 @@ public class EdgeDataSyncService {
             for (Tag tag : tags) {
                 try {
                     String tagPayload = objectMapper.writeValueAsString(tag);
-                    boolean success = pushToNodeWithRetry(node, "TAG", "UPSERT", tag.id.toString(), tagPayload, 15);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "TAG", action, tag.id.toString(), tagPayload, 15);
 
                     if (!success) {
                         failedCount++;
@@ -255,6 +331,63 @@ public class EdgeDataSyncService {
                 }
                 processed++;
                 syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing tags (" + processed + "/" + total + ")"));
+            }
+
+            // 1.1 同步分类
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing categories..."));
+            for (Category category : categories) {
+                try {
+                    String categoryPayload = objectMapper.writeValueAsString(category);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "CATEGORY", action, category.id.toString(), categoryPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push category {} to node {}", category.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing category {} to node {}: {}", category.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing categories (" + processed + "/" + total + ")"));
+            }
+
+            // 1.2 同步链接
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing links..."));
+            for (Link link : links) {
+                try {
+                    String linkPayload = objectMapper.writeValueAsString(link);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "LINK", action, link.id.toString(), linkPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push link {} to node {}", link.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing link {} to node {}: {}", link.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing links (" + processed + "/" + total + ")"));
+            }
+
+            // 1.3 同步媒体元数据
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing media metadata..."));
+            for (Media media : mediaList) {
+                try {
+                    String mediaPayload = objectMapper.writeValueAsString(media);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "MEDIA", action, media.id.toString(), mediaPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push media {} to node {}", media.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing media {} to node {}: {}", media.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing media (" + processed + "/" + total + ")"));
             }
 
             // 2. 同步文章
@@ -271,7 +404,8 @@ public class EdgeDataSyncService {
                     bundle.put("tags", pTags);
 
                     String postPayload = objectMapper.writeValueAsString(bundle);
-                    boolean success = pushToNodeWithRetry(node, "POST", "UPSERT", post.id.toString(), postPayload, 30);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "POST", action, post.id.toString(), postPayload, 30);
 
                     if (!success) {
                         failedCount++;

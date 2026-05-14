@@ -62,7 +62,6 @@ public class Category extends PanacheEntityBase {
      * 创建时间
      */
     @Column(name = "created_at", nullable = false)
-    @CreationTimestamp
     public OffsetDateTime createdAt;
 
 
@@ -70,7 +69,6 @@ public class Category extends PanacheEntityBase {
      * 更新时间
      */
     @Column(name = "updated_at", nullable = false)
-    @UpdateTimestamp
     public OffsetDateTime updatedAt;
 
     /**

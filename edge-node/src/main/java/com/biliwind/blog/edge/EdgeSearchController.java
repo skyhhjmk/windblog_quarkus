@@ -193,7 +193,9 @@ public class EdgeSearchController {
             description = "Tag archive.";
         }
 
-        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, PostStatus.PUBLISHED);
+        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null "
+                        + "and (post.visibilityRegions is null or cast(post.visibilityRegions as String) like ?3)",
+                tag.id, PostStatus.PUBLISHED, "%\"" + region + "\"%");
         return new SearchHit(
                 "tag",
                 "Tag",

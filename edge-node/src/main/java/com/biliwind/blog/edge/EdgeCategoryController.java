@@ -148,13 +148,16 @@ public class EdgeCategoryController {
         String name = resolveCategoryName(category, lang);
         String description = resolveCategoryDescription(category, lang);
         long childCount = Category.count("parent.id", category.id);
+        long postCount = Post.count("category.id = ?1 and status = ?2 and deletedAt is null "
+                        + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3)",
+                category.id, PostStatus.PUBLISHED, "%\"" + region + "\"%");
         return new CategoryListItem(
                 category.slug,
                 name,
                 description,
                 safe(category.path),
                 childCount,
-                category.postCount,
+                postCount,
                 formatDate(category.createdAt)
         );
     }
@@ -163,13 +166,16 @@ public class EdgeCategoryController {
         String name = resolveCategoryName(category, lang);
         String description = resolveCategoryDescription(category, lang);
         long childCount = Category.count("parent.id", category.id);
+        long postCount = Post.count("category.id = ?1 and status = ?2 and deletedAt is null "
+                        + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3)",
+                category.id, PostStatus.PUBLISHED, "%\"" + region + "\"%");
         return new CategoryDetailItem(
                 category.slug,
                 name,
                 description,
                 safe(category.path),
                 childCount,
-                category.postCount,
+                postCount,
                 formatDate(category.createdAt)
         );
     }
@@ -258,6 +264,7 @@ public class EdgeCategoryController {
         return value == null ? "" : value.trim();
     }
 
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record TagItem(String name, String slug) {
     }
 

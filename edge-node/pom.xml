@@ -68,9 +68,14 @@
             <artifactId>quarkus-liquibase</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.vladsch.flexmark</groupId>
-            <artifactId>flexmark-all</artifactId>
-            <version>0.64.8</version>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>0.24.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-gfm-tables</artifactId>
+            <version>0.24.0</version>
         </dependency>
         <dependency>
             <!-- jsoup HTML parser library @ https://jsoup.org/ -->
@@ -167,9 +172,6 @@
                 <skipITs>false</skipITs>
                 <quarkus.package.type>native</quarkus.package.type>
                 <quarkus.native.container-build>true</quarkus.native.container-build>
-                <quarkus.native.additional-build-args>
-                    --initialize-at-run-time=com.vladsch.flexmark,--initialize-at-run-time=com.biliwind.blog.common.helper.MarkdownHelper$FlexmarkHolder,--initialize-at-run-time=com.biliwind.blog.common.markdown
-                </quarkus.native.additional-build-args>
             </properties>
         </profile>
     </profiles>

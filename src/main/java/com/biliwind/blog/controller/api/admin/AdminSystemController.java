@@ -145,6 +145,22 @@ public class AdminSystemController {
         return response;
     }
 
+    @Inject
+    com.biliwind.blog.service.edge.EdgeDataSyncService edgeDataSyncService;
+
+    @jakarta.ws.rs.POST
+    @Path("/sync-cluster-keys")
+    @Operation(summary = "同步集群公钥", description = "将主节点的公钥推送给所有边缘节点，确保加密一致性")
+    public Map<String, Object> syncClusterKeys() {
+        edgeDataSyncService.syncClusterKeyToAll();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "已向所有启用节点发起集群公钥同步任务");
+        return response;
+    }
+
+
     private List<HealthCheckResponse> collectAllHealthCheckResponses() {
         List<HealthCheckResponse> responses = new ArrayList<>();
         for (HealthCheck healthCheck : allHealthChecks) {

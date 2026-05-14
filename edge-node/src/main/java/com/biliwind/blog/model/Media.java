@@ -103,7 +103,6 @@ public class Media extends PanacheEntityBase {
      * 创建时间
      */
     @Column(name = "created_at", nullable = false)
-    @CreationTimestamp
     public OffsetDateTime createdAt;
 
 
@@ -111,7 +110,6 @@ public class Media extends PanacheEntityBase {
      * 更新时间
      */
     @Column(name = "updated_at", nullable = false)
-    @UpdateTimestamp
     public OffsetDateTime updatedAt;
 
     /**
@@ -137,6 +135,10 @@ public class Media extends PanacheEntityBase {
      */
     @Column(name = "processing_error", columnDefinition = "text")
     public String processingError;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "visibility_regions", columnDefinition = "jsonb")
+    public java.util.List<String> visibilityRegions;
 
     /**
      * @return size

@@ -26,6 +26,9 @@ public class AdminCategoryController {
     @jakarta.inject.Inject
     com.biliwind.blog.common.CacheService cacheService;
 
+    @jakarta.inject.Inject
+    jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
     private void invalidateCategoryCaches() {
         // 清理侧边栏分类
         cacheService.deletePattern(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_CATEGORIES + "*");
@@ -65,6 +68,7 @@ public class AdminCategoryController {
         c.createdAt = OffsetDateTime.now();
         c.persist();
         auditService.log("category", c.id, "create", null, java.util.Map.of("name", c.name, "slug", c.slug));
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("CATEGORY", c.id, "UPSERT"));
         invalidateCategoryCaches();
         return toItem(c);
     }
@@ -94,6 +98,7 @@ public class AdminCategoryController {
         }
         c.persist();
         auditService.log("category", c.id, "update", null, java.util.Map.of("name", c.name, "slug", c.slug));
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("CATEGORY", c.id, "UPSERT"));
         invalidateCategoryCaches();
         return toItem(c);
     }
@@ -107,6 +112,7 @@ public class AdminCategoryController {
         if (c == null) throw new NotFoundException();
         // 处理子分类或关联文章的逻辑通常由业务决定，这里简单处理
         auditService.log("category", c.id, "delete", java.util.Map.of("name", c.name), null);
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("CATEGORY", id, "DELETE"));
         Category.deleteById(id);
         invalidateCategoryCaches();
     }

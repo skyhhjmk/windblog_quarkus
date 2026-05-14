@@ -96,8 +96,8 @@ public class AdminEdgeNodeApiController {
     @POST
     @Path("/{nodeId}/sync")
     @Operation(summary = "手动触发同步", description = "触发主节点向指定边缘节点全量推送所有标签和文章")
-    public Response triggerSync(@PathParam("nodeId") String nodeId) {
-        syncService.triggerFullSync(nodeId);
+    public Response triggerSync(@PathParam("nodeId") String nodeId, @QueryParam("force") @DefaultValue("false") boolean force) {
+        syncService.triggerFullSync(nodeId, force);
         return Response.accepted().build();
     }
 

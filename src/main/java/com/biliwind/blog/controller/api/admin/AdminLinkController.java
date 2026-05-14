@@ -43,6 +43,9 @@ public class AdminLinkController {
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
+    @Inject
+    jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
     @GET
     @Operation(summary = "所有友链")
     public List<AdminLinkItem> list() {
@@ -262,6 +265,7 @@ public class AdminLinkController {
 
         l.persist();
         auditService.log("link", String.valueOf(l.id), "create", null, java.util.Map.of("name", l.name, "url", l.url));
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", l.id, "UPSERT"));
         return toItem(l);
     }
 
@@ -308,6 +312,7 @@ public class AdminLinkController {
 
         l.updatedAt = OffsetDateTime.now();
         auditService.log("link", String.valueOf(l.id), "update", null, java.util.Map.of("name", l.name, "url", l.url)); // For simplicity, just log key info
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", l.id, "UPSERT"));
         return toItem(l);
     }
 
@@ -318,6 +323,7 @@ public class AdminLinkController {
         Link l = Link.findById(id);
         if (l != null) {
             auditService.log("link", String.valueOf(l.id), "delete", java.util.Map.of("name", l.name), null);
+            dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", id, "DELETE"));
             Link.deleteById(id);
         }
     }
