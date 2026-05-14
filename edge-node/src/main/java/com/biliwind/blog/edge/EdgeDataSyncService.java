@@ -93,6 +93,9 @@ public class EdgeDataSyncService {
             JsonNode postNode = root.get("post");
             Post incomingPost = objectMapper.treeToValue(postNode, Post.class);
 
+            // 0. 置空可能引起级联问题的关联字段，修订版在后续独立处理
+            incomingPost.currentRevision = null;
+
             // 1. 处理用户依赖
             if (incomingPost.user != null) {
                 incomingPost.user = syncUserDependency(incomingPost.user);
