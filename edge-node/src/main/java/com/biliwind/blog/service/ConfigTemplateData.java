@@ -12,6 +12,10 @@ public class ConfigTemplateData {
         return Arc.container().instance(ConfigManager.class).get();
     }
 
+    public static String baseUrl() {
+        return configManager().getString("site_info", "url", "http://localhost:8080");
+    }
+
     public static String siteTitle() {
         return configManager().getString("site_info", "title", "WindBlog");
     }

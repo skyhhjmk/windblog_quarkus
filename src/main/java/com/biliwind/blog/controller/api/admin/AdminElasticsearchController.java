@@ -311,4 +311,29 @@ public class AdminElasticsearchController {
             )).build();
         }
     }
+
+    @POST
+    @Path("/posts/reindex-all")
+    @Operation(summary = "全量索引文章", description = "将所有已发布的文章重新索引到 Elasticsearch，用于更新索引结构或修复数据")
+    @APIResponse(responseCode = "200", description = "索引任务启动成功")
+    public Response reindexAll() {
+        try {
+            List<Post> posts = Post.list("status", com.biliwind.blog.model.PostStatus.PUBLISHED);
+            int count = 0;
+            for (Post post : posts) {
+                if (post.deletedAt == null) {
+                    List<String> tags = postSearchService.getPostTags(post.id);
+                    postSearchService.indexPost(post, tags);
+                    count++;
+                }
+            }
+            return Response.ok(Map.of(
+                    "success", true,
+                    "message", "全量索引完成",
+                    "totalCount", count
+            )).build();
+        } catch (Exception e) {
+            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+        }
+    }
 }

@@ -114,6 +114,21 @@ public class SearchController {
                 .data("esDegraded", esDegraded);
     }
 
+    @GET
+    @Path("/suggest")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<String> suggest(@QueryParam("q") String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        try {
+            return postSearchService.suggestPosts(keyword);
+        } catch (Exception e) {
+            log.error("获取搜索建议失败", e);
+            return List.of();
+        }
+    }
+
     private List<SearchHit> buildHits(String keyword, String type, String sort, String date, String lang) {
         if (keyword.isBlank()) {
             return List.of();

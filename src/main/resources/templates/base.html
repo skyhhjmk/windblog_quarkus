@@ -34,6 +34,29 @@
     <meta name="keywords" content="{config:siteKeywords}"/>
     <link rel="icon" href="{config:faviconUrl}"/>
 
+    {#if canonicalUrl}
+        <link rel="canonical" href="{canonicalUrl}"/>
+    {#else}
+        <link rel="canonical" href="{config:baseUrl}{currentPath ?: ''}"/>
+    {/if}
+
+    {#if ogData}
+        {#for entry in ogData.entrySet}
+            {#if entry.key.startsWith('og:')}
+                <meta property="{entry.key}" content="{entry.value}"/>
+            {#else}
+                <meta name="{entry.key}" content="{entry.value}"/>
+            {/if}
+        {/for}
+    {/if}
+
+    {#if jsonLd}
+        <script type="application/ld+json">
+            {jsonLd.raw}
+
+        </script>
+    {/if}
+
     <!-- Theme & SEO -->
     <meta name="theme-color" content="{config:themeColor}"/>
     <meta name="color-scheme" content="dark" />

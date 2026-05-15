@@ -97,6 +97,31 @@ public class EdgeSearchController {
                 .data("esDegraded", esDegraded);
     }
 
+    @GET
+    @Path("/suggest")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<String> suggest(@QueryParam("q") String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        String lang = languageContext.getLang();
+        String lowerKeyword = keyword.toLowerCase(Locale.ROOT);
+
+        // Simple database-based keyword suggestion for edge nodes
+        // Matches titles of published posts in the current region
+        List<Post> posts = Post.find(
+                "status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+                PostStatus.PUBLISHED, "%\"" + region + "\"%"
+        ).list();
+
+        return posts.stream()
+                .map(post -> LanguageHelper.resolveLocalizedValue(post.title, lang))
+                .filter(title -> title != null && title.toLowerCase(Locale.ROOT).contains(lowerKeyword))
+                .distinct()
+                .limit(10)
+                .toList();
+    }
+
     private List<SearchHit> buildHits(String keyword, String type, String sort, String date, String lang) {
         if (keyword.isBlank()) {
             return List.of();

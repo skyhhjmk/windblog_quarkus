@@ -238,7 +238,12 @@ public class ElasticsearchPostSearchService {
                         "publishedAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
                         "createdAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
                             "updatedAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
-                            "visibilityRegions": { "type": "keyword" }
+                                "visibilityRegions": { "type": "keyword" },
+                                "suggest": {
+                                  "type": "completion",
+                                  "analyzer": "ik_max_word_analyzer",
+                                  "search_analyzer": "ik_smart_analyzer"
+                                }
                   }
                 }
               },
@@ -374,6 +379,16 @@ public class ElasticsearchPostSearchService {
         } else {
             document.put("tags", List.of());
         }
+
+        // 填充搜索建议字段 (Completion Suggester)
+        List<String> suggestions = new ArrayList<>();
+        if (defaultTitle != null && !defaultTitle.isBlank()) {
+            suggestions.add(defaultTitle);
+        }
+        if (tags != null) {
+            suggestions.addAll(tags);
+        }
+        document.put("suggest", suggestions);
 
         String documentJson = new com.fasterxml.jackson.databind.ObjectMapper()
             .writeValueAsString(document);
@@ -524,6 +539,59 @@ public class ElasticsearchPostSearchService {
             log.error("Search failed: " + response.body());
             throw new ElasticsearchUnavailableException("Search failed: " + response.statusCode());
         }
+    }
+
+    /**
+     * 获取搜索建议 (Completion Suggester)
+     */
+    public List<String> suggestPosts(String query) throws Exception {
+        if (!connectionManager.isAvailable()) {
+            return List.of();
+        }
+
+        if (query == null || query.trim().isEmpty()) {
+            return List.of();
+        }
+
+        String suggestBody = String.format("""
+                {
+                  "suggest": {
+                    "post-suggest": {
+                      "prefix": "%s",
+                      "completion": {
+                        "field": "suggest",
+                        "size": 10,
+                        "skip_duplicates": true
+                      }
+                    }
+                  }
+                }
+                """, escapeJson(query));
+
+        var request = HttpRequest.newBuilder()
+                .uri(URI.create(elasticsearchHosts + "/" + POST_INDEX_ALIAS + "/_search"))
+                .POST(HttpRequest.BodyPublishers.ofString(suggestBody))
+                .header("Content-Type", "application/json")
+                .build();
+
+        var response = connectionManager.sendRequest(request);
+
+        List<String> results = new ArrayList<>();
+        if (response.statusCode() == 200) {
+            var objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var rootNode = objectMapper.readTree(response.body());
+            var options = rootNode.path("suggest").path("post-suggest").get(0).path("options");
+
+            if (options.isArray()) {
+                for (var option : options) {
+                    results.add(option.path("text").asText());
+                }
+            }
+        } else {
+            log.warn("Suggest failed: " + response.body());
+        }
+
+        return results;
     }
 
     private SearchResult parseSearchResponse(String responseBody) throws IOException {

@@ -48,6 +48,9 @@ public class EdgeBlogController {
     @Inject
     com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
+    @Inject
+    com.biliwind.blog.service.ConfigManager configManager;
+
     @org.eclipse.microprofile.config.inject.ConfigProperty(name = "edge.node.region", defaultValue = "global")
     String region;
 
@@ -150,7 +153,65 @@ public class EdgeBlogController {
                 .data("hasPurchased", hasPurchased)
                 .data("postTags", postTags)
                 .data("attachments", attachments)
-                .data("relatedStoreItems", resolveRelatedStoreItems(postEntity));
+                .data("relatedStoreItems", resolveRelatedStoreItems(postEntity))
+                .data("canonicalUrl", buildCanonicalUrl(slug))
+                .data("ogData", buildOgData(postEntity, localizedTitle, localizedAiSummary, resolvedLang))
+                .data("jsonLd", buildJsonLd(postEntity, localizedTitle, localizedAiSummary, resolvedLang));
+    }
+
+    private String buildCanonicalUrl(String slug) {
+        String baseUrl = configManager.getString("site_info", "url", "http://localhost:8080");
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        return baseUrl + "/post/" + slug;
+    }
+
+    private java.util.Map<String, String> buildOgData(Post post, String title, String summary, String lang) {
+        java.util.Map<String, String> og = new java.util.HashMap<>();
+        og.put("og:title", title);
+        og.put("og:description", summary != null ? summary : "");
+        og.put("og:type", "article");
+        og.put("og:url", buildCanonicalUrl(post.slug));
+
+        String imageUrl = configManager.getString("appearance", "logo_url", "/logo.png");
+        og.put("og:image", imageUrl);
+
+        og.put("twitter:card", "summary_large_image");
+        og.put("twitter:title", title);
+        og.put("twitter:description", summary != null ? summary : "");
+        og.put("twitter:image", imageUrl);
+
+        return og;
+    }
+
+    private String buildJsonLd(Post post, String title, String summary, String lang) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            com.fasterxml.jackson.databind.node.ObjectNode root = mapper.createObjectNode();
+            root.put("@context", "https://schema.org");
+            root.put("@type", "BlogPosting");
+            root.put("headline", title);
+            root.put("description", summary != null ? summary : "");
+            root.put("url", buildCanonicalUrl(post.slug));
+            root.put("datePublished", post.publishedAt != null ? post.publishedAt.toString() : "");
+            root.put("dateModified", post.updatedAt != null ? post.updatedAt.toString() : "");
+
+            com.fasterxml.jackson.databind.node.ObjectNode author = root.putObject("author");
+            author.put("@type", "Person");
+            author.put("name", post.user != null ? post.user.username : "Unknown");
+
+            com.fasterxml.jackson.databind.node.ObjectNode publisher = root.putObject("publisher");
+            publisher.put("@type", "Organization");
+            publisher.put("name", configManager.getString("site_info", "title", "WindBlog"));
+            com.fasterxml.jackson.databind.node.ObjectNode logo = publisher.putObject("logo");
+            logo.put("@type", "ImageObject");
+            logo.put("url", configManager.getString("appearance", "logo_url", "/logo.png"));
+
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     private String normalizeSlug(String slug) {

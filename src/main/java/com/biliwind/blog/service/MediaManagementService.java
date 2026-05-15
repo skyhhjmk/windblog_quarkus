@@ -357,6 +357,18 @@ public class MediaManagementService {
             throw new IllegalStateException("写入媒体文件失败", e);
         }
 
+        // 验证文件头 (Magic Number) 以防止伪装文件
+        try (InputStream checkStream = Files.newInputStream(target)) {
+            byte[] head = new byte[16];
+            int readCount = checkStream.read(head);
+            if (readCount > 0 && !com.biliwind.blog.common.helper.MediaSecurityHelper.validateMagicNumber(head, normalizedMime)) {
+                deleteTarget(target);
+                throw new BadRequestException("文件内容与声明的类型不符（Magic Number 校验失败）");
+            }
+        } catch (IOException e) {
+            Log.warn("Magic number validation skipped due to IO error: " + e.getMessage());
+        }
+
         long size;
         try {
             size = Files.size(target);

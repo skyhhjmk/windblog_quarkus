@@ -271,5 +271,69 @@
                 window.setLoading(submitBtn, true);
             }
         });
+
+        // Search Suggestions logic
+        const searchInput = document.querySelector('form[action="/search"] input[name="q"]');
+        if (searchInput) {
+            const form = searchInput.closest('form');
+            const suggestWrap = document.createElement('div');
+            suggestWrap.id = 'search-suggestions';
+            suggestWrap.className = 'absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl hidden z-[60] overflow-hidden';
+            form.appendChild(suggestWrap);
+
+            let suggestTimer = null;
+            searchInput.addEventListener('input', () => {
+                const q = searchInput.value.trim();
+                clearTimeout(suggestTimer);
+                if (q.length < 2) {
+                    suggestWrap.innerHTML = '';
+                    suggestWrap.classList.add('hidden');
+                    return;
+                }
+
+                suggestTimer = setTimeout(async () => {
+                    try {
+                        const res = await fetch(`/search/suggest?q=${encodeURIComponent(q)}`);
+                        if (!res.ok) throw new Error('Suggest fetch failed');
+                        const suggestions = await res.json();
+
+                        if (suggestions && suggestions.length > 0) {
+                            suggestWrap.innerHTML = suggestions.map(s => `
+                                <div class="px-4 py-2 text-sm hover:bg-accent/10 cursor-pointer transition-colors border-b border-border/50 last:border-0" data-val="${s.replace(/"/g, '&quot;')}">
+                                    ${s}
+                                </div>
+                            `).join('');
+                            suggestWrap.classList.remove('hidden');
+                        } else {
+                            suggestWrap.innerHTML = '';
+                            suggestWrap.classList.add('hidden');
+                        }
+                    } catch (err) {
+                        console.warn('Autocomplete error:', err);
+                    }
+                }, 300);
+            });
+
+            suggestWrap.addEventListener('click', (e) => {
+                const item = e.target.closest('[data-val]');
+                if (item) {
+                    searchInput.value = item.getAttribute('data-val');
+                    suggestWrap.classList.add('hidden');
+                    form.submit();
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!form.contains(e.target)) {
+                    suggestWrap.classList.add('hidden');
+                }
+            });
+
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    suggestWrap.classList.add('hidden');
+                }
+            });
+        }
     });
 })();
