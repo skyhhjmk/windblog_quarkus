@@ -71,7 +71,7 @@ public class IndexController {
         }
 
         String language = languageContext.getLang();
-        String currentRegion = regionContext.getCurrentRegion();
+        String currentRegion = regionContext.getCurrentRegion().getCode();
         String cacheKey = com.biliwind.blog.common.CacheService.Keys.indexPage(subPage, language + ":" + currentRegion);
 
         long totalPostsCount;

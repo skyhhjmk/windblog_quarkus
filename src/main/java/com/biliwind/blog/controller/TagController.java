@@ -106,7 +106,7 @@ public class TagController {
         String tagName = resolveTagName(entity, lang);
         String tagDescription = resolveTagDescription(entity, lang);
 
-        String currentRegion = regionContext.getCurrentRegion();
+        String currentRegion = regionContext.getCurrentRegion().getCode();
         var query = Post.find("status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2) and id in "
                         + "(select pt.post.id from PostTag pt where pt.tag = ?3) order by publishedAt desc nulls last, createdAt desc",
                 PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%", entity);

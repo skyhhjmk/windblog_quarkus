@@ -1,6 +1,6 @@
 package com.biliwind.blog.context;
 
-import com.biliwind.blog.common.constant.RegionConstant;
+import com.biliwind.blog.model.BlogRegion;
 import jakarta.enterprise.context.RequestScoped;
 
 /**
@@ -12,14 +12,14 @@ public class RegionContext {
     /**
      * 当前请求所属区域，默认为 global
      */
-    private String currentRegion = RegionConstant.GLOBAL;
+    private BlogRegion currentRegion = BlogRegion.GLOBAL;
 
-    public String getCurrentRegion() {
+    public BlogRegion getCurrentRegion() {
         return currentRegion;
     }
 
-    public void setCurrentRegion(String currentRegion) {
-        if (currentRegion != null && !currentRegion.isBlank()) {
+    public void setCurrentRegion(BlogRegion currentRegion) {
+        if (currentRegion != null) {
             this.currentRegion = currentRegion;
         }
     }

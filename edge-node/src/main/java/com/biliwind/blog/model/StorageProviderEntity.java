@@ -50,7 +50,7 @@ public class StorageProviderEntity extends PanacheEntityBase {
     public Boolean cdnEnabled = false;
 
     @Column(nullable = false, length = 20)
-    public String region = "global";
+    public BlogRegion region = BlogRegion.GLOBAL;
 
     @Column(nullable = false)
     public Integer priority = 0;

@@ -139,7 +139,7 @@ public class SearchController {
         List<SearchHit> hits = new ArrayList<>();
 
         if ("all".equals(type) || "post".equals(type)) {
-            String currentRegion = regionContext.getCurrentRegion();
+            String currentRegion = regionContext.getCurrentRegion().getCode();
             List<Post> posts = Post.find(
                     "status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
                     PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%"
@@ -185,7 +185,7 @@ public class SearchController {
 
             log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s, page=%d", keyword, type, page);
 
-            var searchResult = postSearchService.searchPosts(keyword, page, PAGE_SIZE, "PUBLISHED", null, null, regionContext.getCurrentRegion());
+            var searchResult = postSearchService.searchPosts(keyword, page, PAGE_SIZE, "PUBLISHED", null, null, regionContext.getCurrentRegion().getCode());
 
             OffsetDateTime threshold = dateThreshold(date);
             List<SearchHit> hits = new ArrayList<>();

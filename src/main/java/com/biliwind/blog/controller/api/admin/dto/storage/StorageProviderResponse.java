@@ -30,7 +30,7 @@ public record StorageProviderResponse(
                 entity.supportedTypes,
                 entity.cdnDomain,
                 entity.cdnEnabled,
-                entity.region,
+                entity.region == null ? null : entity.region.getCode(),
                 entity.priority
         );
     }

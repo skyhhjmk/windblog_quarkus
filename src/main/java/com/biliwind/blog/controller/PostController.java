@@ -75,7 +75,7 @@ public class PostController {
 
         slug = normalizeSlug(slug);
 
-        String currentRegion = regionContext.getCurrentRegion();
+        String currentRegion = regionContext.getCurrentRegion().getCode();
 
         // 核心过滤逻辑: visibilityRegions 为空或者是包含当前区域
         Post postEntity = Post.find(

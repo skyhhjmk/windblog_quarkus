@@ -112,7 +112,7 @@ public class AdminStorageController {
         entity.supportedTypes = supportedTypes;
         entity.cdnDomain = request.cdnDomain();
         entity.cdnEnabled = request.cdnEnabled() != null ? request.cdnEnabled() : false;
-        entity.region = request.region() != null ? request.region() : "global";
+        entity.region = com.biliwind.blog.model.BlogRegion.fromCode(request.region());
         entity.priority = request.priority() != null ? request.priority() : 0;
 
         entity.persist();
@@ -190,7 +190,7 @@ public class AdminStorageController {
         existing.supportedTypes = supportedTypes;
         existing.cdnDomain = request.cdnDomain();
         existing.cdnEnabled = request.cdnEnabled() != null ? request.cdnEnabled() : existing.cdnEnabled;
-        existing.region = request.region() != null ? request.region() : existing.region;
+        existing.region = request.region() != null ? com.biliwind.blog.model.BlogRegion.fromCode(request.region()) : existing.region;
         existing.priority = request.priority() != null ? request.priority() : existing.priority;
 
         existing.persist();

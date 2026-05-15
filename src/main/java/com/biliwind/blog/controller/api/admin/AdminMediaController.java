@@ -37,6 +37,9 @@ public class AdminMediaController {
     @Inject
     jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
 
+    @Inject
+    com.biliwind.blog.service.RegionValidationService regionValidationService;
+
     @GET
     @Operation(summary = "列出媒体资源")
     public AdminMediaDtos.MediaListResult list(
@@ -126,7 +129,7 @@ public class AdminMediaController {
             throw new NotFoundException("媒体不存在");
         }
         if (request.visibilityRegions() != null) {
-            media.visibilityRegions = request.visibilityRegions();
+            media.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
         }
         media.persist();
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("MEDIA", media.id, "UPSERT"));

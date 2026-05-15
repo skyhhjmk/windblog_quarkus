@@ -1,6 +1,6 @@
 package com.biliwind.blog.service;
 
-import com.biliwind.blog.common.constant.RegionConstant;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.RegionRule;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -18,13 +18,11 @@ public class RegionRuleService {
      *
      * @param host      域名
      * @param languages Accept-Language 列表
-     * @return 识别出的区域标识
+     * @return 识别出的区域枚举
      */
-    public String resolveRegion(String host, List<String> languages) {
-        // 1. 获取所有启用的规则，按优先级降序
+    public BlogRegion resolveRegion(String host, List<String> languages) {
         List<RegionRule> rules = RegionRule.find("isEnabled = true ORDER BY priority DESC").list();
 
-        // 2. 域名匹配 (RuleType = 'domain')
         if (host != null && !host.isBlank()) {
             for (RegionRule rule : rules) {
                 if ("domain".equals(rule.ruleType) && host.equalsIgnoreCase(rule.pattern)) {
@@ -33,7 +31,6 @@ public class RegionRuleService {
             }
         }
 
-        // 3. 语言匹配 (RuleType = 'language')
         if (languages != null && !languages.isEmpty()) {
             for (RegionRule rule : rules) {
                 if ("language".equals(rule.ruleType)) {
@@ -46,7 +43,6 @@ public class RegionRuleService {
             }
         }
 
-        // 4. 兜底返回 global
-        return RegionConstant.GLOBAL;
+        return BlogRegion.GLOBAL;
     }
 }

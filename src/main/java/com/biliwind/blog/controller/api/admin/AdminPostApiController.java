@@ -54,6 +54,9 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.repository.PostRepository postRepository;
 
+    @Inject
+    com.biliwind.blog.service.RegionValidationService regionValidationService;
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -153,7 +156,7 @@ public class AdminPostApiController {
         post.user = operator;
         post.createdAt = now;
         post.updatedAt = now;
-        post.visibilityRegions = request.visibilityRegions();
+        post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
 
         // 设置分类
         if (request.categoryId() != null) {
@@ -506,7 +509,7 @@ public class AdminPostApiController {
             changed = true;
         }
         if (request.visibilityRegions() != null && !Objects.equals(post.visibilityRegions, request.visibilityRegions())) {
-            post.visibilityRegions = request.visibilityRegions();
+            post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
             changed = true;
         }
         // 密码允许设为 null (即清除密码)

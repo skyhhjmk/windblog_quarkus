@@ -58,9 +58,8 @@ public class EdgeNode extends PanacheEntityBase {
     /**
      * 区域配置
      */
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    public EdgeRegion region;
+    public BlogRegion region;
 
     /**
      * 连接模式

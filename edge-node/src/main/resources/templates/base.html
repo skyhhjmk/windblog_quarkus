@@ -34,13 +34,13 @@
     <meta content="{config:siteKeywords}" name="keywords"/>
     <link href="{config:faviconUrl}" rel="icon"/>
 
-    {#if canonicalUrl}
+    {#if canonicalUrl.or(null)}
         <link rel="canonical" href="{canonicalUrl}"/>
     {#else}
         <link rel="canonical" href="{config:baseUrl}{currentPath ?: ''}"/>
     {/if}
 
-    {#if ogData}
+    {#if ogData.or(null)}
         {#for entry in ogData.entrySet}
             {#if entry.key.startsWith('og:')}
                 <meta property="{entry.key}" content="{entry.value}"/>
@@ -50,7 +50,7 @@
         {/for}
     {/if}
 
-    {#if jsonLd}
+    {#if jsonLd.or(null)}
         <script type="application/ld+json">
             {jsonLd.raw}
 

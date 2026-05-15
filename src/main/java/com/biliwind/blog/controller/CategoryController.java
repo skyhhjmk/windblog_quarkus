@@ -105,7 +105,7 @@ public class CategoryController {
         List<Category> children = Category.list("parent.id = ?1 order by createdAt desc", entity.id);
         List<CategoryListItem> childItems = children.stream().map(c -> toCategoryListItem(c, lang)).toList();
 
-        String currentRegion = regionContext.getCurrentRegion();
+        String currentRegion = regionContext.getCurrentRegion().getCode();
         String queryStr = "category = ?1 and status = ?2 and deletedAt is null "
                 + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3) "
                 + "order by publishedAt desc nulls last, createdAt desc";

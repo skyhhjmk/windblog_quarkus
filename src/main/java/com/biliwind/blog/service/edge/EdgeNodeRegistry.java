@@ -2,9 +2,9 @@ package com.biliwind.blog.service.edge;
 
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
-import com.biliwind.blog.model.EdgeRegion;
 import io.grpc.ManagedChannelBuilder;
 import io.quarkus.grpc.GrpcService;
 import io.quarkus.scheduler.Scheduled;
@@ -27,18 +27,14 @@ public class EdgeNodeRegistry {
     EdgeNodeGrpcService edgeNodeGrpcService;
 
     @Transactional
-    public void registerOrUpdate(String nodeId, String regionStr, Map<String, String> metrics) {
+    public void registerOrUpdate(String nodeId, BlogRegion region, Map<String, String> metrics) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) {
-            log.info("New edge node registered: {} in region {}", nodeId, regionStr);
+            log.info("New edge node registered: {} in region {}", nodeId, region.getCode());
             node = new EdgeNode();
             node.nodeId = nodeId;
-            node.name = nodeId; // 默认名称
-            try {
-                node.region = EdgeRegion.valueOf(regionStr.toUpperCase());
-            } catch (Exception e) {
-                node.region = EdgeRegion.GLOBAL;
-            }
+            node.name = nodeId;
+            node.region = region;
             node.connectionType = EdgeConnectionType.HEARTBEAT;
             node.persist();
         }
@@ -86,7 +82,6 @@ public class EdgeNodeRegistry {
             return;
         }
 
-        // 获取当前存储配置
         EdgeServiceProto.StorageConfigResponse config = edgeNodeGrpcService.getStorageConfig(
                 EdgeServiceProto.ConfigRequest.newBuilder().setNodeId("main").build()
         ).await().indefinitely();
@@ -126,7 +121,7 @@ public class EdgeNodeRegistry {
     }
 
     @Transactional
-    public void updateNodeStatus(String nodeId, String region, Map<String, String> metrics) {
+    public void updateNodeStatus(String nodeId, String regionCode, Map<String, String> metrics) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node != null) {
             node.status = "ONLINE";

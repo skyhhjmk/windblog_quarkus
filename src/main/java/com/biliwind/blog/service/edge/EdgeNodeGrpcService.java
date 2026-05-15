@@ -2,6 +2,7 @@ package com.biliwind.blog.service.edge;
 
 import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageProviderEntity;
 import com.biliwind.blog.service.storage.StorageProvider;
@@ -42,7 +43,8 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Override
     public Uni<HeartbeatResponse> heartbeat(HeartbeatRequest request) {
-        registry.registerOrUpdate(request.getNodeId(), request.getRegion(), request.getMetricsMap());
+        BlogRegion region = BlogRegion.fromCode(request.getRegion());
+        registry.registerOrUpdate(request.getNodeId(), region, request.getMetricsMap());
 
         return getStorageConfig(ConfigRequest.newBuilder().setNodeId(request.getNodeId()).build())
                 .map(configResponse -> HeartbeatResponse.newBuilder()

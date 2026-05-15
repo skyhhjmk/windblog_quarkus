@@ -37,10 +37,10 @@ public class RegionRule extends PanacheEntityBase {
     public String pattern;
 
     /**
-     * 映射到的区域: cn, us, eu, global
+     * 映射到的区域
      */
     @Column(nullable = false)
-    public String region;
+    public BlogRegion region;
 
     /**
      * 优先级，越大越优先
