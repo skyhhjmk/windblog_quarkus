@@ -181,53 +181,53 @@
 <body>
     {#include system/ui.html /}
 
-<div class="error-container">
-    <div class="error-icon">X</div>
-    <h1>抱歉，出错了</h1>
-    <p class="message">{message}</p>
+    <div class="error-container">
+        <div class="error-icon">X</div>
+        <h1>抱歉，出错了</h1>
+        <p class="message">{message}</p>
 
-    {#if trackingId}
-    <div class="tracking-box">
-        <div class="tracking-item">
-            <span class="tracking-label">错误追踪号 (Tracking ID)</span>
-            <span class="tracking-value" id="trackingId">{trackingId}</span>
+        {#if trackingId}
+            <div class="tracking-box">
+                <div class="tracking-item">
+                    <span class="tracking-label">错误追踪号 (Tracking ID)</span>
+                    <span class="tracking-value" id="trackingId">{trackingId}</span>
+                </div>
+                <div class="tracking-item">
+                    <span class="tracking-label">错误追踪文本 (如有必要，请将此文本反馈给管理员)</span>
+                    <span class="tracking-value" id="trackingText"
+                          style="max-height: 100px; overflow-y: auto;">{trackingText}</span>
+                </div>
+                <button class="btn btn-secondary" onclick="copyTrackingText()"
+                        style="width: 100%; margin-top: 8px; padding: 8px; font-size: 14px;">
+                    复制追踪文本
+                </button>
+                <p class="copy-hint">追踪文本已经过加密处理，仅管理员可查看其中包含的调试信息。</p>
+            </div>
+        {/if}
+
+        <div class="actions">
+            <a class="btn btn-primary" href="/">返回首页</a>
+            <a class="btn btn-secondary" href="javascript:location.reload()">重试一次</a>
         </div>
-        <div class="tracking-item">
-            <span class="tracking-label">错误追踪文本 (如有必要，请将此文本反馈给管理员)</span>
-            <span class="tracking-value" id="trackingText"
-                  style="max-height: 100px; overflow-y: auto;">{trackingText}</span>
-        </div>
-        <button class="btn btn-secondary" onclick="copyTrackingText()"
-                style="width: 100%; margin-top: 8px; padding: 8px; font-size: 14px;">
-            复制追踪文本
-        </button>
-        <p class="copy-hint">追踪文本已经过加密处理，仅管理员可查看其中包含的调试信息。</p>
     </div>
-    {/if}
 
-    <div class="actions">
-        <a class="btn btn-primary" href="/">返回首页</a>
-        <a class="btn btn-secondary" href="javascript:location.reload()">重试一次</a>
-    </div>
-</div>
+    <script src="/assets/js/ui.js"></script>
+    <script>
+        function copyTrackingText() {
+            const text = document.getElementById('trackingText').innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = text;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
 
-<script src="/assets/js/ui.js"></script>
-<script>
-    function copyTrackingText() {
-        const text = document.getElementById('trackingText').innerText;
-        const tempTextArea = document.createElement('textarea');
-        tempTextArea.value = text;
-        document.body.appendChild(tempTextArea);
-        tempTextArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(tempTextArea);
-
-        if (window.showToast) {
-            window.showToast('追踪文本已复制到剪贴板', 'success');
-        } else {
-            alert('追踪文本已复制到剪贴板');
+            if (window.showToast) {
+                window.showToast('追踪文本已复制到剪贴板', 'success');
+            } else {
+                alert('追踪文本已复制到剪贴板');
+            }
         }
-    }
-</script>
+    </script>
 </body>
 </html>

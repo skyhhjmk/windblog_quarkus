@@ -1,4 +1,4 @@
-﻿<div data-page-title="{postTitle ?: '文章信息'}" id="pjax-content-root">
+<div data-page-title="{postTitle ?: '文章信息'}" id="pjax-content-root">
     <div class="hidden" id="pjax-nav-path">
         post / {postSlug ?: 'unknown'}
     </div>
@@ -163,8 +163,7 @@
                         </a>
                         <div class="h-[1px] flex-1 bg-gradient-to-r from-accent/20 to-transparent"></div>
                     </div>
-                    <h1 class="text-6xl font-black text-main tracking-tight leading-[1.1]">{postTitle ?:
-                        '文章信息'}</h1>
+                    <h1 class="text-6xl font-black text-main tracking-tight leading-[1.1]">{postTitle ?: '文章信息'}</h1>
                 </div>
 
                 <div class="flex items-center gap-12 py-6 border-y border-border/40">

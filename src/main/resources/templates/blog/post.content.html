@@ -1,4 +1,4 @@
-﻿<div id="pjax-content-root" data-page-title="{postTitle ?: '文章信息'}">
+<div id="pjax-content-root" data-page-title="{postTitle ?: '文章信息'}">
     <div id="pjax-nav-path" class="hidden">
         post / {postSlug ?: 'unknown'}
     </div>
@@ -192,7 +192,7 @@
                 </div>
             </header>
 
-            {#if config:toggle('enable_ai_summary') && aiSummaryStatus != 2 && aiSummary && ! aiSummary.isEmpty}
+            {#if aiSummary && ! aiSummary.isEmpty}
                 <section class="card card-static p-8 bg-accent/[0.02] border-accent/20 group">
                     <div class="flex items-center gap-4 mb-6">
                         <span class="badge-ai">
