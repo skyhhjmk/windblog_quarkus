@@ -1,5 +1,8 @@
 package com.biliwind.blog.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 /**
  * 博客业务区域枚举，统一项目中所有区域相关的定义
  */
@@ -24,6 +27,7 @@ public enum BlogRegion {
     /**
      * 从字符串 code 转换为枚举，兼容旧数据中的 "china" 映射到 CN
      */
+    @JsonCreator
     public static BlogRegion fromCode(String code) {
         if (code == null || code.isBlank()) {
             return GLOBAL;
@@ -40,6 +44,7 @@ public enum BlogRegion {
         return GLOBAL;
     }
 
+    @JsonValue
     public String getCode() {
         return code;
     }

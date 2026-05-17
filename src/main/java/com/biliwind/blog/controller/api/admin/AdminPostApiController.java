@@ -4,7 +4,7 @@ import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.MediaManagementService;
-import com.biliwind.blog.service.elasticsearch.PostSyncedEvent;
+import com.biliwind.blog.service.edge.PostSyncedEvent;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.event.Event;

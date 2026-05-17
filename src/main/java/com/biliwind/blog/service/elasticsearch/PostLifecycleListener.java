@@ -4,6 +4,7 @@ import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.service.TempDataService;
+import com.biliwind.blog.service.edge.PostSyncedEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -57,19 +58,19 @@ public class PostLifecycleListener {
     }
 
     public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
-        log.info(">>>>>>>>>> [onPostSynced] 收到文章同步事件: " + event.postId());
+        log.info(">>>>>>>>>> [onPostSynced] 收到文章同步事件: " + event.getPostId());
 
         if (!connectionManager.isAvailable()) {
-            log.warnf("Elasticsearch 当前不可用，发送同步任务到 RabbitMQ 持久化: %d", event.postId());
-            sendToQueue(event.postId(), "UPDATE");
+            log.warnf("Elasticsearch 当前不可用，发送同步任务到 RabbitMQ 持久化: %d", event.getPostId());
+            sendToQueue(event.getPostId(), "UPDATE");
             return;
         }
 
         try {
-            processPostUpdate(event.postId());
+            processPostUpdate(event.getPostId());
         } catch (Exception e) {
-            log.errorf("同步文章到 Elasticsearch 失败: %d, 错误: %s", event.postId(), e.getMessage());
-            sendToQueue(event.postId(), "UPDATE");
+            log.errorf("同步文章到 Elasticsearch 失败: %d, 错误: %s", event.getPostId(), e.getMessage());
+            sendToQueue(event.getPostId(), "UPDATE");
         }
     }
 

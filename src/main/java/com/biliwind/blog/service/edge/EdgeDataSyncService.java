@@ -2,16 +2,8 @@ package com.biliwind.blog.service.edge;
 
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
-import com.biliwind.blog.model.EdgeNode;
-import com.biliwind.blog.model.Post;
-import com.biliwind.blog.model.PostTag;
-import com.biliwind.blog.model.Tag;
-import com.biliwind.blog.model.Category;
-import com.biliwind.blog.model.Link;
-import com.biliwind.blog.model.Media;
-import com.biliwind.blog.service.elasticsearch.PostSyncedEvent;
+import com.biliwind.blog.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.grpc.ManagedChannelBuilder;
 import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -40,6 +32,8 @@ public class EdgeDataSyncService {
     EntityManager entityManager;
     @Inject
     com.biliwind.blog.common.helper.RsaHelper rsaHelper;
+    @Inject
+    GrpcChannelFactory channelFactory;
 
     void onStart(@Observes StartupEvent ev) {
         log.info("EdgeDataSyncService started");
@@ -65,24 +59,24 @@ public class EdgeDataSyncService {
      * 监听文章同步事件
      */
     public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
-        log.info("Detected post change, syncing to edge nodes: {}", event.postId());
-        syncPost(event.postId());
+        log.info("Detected post change, syncing to edge nodes: {}", event.getPostId());
+        syncPost(event.getPostId());
     }
 
     /**
      * 监听通用同步事件（如标签）
      */
     public void onDataChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) DataSyncEvent event) {
-        log.info("Detected {} change, action: {}, id: {}", event.entityType(), event.action(), event.entityId());
+        log.info("Detected {} change, action: {}, id: {}", event.getEntityType(), event.getAction(), event.getEntityId());
 
-        if ("TAG".equals(event.entityType())) {
-            syncTag(event.entityId(), event.action());
-        } else if ("CATEGORY".equals(event.entityType())) {
-            syncCategory(event.entityId(), event.action());
-        } else if ("LINK".equals(event.entityType())) {
-            syncLink(event.entityId(), event.action());
-        } else if ("MEDIA".equals(event.entityType())) {
-            syncMedia(event.entityId(), event.action());
+        if ("TAG".equals(event.getEntityType())) {
+            syncTag(event.getEntityId(), event.getAction());
+        } else if ("CATEGORY".equals(event.getEntityType())) {
+            syncCategory(event.getEntityId(), event.getAction());
+        } else if ("LINK".equals(event.getEntityType())) {
+            syncLink(event.getEntityId(), event.getAction());
+        } else if ("MEDIA".equals(event.getEntityType())) {
+            syncMedia(event.getEntityId(), event.getAction());
         }
     }
 
@@ -205,9 +199,7 @@ public class EdgeDataSyncService {
             grpcAddress = node.address;
         }
         return stubCache.computeIfAbsent(grpcAddress, addr ->
-                MutinyEdgeNodeServiceGrpc.newMutinyStub(
-                        ManagedChannelBuilder.forTarget(addr).usePlaintext().build()
-                )
+                MutinyEdgeNodeServiceGrpc.newMutinyStub(channelFactory.createChannel(addr))
         );
     }
 

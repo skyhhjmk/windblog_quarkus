@@ -68,4 +68,6 @@
     <include file="db/migration/064-create-region-rule.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/065-create-edge-nodes.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/066-add-edge-node-addresses.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/067-add-edge-node-certificate.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/068-add-edge-node-backup-certs.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

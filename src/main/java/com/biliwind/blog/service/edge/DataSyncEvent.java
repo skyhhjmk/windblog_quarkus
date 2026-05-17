@@ -2,10 +2,27 @@ package com.biliwind.blog.service.edge;
 
 /**
  * 通用数据同步事件
- *
- * @param entityType 实体类型 (如: TAG, CATEGORY)
- * @param entityId   实体ID
- * @param action     操作类型 (UPSERT, DELETE)
  */
-public record DataSyncEvent(String entityType, Long entityId, String action) {
+public class DataSyncEvent {
+    private final String entityType;
+    private final Long entityId;
+    private final String action;
+
+    public DataSyncEvent(String entityType, Long entityId, String action) {
+        this.entityType = entityType;
+        this.entityId = entityId;
+        this.action = action;
+    }
+
+    public String getEntityType() {
+        return entityType;
+    }
+
+    public Long getEntityId() {
+        return entityId;
+    }
+
+    public String getAction() {
+        return action;
+    }
 }

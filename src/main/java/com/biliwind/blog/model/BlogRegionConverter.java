@@ -4,7 +4,7 @@ import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 
 /**
- * BlogRegion 枚举与数据库字符串的自动转换器
+ * BlogRegion JPA 转换器，确保存储 code 到数据库
  */
 @Converter(autoApply = true)
 public class BlogRegionConverter implements AttributeConverter<BlogRegion, String> {
@@ -12,13 +12,16 @@ public class BlogRegionConverter implements AttributeConverter<BlogRegion, Strin
     @Override
     public String convertToDatabaseColumn(BlogRegion attribute) {
         if (attribute == null) {
-            return BlogRegion.GLOBAL.getCode();
+            return null;
         }
         return attribute.getCode();
     }
 
     @Override
     public BlogRegion convertToEntityAttribute(String dbData) {
+        if (dbData == null) {
+            return null;
+        }
         return BlogRegion.fromCode(dbData);
     }
 }

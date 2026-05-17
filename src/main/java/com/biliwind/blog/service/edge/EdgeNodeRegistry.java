@@ -5,7 +5,6 @@ import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
-import io.grpc.ManagedChannelBuilder;
 import io.quarkus.grpc.GrpcService;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -25,6 +24,9 @@ public class EdgeNodeRegistry {
     @Inject
     @GrpcService
     EdgeNodeGrpcService edgeNodeGrpcService;
+
+    @Inject
+    GrpcChannelFactory channelFactory;
 
     @Transactional
     public void registerOrUpdate(String nodeId, BlogRegion region, Map<String, String> metrics) {
@@ -97,7 +99,7 @@ public class EdgeNodeRegistry {
             log.info("Polling active edge node {} at {}", node.nodeId, grpcAddress);
             try {
                 MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = MutinyEdgeNodeServiceGrpc.newMutinyStub(
-                        ManagedChannelBuilder.forTarget(grpcAddress).usePlaintext().build()
+                        channelFactory.createChannel(grpcAddress)
                 );
 
                 EdgeServiceProto.PollRequest request = EdgeServiceProto.PollRequest.newBuilder()

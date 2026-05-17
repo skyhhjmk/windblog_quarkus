@@ -24,6 +24,9 @@ public class AdminEdgeNodeApiController {
     @Inject
     com.biliwind.blog.service.edge.EdgeDataSyncService syncService;
 
+    @Inject
+    com.biliwind.blog.service.security.CertificateService certificateService;
+
     @GET
     @Operation(summary = "获取所有边缘节点", description = "获取所有已注册的边缘节点及其状态")
     public List<EdgeNode> list() {
@@ -106,5 +109,100 @@ public class AdminEdgeNodeApiController {
     @Operation(summary = "获取同步进度", description = "获取当前节点的同步进度（仅包含正在进行或最近一次的手动同步任务）")
     public com.biliwind.blog.service.edge.EdgeDataSyncService.SyncProgress getSyncStatus(@PathParam("nodeId") String nodeId) {
         return syncService.getSyncStatus(nodeId);
+    }
+
+    @POST
+    @Path("/{nodeId}/issue-certificate")
+    @Transactional
+    @Operation(summary = "签发节点证书", description = "为主节点生成一对新的 mTLS 证书（24h 主证书 + 72h 备用证书）")
+    public EdgeNode issueCertificate(@PathParam("nodeId") String nodeId) throws Exception {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node == null) throw new NotFoundException("节点不存在");
+
+        // 签发 24 小时主证书
+        var primary = certificateService.generateNodeCertificate(nodeId, 24);
+        node.certificateSerial = primary.serialNumber();
+        node.certificateExpiry = primary.expiry();
+
+        // 签发 72 小时备用证书
+        var backup = certificateService.generateNodeCertificate(nodeId, 72);
+        node.certificateBackupSerial = backup.serialNumber();
+        node.certificateBackupExpiry = backup.expiry();
+
+        node.certificateRevoked = false;
+        node.persist();
+
+        // 将证书内容放入响应中供下载（通过 DTO 包装或直接返回 node，但在 node 中不存储 PEM）
+        // 这里我们返回 node，但实际下载 PEM 需要一个专门的 DTO
+        return node;
+    }
+
+    @GET
+    @Path("/{nodeId}/deployment-package")
+    @Operation(summary = "获取部署包信息", description = "获取包含证书 PEM、环境变量和 Docker Compose 配置的部署包数据")
+    public DeploymentPackage getDeploymentPackage(@PathParam("nodeId") String nodeId) throws Exception {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node == null) throw new NotFoundException("节点不存在");
+
+        // 注意：由于证书 PEM 不存储在数据库中，如果是通过 GET 请求获取，
+        // 实际上需要重新签发或从缓存中获取。
+        // 这里为了简化，我们让 issue-certificate 返回完整数据，或者让该接口直接重新签发。
+        var primary = certificateService.generateNodeCertificate(nodeId, 24);
+        var backup = certificateService.generateNodeCertificate(nodeId, 72);
+
+        // 更新数据库中的序列号
+        node.certificateSerial = primary.serialNumber();
+        node.certificateExpiry = primary.expiry();
+        node.certificateBackupSerial = backup.serialNumber();
+        node.certificateBackupExpiry = backup.expiry();
+        node.persist();
+
+        String envContent = String.format(
+                "EDGE_NODE_ID=%s\n" +
+                        "EDGE_NODE_REGION=%s\n" +
+                        "MAIN_NODE_GRPC_HOST=%s\n" +
+                        "MAIN_NODE_GRPC_PORT=9000\n" +
+                        "EDGE_CERT_PATH=/deploy/certs/server.crt\n" +
+                        "EDGE_KEY_PATH=/deploy/certs/server.key\n" +
+                        "CA_CERT_PATH=/deploy/certs/ca.crt\n",
+                node.nodeId, node.region.getCode(), "main-node-host-or-ip"
+        );
+
+        String dockerCompose =
+                "version: '3.8'\n" +
+                        "services:\n" +
+                        "  edge-node:\n" +
+                        "    image: biliwind/windblog-edge-node:latest\n" +
+                        "    container_name: windblog-edge-" + node.nodeId + "\n" +
+                        "    volumes:\n" +
+                        "      - ./certs:/deploy/certs:ro\n" +
+                        "    environment:\n" +
+                        "      - EDGE_NODE_ID=" + node.nodeId + "\n" +
+                        "      - MAIN_NODE_GRPC_HOST=host.docker.internal\n" +
+                        "    ports:\n" +
+                        "      - \"8082:8082\"\n" +
+                        "    extra_hosts:\n" +
+                        "      - \"host.docker.internal:host-gateway\"\n";
+
+        return new DeploymentPackage(
+                primary.certificatePem(),
+                primary.privateKeyPem(),
+                backup.certificatePem(),
+                backup.privateKeyPem(),
+                primary.caCertificatePem(),
+                envContent,
+                dockerCompose
+        );
+    }
+
+    public record DeploymentPackage(
+            String primaryCert,
+            String primaryKey,
+            String backupCert,
+            String backupKey,
+            String caCert,
+            String envFile,
+            String dockerCompose
+    ) {
     }
 }
