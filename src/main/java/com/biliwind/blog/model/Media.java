@@ -78,7 +78,8 @@ public class Media extends PanacheEntityBase {
     /**
      * 乐观锁版本号
      */
-    @Column
+    @Version
+    @Column(nullable = false)
     public Integer version;
 
     /** 创建时间 */

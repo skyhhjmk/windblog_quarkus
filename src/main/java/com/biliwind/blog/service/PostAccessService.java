@@ -126,6 +126,7 @@ public class PostAccessService {
 
     /**
      * 购买文章买断或特定区块
+     * 服务端会根据文章/区块实际价格校验前端传入的 points，防止价格篡改。
      */
     @jakarta.transaction.Transactional
     public void buyPost(Long userId, Long postId, Long points, String blockId) {
@@ -145,11 +146,21 @@ public class PostAccessService {
         }
 
         long postPrice = getPostPrice(post);
-        long priceToPay = (points != null) ? points : postPrice;
 
         // 如果已经全站买断，则无需再买区块
         if (getMaxPointsPaid(userId, postId) >= postPrice && postPrice > 0) {
             return;
+        }
+
+        // 服务端校验价格：买入全站必须使用服务端计算的实际价格，买入区块至少需要 postPrice
+        long priceToPay;
+        if (blockId != null) {
+            if (points != null && points < 0) {
+                throw new BadRequestException("价格不能为负数");
+            }
+            priceToPay = (points != null && points > 0) ? points : postPrice;
+        } else {
+            priceToPay = postPrice;
         }
 
         // 扣除积分（如果价格大于0）

@@ -355,13 +355,17 @@ public class AdminPostApiController {
         return PostRenderType.fromCode(renderTypeCode);
     }
 
-    private AdminPostItem toItem(Post post) {
-        // 获取文章的标签ID列表
-        List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
+    private List<Long> getTagIdsByPostId(Long postId) {
+        List<PostTag> postTags = PostTag.find("post.id = ?1", postId).list();
         List<Long> tagIds = new ArrayList<>();
         for (PostTag pt : postTags) {
             tagIds.add(pt.tag.id);
         }
+        return tagIds;
+    }
+
+    private AdminPostItem toItem(Post post) {
+        List<Long> tagIds = getTagIdsByPostId(post.id);
 
         return new AdminPostItem(
                 post.id,
@@ -382,12 +386,7 @@ public class AdminPostApiController {
     }
 
     private AdminPostDetail toDetail(Post post) {
-        // 获取文章的标签ID列表
-        List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
-        List<Long> tagIds = new ArrayList<>();
-        for (PostTag pt : postTags) {
-            tagIds.add(pt.tag.id);
-        }
+        List<Long> tagIds = getTagIdsByPostId(post.id);
 
         return new AdminPostDetail(
                 post.id,
@@ -641,11 +640,7 @@ public class AdminPostApiController {
             throw new NotFoundException("版本不存在");
         }
 
-        List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
-        List<Long> tagIds = new ArrayList<>();
-        for (PostTag pt : postTags) {
-            tagIds.add(pt.tag.id);
-        }
+        List<Long> tagIds = getTagIdsByPostId(post.id);
 
         return new AdminPostDetail(
                 post.id,

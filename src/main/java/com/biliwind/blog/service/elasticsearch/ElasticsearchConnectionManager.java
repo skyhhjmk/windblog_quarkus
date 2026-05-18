@@ -46,7 +46,7 @@ public class ElasticsearchConnectionManager {
     private ScheduledExecutorService healthCheckExecutor;
 
     void onStart(@Observes StartupEvent event) {
-        log.info(">>> ElasticsearchConnectionManager startup initiated, starting async initialization...");
+        log.debug("ElasticsearchConnectionManager startup initiated, starting async initialization...");
         healthStatus.set(HealthStatus.INITIALIZING);
 
         CompletableFuture.runAsync(this::asyncInitialize);
@@ -84,21 +84,21 @@ public class ElasticsearchConnectionManager {
      */
     public void onAvailable(Runnable callback) {
         String callbackName = callback.toString();
-        log.infof(">>> onAvailable called, current available status: %s, callback count before: %d",
+        log.debugf("onAvailable called, current available status: %s, callback count before: %d",
                 available.get(), onAvailableCallbacks.size());
-        log.infof(">>> Callback class: %s", callbackName);
+        log.debugf("Callback class: %s", callbackName);
         if (available.get()) {
-            log.info(">>> Elasticsearch already available, executing callback immediately");
+            log.debug("Elasticsearch already available, executing callback immediately");
             try {
                 callback.run();
-                log.info(">>> Callback execution completed");
+                log.debug("Callback execution completed");
             } catch (Exception e) {
-                log.error(">>> Callback execution failed", e);
+                log.error("Callback execution failed", e);
             }
         } else {
-            log.info(">>> Elasticsearch not available, callback registered for later execution");
+            log.debug("Elasticsearch not available, callback registered for later execution");
             onAvailableCallbacks.add(callback);
-            log.infof(">>> Current registered callback count: %d", onAvailableCallbacks.size());
+            log.debugf("Current registered callback count: %d", onAvailableCallbacks.size());
         }
     }
 
@@ -106,7 +106,7 @@ public class ElasticsearchConnectionManager {
      * Async initialize ElasticSearch connection
      */
     private void asyncInitialize() {
-        log.infof(">>> Starting async connection to ElasticSearch: %s", elasticsearchHosts);
+        log.debugf("Starting async connection to ElasticSearch: %s", elasticsearchHosts);
         long startTime = System.currentTimeMillis();
         long maxWaitMs = maxWaitSeconds * 1000L;
 
@@ -117,21 +117,21 @@ public class ElasticsearchConnectionManager {
                     available.set(true);
                     healthStatus.set(HealthStatus.AVAILABLE);
                     lastError.set(null);
-                    log.info(">>> ElasticSearch connection initialized successfully");
-                    log.infof(">>> Preparing to execute %d callbacks", onAvailableCallbacks.size());
+                    log.debug("ElasticSearch connection initialized successfully");
+                    log.debugf("Preparing to execute %d callbacks", onAvailableCallbacks.size());
 
                     // Execute registered callbacks
                     int callbackCount = 0;
                     for (Runnable callback : onAvailableCallbacks) {
                         try {
-                            log.infof(">>> Executing callback #%d: %s", ++callbackCount, callback.toString());
+                            log.debugf("Executing callback #%d: %s", ++callbackCount, callback.toString());
                             callback.run();
-                            log.infof(">>> Callback #%d completed: %s", callbackCount, callback.toString());
+                            log.debugf("Callback #%d completed: %s", callbackCount, callback.toString());
                         } catch (Exception e) {
-                            log.errorf(">>> Callback #%d failed: %s", callbackCount, callback.toString(), e);
+                            log.errorf("Callback #%d failed: %s", callbackCount, callback.toString(), e);
                         }
                     }
-                    log.info(">>> All callbacks executed, clearing callback list");
+                    log.debug("All callbacks executed, clearing callback list");
                     onAvailableCallbacks.clear();
                     return;
                 }
@@ -165,7 +165,7 @@ public class ElasticsearchConnectionManager {
             if (nowAvailable && !wasAvailable) {
                 healthStatus.set(HealthStatus.AVAILABLE);
                 lastError.set(null);
-                log.info(">>> ElasticSearch service recovered");
+                log.debug("ElasticSearch service recovered");
 
                 // Execute registered callbacks
                 for (Runnable callback : onAvailableCallbacks) {

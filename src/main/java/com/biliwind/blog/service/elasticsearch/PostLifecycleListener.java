@@ -58,7 +58,7 @@ public class PostLifecycleListener {
     }
 
     public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
-        log.info(">>>>>>>>>> [onPostSynced] 收到文章同步事件: " + event.getPostId());
+        log.debug("[onPostSynced] 收到文章同步事件: " + event.getPostId());
 
         if (!connectionManager.isAvailable()) {
             log.warnf("Elasticsearch 当前不可用，发送同步任务到 RabbitMQ 持久化: %d", event.getPostId());

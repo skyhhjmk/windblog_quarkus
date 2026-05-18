@@ -39,25 +39,25 @@ public class ElasticsearchIndexService {
 
     @PostConstruct
     void postConstruct() {
-        log.info(">>> [LOG INDEX] ElasticsearchIndexService @PostConstruct called - bean is being initialized");
+        log.debug("[LOG INDEX] ElasticsearchIndexService @PostConstruct called - bean is being initialized");
     }
 
     void onStart(@Observes StartupEvent event) {
-        log.info(">>> ElasticsearchIndexService startup initiated");
-        log.info(">>> connectionManager status: " + (connectionManager != null ? "injected" : "NULL"));
-        log.info(">>> Registering log index initialization callback...");
+        log.debug("ElasticsearchIndexService startup initiated");
+        log.debug("connectionManager status: " + (connectionManager != null ? "injected" : "NULL"));
+        log.debug("Registering log index initialization callback...");
         try {
             connectionManager.onAvailable(() -> {
-                log.info(">>> [LOG INDEX] Received Elasticsearch available notification, starting log index initialization...");
+                log.debug("[LOG INDEX] Received Elasticsearch available notification, starting log index initialization...");
                 try {
                     initializeIndex();
                 } catch (Exception e) {
-                    log.error(">>> [LOG INDEX] Exception during initializeIndex()", e);
+                    log.error("[LOG INDEX] Exception during initializeIndex()", e);
                 }
             });
-            log.info(">>> Callback registration completed");
+            log.debug("Callback registration completed");
         } catch (Exception e) {
-            log.error(">>> Exception during callback registration", e);
+            log.error("Exception during callback registration", e);
         }
     }
 
@@ -65,50 +65,50 @@ public class ElasticsearchIndexService {
      * Initialize index (called when connection is available)
      */
     private void initializeIndex() {
-        log.info(">>> [LOG INDEX] ====== initializeIndex() CALLED ======");
-        log.info(">>> [LOG INDEX] Starting log index initialization...");
-        log.info(">>> [LOG INDEX] elasticsearchHosts config: " + (elasticsearchHosts != null ? elasticsearchHosts : "NULL"));
-        log.info(">>> [LOG INDEX] connectionManager injected: " + (connectionManager != null ? "YES" : "NO"));
+        log.debug("[LOG INDEX] ====== initializeIndex() CALLED ======");
+        log.debug("[LOG INDEX] Starting log index initialization...");
+        log.debug("[LOG INDEX] elasticsearchHosts config: " + (elasticsearchHosts != null ? elasticsearchHosts : "NULL"));
+        log.debug("[LOG INDEX] connectionManager injected: " + (connectionManager != null ? "YES" : "NO"));
 
         int maxRetries = 3;
         int attempt = 0;
 
         while (attempt < maxRetries) {
             try {
-                log.info(">>> [LOG INDEX] Attempt " + (attempt + 1) + "/" + maxRetries);
-                log.info(">>> [LOG INDEX] Calling deleteLegacyTemplates()...");
+                log.debug("[LOG INDEX] Attempt " + (attempt + 1) + "/" + maxRetries);
+                log.debug("[LOG INDEX] Calling deleteLegacyTemplates()...");
                 deleteLegacyTemplates();
-                log.info(">>> [LOG INDEX] Legacy templates cleaned up");
-                log.info(">>> [LOG INDEX] Calling createIlmPolicy()...");
+                log.debug("[LOG INDEX] Legacy templates cleaned up");
+                log.debug("[LOG INDEX] Calling createIlmPolicy()...");
                 createIlmPolicy();
-                log.info(">>> [LOG INDEX] ILM policy created");
-                log.info(">>> [LOG INDEX] Calling createIndexTemplate()...");
+                log.debug("[LOG INDEX] ILM policy created");
+                log.debug("[LOG INDEX] Calling createIndexTemplate()...");
                 createIndexTemplate();
-                log.info(">>> [LOG INDEX] Index template created");
-                log.info(">>> [LOG INDEX] Calling createInitialIndex()...");
+                log.debug("[LOG INDEX] Index template created");
+                log.debug("[LOG INDEX] Calling createInitialIndex()...");
                 createInitialIndex();
-                log.info(">>> [LOG INDEX] Initial index created");
+                log.debug("[LOG INDEX] Initial index created");
                 indexInitialized.set(true);
-                log.info(">>> [LOG INDEX] ====== initializeIndex() COMPLETED ======");
-                log.info(">>> [LOG INDEX] Elasticsearch log index initialization completed");
+                log.debug("[LOG INDEX] ====== initializeIndex() COMPLETED ======");
+                log.debug("[LOG INDEX] Elasticsearch log index initialization completed");
                 return;
             } catch (Exception e) {
                 attempt++;
-                log.error(">>> [LOG INDEX] Failed to initialize log index (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage(), e);
-                log.error(">>> [LOG INDEX] Exception type: " + e.getClass().getName());
+                log.error("[LOG INDEX] Failed to initialize log index (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage(), e);
+                log.error("[LOG INDEX] Exception type: " + e.getClass().getName());
                 if (attempt < maxRetries) {
                     try {
                         Thread.sleep(2000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.warn(">>> [LOG INDEX] Interrupted during retry sleep");
+                        log.warn("[LOG INDEX] Interrupted during retry sleep");
                         break;
                     }
                 }
             }
         }
 
-        log.warn(">>> [LOG INDEX] Elasticsearch log index initialization failed after all retries, logs will be cached to local file");
+        log.warn("[LOG INDEX] Elasticsearch log index initialization failed after all retries, logs will be cached to local file");
     }
 
     /**
@@ -257,7 +257,7 @@ public class ElasticsearchIndexService {
      * Read JSON configuration from resource file
      */
     private String readResourceFile(String resourceName) throws Exception {
-        log.info(">>> [LOG INDEX] Reading resource file: " + resourceName);
+        log.debug("[LOG INDEX] Reading resource file: " + resourceName);
 
         // Try different classloader approaches
         InputStream inputStream = null;
@@ -278,8 +278,8 @@ public class ElasticsearchIndexService {
         }
 
         if (inputStream == null) {
-            log.error(">>> [LOG INDEX] Resource file not found: " + resourceName);
-            log.error(">>> [LOG INDEX] Tried multiple classloader approaches but all failed");
+            log.error("[LOG INDEX] Resource file not found: " + resourceName);
+            log.error("[LOG INDEX] Tried multiple classloader approaches but all failed");
             throw new Exception("Resource file not found: " + resourceName + ". Please ensure the file exists in src/main/resources/" + resourceName);
         }
 
@@ -291,7 +291,7 @@ public class ElasticsearchIndexService {
             while ((line = reader.readLine()) != null) {
                 content.append(line).append("\n");
             }
-            log.info(">>> [LOG INDEX] Resource file read successfully: " + resourceName);
+            log.debug("[LOG INDEX] Resource file read successfully: " + resourceName);
             return content.toString();
         }
     }

@@ -27,6 +27,17 @@ import java.util.regex.Pattern;
 @ApplicationScoped
 public class ImportService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ImportService.class);
+
+    private static final int COMMENT_AUDIT_STATUS_APPROVED = 2;
+
+    private static final Pattern MD_IMG_PATTERN = Pattern.compile("(!\\[.*?\\])\\((.*?)\\)");
+    private static final Pattern MD_LINK_PATTERN = Pattern.compile("(?<!!)(\\[(.*?)\\])\\((.*?)\\)");
+    private static final Pattern HTML_IMG_PATTERN = Pattern.compile("(<img[^>]+src=[\"'])(.*?)([\"'])");
+    private static final Pattern HTML_LINK_PATTERN = Pattern.compile("(<a[^>]+href=[\"'])(.*?)([\"'])");
+    private static final Pattern URL_DISCOVERY_MD_PATTERN = Pattern.compile("!?\\[.*?\\]\\((.*?)\\)");
+    private static final Pattern URL_DISCOVERY_HTML_PATTERN = Pattern.compile("src=[\"'](.*?)([\"'])");
+
     private final BroadcastProcessor<ImportProgressEvent> eventProcessor = BroadcastProcessor.create();
 
     @Inject
@@ -97,7 +108,7 @@ public class ImportService {
             emit("end", "全部导入任务完成", null);
             return new ImportResult(true, "导入完成", categories, tags, posts, links, comments);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("导入发生错误: " + e.getMessage(), e);
             emit("error", "导入发生错误: " + e.getMessage(), e.toString());
             return new ImportResult(false, "导入失败: " + e.getMessage(), 0, 0, 0, 0, 0);
         }
@@ -290,15 +301,13 @@ public class ImportService {
 
                 // 使用正则提取所有可能的 URL
                 // Markdown ![]() or []()
-                Pattern mdPattern = Pattern.compile("!?\\[.*?\\]\\((.*?)\\)");
-                Matcher mdMatcher = mdPattern.matcher(content);
+                Matcher mdMatcher = URL_DISCOVERY_MD_PATTERN.matcher(content);
                 while (mdMatcher.find()) {
                     addDiscoveredUrl(mdMatcher.group(1), assetPrefix, discoveryMap);
                 }
 
                 // HTML src="..."
-                Pattern htmlPattern = Pattern.compile("src=[\"'](.*?)([\"'])");
-                Matcher htmlMatcher = htmlPattern.matcher(content);
+                Matcher htmlMatcher = URL_DISCOVERY_HTML_PATTERN.matcher(content);
                 while (htmlMatcher.find()) {
                     addDiscoveredUrl(htmlMatcher.group(1), assetPrefix, discoveryMap);
                 }
@@ -328,6 +337,17 @@ public class ImportService {
 
     private int importPosts(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
         int count = 0;
+
+        // 预加载用户映射中需要的用户，避免循环内逐条查询
+        Map<Long, User> usersById = new HashMap<>();
+        if (!ctx.userMap().isEmpty()) {
+            java.util.Set<Long> neededIds = new java.util.HashSet<>(ctx.userMap().values());
+            List<User> neededUsers = User.list("id in ?1", neededIds);
+            for (User u : neededUsers) {
+                usersById.put(u.id, u);
+            }
+        }
+
         String sql = "SELECT * FROM posts WHERE deleted_at IS NULL";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -380,12 +400,12 @@ public class ImportService {
                 if (columnExists(cols, "author_id")) {
                     long oldAuthId = rs.getLong("author_id");
                     if (!rs.wasNull() && ctx.userMap().containsKey(oldAuthId)) {
-                        postAuthor = User.findById(ctx.userMap().get(oldAuthId));
+                        postAuthor = usersById.get(ctx.userMap().get(oldAuthId));
                     }
                 } else if (columnExists(cols, "user_id")) {
                     long oldUserId = rs.getLong("user_id");
                     if (!rs.wasNull() && ctx.userMap().containsKey(oldUserId)) {
-                        postAuthor = User.findById(ctx.userMap().get(oldUserId));
+                        postAuthor = usersById.get(ctx.userMap().get(oldUserId));
                     }
                 }
                 p.user = postAuthor != null ? postAuthor : operator;
@@ -529,6 +549,32 @@ public class ImportService {
     }
 
     private void importPostRelations(Connection conn, ImportContext ctx) throws SQLException {
+        // 预加载文章和分类，避免 N+1 查询
+        Map<Long, Post> postsById = new HashMap<>();
+        if (!ctx.postMap().isEmpty()) {
+            java.util.Set<Long> postIds = new java.util.HashSet<>(ctx.postMap().values());
+            List<Post> postList = Post.list("id in ?1", postIds);
+            for (Post p : postList) {
+                postsById.put(p.id, p);
+            }
+        }
+        Map<Long, Category> categoriesById = new HashMap<>();
+        if (!ctx.categoryMap().isEmpty()) {
+            java.util.Set<Long> catIds = new java.util.HashSet<>(ctx.categoryMap().values());
+            List<Category> catList = Category.list("id in ?1", catIds);
+            for (Category c : catList) {
+                categoriesById.put(c.id, c);
+            }
+        }
+        Map<Long, User> usersById = new HashMap<>();
+        if (!ctx.userMap().isEmpty()) {
+            java.util.Set<Long> userIds = new java.util.HashSet<>(ctx.userMap().values());
+            List<User> userList = User.list("id in ?1", userIds);
+            for (User u : userList) {
+                usersById.put(u.id, u);
+            }
+        }
+
         // 1. 迁移分类关联 (post_category)
         // 注意：新系统 Post 实体目前仅支持一个 category_id
         String catSql = "SELECT post_id, category_id FROM post_category";
@@ -543,8 +589,8 @@ public class ImportService {
 
                 if (newPostId != null && newCatId != null) {
                     QuarkusTransaction.requiringNew().run(() -> {
-                        Post p = Post.findById(newPostId);
-                        Category c = Category.findById(newCatId);
+                        Post p = postsById.get(newPostId);
+                        Category c = categoriesById.get(newCatId);
                         if (p != null && c != null && p.category == null) {
                             p.category = c;
                             p.persist();
@@ -569,7 +615,7 @@ public class ImportService {
 
                 if (newPostId != null && newTagId != null) {
                     QuarkusTransaction.requiringNew().run(() -> {
-                        Post p = Post.findById(newPostId);
+                        Post p = postsById.get(newPostId);
                         Tag t = Tag.findById(newTagId);
                         if (p != null && t != null) {
                             if (PostTag.count("id.postId = ?1 and id.tagId = ?2", p.id, t.id) == 0) {
@@ -600,8 +646,8 @@ public class ImportService {
 
                 if (newPostId != null && newAuthId != null) {
                     QuarkusTransaction.requiringNew().run(() -> {
-                        Post p = Post.findById(newPostId);
-                        User u = User.findById(newAuthId);
+                        Post p = postsById.get(newPostId);
+                        User u = usersById.get(newAuthId);
                         if (p != null && u != null) {
                             p.user = u;
                             p.persist();
@@ -617,6 +663,25 @@ public class ImportService {
     private int importComments(Connection conn, ImportContext ctx) throws SQLException {
         int count = 0;
         Map<Long, Long> commentIdMap = new HashMap<>();
+
+        // 预加载文章和用户，避免 N+1 查询
+        Map<Long, Post> postsById = new HashMap<>();
+        if (!ctx.postMap().isEmpty()) {
+            java.util.Set<Long> postIds = new java.util.HashSet<>(ctx.postMap().values());
+            List<Post> postList = Post.list("id in ?1", postIds);
+            for (Post p : postList) {
+                postsById.put(p.id, p);
+            }
+        }
+        Map<Long, User> usersById = new HashMap<>();
+        if (!ctx.userMap().isEmpty()) {
+            java.util.Set<Long> userIds = new java.util.HashSet<>(ctx.userMap().values());
+            List<User> userList = User.list("id in ?1", userIds);
+            for (User u : userList) {
+                usersById.put(u.id, u);
+            }
+        }
+
         // 按 ID 排序以确保父评论先被处理（或者后续处理层级）
         String sql = "SELECT * FROM comments ORDER BY id ASC";
         try (PreparedStatement ps = conn.prepareStatement(sql);
@@ -634,7 +699,7 @@ public class ImportService {
                 Comment c = new Comment();
                 c.content = rs.getString("content");
                 c.status = 1; // 默认通过
-                c.auditStatus = 2; // 默认通过
+                c.auditStatus = COMMENT_AUDIT_STATUS_APPROVED;
 
                 Timestamp createdAtTs = rs.getTimestamp("created_at");
                 if (createdAtTs != null)
@@ -663,12 +728,12 @@ public class ImportService {
                 final Long finalUserId = oldUserId != null ? ctx.userMap().get(oldUserId) : null;
 
                 QuarkusTransaction.requiringNew().run(() -> {
-                    c.post = Post.findById(newPostId);
+                    c.post = postsById.get(newPostId);
                     if (finalParentId != null) {
                         c.parent = Comment.findById(finalParentId);
                     }
                     if (finalUserId != null) {
-                        c.user = User.findById(finalUserId);
+                        c.user = usersById.get(finalUserId);
                     }
                     c.persist();
                 });
@@ -744,8 +809,7 @@ public class ImportService {
         int lastEnd;
 
         // 1. Markdown 图片: ![]()
-        Pattern mdImgPattern = Pattern.compile("(!\\[.*?\\])\\((.*?)\\)");
-        Matcher mdImgMatcher = mdImgPattern.matcher(content);
+        Matcher mdImgMatcher = MD_IMG_PATTERN.matcher(content);
         sb = new StringBuilder();
         lastEnd = 0;
         while (mdImgMatcher.find()) {
@@ -760,8 +824,7 @@ public class ImportService {
         content = sb.toString();
 
         // 2. Markdown 普通链接: [text](url) - 排除图片
-        Pattern mdLinkPattern = Pattern.compile("(?<!!)(\\[(.*?)\\])\\((.*?)\\)");
-        Matcher mdLinkMatcher = mdLinkPattern.matcher(content);
+        Matcher mdLinkMatcher = MD_LINK_PATTERN.matcher(content);
         sb = new StringBuilder();
         lastEnd = 0;
         while (mdLinkMatcher.find()) {
@@ -776,8 +839,7 @@ public class ImportService {
         content = sb.toString();
 
         // 3. HTML <img>: <img src="...">
-        Pattern htmlImgPattern = Pattern.compile("(<img[^>]+src=[\"'])(.*?)([\"'])");
-        Matcher htmlImgMatcher = htmlImgPattern.matcher(content);
+        Matcher htmlImgMatcher = HTML_IMG_PATTERN.matcher(content);
         sb = new StringBuilder();
         lastEnd = 0;
         while (htmlImgMatcher.find()) {
@@ -793,8 +855,7 @@ public class ImportService {
         content = sb.toString();
 
         // 4. HTML <a>: <a href="...">
-        Pattern htmlLinkPattern = Pattern.compile("(<a[^>]+href=[\"'])(.*?)([\"'])");
-        Matcher htmlLinkMatcher = htmlLinkPattern.matcher(content);
+        Matcher htmlLinkMatcher = HTML_LINK_PATTERN.matcher(content);
         sb = new StringBuilder();
         lastEnd = 0;
         while (htmlLinkMatcher.find()) {

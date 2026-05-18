@@ -129,7 +129,9 @@ public class UserPostContentController {
 
         Post post = Post.findById(postId);
         if (post == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("success", false, "message", "文章不存在"))
+                    .build();
         }
 
         long postPrice = postAccessService.getPostPrice(post);

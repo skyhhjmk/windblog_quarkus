@@ -319,10 +319,11 @@ public class StorageService {
                 return new SyncResult(false, errorMsg);
             }
 
-            InputStream downloadStream = primaryProvider.download(sourcePath);
             String targetPath = generateTargetPath(variant, media.mimeType);
-            String uploadedPath = targetProvider.upload(downloadStream, targetPath, media.mimeType);
-            downloadStream.close();
+            String uploadedPath;
+            try (InputStream downloadStream = primaryProvider.download(sourcePath)) {
+                uploadedPath = targetProvider.upload(downloadStream, targetPath, media.mimeType);
+            }
 
             long fileSize = 0;
             String etag = "";
@@ -387,20 +388,21 @@ public class StorageService {
 
         String sql = "UPDATE media SET "
                 + "storage_providers = jsonb_set("
-                + "  jsonb_set(storage_providers, '{\"$1\"}', COALESCE(storage_providers->'$1', '{}'::jsonb), true),"
-                + "  '{\"$1\",\"$2\"}',"
-                + "  '$3'::jsonb"
+                + "  jsonb_set(storage_providers, ARRAY[?1::text], COALESCE(storage_providers -> ?1, '{}'::jsonb), true),"
+                + "  ARRAY[?1::text, ?2::text],"
+                + "  CAST(?3 AS jsonb)"
                 + "), "
                 + "version = version + 1 "
-                + "WHERE id = $4 AND version = $5";
+                + "WHERE id = ?4 AND version = ?5";
 
-        sql = sql.replace("$1", providerName);
-        sql = sql.replace("$2", variantKey);
-        sql = sql.replace("$3", jsonPayload.replace("'", "''"));
-        sql = sql.replace("$4", mediaId.toString());
-        sql = sql.replace("$5", String.valueOf(expectedVersion));
+        jakarta.persistence.Query query = entityManager.createNativeQuery(sql);
+        query.setParameter(1, providerName);
+        query.setParameter(2, variantKey);
+        query.setParameter(3, jsonPayload);
+        query.setParameter(4, mediaId);
+        query.setParameter(5, expectedVersion);
 
-        int updatedRows = entityManager.createNativeQuery(sql).executeUpdate();
+        int updatedRows = query.executeUpdate();
         return updatedRows > 0;
     }
 

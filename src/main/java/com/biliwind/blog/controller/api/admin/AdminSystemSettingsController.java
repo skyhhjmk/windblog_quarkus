@@ -86,8 +86,22 @@ public class AdminSystemSettingsController {
                     .entity(Map.of("success", false, "message", "配置项处于验证锁定期，请先确认或回滚")).build();
         }
 
-        JsonNode newValue = mapper.valueToTree(body.get("configValue"));
-        String reason = (String) body.get("reason");
+        Object configValueObj = body.get("configValue");
+        if (configValueObj == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "configValue 不能为空")).build();
+        }
+
+        JsonNode newValue = mapper.valueToTree(configValueObj);
+        Object reasonObj = body.get("reason");
+        String reason = null;
+        if (reasonObj != null) {
+            if (reasonObj instanceof String) {
+                reason = (String) reasonObj;
+            } else {
+                reason = reasonObj.toString();
+            }
+        }
 
         // 保存历史
         SystemSettingHistory history = new SystemSettingHistory();
@@ -126,7 +140,8 @@ public class AdminSystemSettingsController {
     public Response confirmSetting(@PathParam("key") String key) {
         SystemSetting setting = SystemSetting.findByKey(key);
         if (setting == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("success", false, "message", "配置项不存在")).build();
         }
         setting.isFrozen = false;
         setting.persist();
@@ -142,7 +157,8 @@ public class AdminSystemSettingsController {
     public Response rollbackSetting(@PathParam("key") String key) {
         SystemSetting setting = SystemSetting.findByKey(key);
         if (setting == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("success", false, "message", "配置项不存在")).build();
         }
         watchdog.rollback(setting);
         auditService.log("system_setting", String.valueOf(setting.id), "rollback", null, Map.of("key", key));

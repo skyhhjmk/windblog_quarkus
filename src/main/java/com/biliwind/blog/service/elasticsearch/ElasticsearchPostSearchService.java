@@ -29,6 +29,8 @@ public class ElasticsearchPostSearchService {
 
     private static final Logger log = Logger.getLogger(ElasticsearchPostSearchService.class);
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
     private final AtomicBoolean indexInitialized = new AtomicBoolean(false);
 
     @ConfigProperty(name = "elasticsearch.hosts")
@@ -42,57 +44,57 @@ public class ElasticsearchPostSearchService {
     ElasticsearchConnectionManager connectionManager;
 
     void onStart(@Observes StartupEvent event) {
-        log.info(">>> ElasticsearchPostSearchService startup initiated");
-        log.info(">>> Registering article index initialization callback...");
+        log.debug("ElasticsearchPostSearchService startup initiated");
+        log.debug("Registering article index initialization callback...");
         connectionManager.onAvailable(this::initializeIndex);
-        log.info(">>> Callback registration completed");
+        log.debug("Callback registration completed");
     }
 
     /**
      * Initialize index (called when connection is available)
      */
     private void initializeIndex() {
-        log.info(">>> [POST INDEX] ====== initializeIndex() CALLED ======");
-        log.info(">>> [POST INDEX] Starting article index initialization...");
-        log.info(">>> [POST INDEX] elasticsearchHosts config: " + (elasticsearchHosts != null ? elasticsearchHosts : "NULL"));
-        log.info(">>> [POST INDEX] connectionManager injected: " + (connectionManager != null ? "YES" : "NO"));
+        log.debug("[POST INDEX] ====== initializeIndex() CALLED ======");
+        log.debug("[POST INDEX] Starting article index initialization...");
+        log.debug("[POST INDEX] elasticsearchHosts config: " + (elasticsearchHosts != null ? elasticsearchHosts : "NULL"));
+        log.debug("[POST INDEX] connectionManager injected: " + (connectionManager != null ? "YES" : "NO"));
 
         int maxRetries = 3;
         int attempt = 0;
 
         while (attempt < maxRetries) {
             try {
-                log.info(">>> [POST INDEX] Attempt " + (attempt + 1) + "/" + maxRetries);
-                log.info(">>> [POST INDEX] Calling createIlmPolicy()...");
+                log.debug("[POST INDEX] Attempt " + (attempt + 1) + "/" + maxRetries);
+                log.debug("[POST INDEX] Calling createIlmPolicy()...");
                 createIlmPolicy();
-                log.info(">>> [POST INDEX] ILM policy created");
-                log.info(">>> [POST INDEX] Calling createPostIndexTemplate()...");
+                log.debug("[POST INDEX] ILM policy created");
+                log.debug("[POST INDEX] Calling createPostIndexTemplate()...");
                 createPostIndexTemplate();
-                log.info(">>> [POST INDEX] Index template created");
-                log.info(">>> [POST INDEX] Calling createInitialPostIndex()...");
+                log.debug("[POST INDEX] Index template created");
+                log.debug("[POST INDEX] Calling createInitialPostIndex()...");
                 createInitialPostIndex();
-                log.info(">>> [POST INDEX] Initial index created");
+                log.debug("[POST INDEX] Initial index created");
                 indexInitialized.set(true);
-                log.info(">>> [POST INDEX] ====== initializeIndex() COMPLETED ======");
-                log.info(">>> [POST INDEX] Elasticsearch article index initialization completed");
+                log.debug("[POST INDEX] ====== initializeIndex() COMPLETED ======");
+                log.debug("[POST INDEX] Elasticsearch article index initialization completed");
                 return;
             } catch (Exception e) {
                 attempt++;
-                log.error(">>> [POST INDEX] Failed to initialize article index (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage(), e);
-                log.error(">>> [POST INDEX] Exception type: " + e.getClass().getName());
+                log.error("[POST INDEX] Failed to initialize article index (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage(), e);
+                log.error("[POST INDEX] Exception type: " + e.getClass().getName());
                 if (attempt < maxRetries) {
                     try {
                         Thread.sleep(2000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.warn(">>> [POST INDEX] Interrupted during retry sleep");
+                        log.warn("[POST INDEX] Interrupted during retry sleep");
                         break;
                     }
                 }
             }
         }
 
-        log.warn(">>> [POST INDEX] Elasticsearch article index initialization failed, search will fallback to database");
+        log.warn("[POST INDEX] Elasticsearch article index initialization failed, search will fallback to database");
     }
 
     /**
@@ -390,7 +392,7 @@ public class ElasticsearchPostSearchService {
         }
         document.put("suggest", suggestions);
 
-        String documentJson = new com.fasterxml.jackson.databind.ObjectMapper()
+        String documentJson = objectMapper
             .writeValueAsString(document);
 
         var request = HttpRequest.newBuilder()
@@ -578,7 +580,6 @@ public class ElasticsearchPostSearchService {
 
         List<String> results = new ArrayList<>();
         if (response.statusCode() == 200) {
-            var objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             var rootNode = objectMapper.readTree(response.body());
             var options = rootNode.path("suggest").path("post-suggest").get(0).path("options");
 
@@ -595,7 +596,6 @@ public class ElasticsearchPostSearchService {
     }
 
     private SearchResult parseSearchResponse(String responseBody) throws IOException {
-        var objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
         var rootNode = objectMapper.readTree(responseBody);
 
         long total = rootNode.path("hits").path("total").path("value").asLong();

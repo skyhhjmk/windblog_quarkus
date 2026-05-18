@@ -4,7 +4,6 @@ import com.biliwind.blog.model.AiProviderConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +40,6 @@ public class AiManager {
         return null;
     }
 
-    @Transactional
     public CompletionStage<AiResult> summarize(Map<String, String> content) {
         List<AiProviderConfig> allConfigs = configService.listAll();
         List<AiProviderConfig> configs = new ArrayList<>();
@@ -70,7 +68,6 @@ public class AiManager {
         return executeSummarize(best, content);
     }
 
-    @Transactional
     public CompletionStage<AiResult> moderate(String content) {
         List<AiProviderConfig> allConfigs = configService.listAll();
         List<AiProviderConfig> configs = new ArrayList<>();
