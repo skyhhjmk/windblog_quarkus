@@ -83,6 +83,7 @@ public final class LanguageHelper {
         return null;
     }
 
+    @SuppressWarnings("unchecked")
     public String resolveLocalizedValue(Object localized, String preferredLang) {
         if (localized instanceof Map) {
             return resolveLocalizedValue((Map<String, String>) localized, preferredLang);

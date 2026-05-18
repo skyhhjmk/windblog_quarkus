@@ -86,7 +86,7 @@ public class EdgeNodeRegistry {
 
         EdgeServiceProto.StorageConfigResponse config = edgeNodeGrpcService.getStorageConfig(
                 EdgeServiceProto.ConfigRequest.newBuilder().setNodeId("main").build()
-        ).await().indefinitely();
+        ).await().atMost(java.time.Duration.ofSeconds(30));
 
         for (EdgeNode node : activeNodes) {
             String grpcAddress = node.grpcAddress;
