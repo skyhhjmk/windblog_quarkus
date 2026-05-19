@@ -58,6 +58,13 @@ public class EdgeNode extends PanacheEntityBase {
     public String grpcAddress;
 
     /**
+     * 边缘节点 gRPC 服务端口 (部署时对外暴露的端口)
+     */
+    @Column(name = "edge_grpc_port")
+    @JsonProperty("edgeGrpcPort")
+    public Integer edgeGrpcPort;
+
+    /**
      * 节点地址 (已废弃，保留向后兼容)
      */
     @Deprecated

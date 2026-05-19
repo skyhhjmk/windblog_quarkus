@@ -12,8 +12,6 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import java.time.OffsetDateTime;
-
 /**
  * 边缘节点证书管理 API
  */
@@ -44,6 +42,8 @@ public class AdminNodeCertificateController {
         // 更新数据库记录
         node.certificateSerial = primary.serialNumber();
         node.certificateExpiry = primary.expiry();
+        node.certificateBackupSerial = backup.serialNumber();
+        node.certificateBackupExpiry = backup.expiry();
         node.certificateRevoked = false;
         node.persist();
 
@@ -68,14 +68,10 @@ public class AdminNodeCertificateController {
             throw new NotFoundException("节点不存在");
         }
 
-        boolean isTrusted = !node.certificateRevoked &&
-                node.certificateExpiry != null &&
-                node.certificateExpiry.isAfter(OffsetDateTime.now());
-
         return new NodeStatusResponse(
                 nodeId,
                 node.status,
-                isTrusted,
+                node.isTrusted,
                 node.certificateSerial,
                 node.certificateExpiry,
                 node.certificateRevoked

@@ -1,7 +1,11 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.model.BlogRegion;
+import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.service.edge.EdgeNodeRegistry;
+import com.biliwind.blog.service.security.CertificateService;
+import com.biliwind.blog.service.security.DeploymentPackageService;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -25,7 +29,10 @@ public class AdminEdgeNodeApiController {
     com.biliwind.blog.service.edge.EdgeDataSyncService syncService;
 
     @Inject
-    com.biliwind.blog.service.security.CertificateService certificateService;
+    CertificateService certificateService;
+
+    @Inject
+    DeploymentPackageService deploymentPackageService;
 
     @GET
     @Operation(summary = "获取所有边缘节点", description = "获取所有已注册的边缘节点及其状态")
@@ -46,15 +53,25 @@ public class AdminEdgeNodeApiController {
 
     @POST
     @Transactional
-    @Operation(summary = "手动添加边缘节点", description = "手动录入边缘节点，通常用于主节点主动连接从节点的场景")
-    public EdgeNode create(EdgeNode node) {
-        if (node.nodeId == null || node.nodeId.isEmpty()) {
+    @Operation(summary = "创建边缘节点", description = "创建新的边缘节点，同时签发 mTLS 证书。创建后可通过 deployment-zip 接口下载部署包。")
+    public EdgeNode create(CreateNodeRequest request) {
+        if (request.nodeId() == null || request.nodeId().isEmpty()) {
             throw new BadRequestException("nodeId 不能为空");
         }
-        if (EdgeNode.findByNodeId(node.nodeId) != null) {
+        if (EdgeNode.findByNodeId(request.nodeId()) != null) {
             throw new BadRequestException("nodeId 已存在");
         }
+
+        EdgeNode node = new EdgeNode();
+        node.nodeId = request.nodeId();
+        node.name = request.nodeName() != null && !request.nodeName().isEmpty()
+                ? request.nodeName() : request.nodeId();
+        node.region = request.region() != null ? request.region() : BlogRegion.GLOBAL;
+        node.connectionType = request.connectionType() != null
+                ? request.connectionType() : EdgeConnectionType.HEARTBEAT;
+        node.edgeGrpcPort = request.edgeGrpcPort() != null ? request.edgeGrpcPort() : 9001;
         node.persist();
+
         return node;
     }
 
@@ -75,6 +92,7 @@ public class AdminEdgeNodeApiController {
         if (request.region() != null) node.region = request.region();
         if (request.connectionType() != null) node.connectionType = request.connectionType();
         if (request.isEnabled() != null) node.isEnabled = request.isEnabled();
+        if (request.edgeGrpcPort() != null) node.edgeGrpcPort = request.edgeGrpcPort();
 
         node.persist();
         return node;
@@ -88,6 +106,10 @@ public class AdminEdgeNodeApiController {
         return Response.ok().build();
     }
 
+    @DELETE
+    @Path("/{nodeId}")
+    @Transactional
+    @Operation(summary = "删除边缘节点")
     public Response delete(@PathParam("nodeId") String nodeId) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node != null) {
@@ -114,95 +136,55 @@ public class AdminEdgeNodeApiController {
     @POST
     @Path("/{nodeId}/issue-certificate")
     @Transactional
-    @Operation(summary = "签发节点证书", description = "为主节点生成一对新的 mTLS 证书（24h 主证书 + 72h 备用证书）")
+    @Operation(summary = "签发节点证书", description = "为边缘节点生成一对新的 mTLS 证书（24h 主证书 + 72h 备用证书），并更新数据库记录")
     public EdgeNode issueCertificate(@PathParam("nodeId") String nodeId) throws Exception {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) throw new NotFoundException("节点不存在");
 
-        // 签发 24 小时主证书
-        var primary = certificateService.generateNodeCertificate(nodeId, 24);
+        CertificateService.GeneratedCertificate primary = certificateService.generateNodeCertificate(nodeId, 24);
+        CertificateService.GeneratedCertificate backup = certificateService.generateNodeCertificate(nodeId, 72);
+
         node.certificateSerial = primary.serialNumber();
         node.certificateExpiry = primary.expiry();
-
-        // 签发 72 小时备用证书
-        var backup = certificateService.generateNodeCertificate(nodeId, 72);
         node.certificateBackupSerial = backup.serialNumber();
         node.certificateBackupExpiry = backup.expiry();
-
         node.certificateRevoked = false;
         node.persist();
 
-        // 将证书内容放入响应中供下载（通过 DTO 包装或直接返回 node，但在 node 中不存储 PEM）
-        // 这里我们返回 node，但实际下载 PEM 需要一个专门的 DTO
         return node;
     }
 
     @GET
-    @Path("/{nodeId}/deployment-package")
-    @Operation(summary = "获取部署包信息", description = "获取包含证书 PEM、环境变量和 Docker Compose 配置的部署包数据")
-    public DeploymentPackage getDeploymentPackage(@PathParam("nodeId") String nodeId) throws Exception {
+    @Path("/{nodeId}/deployment-zip")
+    @Transactional
+    @Produces("application/zip")
+    @Operation(summary = "下载部署 ZIP 包", description = "生成并下载包含证书、.env、docker-compose.yml 的完整部署 ZIP 包，解压后即可使用 docker compose up -d 启动")
+    public Response downloadDeploymentZip(@PathParam("nodeId") String nodeId) throws Exception {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
-        if (node == null) throw new NotFoundException("节点不存在");
+        if (node == null) {
+            throw new NotFoundException("节点不存在");
+        }
 
-        // 注意：由于证书 PEM 不存储在数据库中，如果是通过 GET 请求获取，
-        // 实际上需要重新签发或从缓存中获取。
-        // 这里为了简化，我们让 issue-certificate 返回完整数据，或者让该接口直接重新签发。
-        var primary = certificateService.generateNodeCertificate(nodeId, 24);
-        var backup = certificateService.generateNodeCertificate(nodeId, 72);
-
-        // 更新数据库中的序列号
-        node.certificateSerial = primary.serialNumber();
-        node.certificateExpiry = primary.expiry();
-        node.certificateBackupSerial = backup.serialNumber();
-        node.certificateBackupExpiry = backup.expiry();
+        byte[] zipBytes = deploymentPackageService.buildDeploymentZip(node);
         node.persist();
 
-        String envContent = String.format(
-                "EDGE_NODE_ID=%s\n" +
-                        "EDGE_NODE_REGION=%s\n" +
-                        "MAIN_NODE_GRPC_HOST=%s\n" +
-                        "MAIN_NODE_GRPC_PORT=9000\n" +
-                        "EDGE_CERT_PATH=/deploy/certs/server.crt\n" +
-                        "EDGE_KEY_PATH=/deploy/certs/server.key\n" +
-                        "CA_CERT_PATH=/deploy/certs/ca.crt\n",
-                node.nodeId, node.region.getCode(), "main-node-host-or-ip"
-        );
+        String fileName = "windblog-edge-" + nodeId + ".zip";
 
-        String dockerCompose =
-                "version: '3.8'\n" +
-                        "services:\n" +
-                        "  edge-node:\n" +
-                        "    image: biliwind/windblog-edge-node:latest\n" +
-                        "    container_name: windblog-edge-" + node.nodeId + "\n" +
-                        "    volumes:\n" +
-                        "      - ./certs:/deploy/certs:ro\n" +
-                        "    environment:\n" +
-                        "      - EDGE_NODE_ID=" + node.nodeId + "\n" +
-                        "      - MAIN_NODE_GRPC_HOST=host.docker.internal\n" +
-                        "    ports:\n" +
-                        "      - \"8082:8082\"\n" +
-                        "    extra_hosts:\n" +
-                        "      - \"host.docker.internal:host-gateway\"\n";
-
-        return new DeploymentPackage(
-                primary.certificatePem(),
-                primary.privateKeyPem(),
-                backup.certificatePem(),
-                backup.privateKeyPem(),
-                primary.caCertificatePem(),
-                envContent,
-                dockerCompose
-        );
+        return Response.ok(zipBytes)
+                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                .header("Content-Type", "application/zip")
+                .build();
     }
 
-    public record DeploymentPackage(
-            String primaryCert,
-            String primaryKey,
-            String backupCert,
-            String backupKey,
-            String caCert,
-            String envFile,
-            String dockerCompose
+    /**
+     * 创建边缘节点的请求参数
+     */
+    public record CreateNodeRequest(
+            String nodeId,
+            String nodeName,
+            BlogRegion region,
+            EdgeConnectionType connectionType,
+            Integer edgeGrpcPort
     ) {
     }
 }

@@ -13,6 +13,7 @@ public record EdgeNodeUpdateRequest(
         String grpcAddress,
         BlogRegion region,
         EdgeConnectionType connectionType,
-        Boolean isEnabled
+        Boolean isEnabled,
+        Integer edgeGrpcPort
 ) {
 }

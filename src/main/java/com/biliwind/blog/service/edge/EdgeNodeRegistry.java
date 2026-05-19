@@ -2,7 +2,6 @@ package com.biliwind.blog.service.edge;
 
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
-import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
 import io.quarkus.grpc.GrpcService;
@@ -28,22 +27,29 @@ public class EdgeNodeRegistry {
     @Inject
     GrpcChannelFactory channelFactory;
 
+    /**
+     * 记录来自边缘节点的心跳或注册请求。
+     * 仅接受已通过 mTLS 认证且在数据库中有记录的节点。
+     * 如果节点不存在，拒绝注册（节点必须由管理员先在 Flutter 后台创建并签发证书）。
+     */
     @Transactional
-    public void registerOrUpdate(String nodeId, BlogRegion region, Map<String, String> metrics) {
+    public boolean updateHeartbeat(String nodeId, Map<String, String> metrics) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) {
-            log.info("New edge node registered: {} in region {}", nodeId, region.getCode());
-            node = new EdgeNode();
-            node.nodeId = nodeId;
-            node.name = nodeId;
-            node.region = region;
-            node.connectionType = EdgeConnectionType.HEARTBEAT;
-            node.persist();
+            log.warn("拒绝未知节点的注册请求: {}（节点必须由管理员先创建）", nodeId);
+            return false;
+        }
+
+        if (!node.isEnabled) {
+            log.warn("拒绝已禁用节点的心跳: {}", nodeId);
+            return false;
         }
 
         node.lastHeartbeat = OffsetDateTime.now(java.time.ZoneOffset.UTC);
         node.metrics = metrics;
         node.status = "ONLINE";
+        log.debug("节点 {} 心跳更新成功", nodeId);
+        return true;
     }
 
     public List<EdgeNode> getAllNodes() {
@@ -76,10 +82,17 @@ public class EdgeNodeRegistry {
         }
     }
 
+    /**
+     * 轮询主动连接模式的边缘节点。
+     * 仅轮询已通过 mTLS 受信任且已启用的节点。
+     */
     @Scheduled(every = "30s")
     @Transactional
     public void pollActiveNodes() {
-        List<EdgeNode> activeNodes = EdgeNode.list("connectionType = ?1 AND isEnabled = true", EdgeConnectionType.ACTIVE_POLL);
+        List<EdgeNode> activeNodes = EdgeNode.list(
+                "connectionType = ?1 AND isEnabled = true AND isTrusted = true",
+                EdgeConnectionType.ACTIVE_POLL
+        );
         if (activeNodes.isEmpty()) {
             return;
         }
@@ -110,7 +123,7 @@ public class EdgeNodeRegistry {
                 stub.poll(request)
                         .subscribe().with(
                                 response -> {
-                                    updateNodeStatus(response.getNodeId(), response.getRegion(), response.getMetricsMap());
+                                    updateNodeStatus(response.getNodeId(), response.getMetricsMap());
                                 },
                                 error -> {
                                     log.error("Failed to poll edge node {}: {}", node.nodeId, error.getMessage());
@@ -123,7 +136,7 @@ public class EdgeNodeRegistry {
     }
 
     @Transactional
-    public void updateNodeStatus(String nodeId, String regionCode, Map<String, String> metrics) {
+    public void updateNodeStatus(String nodeId, Map<String, String> metrics) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node != null) {
             node.status = "ONLINE";

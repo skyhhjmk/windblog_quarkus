@@ -2,7 +2,6 @@ package com.biliwind.blog.service.edge;
 
 import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
-import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageProviderEntity;
 import com.biliwind.blog.service.storage.StorageProvider;
@@ -43,15 +42,37 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Override
     public Uni<HeartbeatResponse> heartbeat(HeartbeatRequest request) {
-        BlogRegion region = BlogRegion.fromCode(request.getRegion());
-        registry.registerOrUpdate(request.getNodeId(), region, request.getMetricsMap());
+        String authenticatedNodeId = com.biliwind.blog.service.security.GrpcMtlsInterceptor.getAuthenticatedNodeId();
+        if (authenticatedNodeId == null) {
+            log.warn("拒绝未经 mTLS 认证的心跳请求");
+            return Uni.createFrom().item(HeartbeatResponse.newBuilder()
+                    .setAccepted(false)
+                    .setHeartbeatIntervalSeconds(30)
+                    .build());
+        }
 
-        return getStorageConfig(ConfigRequest.newBuilder().setNodeId(request.getNodeId()).build())
-                .map(configResponse -> HeartbeatResponse.newBuilder()
-                        .setAccepted(true)
-                        .setHeartbeatIntervalSeconds(30)
-                        .setConfig(configResponse)
-                        .build());
+        if (!authenticatedNodeId.equals(request.getNodeId())) {
+            log.warn("心跳请求中的 nodeId ({}) 与 mTLS 认证的 nodeId ({}) 不一致，拒绝",
+                    request.getNodeId(), authenticatedNodeId);
+            return Uni.createFrom().item(HeartbeatResponse.newBuilder()
+                    .setAccepted(false)
+                    .setHeartbeatIntervalSeconds(30)
+                    .build());
+        }
+
+        boolean accepted = registry.updateHeartbeat(authenticatedNodeId, request.getMetricsMap());
+
+        StorageConfigResponse config = StorageConfigResponse.newBuilder().build();
+        if (accepted) {
+            config = getStorageConfig(ConfigRequest.newBuilder().setNodeId(authenticatedNodeId).build())
+                    .await().atMost(java.time.Duration.ofSeconds(10));
+        }
+
+        return Uni.createFrom().item(HeartbeatResponse.newBuilder()
+                .setAccepted(accepted)
+                .setHeartbeatIntervalSeconds(30)
+                .setConfig(config)
+                .build());
     }
 
     @Override

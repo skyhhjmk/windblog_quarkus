@@ -70,4 +70,5 @@
     <include file="migration/066-add-edge-node-addresses.sql" relativeToChangelogFile="true"/>
     <include file="migration/067-add-edge-node-certificate.sql" relativeToChangelogFile="true"/>
     <include file="migration/068-add-edge-node-backup-certs.sql" relativeToChangelogFile="true"/>
+    <include file="migration/069-add-edge-node-grpc-port.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

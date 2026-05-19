@@ -47,3 +47,4 @@ nb-configuration.xml
 /uploads/
 /logs/
 /rsa_keys/*
+/certs/
