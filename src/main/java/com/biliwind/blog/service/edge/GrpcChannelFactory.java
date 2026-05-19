@@ -22,7 +22,7 @@ public class GrpcChannelFactory {
      * 创建支持 mTLS 的 gRPC 通道。
      * 如果证书文件不存在，则回退到明文连接（用于兼容旧节点或初始引导）。
      */
-    public ManagedChannel createChannel(String grpcAddress) {
+    public ManagedChannel createChannel(String grpcAddress, String nodeId) {
         try {
             File caFile = new File(CERT_DIR + "/ca.crt");
             File clientCertFile = new File(CERT_DIR + "/client.crt");
@@ -41,6 +41,7 @@ public class GrpcChannelFactory {
 
             LOGGER.info("正在为 {} 创建加密的 gRPC 通道 (mTLS)", grpcAddress);
             return NettyChannelBuilder.forTarget(grpcAddress)
+                    .overrideAuthority(nodeId)
                     .sslContext(sslContext)
                     .build();
         } catch (Exception e) {

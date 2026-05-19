@@ -199,7 +199,7 @@ public class EdgeDataSyncService {
             grpcAddress = node.address;
         }
         return stubCache.computeIfAbsent(grpcAddress, addr ->
-                MutinyEdgeNodeServiceGrpc.newMutinyStub(channelFactory.createChannel(addr))
+                MutinyEdgeNodeServiceGrpc.newMutinyStub(channelFactory.createChannel(addr, node.nodeId))
         );
     }
 

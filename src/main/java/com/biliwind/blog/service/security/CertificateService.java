@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.*;
 import java.security.cert.X509Certificate;
@@ -85,8 +86,16 @@ public class CertificateService {
             if (!clientKeyFile.exists() || !clientCertFile.exists() || isExpired(clientCertFile)) {
                 generateServerCertificate("main-node-client", clientKeyFile, clientCertFile);
             }
+
+            // 执行热迁移，将遗留的二进制证书自动转为 PEM 格式
+            migrateCertToPemIfNeeded(caCertFile);
+            migrateKeyToPemIfNeeded(caKeyFile);
+            migrateCertToPemIfNeeded(serverCertFile);
+            migrateKeyToPemIfNeeded(serverKeyFile);
+            migrateCertToPemIfNeeded(clientCertFile);
+            migrateKeyToPemIfNeeded(clientKeyFile);
         } catch (Exception e) {
-            LOGGER.error("初始化证书服务失败: " + e.getMessage(), e);
+            LOGGER.error("初始化证书服务失败: {}", e.getMessage(), e);
         }
     }
 
@@ -96,6 +105,39 @@ public class CertificateService {
             return false;
         } catch (Exception e) {
             return true;
+        }
+    }
+
+    private void migrateCertToPemIfNeeded(File file) {
+        try {
+            if (!file.exists()) return;
+            byte[] bytes = Files.readAllBytes(file.toPath());
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            if (!content.contains("-----BEGIN")) {
+                java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
+                X509Certificate cert = (X509Certificate) cf.generateCertificate(new java.io.ByteArrayInputStream(bytes));
+                Files.writeString(file.toPath(), toPem(cert));
+                LOGGER.info("已将二进制证书文件 {} 转换为 PEM 格式", file.getName());
+            }
+        } catch (Exception e) {
+            LOGGER.warn("尝试转换证书 {} 到 PEM 格式失败: {}", file.getName(), e.getMessage());
+        }
+    }
+
+    private void migrateKeyToPemIfNeeded(File file) {
+        try {
+            if (!file.exists()) return;
+            byte[] bytes = Files.readAllBytes(file.toPath());
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            if (!content.contains("-----BEGIN")) {
+                KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+                PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(bytes);
+                PrivateKey key = keyFactory.generatePrivate(keySpec);
+                Files.writeString(file.toPath(), toPem(key));
+                LOGGER.info("已将二进制私钥文件 {} 转换为 PEM 格式", file.getName());
+            }
+        } catch (Exception e) {
+            LOGGER.warn("尝试转换私钥 {} 到 PEM 格式失败: {}", file.getName(), e.getMessage());
         }
     }
 
@@ -111,12 +153,9 @@ public class CertificateService {
     }
 
     private void loadCA(File keyFile, File certFile) throws Exception {
-        byte[] keyBytes = Files.readAllBytes(keyFile.toPath());
         byte[] certBytes = Files.readAllBytes(certFile.toPath());
 
-        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-        caPrivateKey = keyFactory.generatePrivate(keySpec);
+        caPrivateKey = loadPrivateKey(keyFile);
 
         java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
         caCertificate = (X509Certificate) cf.generateCertificate(new java.io.ByteArrayInputStream(certBytes));
@@ -144,8 +183,8 @@ public class CertificateService {
         X509CertificateHolder holder = certBuilder.build(signer);
         caCertificate = new JcaX509CertificateConverter().setProvider(PROVIDER).getCertificate(holder);
 
-        Files.write(new File(CERT_DIRECTORY + "/ca.key").toPath(), caPrivateKey.getEncoded());
-        Files.write(new File(CERT_DIRECTORY + "/ca.crt").toPath(), caCertificate.getEncoded());
+        Files.write(new File(CERT_DIRECTORY + "/ca.key").toPath(), toPem(caPrivateKey).getBytes("UTF-8"));
+        Files.write(new File(CERT_DIRECTORY + "/ca.crt").toPath(), toPem(caCertificate).getBytes("UTF-8"));
 
         LOGGER.info("已生成新的根 CA 证书");
     }
@@ -213,8 +252,8 @@ public class CertificateService {
         X509CertificateHolder holder = certBuilder.build(signer);
         X509Certificate cert = new JcaX509CertificateConverter().setProvider(PROVIDER).getCertificate(holder);
 
-        Files.write(keyFile.toPath(), keyPair.getPrivate().getEncoded());
-        Files.write(certFile.toPath(), cert.getEncoded());
+        Files.write(keyFile.toPath(), toPem(keyPair.getPrivate()).getBytes("UTF-8"));
+        Files.write(certFile.toPath(), toPem(cert).getBytes("UTF-8"));
         LOGGER.info("已为 {} 生成服务器证书", commonName);
     }
 
@@ -224,6 +263,26 @@ public class CertificateService {
             pemWriter.writeObject(object);
         }
         return sw.toString();
+    }
+
+    private PrivateKey loadPrivateKey(File file) throws Exception {
+        byte[] bytes = Files.readAllBytes(file.toPath());
+        String content = new String(bytes, "UTF-8");
+        if (content.contains("-----BEGIN")) {
+            content = content.replace("-----BEGIN PRIVATE KEY-----", "");
+            content = content.replace("-----END PRIVATE KEY-----", "");
+            content = content.replace("-----BEGIN RSA PRIVATE KEY-----", "");
+            content = content.replace("-----END RSA PRIVATE KEY-----", "");
+            content = content.replaceAll("\\s+", "");
+            byte[] derBytes = java.util.Base64.getDecoder().decode(content);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(derBytes);
+            return keyFactory.generatePrivate(keySpec);
+        } else {
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(bytes);
+            return keyFactory.generatePrivate(keySpec);
+        }
     }
 
     public record GeneratedCertificate(

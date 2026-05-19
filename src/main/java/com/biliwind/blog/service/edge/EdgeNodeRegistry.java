@@ -112,7 +112,7 @@ public class EdgeNodeRegistry {
             log.info("Polling active edge node {} at {}", node.nodeId, grpcAddress);
             try {
                 MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = MutinyEdgeNodeServiceGrpc.newMutinyStub(
-                        channelFactory.createChannel(grpcAddress)
+                        channelFactory.createChannel(grpcAddress, node.nodeId)
                 );
 
                 EdgeServiceProto.PollRequest request = EdgeServiceProto.PollRequest.newBuilder()

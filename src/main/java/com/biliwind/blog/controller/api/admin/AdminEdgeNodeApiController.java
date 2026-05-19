@@ -64,12 +64,47 @@ public class AdminEdgeNodeApiController {
 
         EdgeNode node = new EdgeNode();
         node.nodeId = request.nodeId();
-        node.name = request.nodeName() != null && !request.nodeName().isEmpty()
-                ? request.nodeName() : request.nodeId();
-        node.region = request.region() != null ? request.region() : BlogRegion.GLOBAL;
-        node.connectionType = request.connectionType() != null
-                ? request.connectionType() : EdgeConnectionType.HEARTBEAT;
-        node.edgeGrpcPort = request.edgeGrpcPort() != null ? request.edgeGrpcPort() : 9001;
+
+        String reqName = request.nodeName();
+        if (reqName != null && !reqName.isEmpty()) {
+            node.name = reqName;
+        } else {
+            node.name = request.nodeId();
+        }
+
+        BlogRegion reqRegion = request.region();
+        if (reqRegion != null) {
+            node.region = reqRegion;
+        } else {
+            node.region = BlogRegion.GLOBAL;
+        }
+
+        EdgeConnectionType reqConn = request.connectionType();
+        if (reqConn != null) {
+            node.connectionType = reqConn;
+        } else {
+            node.connectionType = EdgeConnectionType.HEARTBEAT;
+        }
+
+        Integer reqPort = request.edgeGrpcPort();
+        if (reqPort != null) {
+            node.edgeGrpcPort = reqPort;
+        } else {
+            java.util.Random random = new java.util.Random();
+            int randomPort = random.nextInt(40000) + 20000;
+            node.edgeGrpcPort = Integer.valueOf(randomPort);
+        }
+
+        // 主动连接模式校验和通信地址填充
+        if (node.connectionType == EdgeConnectionType.ACTIVE_POLL) {
+            String ip = request.nodeIp();
+            if (ip == null || ip.trim().isEmpty()) {
+                throw new BadRequestException("使用主动轮询模式时必须填写节点 IP");
+            }
+            node.grpcAddress = ip.trim() + ":" + node.edgeGrpcPort;
+            node.isTrusted = true;
+        }
+
         node.persist();
 
         return node;
@@ -184,7 +219,8 @@ public class AdminEdgeNodeApiController {
             String nodeName,
             BlogRegion region,
             EdgeConnectionType connectionType,
-            Integer edgeGrpcPort
+            Integer edgeGrpcPort,
+            String nodeIp
     ) {
     }
 }
