@@ -8,12 +8,12 @@ class LanguageConstantTest {
 
     @Test
     void shouldHaveCorrectDefaultLanguage() {
-        assertEquals("zh-CN", LanguageConstant.DEFAULT_LANG);
+        assertEquals("zh-cn", LanguageConstant.DEFAULT_LANG);
     }
 
     @Test
     void shouldHaveCorrectZhCnLanguage() {
-        assertEquals("zh-CN", LanguageConstant.LANG_ZH_CN);
+        assertEquals("zh-cn", LanguageConstant.LANG_ZH_CN);
     }
 
     @Test
@@ -28,7 +28,7 @@ class LanguageConstantTest {
 
     @Test
     void shouldContainZhCnInSupportedLanguages() {
-        assertTrue(LanguageConstant.SUPPORT_LANGS.contains("zh-CN"));
+        assertTrue(LanguageConstant.SUPPORT_LANGS.contains("zh-cn"));
     }
 
     @Test

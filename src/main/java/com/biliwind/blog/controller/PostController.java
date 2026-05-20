@@ -8,14 +8,13 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.storage.VariantType;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.*;
 
 import java.util.List;
 
@@ -45,31 +44,37 @@ public class PostController {
     @Inject
     com.biliwind.blog.service.ConfigManager configManager;
 
+    @Inject
+    com.biliwind.blog.service.storage.StorageService storageService;
+
     @GET
     @Path("/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
     @PasswordProtected
-    public TemplateInstance post(@PathParam("slug") String slug,
-                                 @QueryParam("levels") List<Short> levels,
-                                 @Context HttpHeaders httpHeaders) {
-        return render(slug, null, levels, httpHeaders);
+    public Response post(@PathParam("slug") String slug,
+                         @QueryParam("levels") List<Short> levels,
+                         @Context HttpHeaders httpHeaders,
+                         @Context Request request) {
+        return render(slug, null, levels, httpHeaders, request);
     }
 
     @GET
     @Path("/{langCode}/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
     @PasswordProtected
-    public TemplateInstance postWithLang(@PathParam("langCode") String langCode,
-                                         @PathParam("slug") String slug,
-                                         @QueryParam("levels") List<Short> levels,
-                                         @Context HttpHeaders httpHeaders) {
-        return render(slug, langCode, levels, httpHeaders);
+    public Response postWithLang(@PathParam("langCode") String langCode,
+                                 @PathParam("slug") String slug,
+                                 @QueryParam("levels") List<Short> levels,
+                                 @Context HttpHeaders httpHeaders,
+                                 @Context Request request) {
+        return render(slug, langCode, levels, httpHeaders, request);
     }
 
-    private TemplateInstance render(String slug,
-                                    String langCode,
-                                    List<Short> levels,
-                                    HttpHeaders httpHeaders) {
+    private Response render(String slug,
+                            String langCode,
+                            List<Short> levels,
+                            HttpHeaders httpHeaders,
+                            Request request) {
 
         resolveLanguage(langCode);
 
@@ -92,13 +97,33 @@ public class PostController {
         }
 
         String resolvedLang = languageContext.getLang();
+
+        // 计算 ETag 逻辑。使用显式 if/else，禁止三目
+        java.time.OffsetDateTime lastUpdated = postEntity.updatedAt;
+        if (lastUpdated == null) {
+            lastUpdated = postEntity.createdAt;
+        }
+        if (lastUpdated == null) {
+            lastUpdated = java.time.OffsetDateTime.now();
+        }
+
+        long epoch = lastUpdated.toEpochSecond();
+        String etagValue = postEntity.id.toString() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion;
+        EntityTag etag = new EntityTag(etagValue);
+
+        // 评估客户端提供的 If-None-Match 首部
+        Response.ResponseBuilder responseBuilder = request.evaluatePreconditions(etag);
+        if (responseBuilder != null) {
+            CacheControl cacheControl = new CacheControl();
+            cacheControl.setMaxAge(60); // 缓存 60 秒
+            return responseBuilder.cacheControl(cacheControl).build();
+        }
+
         String localizedTitle =
                 LanguageHelper.resolveLocalizedValue(postEntity.title, resolvedLang);
 
         String localizedContent =
                 resolveContent(postEntity.currentRevision, resolvedLang);
-
-
 
         // Check if user is logged in
         Long currentUserId = resolveUserIdFromCookie(httpHeaders);
@@ -108,7 +133,14 @@ public class PostController {
         long maxPointsPaid = postAccessService.getMaxPointsPaid(currentUserId, postEntity.id);
 
         // 作者直接绕过购买检查
-        boolean isAuthor = currentUserId != null && postEntity.user != null && currentUserId.equals(postEntity.user.id);
+        boolean isAuthor = false;
+        if (currentUserId != null) {
+            if (postEntity.user != null) {
+                if (currentUserId.equals(postEntity.user.id)) {
+                    isAuthor = true;
+                }
+            }
+        }
 
         // 安全处理：渲染重构。为了支持 CDN 缓存静态 HTML 且减轻后端渲染压力，
         // 初始下发的 HTML 统一使用剔除保密内容的“安全预览版”，在后端通过 Redis 对此版本进行深度缓存。
@@ -120,15 +152,29 @@ public class PostController {
         String localizedAiSummary =
                 LanguageHelper.resolveLocalizedValue(postEntity.aiSummary, resolvedLang);
 
-        Template template =
-                PjaxHelper.isPjaxRequest(httpHeaders)
-                        ? postContentTemplate
-                        : postTemplate;
+        Template template = null;
+        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
+            template = postContentTemplate;
+        } else {
+            template = postTemplate;
+        }
 
         // 全站买断判定
-        boolean hasPurchased = isAuthor
-                || (postPrice > 0 && maxPointsPaid >= postPrice)
-                || postAccessService.hasPurchasedPost(currentUserId, postEntity.id);
+        boolean hasPurchased = false;
+        if (isAuthor) {
+            hasPurchased = true;
+        } else {
+            if (postPrice > 0) {
+                if (maxPointsPaid >= postPrice) {
+                    hasPurchased = true;
+                }
+            }
+        }
+        if (hasPurchased == false) {
+            if (postAccessService.hasPurchasedPost(currentUserId, postEntity.id)) {
+                hasPurchased = true;
+            }
+        }
 
         List<PostTag> rawPostTags = PostTag.find("post", postEntity).list();
         List<TagItem> postTags = new java.util.ArrayList<>();
@@ -140,31 +186,78 @@ public class PostController {
         List<AttachmentView> attachments = new java.util.ArrayList<>();
         for (PostMedia pm : rawPostMedia) {
             if (pm.usageType == 3) { // 3 = 附件
-                String attachmentUrl = hasPurchased ? pm.media.url : "";
-                long bytes = pm.media.size != null ? pm.media.size : 0;
-                String formattedSize = bytes < 1024 * 1024
-                        ? (bytes / 1024) + " KB"
-                        : String.format("%.2f MB", bytes / (1024.0 * 1024.0));
+                String attachmentUrl = "";
+                if (hasPurchased) {
+                    attachmentUrl = storageService.getBestSignedUrl(pm.media, VariantType.ORIGINAL, java.time.Duration.ofMinutes(10));
+                    if (attachmentUrl == null) {
+                        attachmentUrl = pm.media.url;
+                    }
+                }
+                long bytes = 0;
+                if (pm.media.size != null) {
+                    bytes = pm.media.size;
+                }
+                String formattedSize = "";
+                if (bytes < 1024 * 1024) {
+                    formattedSize = (bytes / 1024) + " KB";
+                } else {
+                    formattedSize = String.format("%.2f MB", bytes / (1024.0 * 1024.0));
+                }
                 attachments.add(new AttachmentView(pm.media.fileName, attachmentUrl, formattedSize));
             }
         }
 
-        return template
+        String displayTitle = localizedTitle;
+        if (displayTitle == null) {
+            displayTitle = slug;
+        }
+
+        int aiSummaryStatusVal = 0;
+        if (postEntity.aiSummaryStatus != null) {
+            aiSummaryStatusVal = postEntity.aiSummaryStatus.intValue();
+        }
+
+        String authorName = "Unknown";
+        if (postEntity.user != null) {
+            authorName = postEntity.user.username;
+        }
+
+        String authorAvatar = "/static/img/avatar-default.png";
+        if (postEntity.user != null) {
+            authorAvatar = "https://ui-avatars.com/api/?name=" + postEntity.user.username;
+        }
+
+        String renderTypeName = null;
+        if (postBody.renderType() != null) {
+            renderTypeName = postBody.renderType().name();
+        }
+
+        String postCategory = "未分类";
+        if (postEntity.category != null) {
+            postCategory = LanguageHelper.resolveLocalizedValue(postEntity.category.name, resolvedLang);
+        }
+
+        String postCategorySlug = "uncategorized";
+        if (postEntity.category != null) {
+            postCategorySlug = postEntity.category.slug;
+        }
+
+        TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
                 .data("postId", postEntity.id)
                 .data("postSlug", slug)
-                .data("postTitle", localizedTitle == null ? slug : localizedTitle)
+                .data("postTitle", displayTitle)
                 .data("aiSummary", localizedAiSummary)
-                .data("aiSummaryStatus", postEntity.aiSummaryStatus != null ? postEntity.aiSummaryStatus.intValue() : 0)
+                .data("aiSummaryStatus", aiSummaryStatusVal)
                 .data("postBody", postBody.body())
                 .data("postBodyHtml", postBody.html())
                 .data("publishedAt", postEntity.publishedAt)
-                .data("authorName", postEntity.user != null ? postEntity.user.username : "Unknown")
-                .data("authorAvatar", postEntity.user != null ? "https://ui-avatars.com/api/?name=" + postEntity.user.username : "/static/img/avatar-default.png")
-                .data("postRenderType", postBody.renderType() != null ? postBody.renderType().name() : null)
+                .data("authorName", authorName)
+                .data("authorAvatar", authorAvatar)
+                .data("postRenderType", renderTypeName)
                 .data("postBodyJson", escapeJavaScript(postBody.body()))
-                .data("postCategory", postEntity.category != null ? LanguageHelper.resolveLocalizedValue(postEntity.category.name, resolvedLang) : "未分类")
-                .data("postCategorySlug", postEntity.category != null ? postEntity.category.slug : "uncategorized")
+                .data("postCategory", postCategory)
+                .data("postCategorySlug", postCategorySlug)
                 .data("postPrice", postPrice)
                 .data("hasPurchased", hasPurchased)
                 .data("postTags", postTags)
@@ -173,6 +266,14 @@ public class PostController {
                 .data("canonicalUrl", buildCanonicalUrl(slug))
                 .data("ogData", buildOgData(postEntity, localizedTitle, localizedAiSummary, resolvedLang))
                 .data("jsonLd", buildJsonLd(postEntity, localizedTitle, localizedAiSummary, resolvedLang));
+
+        CacheControl cacheControl = new CacheControl();
+        cacheControl.setMaxAge(60); // 缓存 60 秒
+
+        return Response.ok(templateInstance)
+                .tag(etag)
+                .cacheControl(cacheControl)
+                .build();
     }
 
     private String buildCanonicalUrl(String slug) {

@@ -40,9 +40,11 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
             Metadata headers,
             ServerCallHandler<ReqT, RespT> next) {
 
+        java.net.SocketAddress remoteAddress = call.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+
         SSLSession sslSession = call.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
         if (sslSession == null) {
-            LOGGER.warn("非 TLS 连接：无 SSL 会话，拒绝请求");
+            LOGGER.warn("Non-TLS connection rejected: no SSL session from {}", remoteAddress);
             call.close(Status.UNAUTHENTICATED.withDescription("TLS required"), new Metadata());
             return new ServerCall.Listener<ReqT>() {
             };
@@ -51,7 +53,7 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
         try {
             X509Certificate[] chain = (X509Certificate[]) sslSession.getPeerCertificates();
             if (chain == null || chain.length == 0) {
-                LOGGER.warn("客户端未提供证书，拒绝请求");
+                LOGGER.warn("Client certificate missing from {}", remoteAddress);
                 call.close(Status.UNAUTHENTICATED.withDescription("Client certificate required"), new Metadata());
                 return new ServerCall.Listener<ReqT>() {
                 };
@@ -63,24 +65,26 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
 
             CertificateValidationResult validationResult = validateCertificateInDb(serialNumber, subjectCN);
             if (!validationResult.valid) {
-                LOGGER.warn("证书校验失败: Serial={}, Reason={}", serialNumber, validationResult.reason);
+                LOGGER.warn("Certificate validation failed from {}: Serial={}, Reason={}",
+                        remoteAddress, serialNumber, validationResult.reason);
                 call.close(Status.PERMISSION_DENIED.withDescription(validationResult.reason), new Metadata());
                 return new ServerCall.Listener<ReqT>() {
                 };
             }
 
-            LOGGER.debug("证书校验通过: NodeId={}, Serial={}", validationResult.nodeId, serialNumber);
+            LOGGER.debug("Certificate validation passed from {}: NodeId={}, Serial={}",
+                    remoteAddress, validationResult.nodeId, serialNumber);
 
             Context ctx = Context.current().withValue(AUTHENTICATED_NODE_ID_KEY, validationResult.nodeId);
             return Contexts.interceptCall(ctx, call, headers, next);
 
         } catch (SSLPeerUnverifiedException e) {
-            LOGGER.error("SSL 握手验证失败: {}", e.getMessage());
+            LOGGER.error("SSL handshake verification failed from {}: {}", remoteAddress, e.getMessage());
             call.close(Status.UNAUTHENTICATED.withDescription("SSL session unverified"), new Metadata());
             return new ServerCall.Listener<ReqT>() {
             };
         } catch (Exception e) {
-            LOGGER.error("证书校验过程异常: {}", e.getMessage());
+            LOGGER.error("Certificate validation exception from {}: {}", remoteAddress, e.getMessage(), e);
             call.close(Status.INTERNAL.withDescription("Certificate validation error"), new Metadata());
             return new ServerCall.Listener<ReqT>() {
             };

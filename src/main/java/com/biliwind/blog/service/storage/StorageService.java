@@ -36,69 +36,73 @@ public class StorageService {
     private StorageProvider primaryProvider;
 
     @PostConstruct
-    @Transactional
     void init() {
-        long count = StorageProviderEntity.count();
-        if (count == 0) {
-            log.info("No storage providers found, initializing default local_fs provider...");
-            String rootPath = org.eclipse.microprofile.config.ConfigProvider.getConfig()
-                    .getOptionalValue("storage.path", String.class)
-                    .orElse(org.eclipse.microprofile.config.ConfigProvider.getConfig()
-                            .getOptionalValue("media.upload.dir", String.class).orElse("./uploads"));
-            String baseUrl = org.eclipse.microprofile.config.ConfigProvider.getConfig()
-                    .getOptionalValue("media.upload.path", String.class).orElse("/uploads");
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
+            @Override
+            public void run() {
+                long count = StorageProviderEntity.count();
+                if (count == 0) {
+                    log.info("No storage providers found, initializing default local_fs provider...");
+                    String rootPath = org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                            .getOptionalValue("storage.path", String.class)
+                            .orElse(org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                                    .getOptionalValue("media.upload.dir", String.class).orElse("./uploads"));
+                    String baseUrl = org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                            .getOptionalValue("media.upload.path", String.class).orElse("/uploads");
 
-            StorageProviderEntity defaultProvider = new StorageProviderEntity();
-            defaultProvider.name = "local";
-            defaultProvider.displayName = "默认本地存储";
-            defaultProvider.providerType = "local_fs";
-            defaultProvider.isEnabled = true;
-            defaultProvider.isPrimary = true;
-            defaultProvider.role = "primary";
-            defaultProvider.supportedTypes = "[\"*\"]";
+                    StorageProviderEntity defaultProvider = new StorageProviderEntity();
+                    defaultProvider.name = "local";
+                    defaultProvider.displayName = "默认本地存储";
+                    defaultProvider.providerType = "local_fs";
+                    defaultProvider.isEnabled = true;
+                    defaultProvider.isPrimary = true;
+                    defaultProvider.role = "primary";
+                    defaultProvider.supportedTypes = "[\"*\"]";
 
-            Map<String, String> configMap = new HashMap<>();
-            configMap.put("rootPath", rootPath);
-            configMap.put("baseUrl", baseUrl);
-            try {
-                defaultProvider.configJson = objectMapper.writeValueAsString(configMap);
-            } catch (Exception e) {
-                defaultProvider.configJson = "{\"rootPath\":\"" + rootPath + "\",\"baseUrl\":\"" + baseUrl + "\"}";
-            }
-            defaultProvider.persist();
-        }
-
-        List<StorageProviderEntity> entities = StorageProviderEntity.list("isEnabled = true ORDER BY priority ASC");
-        for (StorageProviderEntity entity : entities) {
-            StorageProvider provider = createProvider(entity);
-            if (provider == null) {
-                continue;
-            }
-            try {
-                JsonNode configJson = objectMapper.readTree(entity.configJson);
-                ArrayList<String> supportedTypes = parseSupportedTypes(entity.supportedTypes);
-                StorageProviderConfig config = new StorageProviderConfig(
-                        configJson, supportedTypes, entity.cdnDomain, entity.cdnEnabled);
-                provider.initialize(config);
-
-                enabledProviders.add(provider);
-                if (entity.isPrimary != null && entity.isPrimary) {
-                    if (primaryProvider != null) {
-                        throw new IllegalStateException("Multiple primary storage providers found!");
+                    Map<String, String> configMap = new HashMap<>();
+                    configMap.put("rootPath", rootPath);
+                    configMap.put("baseUrl", baseUrl);
+                    try {
+                        defaultProvider.configJson = objectMapper.writeValueAsString(configMap);
+                    } catch (Exception e) {
+                        defaultProvider.configJson = "{\"rootPath\":\"" + rootPath + "\",\"baseUrl\":\"" + baseUrl + "\"}";
                     }
-                    primaryProvider = provider;
+                    defaultProvider.persist();
                 }
-            } catch (Exception e) {
-                log.error("Failed to initialize storage provider: {}", entity.name, e);
-            }
-        }
 
-        if (primaryProvider == null) {
-            log.warn("No primary storage provider configured.");
-        } else {
-            log.info("StorageService initialized with {} providers, primary: {}",
-                    enabledProviders.size(), primaryProvider.getName());
-        }
+                List<StorageProviderEntity> entities = StorageProviderEntity.list("isEnabled = true ORDER BY priority ASC");
+                for (StorageProviderEntity entity : entities) {
+                    StorageProvider provider = createProvider(entity);
+                    if (provider == null) {
+                        continue;
+                    }
+                    try {
+                        JsonNode configJson = objectMapper.readTree(entity.configJson);
+                        ArrayList<String> supportedTypes = parseSupportedTypes(entity.supportedTypes);
+                        StorageProviderConfig config = new StorageProviderConfig(
+                                configJson, supportedTypes, entity.cdnDomain, entity.cdnEnabled);
+                        provider.initialize(config);
+
+                        enabledProviders.add(provider);
+                        if (entity.isPrimary != null && entity.isPrimary) {
+                            if (primaryProvider != null) {
+                                throw new IllegalStateException("Multiple primary storage providers found!");
+                            }
+                            primaryProvider = provider;
+                        }
+                    } catch (Exception e) {
+                        log.error("Failed to initialize storage provider: {}", entity.name, e);
+                    }
+                }
+
+                if (primaryProvider == null) {
+                    log.warn("No primary storage provider configured.");
+                } else {
+                    log.info("StorageService initialized with {} providers, primary: {}",
+                            enabledProviders.size(), primaryProvider.getName());
+                }
+            }
+        });
     }
 
     private ArrayList<String> parseSupportedTypes(String supportedTypesStr) {
@@ -447,6 +451,42 @@ public class StorageService {
             }
 
             return provider.getPublicUrl(path);
+        }
+        return null;
+    }
+
+    public String getBestSignedUrl(Media media, VariantType variant, java.time.Duration expiration) {
+        if (media == null) {
+            return null;
+        }
+        if (media.storageProviders == null) {
+            return null;
+        }
+
+        for (StorageProvider provider : enabledProviders) {
+            String providerName = provider.getName();
+            Object providerDataObj = media.storageProviders.get(providerName);
+            if (!(providerDataObj instanceof Map)) {
+                continue;
+            }
+            Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
+            String variantKey = variant.name().toLowerCase();
+            Object variantDataObj = providerData.get(variantKey);
+            if (!(variantDataObj instanceof Map)) {
+                continue;
+            }
+            Map<String, Object> variantData = (Map<String, Object>) variantDataObj;
+            Object statusObj = variantData.get("status");
+            if (!"synced".equals(statusObj)) {
+                continue;
+            }
+            Object pathObj = variantData.get("path");
+            if (pathObj == null) {
+                continue;
+            }
+            String path = pathObj.toString();
+
+            return provider.getSignedUrl(path, expiration);
         }
         return null;
     }

@@ -443,35 +443,64 @@ public class EdgeDataSyncService {
             return false;
         }
 
-        try {
-            MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = getStub(node);
+        int maxAttempts = 3;
+        int attempt = 0;
+        long baseDelayMs = 1000L;
 
-            EdgeServiceProto.SyncDataRequest request = EdgeServiceProto.SyncDataRequest.newBuilder()
-                    .setEntityType(entityType)
-                    .setAction(action)
-                    .setPayload(payload)
-                    .build();
+        while (attempt < maxAttempts) {
+            try {
+                MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = getStub(node);
 
-            Boolean result = stub.syncData(request)
-                    .map(response -> {
-                        if (response.getSuccess()) {
-                            return true;
-                        } else {
-                            log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId, response.getMessage());
+                EdgeServiceProto.SyncDataRequest request = EdgeServiceProto.SyncDataRequest.newBuilder()
+                        .setEntityType(entityType)
+                        .setAction(action)
+                        .setPayload(payload)
+                        .build();
+
+                Boolean result = stub.syncData(request)
+                        .map(response -> {
+                            if (response.getSuccess()) {
+                                return true;
+                            } else {
+                                log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId, response.getMessage());
+                                return false;
+                            }
+                        })
+                        .onFailure().recoverWithItem(error -> {
+                            log.error("Error pushing to node {}: {}", node.nodeId, error.getMessage());
                             return false;
-                        }
-                    })
-                    .onFailure().recoverWithItem(error -> {
-                        log.error("Error pushing to node {}: {}", node.nodeId, error.getMessage());
-                        return false;
-                    })
-                    .await().atMost(java.time.Duration.ofSeconds(timeoutSeconds));
+                        })
+                        .await().atMost(java.time.Duration.ofSeconds(timeoutSeconds));
 
-            return result != null && result;
-        } catch (Exception e) {
-            log.error("Failed to push {} {} to node {}: {}", entityType, entityId, node.nodeId, e.getMessage());
-            return false;
+                if (result != null && result) {
+                    return true;
+                }
+            } catch (Exception e) {
+                log.error("Failed attempt to push {} {} to node {}: {}", entityType, entityId, node.nodeId, e.getMessage());
+            }
+
+            attempt = attempt + 1;
+            if (attempt < maxAttempts) {
+                long powerOfTwo = 1L;
+                for (int i = 0; i < attempt; i++) {
+                    powerOfTwo = powerOfTwo * 2L;
+                }
+                long delay = baseDelayMs * powerOfTwo;
+                double randomVal = Math.random();
+                long jitter = (long) (randomVal * 500.0);
+                long totalDelay = delay + jitter;
+
+                log.info("Retrying push {} {} to node {} in {} ms (attempt {}/{})",
+                        entityType, entityId, node.nodeId, totalDelay, attempt, maxAttempts);
+                try {
+                    Thread.sleep(totalDelay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
         }
+        return false;
     }
 
     public SyncProgress getSyncStatus(String nodeId) {

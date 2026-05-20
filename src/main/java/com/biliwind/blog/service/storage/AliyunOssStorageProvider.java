@@ -2,6 +2,7 @@ package com.biliwind.blog.service.storage;
 
 import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.OSSClientBuilder;
+import com.aliyun.sdk.service.oss2.PresignOptions;
 import com.aliyun.sdk.service.oss2.credentials.Credentials;
 import com.aliyun.sdk.service.oss2.credentials.CredentialsProvider;
 import com.aliyun.sdk.service.oss2.models.*;
@@ -251,7 +252,22 @@ public class AliyunOssStorageProvider implements StorageProvider {
 
     @Override
     public String getSignedUrl(String storagePath, Duration expiration) {
-        return getPublicUrl(storagePath);
+        try {
+            GetObjectRequest request = GetObjectRequest.newBuilder()
+                    .bucket(this.bucketName)
+                    .key(storagePath)
+                    .build();
+
+            PresignOptions options = PresignOptions.newBuilder()
+                    .expiration(expiration)
+                    .build();
+
+            PresignResult result = ossClient.presign(request, options);
+            return result.url();
+        } catch (Exception e) {
+            log.error("Failed to generate signed URL from Aliyun OSS", e);
+            return getPublicUrl(storagePath);
+        }
     }
 
     @Override

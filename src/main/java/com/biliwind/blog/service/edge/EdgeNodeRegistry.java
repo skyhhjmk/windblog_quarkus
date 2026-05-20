@@ -20,12 +20,37 @@ import java.util.Map;
 public class EdgeNodeRegistry {
     private static final Logger log = LoggerFactory.getLogger(EdgeNodeRegistry.class);
 
-    @Inject
-    @GrpcService
-    EdgeNodeGrpcService edgeNodeGrpcService;
+    /**
+     * 线程安全的通道连接缓存，按 nodeId 复用连接以彻底杜绝句柄和 Socket 泄露
+     */
+    private final java.util.Map<String, ChannelEntry> channelCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Inject
     GrpcChannelFactory channelFactory;
+    @Inject
+    @GrpcService // 必须带上此限定符，因为 EdgeNodeGrpcService 在 CDI 容器中仅带有 @GrpcService 限定符。由于注入类型是具体的实现类而非接口或 Stub，这依然是纯本地方法调用，不会产生 gRPC 网络请求。
+    EdgeNodeGrpcService edgeNodeGrpcService;
+
+    @Transactional
+    public void toggleNodeEnabled(String nodeId, boolean enabled) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node != null) {
+            node.isEnabled = enabled;
+            log.info("Edge node {} {}", nodeId, enabled ? "ENABLED" : "DISABLED");
+            if (!enabled) {
+                node.status = "OFFLINE";
+                // 禁用时清理并关闭缓存中的连接通道
+                ChannelEntry entry = channelCache.remove(nodeId);
+                if (entry != null) {
+                    try {
+                        entry.channel.shutdownNow();
+                    } catch (Exception e) {
+                        log.error("Failed to shutdown channel for disabled node {}: {}", nodeId, e.getMessage());
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * 记录来自边缘节点的心跳或注册请求。
@@ -60,34 +85,11 @@ public class EdgeNodeRegistry {
         return EdgeNode.findByNodeId(nodeId);
     }
 
-    @Transactional
-    public void toggleNodeEnabled(String nodeId, boolean enabled) {
-        EdgeNode node = EdgeNode.findByNodeId(nodeId);
-        if (node != null) {
-            node.isEnabled = enabled;
-            log.info("Edge node {} {}", nodeId, enabled ? "ENABLED" : "DISABLED");
-        }
-    }
-
-    @Scheduled(every = "60s")
-    @Transactional
-    void checkNodeHealth() {
-        OffsetDateTime threshold = OffsetDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(90);
-        List<EdgeNode> nodes = EdgeNode.list("status = 'ONLINE'");
-        for (EdgeNode node : nodes) {
-            if (node.lastHeartbeat != null && node.lastHeartbeat.isBefore(threshold)) {
-                log.warn("Edge node {} timed out, marking as OFFLINE", node.nodeId);
-                node.status = "OFFLINE";
-            }
-        }
-    }
-
     /**
      * 轮询主动连接模式的边缘节点。
      * 仅轮询已通过 mTLS 受信任且已启用的节点。
      */
     @Scheduled(every = "30s")
-    @Transactional
     public void pollActiveNodes() {
         List<EdgeNode> activeNodes = EdgeNode.list(
                 "connectionType = ?1 AND isEnabled = true AND isTrusted = true",
@@ -111,9 +113,25 @@ public class EdgeNodeRegistry {
             }
             log.info("Polling active edge node {} at {}", node.nodeId, grpcAddress);
             try {
-                MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = MutinyEdgeNodeServiceGrpc.newMutinyStub(
-                        channelFactory.createChannel(grpcAddress, node.nodeId)
-                );
+                ChannelEntry entry = channelCache.get(node.nodeId);
+
+                // 如果缓存为空，或者连接目标的物理地址（IP 端口）发生改变，则安全销毁旧连接并重建
+                if (entry == null || !entry.grpcAddress.equals(grpcAddress)) {
+                    if (entry != null) {
+                        try {
+                            log.info("Closing legacy channel for node {} due to address change from {} to {}",
+                                    node.nodeId, entry.grpcAddress, grpcAddress);
+                            entry.channel.shutdownNow();
+                        } catch (Exception ex) {
+                            log.error("Error shutting down legacy channel for node {}: {}", node.nodeId, ex.getMessage());
+                        }
+                    }
+                    io.grpc.ManagedChannel newChannel = channelFactory.createChannel(grpcAddress, node.nodeId);
+                    entry = new ChannelEntry(grpcAddress, newChannel);
+                    channelCache.put(node.nodeId, entry);
+                }
+
+                MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = MutinyEdgeNodeServiceGrpc.newMutinyStub(entry.channel);
 
                 EdgeServiceProto.PollRequest request = EdgeServiceProto.PollRequest.newBuilder()
                         .setMainNodeId("main")
@@ -135,6 +153,34 @@ public class EdgeNodeRegistry {
         }
     }
 
+    @Scheduled(every = "60s")
+    @Transactional
+    void checkNodeHealth() {
+        OffsetDateTime threshold = OffsetDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(90);
+        List<EdgeNode> nodes = EdgeNode.list("status = 'ONLINE'");
+        for (EdgeNode node : nodes) {
+            if (node.lastHeartbeat != null && node.lastHeartbeat.isBefore(threshold)) {
+                log.warn("Edge node {} timed out, marking as OFFLINE", node.nodeId);
+                node.status = "OFFLINE";
+            }
+        }
+    }
+
+    /**
+     * 优雅停止：在 JVM / Quarkus 停止时，主动且安全地销毁所有活跃连接
+     */
+    public void onStop(@jakarta.enterprise.event.Observes io.quarkus.runtime.ShutdownEvent event) {
+        log.info("Shutting down active gRPC channels in EdgeNodeRegistry...");
+        for (ChannelEntry entry : channelCache.values()) {
+            try {
+                entry.channel.shutdownNow();
+            } catch (Exception e) {
+                log.error("Failed to shutdown channel during application shutdown: {}", e.getMessage());
+            }
+        }
+        channelCache.clear();
+    }
+
     @Transactional
     public void updateNodeStatus(String nodeId, Map<String, String> metrics) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
@@ -142,6 +188,19 @@ public class EdgeNodeRegistry {
             node.status = "ONLINE";
             node.lastHeartbeat = OffsetDateTime.now(java.time.ZoneOffset.UTC);
             node.metrics = metrics;
+        }
+    }
+
+    /**
+     * 用于封装已建立的 gRPC 连接条目，支持 IP 变更对比
+     */
+    private static class ChannelEntry {
+        final String grpcAddress;
+        final io.grpc.ManagedChannel channel;
+
+        ChannelEntry(String grpcAddress, io.grpc.ManagedChannel channel) {
+            this.grpcAddress = grpcAddress;
+            this.channel = channel;
         }
     }
 }

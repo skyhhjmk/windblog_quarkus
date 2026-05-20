@@ -3,15 +3,16 @@ package com.biliwind.blog.model;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.*;
+import org.hibernate.annotations.Cache;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "system_settings")
+@Cacheable
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
 public class SystemSetting extends PanacheEntityBase {
 
     @Id

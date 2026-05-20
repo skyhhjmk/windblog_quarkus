@@ -47,7 +47,7 @@ public class MdProtocolNodeRenderer implements NodeRenderer {
         // Render blockquote with old 'tip' style
         html.attr("class", "md-region md-region-tip")
             .withAttr()
-            .tag("aside");
+                .tag("blockquote");
         
         // Inject icon container
         html.attr("class", "md-region-icon")
@@ -60,8 +60,8 @@ public class MdProtocolNodeRenderer implements NodeRenderer {
             .tag("div");
         context.renderChildren(node);
         html.tag("/div");
-        
-        html.tag("/aside");
+
+        html.tag("/blockquote");
     }
 
     private void renderHighlight(MdNodes.HighlightNode node, NodeRendererContext context, HtmlWriter html) {
