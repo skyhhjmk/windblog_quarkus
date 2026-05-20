@@ -87,6 +87,12 @@ public class CertificateService {
                 generateServerCertificate("main-node-client", clientKeyFile, clientCertFile);
             }
 
+            // 同时也为自己生成一个 PKCS12 信任库用于 gRPC 服务端认证（因为 Quarkus gRPC 服务端只支持 JKS/PKCS12 格式的 trust-store，不支持 PEM 直接作为 trust-certificate）
+            File trustStoreFile = new File(CERT_DIRECTORY + "/truststore.p12");
+            if (!trustStoreFile.exists() || isExpired(caCertFile)) {
+                generateTrustStore(trustStoreFile, caCertificate);
+            }
+
             // 执行热迁移，将遗留的二进制证书自动转为 PEM 格式
             migrateCertToPemIfNeeded(caCertFile);
             migrateKeyToPemIfNeeded(caKeyFile);
@@ -96,6 +102,23 @@ public class CertificateService {
             migrateKeyToPemIfNeeded(clientKeyFile);
         } catch (Exception e) {
             LOGGER.error("初始化证书服务失败: {}", e.getMessage(), e);
+        }
+    }
+
+    private void generateTrustStore(File trustStoreFile, X509Certificate caCertificate) {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("PKCS12");
+            keyStore.load(null, null);
+            keyStore.setCertificateEntry("ca", caCertificate);
+            java.io.FileOutputStream fileOutputStream = new java.io.FileOutputStream(trustStoreFile);
+            try {
+                keyStore.store(fileOutputStream, "changeit".toCharArray());
+            } finally {
+                fileOutputStream.close();
+            }
+            LOGGER.info("已成功生成/更新 PKCS12 格式的信任库文件 {}", trustStoreFile.getName());
+        } catch (Exception exception) {
+            LOGGER.error("生成 PKCS12 信任库文件失败: {}", exception.getMessage(), exception);
         }
     }
 

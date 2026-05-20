@@ -58,7 +58,7 @@ public class EdgeNodeRegistry {
      * 如果节点不存在，拒绝注册（节点必须由管理员先在 Flutter 后台创建并签发证书）。
      */
     @Transactional
-    public boolean updateHeartbeat(String nodeId, Map<String, String> metrics) {
+    public boolean updateHeartbeat(String nodeId, Map<String, String> metrics, int grpcPort) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) {
             log.warn("拒绝未知节点的注册请求: {}（节点必须由管理员先创建）", nodeId);
@@ -70,11 +70,50 @@ public class EdgeNodeRegistry {
             return false;
         }
 
+        if (grpcPort > 0) {
+            updateNodeGrpcAddress(node, grpcPort);
+        }
+
         node.lastHeartbeat = OffsetDateTime.now(java.time.ZoneOffset.UTC);
         node.metrics = metrics;
         node.status = "ONLINE";
         log.debug("节点 {} 心跳更新成功", nodeId);
         return true;
+    }
+
+    private void updateNodeGrpcAddress(EdgeNode node, int grpcPort) {
+        String host = extractHostFromAddress(node.grpcAddress);
+        if (host == null) {
+            host = extractHostFromAddress(node.address);
+        }
+        if (host == null) {
+            log.warn("无法从现有地址提取主机名，跳过节点 {} 的 gRPC 端口更新", node.nodeId);
+            return;
+        }
+
+        String newAddress = host + ":" + grpcPort;
+        if (!newAddress.equals(node.grpcAddress)) {
+            node.grpcAddress = newAddress;
+            log.info("Edge node {} gRPC port updated: {}", node.nodeId, newAddress);
+        }
+    }
+
+    private String extractHostFromAddress(String address) {
+        if (address == null || address.isEmpty()) {
+            return null;
+        }
+
+        int lastColon = address.lastIndexOf(':');
+        if (lastColon < 0) {
+            return address;
+        }
+
+        String host = address.substring(0, lastColon);
+        if (host.isEmpty()) {
+            return null;
+        }
+
+        return host;
     }
 
     public List<EdgeNode> getAllNodes() {

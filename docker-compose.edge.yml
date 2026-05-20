@@ -10,8 +10,6 @@ services:
       POSTGRES_USER: ${EDGE_DB_USER}
       POSTGRES_PASSWORD: ${EDGE_DB_PASSWORD}
       POSTGRES_DB: ${EDGE_DB_NAME}
-    ports:
-      - "${EDGE_DB_PORT}:5432"
     volumes:
       - edge-db-data:/var/lib/postgresql
     healthcheck:
@@ -27,8 +25,6 @@ services:
     restart: unless-stopped
     networks:
       - app-network
-    ports:
-      - "${EDGE_REDIS_PORT}:6379"
     volumes:
       - edge-redis-data:/data
     healthcheck:
@@ -46,6 +42,9 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    ports:
+      - "${EDGE_GRPC_PORT:-9001}:${EDGE_GRPC_PORT:-9001}"
+      - "8081:8081"
     env_file:
       - .env.edge
     environment:
@@ -54,29 +53,27 @@ services:
       - QUARKUS_DATASOURCE_PASSWORD=${EDGE_DB_PASSWORD}
       - QUARKUS_REDIS_HOSTS=${EDGE_REDIS_URL}
       - QUARKUS_HTTP_PORT=8081
-      - QUARKUS_GRPC_SERVER_PORT=9001
-      # 证书路径环境变量：容器工作目录是 /app/，certs/ 挂载后即 /app/certs/
-      - EDGE_CERT_PATH=${EDGE_CERT_PATH:-certs/server.crt}
-      - EDGE_KEY_PATH=${EDGE_KEY_PATH:-certs/server.key}
-      - CA_CERT_PATH=${CA_CERT_PATH:-certs/ca.crt}
+      - QUARKUS_GRPC_SERVER_PORT=${EDGE_GRPC_PORT:-9001}
+      - EDGE_NODE_CONNECTION_TYPE=${EDGE_CONNECTION_TYPE:-ACTIVE_POLL}
+      # 证书路径 (使用 QUARKUS_ 环境变量直接覆盖，防止原生镜像构建时默认值被烘焙导致运行期不生效)
+      - QUARKUS_GRPC_SERVER_PLAIN_TEXT=false
+      - QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=certs/ca/server.crt
+      - QUARKUS_GRPC_SERVER_SSL_KEY=certs/ca/server.key
+      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=certs/ca/client.crt
+      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=certs/ca/client.key
+      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=certs/ca/ca.crt
     volumes:
-      # 把宿主机 certs/ 目录挂载到容器 /work/certs/，与 application.properties 中默认相对路径对齐
-      - ./certs:/work/certs:ro
-    ports:
-      - "${EDGE_APP_HTTP_PORT}:8081"
-      - "${EDGE_APP_GRPC_PORT}:9001"
+      - ./certs:/work/certs
     depends_on:
       edge-db:
         condition: service_healthy
       edge-redis:
         condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+
 
 networks:
   app-network:
-    name: windblog_quarkus_app-network
-    external: true
+    driver: bridge
 
 volumes:
   edge-db-data:

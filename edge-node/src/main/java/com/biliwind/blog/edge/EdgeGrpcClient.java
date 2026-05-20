@@ -3,6 +3,7 @@ package com.biliwind.blog.edge;
 import io.quarkus.grpc.GrpcClient;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,19 +24,25 @@ public class EdgeGrpcClient {
     @ConfigProperty(name = "edge.node.connection.type", defaultValue = "HEARTBEAT")
     String connectionType;
 
+    @Inject
+    EdgeGrpcPortProvider portProvider;
+
     @Scheduled(every = "30s")
     void sendHeartbeat() {
         if ("ACTIVE_POLL".equalsIgnoreCase(connectionType)) {
-            // 在主动轮询模式下，从节点不主动发送心跳，等待主节点连接
             return;
         }
 
         log.info("Sending heartbeat for node {} in region {}", nodeId, region);
 
+        int port = portProvider.getGrpcPort();
+        log.info("Reporting gRPC port: {}", port);
+
         EdgeServiceProto.HeartbeatRequest request = EdgeServiceProto.HeartbeatRequest.newBuilder()
                 .setNodeId(nodeId)
                 .setRegion(region)
                 .setTimestamp(System.currentTimeMillis())
+                .setGrpcPort(port)
                 .putAllMetrics(getMetrics())
                 .build();
 
@@ -64,7 +71,6 @@ public class EdgeGrpcClient {
     }
 
     public java.util.Map<String, String> getMetrics() {
-        // TODO: 实现真实指标采集
         return java.util.Map.of(
                 "uptime", String.valueOf(System.currentTimeMillis()),
                 "os", System.getProperty("os.name")

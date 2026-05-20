@@ -60,7 +60,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                     .build());
         }
 
-        boolean accepted = registry.updateHeartbeat(authenticatedNodeId, request.getMetricsMap());
+        boolean accepted = registry.updateHeartbeat(authenticatedNodeId, request.getMetricsMap(), request.getGrpcPort());
 
         StorageConfigResponse config = StorageConfigResponse.newBuilder().build();
         if (accepted) {

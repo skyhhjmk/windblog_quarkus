@@ -94,7 +94,6 @@ public class DeploymentPackageService {
         if (mainHost == null || mainHost.isEmpty()) {
             mainHost = "host.docker.internal";
         }
-        // 提取主机名，不带端口
         String hostOnly = mainHost;
         int colonIndex = mainHost.lastIndexOf(":");
         if (colonIndex > 0) {
@@ -102,37 +101,28 @@ public class DeploymentPackageService {
         }
         sb.append("MAIN_NODE_GRPC_HOST=").append(hostOnly).append("\n");
         sb.append("MAIN_NODE_GRPC_PORT=9000\n");
-        sb.append("EDGE_CERT_PATH=/work/certs/server.crt\n");
-        sb.append("EDGE_KEY_PATH=/work/certs/server.key\n");
-        sb.append("CA_CERT_PATH=/work/certs/ca.crt\n");
-        sb.append("EDGE_BACKUP_CERT_PATH=/work/certs/backup.crt\n");
-        sb.append("EDGE_BACKUP_KEY_PATH=/work/certs/backup.key\n");
+
+        int grpcPort = 9001;
+        if (node.edgeGrpcPort != null) {
+            grpcPort = node.edgeGrpcPort.intValue();
+        }
+        sb.append("EDGE_GRPC_PORT=").append(grpcPort).append("\n");
+
         sb.append("EDGE_CONNECTION_TYPE=").append(node.connectionType.name()).append("\n");
 
         int dbPort = generateRandomHighPort();
         int redisPort = generateRandomHighPort();
         int httpPort = generateRandomHighPort();
 
-        // 数据库配置
         sb.append("EDGE_DB_USER=windblog\n");
         sb.append("EDGE_DB_PASSWORD=windblog_edge_pwd\n");
         sb.append("EDGE_DB_NAME=windblog_edge\n");
-        sb.append("EDGE_DB_PORT=").append(dbPort).append("\n");
         sb.append("EDGE_DATASOURCE_URL=jdbc:postgresql://edge-db:5432/windblog_edge\n");
 
-        // Redis 缓存配置
-        sb.append("EDGE_REDIS_PORT=").append(redisPort).append("\n");
         sb.append("EDGE_REDIS_URL=redis://edge-redis:6379\n");
 
-        // 外部暴露端口配置
-        int grpcPort = 9001;
-        if (node.edgeGrpcPort != null) {
-            grpcPort = node.edgeGrpcPort.intValue();
-        }
         sb.append("EDGE_APP_HTTP_PORT=").append(httpPort).append("\n");
-        sb.append("EDGE_APP_GRPC_PORT=").append(grpcPort).append("\n");
 
-        // 共享 JWT 密钥及主博客地址配置
         sb.append("USER_JWT_SECRET=").append(this.userJwtSecret).append("\n");
         sb.append("USER_JWT_ISSUER=").append(this.userJwtIssuer).append("\n");
         sb.append("BLOG_URL=").append(this.blogUrl).append("\n");
@@ -146,17 +136,16 @@ public class DeploymentPackageService {
         StringBuilder sb = new StringBuilder();
         sb.append("services:\n");
 
-        // 1. 边缘节点专用数据库容器
         sb.append("  edge-db:\n");
         sb.append("    container_name: ").append(containerPrefix).append("-db\n");
         sb.append("    image: postgres:18\n");
         sb.append("    restart: unless-stopped\n");
+        sb.append("    networks:\n");
+        sb.append("      - app-network\n");
         sb.append("    environment:\n");
         sb.append("      POSTGRES_USER: ${EDGE_DB_USER}\n");
         sb.append("      POSTGRES_PASSWORD: ${EDGE_DB_PASSWORD}\n");
         sb.append("      POSTGRES_DB: ${EDGE_DB_NAME}\n");
-        sb.append("    ports:\n");
-        sb.append("      - \"${EDGE_DB_PORT}:5432\"\n");
         sb.append("    volumes:\n");
         sb.append("      - edge-db-data-").append(node.nodeId).append(":/var/lib/postgresql\n");
         sb.append("    healthcheck:\n");
@@ -166,13 +155,12 @@ public class DeploymentPackageService {
         sb.append("      retries: 5\n");
         sb.append("\n");
 
-        // 2. 边缘节点专用 Redis 容器
         sb.append("  edge-redis:\n");
         sb.append("    container_name: ").append(containerPrefix).append("-redis\n");
         sb.append("    image: redis:8-alpine\n");
         sb.append("    restart: unless-stopped\n");
-        sb.append("    ports:\n");
-        sb.append("      - \"${EDGE_REDIS_PORT}:6379\"\n");
+        sb.append("    networks:\n");
+        sb.append("      - app-network\n");
         sb.append("    volumes:\n");
         sb.append("      - edge-redis-data-").append(node.nodeId).append(":/data\n");
         sb.append("    healthcheck:\n");
@@ -182,14 +170,17 @@ public class DeploymentPackageService {
         sb.append("      retries: 5\n");
         sb.append("\n");
 
-        // 3. 边缘节点应用容器
         sb.append("  edge-node:\n");
         sb.append("    container_name: ").append(containerPrefix).append("-node\n");
         sb.append("    image: biliwind/windblog-edge-node:latest\n");
         sb.append("    restart: unless-stopped\n");
+        sb.append("    networks:\n");
+        sb.append("      - app-network\n");
+        sb.append("    ports:\n");
+        sb.append("      - \"${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\"\n");
+        sb.append("      - \"${EDGE_APP_HTTP_PORT}:8081\"\n");
         sb.append("    volumes:\n");
-        // 将实际证书文件目录挂载到容器内相对路径 certs/，与 application.properties 中的默认相对路径对齐
-        sb.append("      - ./certs:/work/certs:ro\n");
+        sb.append("      - ./certs:/work/certs\n");
         sb.append("    env_file:\n");
         sb.append("      - .env\n");
         sb.append("    environment:\n");
@@ -198,33 +189,32 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_DATASOURCE_PASSWORD=${EDGE_DB_PASSWORD}\n");
         sb.append("      - QUARKUS_REDIS_HOSTS=${EDGE_REDIS_URL}\n");
         sb.append("      - QUARKUS_HTTP_PORT=8081\n");
-        sb.append("      - QUARKUS_GRPC_SERVER_PORT=9001\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_PORT=${EDGE_GRPC_PORT}\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_PLAIN_TEXT=false\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/server.crt}\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_KEY=${EDGE_KEY_PATH:-certs/server.key}\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=${EDGE_CLIENT_CERT_PATH:-certs/server.crt}\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=${EDGE_CLIENT_KEY_PATH:-certs/server.key}\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca.crt}\n");
         sb.append("      - EDGE_NODE_ID=${EDGE_NODE_ID}\n");
         sb.append("      - EDGE_NODE_REGION=${EDGE_NODE_REGION}\n");
         sb.append("      - EDGE_CONNECTION_TYPE=${EDGE_CONNECTION_TYPE}\n");
         sb.append("      - MAIN_NODE_GRPC_HOST=${MAIN_NODE_GRPC_HOST}\n");
         sb.append("      - MAIN_NODE_GRPC_PORT=${MAIN_NODE_GRPC_PORT}\n");
-        sb.append("      - EDGE_CERT_PATH=${EDGE_CERT_PATH}\n");
-        sb.append("      - EDGE_KEY_PATH=${EDGE_KEY_PATH}\n");
-        sb.append("      - CA_CERT_PATH=${CA_CERT_PATH}\n");
-        sb.append("      - EDGE_BACKUP_CERT_PATH=${EDGE_BACKUP_CERT_PATH}\n");
-        sb.append("      - EDGE_BACKUP_KEY_PATH=${EDGE_BACKUP_KEY_PATH}\n");
         sb.append("      - USER_JWT_SECRET=${USER_JWT_SECRET}\n");
         sb.append("      - USER_JWT_ISSUER=${USER_JWT_ISSUER}\n");
         sb.append("      - BLOG_URL=${BLOG_URL}\n");
-        sb.append("    ports:\n");
-        sb.append("      - \"${EDGE_APP_HTTP_PORT}:8081\"\n");
-        sb.append("      - \"${EDGE_APP_GRPC_PORT}:9001\"\n");
         sb.append("    depends_on:\n");
         sb.append("      edge-db:\n");
         sb.append("        condition: service_healthy\n");
         sb.append("      edge-redis:\n");
         sb.append("        condition: service_healthy\n");
-        sb.append("    extra_hosts:\n");
-        sb.append("      - \"host.docker.internal:host-gateway\"\n");
         sb.append("\n");
 
-        // 4. 数据卷定义
+        sb.append("networks:\n");
+        sb.append("  app-network:\n");
+        sb.append("    driver: bridge\n");
+        sb.append("\n");
         sb.append("volumes:\n");
         sb.append("  edge-db-data-").append(node.nodeId).append(":\n");
         sb.append("  edge-redis-data-").append(node.nodeId).append(":\n");
@@ -244,9 +234,11 @@ public class DeploymentPackageService {
         sb.append("区域: ").append(node.region.getCode()).append("\n");
         sb.append("gRPC 端口: ").append(node.edgeGrpcPort != null ? node.edgeGrpcPort : 9001).append("\n");
         sb.append("\n");
-        sb.append("主证书有效期: 24 小时\n");
+        sb.append("主节点签发证书有效期: 24 小时\n");
         sb.append("备用证书有效期: 72 小时\n");
         sb.append("（证书到期前主节点会自动签发新证书，需要重新部署更新）\n");
+        sb.append("注意: 从节点启动时会自动生成自签名证书到 certs/ 目录\n");
+        sb.append("       主节点签发的证书用于 mTLS 身份验证\n");
         sb.append("\n");
         sb.append("========================================\n");
         sb.append("部署步骤\n");
@@ -259,18 +251,17 @@ public class DeploymentPackageService {
         sb.append("\n");
         sb.append("3. 确保 Docker 和 Docker Compose 已安装\n");
         sb.append("\n");
-        sb.append("   【权限提示】如果是在 Linux 主机下运行且遇到证书 Permission Denied 导致容器闪退，\n");
-        sb.append("   请在解压目录下对证书分配读取权限：\n");
-        sb.append("   chmod -R 755 certs/\n");
+        sb.append("4. 本节点使用 host 网络模式，容器直接绑定宿主机端口。\n");
+        sb.append("   编辑 .env 文件确认 EDGE_GRPC_PORT 端口未被占用。\n");
         sb.append("\n");
-        sb.append("4. 如果主节点不在 host.docker.internal 上,\n");
+        sb.append("5. 如果主节点不在 host.docker.internal 上,\n");
         sb.append("   请编辑 .env 文件修改 MAIN_NODE_GRPC_HOST 为实际主节点地址\n");
         sb.append("\n");
-        sb.append("5. 启动服务:\n");
+        sb.append("6. 启动服务:\n");
         sb.append("   docker compose up -d\n");
         sb.append("\n");
-        sb.append("6. 查看日志确认正常:\n");
-        sb.append("   docker compose logs -f\n");
+        sb.append("7. 查看日志确认正常:\n");
+        sb.append("   docker compose logs -f edge-node\n");
         sb.append("\n");
         sb.append("========================================\n");
         return sb.toString();

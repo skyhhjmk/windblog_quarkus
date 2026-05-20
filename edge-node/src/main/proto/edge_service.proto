@@ -53,6 +53,7 @@ message HeartbeatRequest {
   string region = 2;
   int64 timestamp = 3;
   map<string, string> metrics = 4;
+  int32 grpc_port = 5;
 }
 
 message HeartbeatResponse {
