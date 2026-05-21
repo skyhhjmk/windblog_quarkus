@@ -30,6 +30,7 @@ message SyncDataRequest {
   string action = 1; // UPSERT, DELETE
   string entity_type = 2; // POST, TAG
   string payload = 3; // JSON 格式的数据内容
+  int64 entity_id = 4; // DELETE 可不带 payload，但必须带实体 id
 }
 
 message SyncDataResponse {

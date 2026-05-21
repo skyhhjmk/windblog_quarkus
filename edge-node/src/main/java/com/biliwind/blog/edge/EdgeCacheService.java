@@ -1,10 +1,10 @@
 package com.biliwind.blog.edge;
 
 import com.biliwind.blog.model.Media;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.redis.client.RedisClient;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +25,7 @@ public class EdgeCacheService {
     public Media getMedia(String storageKey) {
         String cacheKey = MEDIA_KEY_PREFIX + storageKey;
         try {
-            var value = redisClient.get(cacheKey);
+            io.vertx.redis.client.Response value = redisClient.get(cacheKey);
             if (value != null) {
                 return objectMapper.readValue(value.toString(), Media.class);
             }
@@ -49,7 +49,7 @@ public class EdgeCacheService {
     public com.biliwind.blog.model.Post getPost(String slug) {
         String cacheKey = POST_KEY_PREFIX + slug;
         try {
-            var value = redisClient.get(cacheKey);
+            io.vertx.redis.client.Response value = redisClient.get(cacheKey);
             if (value != null) {
                 return objectMapper.readValue(value.toString(), com.biliwind.blog.model.Post.class);
             }
@@ -76,5 +76,31 @@ public class EdgeCacheService {
 
     public void invalidatePost(String slug) {
         redisClient.del(Arrays.asList(POST_KEY_PREFIX + slug));
+    }
+
+    public void invalidatePublicListCaches() {
+        deletePattern("windblog:cache:index:page:*");
+        deletePattern("windblog:cache:sidebar:recentPosts:*");
+        deletePattern("windblog:cache:sidebar:categories:*");
+        deletePattern("windblog:cache:sidebar:tags:*");
+        redisClient.del(Arrays.asList("windblog:cache:sidebar:stats"));
+    }
+
+    private void deletePattern(String pattern) {
+        try {
+            io.vertx.redis.client.Response keysResponse = redisClient.keys(pattern);
+            if (keysResponse == null) {
+                return;
+            }
+            java.util.ArrayList<String> keys = new java.util.ArrayList<>();
+            for (int index = 0; index < keysResponse.size(); index++) {
+                keys.add(keysResponse.get(index).toString());
+            }
+            if (!keys.isEmpty()) {
+                redisClient.del(keys);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to invalidate cache pattern: {}", pattern, e);
+        }
     }
 }

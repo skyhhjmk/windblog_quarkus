@@ -18,7 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class EdgeDataSyncService {
@@ -161,7 +160,10 @@ public class EdgeDataSyncService {
 
                 // 包含标签关联
                 List<PostTag> postTags = PostTag.find("post.id = ?1", postId).list();
-                List<Tag> tags = postTags.stream().map(pt -> pt.tag).collect(Collectors.toList());
+                java.util.ArrayList<Tag> tags = new java.util.ArrayList<>();
+                for (PostTag postTag : postTags) {
+                    tags.add(postTag.tag);
+                }
                 bundle.put("tags", tags);
 
                 payload = objectMapper.writeValueAsString(bundle);
@@ -175,9 +177,13 @@ public class EdgeDataSyncService {
     }
 
     private void broadcastSync(String entityType, String action, String entityId, String payload) {
-        List<EdgeNode> nodes = registry.getAllNodes().stream()
-                .filter(n -> n.isEnabled != null && n.isEnabled)
-                .collect(Collectors.toList());
+        List<EdgeNode> allNodes = registry.getAllNodes();
+        java.util.ArrayList<EdgeNode> nodes = new java.util.ArrayList<>();
+        for (EdgeNode node : allNodes) {
+            if (node.isEnabled != null && node.isEnabled) {
+                nodes.add(node);
+            }
+        }
 
         if (nodes.isEmpty()) {
             log.debug("No active edge nodes to sync {} {}", entityType, entityId);
@@ -235,6 +241,7 @@ public class EdgeDataSyncService {
                     .setEntityType(entityType)
                     .setAction(action)
                     .setPayload(payload)
+                    .setEntityId(parseEntityId(entityId))
                     .build();
 
             return stub.syncData(request)
@@ -402,8 +409,11 @@ public class EdgeDataSyncService {
                         bundle.put("currentRevision", post.currentRevision);
                     }
                     List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
-                    List<Tag> pTags = postTags.stream().map(pt -> pt.tag).collect(Collectors.toList());
-                    bundle.put("tags", pTags);
+                    java.util.ArrayList<Tag> postTagEntities = new java.util.ArrayList<>();
+                    for (PostTag postTag : postTags) {
+                        postTagEntities.add(postTag.tag);
+                    }
+                    bundle.put("tags", postTagEntities);
 
                     String postPayload = objectMapper.writeValueAsString(bundle);
                     String action = force ? "FORCE_UPSERT" : "UPSERT";
@@ -465,6 +475,7 @@ public class EdgeDataSyncService {
                         .setEntityType(entityType)
                         .setAction(action)
                         .setPayload(payload)
+                        .setEntityId(parseEntityId(entityId))
                         .build();
 
                 Boolean result = stub.syncData(request)
@@ -517,6 +528,14 @@ public class EdgeDataSyncService {
 
     public SyncProgress getSyncStatus(String nodeId) {
         return syncProgressMap.get(nodeId);
+    }
+
+    private long parseEntityId(String entityId) {
+        try {
+            return Long.parseLong(entityId);
+        } catch (Exception e) {
+            return 0L;
+        }
     }
 
     public record SyncProgress(int total, int processed, String status, String lastError) {

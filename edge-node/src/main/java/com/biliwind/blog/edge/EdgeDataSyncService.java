@@ -25,6 +25,8 @@ public class EdgeDataSyncService {
     ObjectMapper objectMapper;
     @Inject
     com.biliwind.blog.common.helper.RsaHelper rsaHelper;
+    @Inject
+    EdgeCacheService edgeCacheService;
 
     @Transactional
     public SyncDataResponse processSync(SyncDataRequest request) {
@@ -32,17 +34,18 @@ public class EdgeDataSyncService {
             String type = request.getEntityType();
             String action = request.getAction();
             String payload = request.getPayload();
+            Long entityId = request.getEntityId();
 
             if ("TAG".equals(type)) {
-                handleTagSync(action, payload);
+                handleTagSync(action, payload, entityId);
             } else if ("POST".equals(type)) {
-                handlePostSync(action, payload);
+                handlePostSync(action, payload, entityId);
             } else if ("CATEGORY".equals(type)) {
-                handleCategorySync(action, payload);
+                handleCategorySync(action, payload, entityId);
             } else if ("LINK".equals(type)) {
-                handleLinkSync(action, payload);
+                handleLinkSync(action, payload, entityId);
             } else if ("MEDIA".equals(type)) {
-                handleMediaSync(action, payload);
+                handleMediaSync(action, payload, entityId);
             } else if ("CLUSTER_PUBLIC_KEY".equals(type)) {
                 handleClusterKeySync(payload);
             } else {
@@ -67,12 +70,13 @@ public class EdgeDataSyncService {
         }
     }
 
-    private void handleTagSync(String action, String payload) throws Exception {
-        Tag incomingTag = objectMapper.readValue(payload, Tag.class);
+    private void handleTagSync(String action, String payload, Long entityId) throws Exception {
         if ("DELETE".equals(action)) {
-            Tag.deleteById(incomingTag.id);
-            log.info("Deleted tag: {}", incomingTag.id);
+            Tag.deleteById(entityId);
+            edgeCacheService.invalidatePublicListCaches();
+            log.info("Deleted tag: {}", entityId);
         } else {
+            Tag incomingTag = objectMapper.readValue(payload, Tag.class);
             if ("FORCE_UPSERT".equals(action)) {
                 Tag.deleteById(incomingTag.id);
                 entityManager.flush();
@@ -89,24 +93,32 @@ public class EdgeDataSyncService {
                 entityManager.flush();
             }
             log.info("Synced tag: {}", incomingTag.id);
+            edgeCacheService.invalidatePublicListCaches();
         }
     }
 
-    private void handlePostSync(String action, String payload) throws Exception {
-        JsonNode root = objectMapper.readTree(payload);
-
+    private void handlePostSync(String action, String payload, Long entityId) throws Exception {
         if ("DELETE".equals(action)) {
-            Long postId;
-            if (root.has("post") && root.get("post").has("id")) {
-                postId = root.get("post").get("id").asLong();
-            } else {
-                postId = root.asLong();
+            Post existingPost = entityManager.find(Post.class, entityId);
+            String oldSlug = null;
+            if (existingPost != null) {
+                oldSlug = existingPost.slug;
             }
-            Post.deleteById(postId);
-            log.info("Deleted post: {}", postId);
+            Post.deleteById(entityId);
+            if (oldSlug != null) {
+                edgeCacheService.invalidatePost(oldSlug);
+            }
+            edgeCacheService.invalidatePublicListCaches();
+            log.info("Deleted post: {}", entityId);
         } else {
+            JsonNode root = objectMapper.readTree(payload);
             JsonNode postNode = root.get("post");
             Post incomingPost = objectMapper.treeToValue(postNode, Post.class);
+            Post oldPost = entityManager.find(Post.class, incomingPost.id);
+            String oldSlug = null;
+            if (oldPost != null) {
+                oldSlug = oldPost.slug;
+            }
 
             if ("FORCE_UPSERT".equals(action)) {
                 Post.deleteById(incomingPost.id);
@@ -207,6 +219,11 @@ public class EdgeDataSyncService {
             }
 
             log.info("Successfully synced post bundle: {}", existingPost.id);
+            if (oldSlug != null && !oldSlug.equals(existingPost.slug)) {
+                edgeCacheService.invalidatePost(oldSlug);
+            }
+            edgeCacheService.setPost(existingPost);
+            edgeCacheService.invalidatePublicListCaches();
         }
     }
 
@@ -239,12 +256,13 @@ public class EdgeDataSyncService {
         return existingCat;
     }
 
-    private void handleCategorySync(String action, String payload) throws Exception {
-        Category incoming = objectMapper.readValue(payload, Category.class);
+    private void handleCategorySync(String action, String payload, Long entityId) throws Exception {
         if ("DELETE".equals(action)) {
-            Category.deleteById(incoming.id);
-            log.info("Deleted category: {}", incoming.id);
+            Category.deleteById(entityId);
+            edgeCacheService.invalidatePublicListCaches();
+            log.info("Deleted category: {}", entityId);
         } else {
+            Category incoming = objectMapper.readValue(payload, Category.class);
             if ("FORCE_UPSERT".equals(action)) {
                 Category.deleteById(incoming.id);
                 entityManager.flush();
@@ -266,15 +284,17 @@ public class EdgeDataSyncService {
                 entityManager.merge(incoming);
             }
             log.info("Synced category: {}", incoming.id);
+            edgeCacheService.invalidatePublicListCaches();
         }
     }
 
-    private void handleLinkSync(String action, String payload) throws Exception {
-        Link incoming = objectMapper.readValue(payload, Link.class);
+    private void handleLinkSync(String action, String payload, Long entityId) throws Exception {
         if ("DELETE".equals(action)) {
-            Link.deleteById(incoming.id);
-            log.info("Deleted link: {}", incoming.id);
+            Link.deleteById(entityId);
+            edgeCacheService.invalidatePublicListCaches();
+            log.info("Deleted link: {}", entityId);
         } else {
+            Link incoming = objectMapper.readValue(payload, Link.class);
             if ("FORCE_UPSERT".equals(action)) {
                 Link.deleteById(incoming.id);
                 entityManager.flush();
@@ -306,15 +326,29 @@ public class EdgeDataSyncService {
                 entityManager.merge(incoming);
             }
             log.info("Synced link: {}", incoming.id);
+            edgeCacheService.invalidatePublicListCaches();
         }
     }
 
-    private void handleMediaSync(String action, String payload) throws Exception {
-        Media incoming = objectMapper.readValue(payload, Media.class);
+    private void handleMediaSync(String action, String payload, Long entityId) throws Exception {
         if ("DELETE".equals(action)) {
-            Media.deleteById(incoming.id);
-            log.info("Deleted media: {}", incoming.id);
+            Media existingMedia = entityManager.find(Media.class, entityId);
+            String oldStorageKey = null;
+            if (existingMedia != null) {
+                oldStorageKey = existingMedia.storageKey;
+            }
+            Media.deleteById(entityId);
+            if (oldStorageKey != null) {
+                edgeCacheService.invalidateMedia(oldStorageKey);
+            }
+            log.info("Deleted media: {}", entityId);
         } else {
+            Media incoming = objectMapper.readValue(payload, Media.class);
+            Media oldMedia = entityManager.find(Media.class, incoming.id);
+            String oldStorageKey = null;
+            if (oldMedia != null) {
+                oldStorageKey = oldMedia.storageKey;
+            }
             if ("FORCE_UPSERT".equals(action)) {
                 Media.deleteById(incoming.id);
                 entityManager.flush();
@@ -344,6 +378,11 @@ public class EdgeDataSyncService {
                 entityManager.merge(incoming);
             }
             log.info("Synced media: {}", incoming.id);
+            if (oldStorageKey != null && !oldStorageKey.equals(incoming.storageKey)) {
+                edgeCacheService.invalidateMedia(oldStorageKey);
+            }
+            Media syncedMedia = entityManager.find(Media.class, incoming.id);
+            edgeCacheService.setMedia(syncedMedia);
         }
     }
 
@@ -352,4 +391,3 @@ public class EdgeDataSyncService {
         rsaHelper.setClusterPublicKey(payload);
     }
 }
-

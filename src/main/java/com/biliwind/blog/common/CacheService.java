@@ -124,6 +124,8 @@ public class CacheService {
         public static final String SIDEBAR_TAGS = "sidebar:tags:";
         public static final String SIDEBAR_STATS = "sidebar:stats";
         public static final String INDEX_PAGE_PREFIX = "index:page:";
+        public static final String POST_META_PREFIX = "post:meta:";
+        public static final String MEDIA_META_PREFIX = "media:meta:";
         
         public static final String ALL_CATEGORIES = "categories:all";
         public static final String ALL_TAGS = "tags:all";
@@ -145,6 +147,14 @@ public class CacheService {
 
         public static String tags(String lang) {
             return SIDEBAR_TAGS + lang;
+        }
+
+        public static String postMeta(String slug) {
+            return POST_META_PREFIX + slug;
+        }
+
+        public static String mediaMeta(String storageKey) {
+            return MEDIA_META_PREFIX + storageKey;
         }
     }
 }
