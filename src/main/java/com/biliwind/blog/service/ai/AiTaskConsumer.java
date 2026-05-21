@@ -6,6 +6,7 @@ import io.smallrye.reactive.messaging.rabbitmq.IncomingRabbitMQMetadata;
 import io.vertx.core.json.JsonObject;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
@@ -64,6 +65,7 @@ public class AiTaskConsumer {
      */
     @Incoming("ai-summary-tasks-in")
     @Blocking
+    @ActivateRequestContext
     public java.util.concurrent.CompletionStage<Void> consume(Message<JsonObject> message) {
         log.info("{} 收到消息", MQ_TAG);
 
@@ -108,6 +110,7 @@ public class AiTaskConsumer {
 
     @Incoming("ai-audit-tasks-in")
     @Blocking
+    @ActivateRequestContext
     public java.util.concurrent.CompletionStage<Void> consumeAudit(Message<JsonObject> message) {
         log.info("{} 收到审核消息", MQ_TAG);
 
