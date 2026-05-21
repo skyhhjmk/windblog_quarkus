@@ -141,7 +141,7 @@ public class SearchController {
         if ("all".equals(type) || "post".equals(type)) {
             String currentRegion = regionContext.getCurrentRegion().getCode();
             List<Post> posts = Post.find(
-                    "status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+                    "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
                     PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%"
             ).list();
             posts.stream()
@@ -285,7 +285,7 @@ public class SearchController {
             description = "Tag archive.";
         }
 
-        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, PostStatus.PUBLISHED);
+        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null and post.visibility = 0 and post.publishedRevision is not null", tag.id, PostStatus.PUBLISHED);
         return new SearchHit(
                 "tag",
                 "Tag",

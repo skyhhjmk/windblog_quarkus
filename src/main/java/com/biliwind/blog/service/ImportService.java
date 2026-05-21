@@ -441,6 +441,9 @@ public class ImportService {
                         rev.persist();
 
                         p.currentRevision = rev;
+                        if (p.status == PostStatus.PUBLISHED) {
+                            p.publishedRevision = rev;
+                        }
                         p.persist();
                     }
                 });

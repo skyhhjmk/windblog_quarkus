@@ -35,7 +35,9 @@ public class SidebarTemplateData {
             return cached.get();
         }
 
-        List<Post> posts = Post.find("deletedAt is null and visibility = 0", Sort.descending("publishedAt").and("createdAt").descending())
+        List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
+                        Sort.descending("publishedAt").and("createdAt").descending(),
+                        com.biliwind.blog.model.PostStatus.PUBLISHED)
                 .page(0, limit)
                 .list();
 
@@ -104,7 +106,8 @@ public class SidebarTemplateData {
             return cached.get();
         }
 
-        long postCount = Post.count("deletedAt is null and visibility = 0");
+        long postCount = Post.count("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
+                com.biliwind.blog.model.PostStatus.PUBLISHED);
         long categoryCount = Category.count();
         long tagCount = Tag.count();
         long commentCount = Comment.count();

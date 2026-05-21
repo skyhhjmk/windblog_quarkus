@@ -84,8 +84,8 @@ public class PostController {
 
         // 核心过滤逻辑: visibilityRegions 为空或者是包含当前区域
         Post postEntity = Post.find(
-                "slug = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
-                slug, "%\"" + currentRegion + "\"%"
+                "slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?3)",
+                slug, PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%"
         ).firstResult();
 
         if (postEntity == null) {
@@ -123,7 +123,7 @@ public class PostController {
                 LanguageHelper.resolveLocalizedValue(postEntity.title, resolvedLang);
 
         String localizedContent =
-                resolveContent(postEntity.currentRevision, resolvedLang);
+                resolveContent(postEntity.publishedRevision, resolvedLang);
 
         // Check if user is logged in
         Long currentUserId = resolveUserIdFromCookie(httpHeaders);

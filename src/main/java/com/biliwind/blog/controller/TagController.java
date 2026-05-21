@@ -107,7 +107,7 @@ public class TagController {
         String tagDescription = resolveTagDescription(entity, lang);
 
         String currentRegion = regionContext.getCurrentRegion().getCode();
-        var query = Post.find("status = ?1 and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2) and id in "
+        var query = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2) and id in "
                         + "(select pt.post.id from PostTag pt where pt.tag = ?3) order by publishedAt desc nulls last, createdAt desc",
                 PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%", entity);
 
@@ -140,7 +140,7 @@ public class TagController {
     private TagListItem toTagListItem(Tag tag, String lang) {
         String name = resolveTagName(tag, lang);
         String description = resolveTagDescription(tag, lang);
-        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null", tag.id, PostStatus.PUBLISHED);
+        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null and post.visibility = 0 and post.publishedRevision is not null", tag.id, PostStatus.PUBLISHED);
         return new TagListItem(tag.slug, name, description, postCount, formatDate(tag.createdAt));
     }
 

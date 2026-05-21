@@ -148,7 +148,8 @@ public class AdminPostApiController {
         post.title = request.title();
         post.summary = request.summary();
         post.aiSummary = request.aiSummary();
-        post.status = resolveStatus(request.status(), PostStatus.DRAFT);
+        PostStatus requestedStatus = resolveStatus(request.status(), PostStatus.DRAFT);
+        post.status = PostStatus.DRAFT;
         post.visibility = request.visibility() == null ? 0 : request.visibility();
         post.password = resolveCreatedPassword(post.visibility, request.password());
         post.seoTitle = request.seoTitle();
@@ -208,8 +209,8 @@ public class AdminPostApiController {
             }
         }
 
-        if (post.status == PostStatus.PUBLISHED) {
-            post.publishedAt = now;
+        if (requestedStatus == PostStatus.PUBLISHED) {
+            publishRevision(post, revision, now);
         }
 
         esSyncEvent.fire(new PostSyncedEvent(post.id));
@@ -279,14 +280,31 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "409", description = "内容相同")
     public AdminPostDetail publish(@PathParam("id") Long id) {
         Post post = mustFindPost(id);
-        if (post.status == PostStatus.PUBLISHED) {
+        if (post.currentRevision == null) {
+            throw badRequest("文章暂无草稿内容");
+        }
+        if (post.status == PostStatus.PUBLISHED && sameRevision(post.publishedRevision, post.currentRevision)) {
             throw conflict("内容相同");
         }
-        post.status = PostStatus.PUBLISHED;
-        if (post.publishedAt == null) {
-            post.publishedAt = OffsetDateTime.now();
+        publishRevision(post, post.currentRevision, OffsetDateTime.now());
+        esSyncEvent.fire(new PostSyncedEvent(post.id));
+        return toDetail(post);
+    }
+
+    @POST
+    @Path("/{id}/revisions/{revisionNumber}/publish")
+    @Transactional
+    @Operation(summary = "发布指定文章版本")
+    @APIResponse(responseCode = "200", description = "发布成功")
+    @APIResponse(responseCode = "404", description = "文章或版本不存在")
+    @APIResponse(responseCode = "409", description = "内容相同")
+    public AdminPostDetail publishRevision(@PathParam("id") Long id, @PathParam("revisionNumber") int revisionNumber) {
+        Post post = mustFindPost(id);
+        PostRevision revision = findRevisionOrThrow(id, revisionNumber);
+        if (post.status == PostStatus.PUBLISHED && sameRevision(post.publishedRevision, revision)) {
+            throw conflict("内容相同");
         }
-        post.updatedAt = OffsetDateTime.now();
+        publishRevision(post, revision, OffsetDateTime.now());
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         return toDetail(post);
     }
@@ -383,6 +401,8 @@ public class AdminPostApiController {
                 post.user == null ? null : post.user.username,
                 post.category == null ? null : post.category.id,
                 tagIds,
+                post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
+                post.publishedRevision != null,
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt);
@@ -417,6 +437,8 @@ public class AdminPostApiController {
                 post.category == null ? null : post.category.id,
                 tagIds,
                 post.visibilityRegions,
+                post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
+                post.publishedRevision != null,
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt);
@@ -586,8 +608,8 @@ public class AdminPostApiController {
             if (!Objects.equals(post.status, nextStatus)) {
                 post.status = nextStatus;
                 changed = true;
-                if (nextStatus == PostStatus.PUBLISHED && post.publishedAt == null) {
-                    post.publishedAt = OffsetDateTime.now();
+                if (nextStatus != PostStatus.PUBLISHED) {
+                    post.publishedRevision = null;
                 }
             }
         }
@@ -706,6 +728,8 @@ public class AdminPostApiController {
                 post.category == null ? null : post.category.id,
                 tagIds,
                 post.visibilityRegions,
+                post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
+                post.publishedRevision != null,
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt);
@@ -719,14 +743,7 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "404", description = "文章或版本不存在")
     public AdminPostDetail activateRevision(@PathParam("id") Long id, @PathParam("revisionNumber") int revisionNumber) {
         Post post = mustFindPost(id);
-        PostRevision revision = PostRevision.find(
-                "post.id = ?1 and revisionNumber = ?2",
-                id,
-                revisionNumber
-        ).firstResult();
-        if (revision == null) {
-            throw new NotFoundException("版本不存在");
-        }
+        PostRevision revision = findRevisionOrThrow(id, revisionNumber);
 
         User operator = mustFindOperator();
         OffsetDateTime now = OffsetDateTime.now();
@@ -760,7 +777,49 @@ public class AdminPostApiController {
                 revision.editorType,
                 revision.createdBy == null ? null : revision.createdBy.id,
                 revision.createdBy == null ? "" : revision.createdBy.username,
+                isPublishedRevision(revision),
                 revision.createdAt
         );
+    }
+
+    private PostRevision findRevisionOrThrow(Long postId, int revisionNumber) {
+        PostRevision revision = PostRevision.find(
+                "post.id = ?1 and revisionNumber = ?2",
+                postId,
+                revisionNumber
+        ).firstResult();
+        if (revision == null) {
+            throw new NotFoundException("版本不存在");
+        }
+        return revision;
+    }
+
+    private void publishRevision(Post post, PostRevision revision, OffsetDateTime now) {
+        post.publishedRevision = revision;
+        post.status = PostStatus.PUBLISHED;
+        if (post.publishedAt == null) {
+            post.publishedAt = now;
+        }
+        post.updatedAt = now;
+    }
+
+    private boolean sameRevision(PostRevision leftRevision, PostRevision rightRevision) {
+        if (leftRevision == null || rightRevision == null) {
+            return false;
+        }
+        if (leftRevision.id == null || rightRevision.id == null) {
+            return false;
+        }
+        return leftRevision.id.equals(rightRevision.id);
+    }
+
+    private Boolean isPublishedRevision(PostRevision revision) {
+        if (revision == null || revision.post == null || revision.post.publishedRevision == null) {
+            return false;
+        }
+        if (revision.id == null || revision.post.publishedRevision.id == null) {
+            return false;
+        }
+        return revision.id.equals(revision.post.publishedRevision.id);
     }
 }

@@ -58,7 +58,11 @@ public class UserPostContentController {
     public Response getPostContent(@PathParam("postId") Long postId, @Context HttpHeaders headers) {
         Long userId = resolveUserId(headers);
 
-        Post post = Post.findById(postId);
+        Post post = Post.find(
+                "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                postId,
+                com.biliwind.blog.model.PostStatus.PUBLISHED
+        ).firstResult();
         if (post == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .entity(Map.of("success", false, "message", "文章不存在"))
@@ -78,7 +82,7 @@ public class UserPostContentController {
         }
 
         String resolvedLang = languageContext.getLang();
-        String localizedContent = resolveContent(post.currentRevision, resolvedLang);
+        String localizedContent = resolveContent(post.publishedRevision, resolvedLang);
         localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postId, postPrice, userId);
 
         // 全站买断判定
@@ -127,7 +131,11 @@ public class UserPostContentController {
             return Response.ok(Map.of("success", true, "data", Map.of("blocks", Map.of(), "hasPurchased", false))).build();
         }
 
-        Post post = Post.findById(postId);
+        Post post = Post.find(
+                "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                postId,
+                com.biliwind.blog.model.PostStatus.PUBLISHED
+        ).firstResult();
         if (post == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .entity(Map.of("success", false, "message", "文章不存在"))
@@ -139,7 +147,7 @@ public class UserPostContentController {
         long maxPointsPaid = postAccessService.getMaxPointsPaid(userId, postId);
 
         String resolvedLang = languageContext.getLang();
-        String localizedContent = resolveContent(post.currentRevision, resolvedLang);
+        String localizedContent = resolveContent(post.publishedRevision, resolvedLang);
 
         java.util.Map<String, String> unlockedBlocks = postAccessService.getUnlockedBlocks(localizedContent, maxPointsPaid, isAuthor, postId, postPrice, userId);
 

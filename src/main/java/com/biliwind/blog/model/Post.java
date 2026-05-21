@@ -47,10 +47,19 @@ public class Post extends PanacheEntityBase {
     @Column(name = "ai_summary_status", nullable = false)
     public Short aiSummaryStatus = 0;
 
-    /** 当前生效版本 */
+    /**
+     * 后台当前编辑草稿版本
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "current_revision_id")
     public PostRevision currentRevision;
+
+    /**
+     * 前台公开展示版本
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "published_revision_id")
+    public PostRevision publishedRevision;
 
     /** 文章状态：参考 `PostStatus` 枚举 */
     @Column(nullable = false)

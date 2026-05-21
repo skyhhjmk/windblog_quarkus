@@ -106,7 +106,7 @@ public class CategoryController {
         List<CategoryListItem> childItems = children.stream().map(c -> toCategoryListItem(c, lang)).toList();
 
         String currentRegion = regionContext.getCurrentRegion().getCode();
-        String queryStr = "category = ?1 and status = ?2 and deletedAt is null "
+        String queryStr = "category = ?1 and status = ?2 and deletedAt is null and visibility = 0 and publishedRevision is not null "
                 + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3) "
                 + "order by publishedAt desc nulls last, createdAt desc";
         PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%");

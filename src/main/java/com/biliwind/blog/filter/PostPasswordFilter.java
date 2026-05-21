@@ -51,7 +51,10 @@ public class PostPasswordFilter implements ContainerRequestFilter {
             return;
         }
 
-        Post post = Post.find("slug = ?1 and deletedAt is null", slug)
+        Post post = Post.find(
+                        "slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                        slug,
+                        com.biliwind.blog.model.PostStatus.PUBLISHED)
                 .firstResult();
 
         if (post == null) {

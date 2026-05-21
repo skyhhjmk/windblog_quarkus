@@ -96,7 +96,7 @@ public class IndexController {
             );
 
             PanacheQuery<Post> postQuery = Post.find(
-                    "status = :status and deletedAt is null and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern) order by publishedAt desc nulls last, createdAt desc",
+                    "status = :status and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern) order by publishedAt desc nulls last, createdAt desc",
                     parameters
             );
 

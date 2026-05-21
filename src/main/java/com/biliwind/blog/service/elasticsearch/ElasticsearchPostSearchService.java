@@ -318,8 +318,9 @@ public class ElasticsearchPostSearchService {
 
         log.infof("Indexing article: %d - %s", post.id, post.slug);
 
-        if (post.status != PostStatus.PUBLISHED) {
-            log.debugf("Skipping unpublished article index: %d", post.id);
+        if (!canIndexPost(post)) {
+            log.debugf("Skipping non-public article index: %d", post.id);
+            deletePostIndex(post.id);
             return;
         }
 
@@ -358,10 +359,10 @@ public class ElasticsearchPostSearchService {
             document.put("updatedAt", post.updatedAt.toString());
         }
 
-        PostRevision latestRevision = PostRevision.find("post.id = ?1 order by revisionNumber desc", post.id).firstResult();
-        if (latestRevision != null) {
-            String content = latestRevision.contentMarkdown != null ?
-                    LanguageHelper.resolveLocalizedValue(latestRevision.contentMarkdown, lang) : "";
+        PostRevision publishedRevision = post.publishedRevision;
+        if (publishedRevision != null) {
+            String content = publishedRevision.contentMarkdown != null ?
+                    LanguageHelper.resolveLocalizedValue(publishedRevision.contentMarkdown, lang) : "";
             document.put("content", content);
             document.put("contentHtml", content);
             document.put("summary", defaultSummary != null ? defaultSummary : "");
@@ -748,6 +749,22 @@ public class ElasticsearchPostSearchService {
                   .replace("\n", "\\n")
                   .replace("\r", "\\r")
                   .replace("\t", "\\t");
+    }
+
+    private boolean canIndexPost(Post post) {
+        if (post == null) {
+            return false;
+        }
+        if (post.status != PostStatus.PUBLISHED) {
+            return false;
+        }
+        if (post.deletedAt != null) {
+            return false;
+        }
+        if (post.visibility != 0) {
+            return false;
+        }
+        return post.publishedRevision != null;
     }
 
     public record SearchResult(long total, List<SearchedPost> posts) {}

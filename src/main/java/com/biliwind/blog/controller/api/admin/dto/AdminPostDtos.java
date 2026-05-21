@@ -70,6 +70,8 @@ public final class AdminPostDtos {
                         String userName,
                         Long categoryId,
                         List<Long> tagIds,
+                        Integer publishedRevisionNumber,
+                        Boolean hasPublishedRevision,
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
                         OffsetDateTime updatedAt) {
@@ -101,6 +103,8 @@ public final class AdminPostDtos {
                         Long categoryId,
                         List<Long> tagIds,
                         List<String> visibilityRegions,
+                        Integer publishedRevisionNumber,
+                        Boolean hasPublishedRevision,
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
                         OffsetDateTime updatedAt) {
@@ -113,6 +117,7 @@ public final class AdminPostDtos {
             short editorType,
             Long createdBy,
             String createdByName,
+            Boolean isPublishedRevision,
             OffsetDateTime createdAt) {
     }
 

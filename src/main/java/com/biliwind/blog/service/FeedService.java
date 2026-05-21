@@ -53,7 +53,7 @@ public class FeedService {
         }
         if (summary == null || summary.isBlank()) {
             // Extract from content
-            String content = LanguageHelper.resolveLocalizedValue(post.currentRevision.contentMarkdown, lang);
+            String content = LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
             summary = extractSummary(content);
         }
 

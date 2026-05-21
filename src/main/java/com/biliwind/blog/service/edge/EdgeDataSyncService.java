@@ -145,17 +145,16 @@ public class EdgeDataSyncService {
         String action = "UPSERT";
         String payload = "{}";
 
-        if (post == null || post.deletedAt != null) {
+        if (post == null || !canSyncPostToEdge(post)) {
             action = "DELETE";
         } else {
             try {
-                // 构建包含关联数据的 Bundle
                 Map<String, Object> bundle = new HashMap<>();
                 bundle.put("post", post);
 
-                // 包含当前版本
-                if (post.currentRevision != null) {
-                    bundle.put("currentRevision", post.currentRevision);
+                if (post.publishedRevision != null) {
+                    bundle.put("currentRevision", post.publishedRevision);
+                    bundle.put("publishedRevision", post.publishedRevision);
                 }
 
                 // 包含标签关联
@@ -315,7 +314,7 @@ public class EdgeDataSyncService {
             List<Category> categories = Category.listAll();
             List<Link> links = Link.listAll();
             List<Media> mediaList = Media.listAll();
-            List<Post> posts = Post.list("deletedAt is null");
+            List<Post> posts = Post.list("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null", PostStatus.PUBLISHED);
             int total = tags.size() + categories.size() + links.size() + mediaList.size() + posts.size();
 
             syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Syncing tags..."));
@@ -405,8 +404,9 @@ public class EdgeDataSyncService {
                 try {
                     Map<String, Object> bundle = new HashMap<>();
                     bundle.put("post", post);
-                    if (post.currentRevision != null) {
-                        bundle.put("currentRevision", post.currentRevision);
+                    if (post.publishedRevision != null) {
+                        bundle.put("currentRevision", post.publishedRevision);
+                        bundle.put("publishedRevision", post.publishedRevision);
                     }
                     List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
                     java.util.ArrayList<Tag> postTagEntities = new java.util.ArrayList<>();
@@ -536,6 +536,22 @@ public class EdgeDataSyncService {
         } catch (Exception e) {
             return 0L;
         }
+    }
+
+    private boolean canSyncPostToEdge(Post post) {
+        if (post == null) {
+            return false;
+        }
+        if (post.deletedAt != null) {
+            return false;
+        }
+        if (post.status != PostStatus.PUBLISHED) {
+            return false;
+        }
+        if (post.visibility != 0) {
+            return false;
+        }
+        return post.publishedRevision != null;
     }
 
     public record SyncProgress(int total, int processed, String status, String lastError) {

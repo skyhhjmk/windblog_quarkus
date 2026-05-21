@@ -100,8 +100,8 @@ public class PostLifecycleListener {
             return;
         }
 
-        if (refreshedPost.deletedAt != null) {
-            log.debugf("文章已软删除，删除索引: %d", postId);
+        if (refreshedPost.deletedAt != null || refreshedPost.visibility != 0 || refreshedPost.publishedRevision == null) {
+            log.debugf("文章不可公开展示，删除索引: %d", postId);
             postSearchService.deletePostIndex(postId);
             return;
         }

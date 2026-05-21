@@ -184,7 +184,11 @@ public class CommentApiController {
             throw new NotFoundException("Post not found");
         }
 
-        Post post = Post.find("slug = ?1 and deletedAt is null", slug.trim()).firstResult();
+        Post post = Post.find(
+                "slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                slug.trim(),
+                com.biliwind.blog.model.PostStatus.PUBLISHED
+        ).firstResult();
         if (post == null || post.visibility == 1) {
             throw new NotFoundException("Post not found");
         }

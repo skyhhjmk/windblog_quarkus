@@ -126,7 +126,10 @@ public class AdminCategoryController {
         for (Category c : allCategories) {
             // 这里可以根据需求决定是否递归计算子分类的文章数量
             // 目前只计算直接关联该分类的文章数量
-            c.postCount = com.biliwind.blog.model.Post.count("category.id = ?1 and deletedAt is null", c.id);
+            c.postCount = com.biliwind.blog.model.Post.count(
+                    "category.id = ?1 and status = ?2 and deletedAt is null and visibility = 0 and publishedRevision is not null",
+                    c.id,
+                    com.biliwind.blog.model.PostStatus.PUBLISHED);
             c.persist();
         }
         invalidateCategoryCaches();

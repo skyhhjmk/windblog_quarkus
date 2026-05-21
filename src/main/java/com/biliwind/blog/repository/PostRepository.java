@@ -24,7 +24,7 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
     }
 
     public java.util.List<Post> findAllPublished() {
-        return list("status = :status and visibility = 0 and deletedAt is null order by publishedAt desc",
+        return list("status = :status and visibility = 0 and deletedAt is null and publishedRevision is not null order by publishedAt desc",
                 java.util.Map.of("status", com.biliwind.blog.model.PostStatus.PUBLISHED));
     }
 

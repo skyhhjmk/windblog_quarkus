@@ -318,14 +318,14 @@ public class AdminElasticsearchController {
     @APIResponse(responseCode = "200", description = "索引任务启动成功")
     public Response reindexAll() {
         try {
-            List<Post> posts = Post.list("status", com.biliwind.blog.model.PostStatus.PUBLISHED);
+            List<Post> posts = Post.list(
+                    "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
+                    com.biliwind.blog.model.PostStatus.PUBLISHED);
             int count = 0;
             for (Post post : posts) {
-                if (post.deletedAt == null) {
-                    List<String> tags = postSearchService.getPostTags(post.id);
-                    postSearchService.indexPost(post, tags);
-                    count++;
-                }
+                List<String> tags = postSearchService.getPostTags(post.id);
+                postSearchService.indexPost(post, tags);
+                count++;
             }
             return Response.ok(Map.of(
                     "success", true,

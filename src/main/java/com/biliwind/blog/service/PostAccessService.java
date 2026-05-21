@@ -1,8 +1,8 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.UserPurchaseRecord;
-import com.biliwind.blog.common.security.PasswordHasher;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
@@ -33,7 +33,9 @@ public class PostAccessService {
     PasswordHasher passwordHasher;
 
     public Post findBySlug(String slug) {
-        return Post.find("slug = ?1 and deletedAt is null", slug)
+        return Post.find("slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                        slug,
+                        com.biliwind.blog.model.PostStatus.PUBLISHED)
                 .firstResult();
     }
 
@@ -91,7 +93,8 @@ public class PostAccessService {
         if (extraPrice != null) return extraPrice;
 
         // 2. 检查内容中的短代码价格总和
-        if (post.currentRevision != null && post.currentRevision.contentMarkdown != null) {
+        com.biliwind.blog.model.PostRevision contentRevision = resolvePublicContentRevision(post);
+        if (contentRevision != null && contentRevision.contentMarkdown != null) {
             long maxPrice = 0;
             // 匹配包含 hide-text 或 hide-attachment 的标签及其内部所有属性
             java.util.regex.Pattern p = java.util.regex.Pattern.compile(
@@ -100,7 +103,7 @@ public class PostAccessService {
             );
 
             // 遍历所有语言版本，取价格总和最大的那个版本作为文章价格（避免多语言累加）
-            for (String content : post.currentRevision.contentMarkdown.values()) {
+            for (String content : contentRevision.contentMarkdown.values()) {
                 if (content != null) {
                     long currentLangTotal = 0;
                     java.util.regex.Matcher m = p.matcher(content);
@@ -188,11 +191,12 @@ public class PostAccessService {
         if (blockId == null || blockId.isBlank()) {
             throw new BadRequestException("区块不存在");
         }
-        if (post.currentRevision == null || post.currentRevision.contentMarkdown == null) {
+        com.biliwind.blog.model.PostRevision contentRevision = resolvePublicContentRevision(post);
+        if (contentRevision == null || contentRevision.contentMarkdown == null) {
             throw new BadRequestException("区块不存在");
         }
 
-        for (String content : post.currentRevision.contentMarkdown.values()) {
+        for (String content : contentRevision.contentMarkdown.values()) {
             Long blockPrice = findBlockPriceInContent(content, blockId);
             if (blockPrice != null) {
                 if (blockPrice < 0) {
@@ -477,7 +481,7 @@ public class PostAccessService {
      * 只有在管理员后台更新文章产生新的 revision 时才会自然失效（因为 revision id 变了）。
      */
     public String getCachedPreviewContent(Post post, String lang, String localizedContent, long postPrice) {
-        String revisionStr = post.currentRevision != null ? String.valueOf(post.currentRevision.id) : "0";
+        String revisionStr = post.publishedRevision != null ? String.valueOf(post.publishedRevision.id) : "0";
         String cacheKey = "post:preview:" + post.id + ":" + lang + ":" + revisionStr;
 
         java.util.Optional<String> cached = cacheService.get(cacheKey, String.class);
@@ -689,5 +693,15 @@ public class PostAccessService {
             return m.group(1) != null ? m.group(1) : m.group(2);
         }
         return null;
+    }
+
+    private com.biliwind.blog.model.PostRevision resolvePublicContentRevision(Post post) {
+        if (post == null) {
+            return null;
+        }
+        if (post.publishedRevision != null) {
+            return post.publishedRevision;
+        }
+        return post.currentRevision;
     }
 }
