@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.ImageProcessingConfig;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,18 +15,40 @@ public class VideoProcessingService {
 
     private static final Logger log = LoggerFactory.getLogger(VideoProcessingService.class);
 
+    @ConfigProperty(name = "media.upload.dir", defaultValue = "uploads")
+    String mediaUploadDir;
+
     public Path extractCoverFrame(Path videoFilePath, Path outputCoverPath) throws IOException {
         String ffmpegPath = getConfigValue("ffmpeg_path", "/usr/bin/ffmpeg");
 
-        Path ffmpegPathObj = Path.of(ffmpegPath);
-        if (!Files.exists(ffmpegPathObj) || !Files.isExecutable(ffmpegPathObj)) {
+        Path ffmpegPathObj = Path.of(ffmpegPath).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(ffmpegPathObj) || !Files.isExecutable(ffmpegPathObj)) {
             throw new IOException("FFmpeg 工具不可用: " + ffmpegPath);
         }
 
-        String command = ffmpegPath + " -ss 3 -i " + videoFilePath.toString()
-                + " -frames:v 1 -q:v 2 " + outputCoverPath.toString();
+        Path uploadRootPath = Path.of(mediaUploadDir).toAbsolutePath().normalize();
+        Path normalizedVideoFilePath = videoFilePath.toAbsolutePath().normalize();
+        Path normalizedOutputCoverPath = outputCoverPath.toAbsolutePath().normalize();
+        if (!normalizedVideoFilePath.startsWith(uploadRootPath)) {
+            throw new IOException("视频文件必须位于媒体上传目录内");
+        }
+        if (!normalizedOutputCoverPath.startsWith(uploadRootPath)) {
+            throw new IOException("封面文件必须位于媒体上传目录内");
+        }
 
-        Process process = Runtime.getRuntime().exec(command);
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                ffmpegPathObj.toString(),
+                "-ss",
+                "3",
+                "-i",
+                normalizedVideoFilePath.toString(),
+                "-frames:v",
+                "1",
+                "-q:v",
+                "2",
+                normalizedOutputCoverPath.toString()
+        );
+        Process process = processBuilder.start();
 
         try {
             boolean finished = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
@@ -44,16 +67,16 @@ public class VideoProcessingService {
             throw new IOException("FFmpeg 封面提取失败, 退出码: " + exitCode + ", 错误: " + stderr);
         }
 
-        if (!Files.exists(outputCoverPath)) {
-            throw new IOException("FFmpeg 封面提取完成但输出文件不存在: " + outputCoverPath);
+        if (!Files.exists(normalizedOutputCoverPath)) {
+            throw new IOException("FFmpeg 封面提取完成但输出文件不存在: " + normalizedOutputCoverPath);
         }
 
-        long fileSize = Files.size(outputCoverPath);
+        long fileSize = Files.size(normalizedOutputCoverPath);
         if (fileSize <= 0) {
-            throw new IOException("FFmpeg 封面提取完成但输出文件大小为0: " + outputCoverPath);
+            throw new IOException("FFmpeg 封面提取完成但输出文件大小为0: " + normalizedOutputCoverPath);
         }
 
-        return outputCoverPath;
+        return normalizedOutputCoverPath;
     }
 
     private String getConfigValue(String key, String defaultValue) {

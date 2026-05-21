@@ -48,6 +48,9 @@ public class UserController {
     @ConfigProperty(name = "user.jwt.expire-days", defaultValue = "7")
     long expireDays;
 
+    @ConfigProperty(name = "cookie.secure", defaultValue = "false")
+    boolean cookieSecure;
+
     @Inject
     @Location("user/login.html")
     Template loginTemplate;
@@ -93,7 +96,7 @@ public class UserController {
     @Path("/login")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance loginPage(@QueryParam("redirect") String redirect, @Context HttpHeaders headers) {
-        String targetRedirect = redirect != null ? redirect : "/";
+        String targetRedirect = sanitizeRedirect(redirect);
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? loginContentTemplate : loginTemplate;
         return template
@@ -111,7 +114,7 @@ public class UserController {
         if (!configManager.getBoolean("feature_toggles", "enable_registration", true)) {
             throw new ForbiddenException("注册功能暂未开放");
         }
-        String targetRedirect = redirect != null ? redirect : "/";
+        String targetRedirect = sanitizeRedirect(redirect);
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? registerContentTemplate : registerTemplate;
         return template
@@ -235,7 +238,7 @@ public class UserController {
         // 设置Cookie
         NewCookie cookie = createAuthCookie(token);
 
-        String targetUrl = redirect != null && !redirect.isBlank() ? redirect : "/";
+        String targetUrl = sanitizeRedirect(redirect);
         return Response.ok(Map.of(
                         "success", true,
                         "message", "注册成功",
@@ -284,7 +287,7 @@ public class UserController {
         boolean rememberMe = "on".equals(remember) || "true".equals(remember);
         NewCookie cookie = createAuthCookie(token, rememberMe);
 
-        String targetUrl = redirect != null && !redirect.isBlank() ? redirect : "/";
+        String targetUrl = sanitizeRedirect(redirect);
         return Response.ok(Map.of(
                         "success", true,
                         "message", "登录成功",
@@ -323,6 +326,8 @@ public class UserController {
                 .value("")
                 .path("/")
                 .maxAge(0)
+                .secure(cookieSecure)
+                .sameSite(NewCookie.SameSite.LAX)
                 .build();
 
         return Response.ok(Map.of("success", true, "message", "已登出"))
@@ -355,8 +360,28 @@ public class UserController {
                 .path("/")
                 .maxAge((int) maxAge)
                 .httpOnly(true)
-                .secure(false) // 生产环境建议改为true
+                .secure(cookieSecure)
+                .sameSite(NewCookie.SameSite.LAX)
                 .build();
+    }
+
+    private String sanitizeRedirect(String redirect) {
+        if (redirect == null || redirect.isBlank()) {
+            return "/";
+        }
+
+        String trimmedRedirect = redirect.trim();
+        if (!trimmedRedirect.startsWith("/")) {
+            return "/";
+        }
+        if (trimmedRedirect.startsWith("//")) {
+            return "/";
+        }
+        if (trimmedRedirect.contains("\\")) {
+            return "/";
+        }
+
+        return trimmedRedirect;
     }
 
     private UserProfile resolveUserFromCookie(HttpHeaders headers) {

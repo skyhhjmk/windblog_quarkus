@@ -2,7 +2,9 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.UserPurchaseRecord;
+import com.biliwind.blog.common.security.PasswordHasher;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 
 /**
@@ -12,20 +14,23 @@ import jakarta.ws.rs.BadRequestException;
 @ApplicationScoped
 public class PostAccessService {
 
-    @jakarta.inject.Inject
+    @Inject
     @io.quarkus.qute.Location("system/components/premium_card.html")
     io.quarkus.qute.Template premiumCardTemplate;
 
-    @jakarta.inject.Inject
+    @Inject
     @io.quarkus.qute.Location("system/components/premium_attachment.html")
     io.quarkus.qute.Template premiumAttachmentTemplate;
 
-    @jakarta.inject.Inject
+    @Inject
     @io.quarkus.qute.Location("system/components/store_item_card.html")
     io.quarkus.qute.Template storeItemCardTemplate;
 
-    @jakarta.inject.Inject
+    @Inject
     com.biliwind.blog.common.CacheService cacheService;
+
+    @Inject
+    PasswordHasher passwordHasher;
 
     public Post findBySlug(String slug) {
         return Post.find("slug = ?1 and deletedAt is null", slug)
@@ -47,10 +52,7 @@ public class PostAccessService {
         if (submittedPassword == null || post.password == null) {
             return false;
         }
-        return java.security.MessageDigest.isEqual(
-                submittedPassword.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                post.password.getBytes(java.nio.charset.StandardCharsets.UTF_8)
-        );
+        return passwordHasher.matches(submittedPassword, post.password);
     }
 
     /**
@@ -152,13 +154,12 @@ public class PostAccessService {
             return;
         }
 
-        // 服务端校验价格：买入全站必须使用服务端计算的实际价格，买入区块至少需要 postPrice
         long priceToPay;
         if (blockId != null) {
-            if (points != null && points < 0) {
-                throw new BadRequestException("价格不能为负数");
+            priceToPay = resolveBlockPrice(post, blockId);
+            if (points != null && points.longValue() != priceToPay) {
+                throw new BadRequestException("价格确认失败，请刷新后重试");
             }
-            priceToPay = (points != null && points > 0) ? points : postPrice;
         } else {
             priceToPay = postPrice;
         }
@@ -178,6 +179,68 @@ public class PostAccessService {
         record.targetBlockId = blockId;
         record.pointsPaid = priceToPay;
         record.persist();
+    }
+
+    public long resolveBlockPrice(Post post, String blockId) {
+        if (post == null) {
+            throw new BadRequestException("文章不存在");
+        }
+        if (blockId == null || blockId.isBlank()) {
+            throw new BadRequestException("区块不存在");
+        }
+        if (post.currentRevision == null || post.currentRevision.contentMarkdown == null) {
+            throw new BadRequestException("区块不存在");
+        }
+
+        for (String content : post.currentRevision.contentMarkdown.values()) {
+            Long blockPrice = findBlockPriceInContent(content, blockId);
+            if (blockPrice != null) {
+                if (blockPrice < 0) {
+                    throw new BadRequestException("价格不能为负数");
+                }
+                return blockPrice;
+            }
+        }
+
+        throw new BadRequestException("区块不存在");
+    }
+
+    private Long findBlockPriceInContent(String content, String targetBlockId) {
+        if (content == null || content.isBlank()) {
+            return null;
+        }
+
+        java.util.regex.Pattern blockPattern = java.util.regex.Pattern.compile(
+                "\\[\\s*(hide-text|hide-attachment)(.*?)\\](.*?)\\[\\s*/\\1\\s*\\]",
+                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
+        );
+        java.util.regex.Matcher blockMatcher = blockPattern.matcher(content);
+        while (blockMatcher.find()) {
+            String attrText = blockMatcher.group(2);
+            String blockContent = blockMatcher.group(3);
+            String explicitBlockId = extractAttribute(attrText, "id");
+            String currentBlockId = explicitBlockId;
+            if (currentBlockId == null || currentBlockId.isBlank()) {
+                currentBlockId = generateBlockId(attrText, blockContent);
+            }
+            if (targetBlockId.equals(currentBlockId)) {
+                return parseBlockPrice(attrText);
+            }
+        }
+
+        return null;
+    }
+
+    private long parseBlockPrice(String attrText) {
+        String priceText = extractAttribute(attrText, "price");
+        if (priceText == null || priceText.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(priceText);
+        } catch (NumberFormatException e) {
+            throw new BadRequestException("区块价格不合法");
+        }
     }
 
     /**

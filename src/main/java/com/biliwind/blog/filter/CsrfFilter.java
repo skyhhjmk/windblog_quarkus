@@ -14,6 +14,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +34,9 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
 
     @Inject
     CsrfTokenManager csrfTokenManager;
+
+    @ConfigProperty(name = "cookie.secure", defaultValue = "false")
+    boolean cookieSecure;
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
@@ -70,7 +74,7 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
                     .value(newToken)
                     .path("/")
                     .httpOnly(false) // 前端需要读取此 Cookie 来设置 Header
-                    .secure(false)   // 开发环境设为 false
+                    .secure(cookieSecure)
                     .sameSite(NewCookie.SameSite.LAX)
                     .build();
             responseContext.getHeaders().add("Set-Cookie", cookie);

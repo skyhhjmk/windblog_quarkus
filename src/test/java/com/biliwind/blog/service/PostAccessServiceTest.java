@@ -1,11 +1,25 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostRenderType;
+import com.biliwind.blog.model.PostRevision;
+import com.biliwind.blog.model.PostStatus;
+import com.biliwind.blog.model.User;
+import com.biliwind.blog.model.UserPurchaseRecord;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -17,6 +31,12 @@ class PostAccessServiceTest {
 
     @Inject
     PostAccessService postAccessService;
+
+    @Inject
+    PasswordHasher passwordHasher;
+
+    @Inject
+    WalletService walletService;
 
     @Test
     void shouldReturnTrueForPrivatePost() {
@@ -69,6 +89,14 @@ class PostAccessServiceTest {
     @Test
     void shouldVerifyCorrectPassword() {
         Post post = new Post();
+        post.password = passwordHasher.hash("secret123");
+
+        assertTrue(postAccessService.verifyPassword(post, "secret123"));
+    }
+
+    @Test
+    void shouldVerifyOldPlainTextPasswordBeforeMigration() {
+        Post post = new Post();
         post.password = "secret123";
 
         assertTrue(postAccessService.verifyPassword(post, "secret123"));
@@ -77,7 +105,7 @@ class PostAccessServiceTest {
     @Test
     void shouldNotVerifyIncorrectPassword() {
         Post post = new Post();
-        post.password = "secret123";
+        post.password = passwordHasher.hash("secret123");
 
         assertFalse(postAccessService.verifyPassword(post, "wrongpassword"));
     }
@@ -111,6 +139,72 @@ class PostAccessServiceTest {
         Post post = new Post();
         post.password = "";
 
-        assertTrue(postAccessService.verifyPassword(post, ""));
+        assertFalse(postAccessService.verifyPassword(post, ""));
+    }
+
+    @Test
+    @Transactional
+    void shouldRejectLowerClientPriceAndRecordServerBlockPrice() {
+        User user = createTestUser();
+        walletService.addPoints(user.id, 1000L, "TEST", "测试充值");
+        Post post = createPaidBlockPost(user);
+
+        Executable lowerPricePurchase = new Executable() {
+            @Override
+            public void execute() {
+                postAccessService.buyPost(user.id, post.id, 1L, "vip-block");
+            }
+        };
+        assertThrows(jakarta.ws.rs.BadRequestException.class, lowerPricePurchase);
+        assertFalse(postAccessService.hasPurchasedBlock(user.id, post.id, "vip-block"));
+
+        postAccessService.buyPost(user.id, post.id, 100L, "vip-block");
+
+        assertTrue(postAccessService.hasPurchasedBlock(user.id, post.id, "vip-block"));
+        UserPurchaseRecord record = UserPurchaseRecord.find(
+                "userId = ?1 and targetType = 'POST' and targetId = ?2 and targetBlockId = ?3",
+                user.id,
+                post.id,
+                "vip-block"
+        ).firstResult();
+        assertEquals(100L, record.pointsPaid);
+    }
+
+    private User createTestUser() {
+        String suffix = UUID.randomUUID().toString();
+        User user = new User();
+        user.username = "buyer-" + suffix;
+        user.email = "buyer-" + suffix + "@example.com";
+        user.password = passwordHasher.hash("password123");
+        user.status = 1;
+        user.persist();
+        return user;
+    }
+
+    private Post createPaidBlockPost(User user) {
+        OffsetDateTime now = OffsetDateTime.now();
+        Post post = new Post();
+        post.slug = "paid-post-" + UUID.randomUUID();
+        post.title = Map.of("zh-cn", "付费文章");
+        post.status = PostStatus.PUBLISHED;
+        post.visibility = 0;
+        post.renderType = PostRenderType.MARKDOWN;
+        post.user = user;
+        post.createdAt = now;
+        post.updatedAt = now;
+        post.persist();
+
+        PostRevision revision = new PostRevision();
+        revision.post = post;
+        revision.title = post.title;
+        revision.contentMarkdown = Map.of("zh-cn", "[hide-text id=vip-block price=100]secret[/hide-text]");
+        revision.editorType = 6;
+        revision.revisionNumber = 1;
+        revision.createdBy = user;
+        revision.createdAt = now;
+        revision.persist();
+
+        post.currentRevision = revision;
+        return post;
     }
 }

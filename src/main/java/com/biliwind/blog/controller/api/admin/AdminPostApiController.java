@@ -57,6 +57,9 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.service.RegionValidationService regionValidationService;
 
+    @Inject
+    com.biliwind.blog.common.security.PasswordHasher passwordHasher;
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -147,7 +150,7 @@ public class AdminPostApiController {
         post.aiSummary = request.aiSummary();
         post.status = resolveStatus(request.status(), PostStatus.DRAFT);
         post.visibility = request.visibility() == null ? 0 : request.visibility();
-        post.password = request.password();
+        post.password = resolveCreatedPassword(post.visibility, request.password());
         post.seoTitle = request.seoTitle();
         post.seoKeywords = request.seoKeywords();
         post.seoDescription = request.seoDescription();
@@ -397,7 +400,8 @@ public class AdminPostApiController {
                 post.currentRevision == null ? Map.of() : post.currentRevision.contentMarkdown,
                 statusCode(post.status),
                 post.visibility,
-                post.password,
+                null,
+                post.password != null && !post.password.isBlank(),
                 post.seoTitle,
                 post.seoKeywords,
                 post.seoDescription,
@@ -435,6 +439,43 @@ public class AdminPostApiController {
         return status == null ? PostStatus.DRAFT.getCode() : status.getCode();
     }
 
+
+    private String resolveCreatedPassword(short visibility, String requestPassword) {
+        if (visibility != 2) {
+            return null;
+        }
+        if (requestPassword == null || requestPassword.isBlank()) {
+            throw badRequest("密码文章必须设置访问密码");
+        }
+        return passwordHasher.hash(requestPassword);
+    }
+
+    private String resolveUpdatedPassword(Post post, PostUpdateRequest request) {
+        short nextVisibility = post.visibility;
+        if (request.visibility() != null) {
+            nextVisibility = request.visibility();
+        }
+
+        if (nextVisibility != 2) {
+            return null;
+        }
+
+        if (request.password() == null) {
+            if (post.password == null || post.password.isBlank()) {
+                throw badRequest("密码文章必须设置访问密码");
+            }
+            return post.password;
+        }
+
+        if (request.password().isBlank()) {
+            if (post.password == null || post.password.isBlank()) {
+                throw badRequest("密码文章必须设置访问密码");
+            }
+            return post.password;
+        }
+
+        return passwordHasher.hash(request.password());
+    }
 
 
     private boolean updatePostTags(Post post, List<Long> newTagIds) {
@@ -511,13 +552,10 @@ public class AdminPostApiController {
             post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
             changed = true;
         }
-        // 密码允许设为 null (即清除密码)
-        if (request.password() != null || (request.visibility() != null && request.visibility() != 2)) {
-            String nextPassword = (request.visibility() != null && request.visibility() != 2) ? null : request.password();
-            if (!Objects.equals(post.password, nextPassword)) {
-                post.password = nextPassword;
-                changed = true;
-            }
+        String nextPassword = resolveUpdatedPassword(post, request);
+        if (!Objects.equals(post.password, nextPassword)) {
+            post.password = nextPassword;
+            changed = true;
         }
         if (request.seoTitle() != null && !Objects.equals(post.seoTitle, request.seoTitle())) {
             post.seoTitle = request.seoTitle();
@@ -651,7 +689,8 @@ public class AdminPostApiController {
                 revision.contentMarkdown,
                 statusCode(post.status),
                 post.visibility,
-                post.password,
+                null,
+                post.password != null && !post.password.isBlank(),
                 post.seoTitle,
                 post.seoKeywords,
                 post.seoDescription,

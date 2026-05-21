@@ -3,6 +3,7 @@ package com.biliwind.blog.filter;
 import com.biliwind.blog.common.annotation.PasswordProtected;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.service.PostAccessService;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -35,6 +36,9 @@ public class PostPasswordFilter implements ContainerRequestFilter {
     @Inject
     @Location("blog/password.content.html")
     Template passwordContentTemplate;
+
+    @Inject
+    PostAccessService postAccessService;
 
     @Override
     public void filter(ContainerRequestContext ctx) throws IOException {
@@ -93,7 +97,7 @@ public class PostPasswordFilter implements ContainerRequestFilter {
             return false;
         }
 
-        return submittedPassword.equals(post.password);
+        return postAccessService.verifyPassword(post, submittedPassword);
     }
 
     private void abortWithPasswordPrompt(ContainerRequestContext ctx,

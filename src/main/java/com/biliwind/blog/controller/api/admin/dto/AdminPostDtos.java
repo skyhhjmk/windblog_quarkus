@@ -85,6 +85,7 @@ public final class AdminPostDtos {
                         Short status,
                         Short visibility,
                         String password,
+                        Boolean hasPassword,
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription,

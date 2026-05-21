@@ -106,19 +106,22 @@ public class DeploymentPackageService {
         if (node.edgeGrpcPort != null) {
             grpcPort = node.edgeGrpcPort.intValue();
         }
-        sb.append("EDGE_GRPC_PORT=").append(grpcPort).append("\n");
-
-        sb.append("EDGE_CONNECTION_TYPE=").append(node.connectionType.name()).append("\n");
-
         int dbPort = generateRandomHighPort();
         int redisPort = generateRandomHighPort();
         int httpPort = generateRandomHighPort();
 
+        sb.append("EDGE_GRPC_PORT=").append(grpcPort).append("\n");
+        sb.append("EDGE_APP_GRPC_PORT=").append(grpcPort).append("\n");
+
+        sb.append("EDGE_CONNECTION_TYPE=").append(node.connectionType.name()).append("\n");
+
         sb.append("EDGE_DB_USER=windblog\n");
         sb.append("EDGE_DB_PASSWORD=windblog_edge_pwd\n");
         sb.append("EDGE_DB_NAME=windblog_edge\n");
+        sb.append("EDGE_DB_PORT=").append(dbPort).append("\n");
         sb.append("EDGE_DATASOURCE_URL=jdbc:postgresql://edge-db:5432/windblog_edge\n");
 
+        sb.append("EDGE_REDIS_PORT=").append(redisPort).append("\n");
         sb.append("EDGE_REDIS_URL=redis://edge-redis:6379\n");
 
         sb.append("EDGE_APP_HTTP_PORT=").append(httpPort).append("\n");
@@ -148,6 +151,8 @@ public class DeploymentPackageService {
         sb.append("      POSTGRES_DB: ${EDGE_DB_NAME}\n");
         sb.append("    volumes:\n");
         sb.append("      - edge-db-data-").append(node.nodeId).append(":/var/lib/postgresql\n");
+        sb.append("    ports:\n");
+        sb.append("      - \"${EDGE_DB_PORT}:5432\"\n");
         sb.append("    healthcheck:\n");
         sb.append("      test: [\"CMD-SHELL\", \"pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB\"]\n");
         sb.append("      interval: 10s\n");
@@ -163,6 +168,8 @@ public class DeploymentPackageService {
         sb.append("      - app-network\n");
         sb.append("    volumes:\n");
         sb.append("      - edge-redis-data-").append(node.nodeId).append(":/data\n");
+        sb.append("    ports:\n");
+        sb.append("      - \"${EDGE_REDIS_PORT}:6379\"\n");
         sb.append("    healthcheck:\n");
         sb.append("      test: [\"CMD\", \"redis-cli\", \"ping\"]\n");
         sb.append("      interval: 10s\n");
@@ -254,8 +261,8 @@ public class DeploymentPackageService {
         sb.append("\n");
         sb.append("3. 确保 Docker 和 Docker Compose 已安装\n");
         sb.append("\n");
-        sb.append("4. 本节点使用 host 网络模式，容器直接绑定宿主机端口。\n");
-        sb.append("   编辑 .env 文件确认 EDGE_GRPC_PORT 端口未被占用。\n");
+        sb.append("4. 本节点使用 bridge 网络模式，docker-compose.yml 会映射数据库、Redis、HTTP 和 gRPC 端口。\n");
+        sb.append("   编辑 .env 文件确认 EDGE_DB_PORT、EDGE_REDIS_PORT、EDGE_APP_HTTP_PORT、EDGE_GRPC_PORT 未被占用。\n");
         sb.append("\n");
         sb.append("5. 如果主节点不在 host.docker.internal 上,\n");
         sb.append("   请编辑 .env 文件修改 MAIN_NODE_GRPC_HOST 为实际主节点地址\n");

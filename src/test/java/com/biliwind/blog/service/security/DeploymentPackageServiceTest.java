@@ -93,10 +93,14 @@ public class DeploymentPackageServiceTest {
         assertNotNull(dockerComposeContent);
         assertTrue(dockerComposeContent.contains("edge-db:"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-db"));
+        assertTrue(dockerComposeContent.contains("\"${EDGE_DB_PORT}:5432\""));
         assertTrue(dockerComposeContent.contains("edge-redis:"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-redis"));
+        assertTrue(dockerComposeContent.contains("\"${EDGE_REDIS_PORT}:6379\""));
         assertTrue(dockerComposeContent.contains("edge-node:"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-node"));
+        assertTrue(dockerComposeContent.contains("\"${EDGE_APP_HTTP_PORT}:8081\""));
+        assertTrue(dockerComposeContent.contains("\"${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\""));
         assertTrue(dockerComposeContent.contains("QUARKUS_DATASOURCE_JDBC_URL=${EDGE_DATASOURCE_URL}"));
         assertTrue(dockerComposeContent.contains("depends_on:"));
         assertTrue(dockerComposeContent.contains("edge-db:"));
