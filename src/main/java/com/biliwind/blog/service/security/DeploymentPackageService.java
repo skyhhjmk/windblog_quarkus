@@ -197,7 +197,8 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=${EDGE_CLIENT_CERT_PATH:-certs/server.crt}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=${EDGE_CLIENT_KEY_PATH:-certs/server.key}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca.crt}\n");
-        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_OVERRIDE_AUTHORITY=main-node\n");
+        sb.append("      - MAIN_NODE_GRPC_OVERRIDE_AUTHORITY=main-node\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS__MAIN_NODE__OVERRIDE_AUTHORITY=main-node\n");
         sb.append("      - EDGE_NODE_ID=${EDGE_NODE_ID}\n");
         sb.append("      - EDGE_NODE_REGION=${EDGE_NODE_REGION}\n");
         sb.append("      - EDGE_CONNECTION_TYPE=${EDGE_CONNECTION_TYPE}\n");

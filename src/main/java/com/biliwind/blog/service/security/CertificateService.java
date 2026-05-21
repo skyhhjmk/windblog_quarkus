@@ -5,6 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
@@ -28,6 +30,7 @@ import java.security.*;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.OffsetDateTime;
+import java.util.Base64;
 import java.util.Date;
 
 /**
@@ -156,7 +159,7 @@ public class CertificateService {
                 KeyFactory keyFactory = KeyFactory.getInstance("RSA");
                 PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(bytes);
                 PrivateKey key = keyFactory.generatePrivate(keySpec);
-                Files.writeString(file.toPath(), toPem(key));
+                Files.writeString(file.toPath(), privateKeyToPkcs8Pem(key));
                 LOGGER.info("已将二进制私钥文件 {} 转换为 PEM 格式", file.getName());
             }
         } catch (Exception e) {
@@ -206,7 +209,7 @@ public class CertificateService {
         X509CertificateHolder holder = certBuilder.build(signer);
         caCertificate = new JcaX509CertificateConverter().setProvider(PROVIDER).getCertificate(holder);
 
-        Files.write(new File(CERT_DIRECTORY + "/ca.key").toPath(), toPem(caPrivateKey).getBytes("UTF-8"));
+        Files.write(new File(CERT_DIRECTORY + "/ca.key").toPath(), privateKeyToPkcs8Pem(caPrivateKey).getBytes("UTF-8"));
         Files.write(new File(CERT_DIRECTORY + "/ca.crt").toPath(), toPem(caCertificate).getBytes("UTF-8"));
 
         LOGGER.info("已生成新的根 CA 证书");
@@ -231,11 +234,12 @@ public class CertificateService {
         Date notAfter = new Date(System.currentTimeMillis() + (long) validityHours * 60 * 60 * 1000);
 
         X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(
-                new X500Name(caCertificate.getSubjectX500Principal().getName()),
+                getCertificateSubjectName(caCertificate),
                 serial, notBefore, notAfter, subject, keyPair.getPublic());
 
         certBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
         certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
+        certBuilder.addExtension(Extension.subjectAlternativeName, false, createDnsSubjectAlternativeName(nodeId));
 
         JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
         certBuilder.addExtension(Extension.authorityKeyIdentifier, false, extUtils.createAuthorityKeyIdentifier(caCertificate));
@@ -247,7 +251,7 @@ public class CertificateService {
 
         return new GeneratedCertificate(
                 toPem(cert),
-                toPem(keyPair.getPrivate()),
+                privateKeyToPkcs8Pem(keyPair.getPrivate()),
                 toPem(caCertificate),
                 serial.toString(),
                 OffsetDateTime.now().plusHours(validityHours)
@@ -265,19 +269,41 @@ public class CertificateService {
         Date notAfter = new Date(notBefore.getTime() + 365L * 24 * 60 * 60 * 1000); // 1 year
 
         X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(
-                new X500Name(caCertificate.getSubjectX500Principal().getName()),
+                getCertificateSubjectName(caCertificate),
                 serial, notBefore, notAfter, subject, keyPair.getPublic());
 
         certBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
         certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
+        certBuilder.addExtension(Extension.subjectAlternativeName, false, createDnsSubjectAlternativeName(commonName));
 
         ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA").setProvider(PROVIDER).build(caPrivateKey);
         X509CertificateHolder holder = certBuilder.build(signer);
         X509Certificate cert = new JcaX509CertificateConverter().setProvider(PROVIDER).getCertificate(holder);
 
-        Files.write(keyFile.toPath(), toPem(keyPair.getPrivate()).getBytes("UTF-8"));
+        Files.write(keyFile.toPath(), privateKeyToPkcs8Pem(keyPair.getPrivate()).getBytes("UTF-8"));
         Files.write(certFile.toPath(), toPem(cert).getBytes("UTF-8"));
         LOGGER.info("已为 {} 生成服务器证书", commonName);
+    }
+
+    private GeneralNames createDnsSubjectAlternativeName(String dnsName) {
+        GeneralName generalName = new GeneralName(GeneralName.dNSName, dnsName);
+        return new GeneralNames(generalName);
+    }
+
+    private X500Name getCertificateSubjectName(X509Certificate certificate) {
+        return X500Name.getInstance(certificate.getSubjectX500Principal().getEncoded());
+    }
+
+    private String privateKeyToPkcs8Pem(PrivateKey privateKey) {
+        byte[] encodedPrivateKey = privateKey.getEncoded();
+        byte[] lineSeparator = "\n".getBytes(StandardCharsets.UTF_8);
+        Base64.Encoder encoder = Base64.getMimeEncoder(64, lineSeparator);
+        String encodedContent = encoder.encodeToString(encodedPrivateKey);
+        StringBuilder pemContent = new StringBuilder();
+        pemContent.append("-----BEGIN PRIVATE KEY-----\n");
+        pemContent.append(encodedContent);
+        pemContent.append("\n-----END PRIVATE KEY-----\n");
+        return pemContent.toString();
     }
 
     private String toPem(Object object) throws IOException {

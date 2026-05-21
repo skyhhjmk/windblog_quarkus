@@ -1,9 +1,12 @@
 package com.biliwind.blog.edge;
 
 import io.quarkus.grpc.GrpcClient;
+import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
+import jakarta.enterprise.inject.Instance;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,8 +18,11 @@ public class EdgeGrpcClient {
     private static final Logger log = LoggerFactory.getLogger(EdgeGrpcClient.class);
 
     private final AtomicReference<EdgeServiceProto.StorageConfigResponse> currentConfig = new AtomicReference<>();
+
+    @Inject
     @GrpcClient("main-node")
-    MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub edgeService;
+    Instance<MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub> edgeServiceInstance;
+
     @ConfigProperty(name = "edge.node.id")
     String nodeId;
     @ConfigProperty(name = "edge.node.region")
@@ -26,6 +32,14 @@ public class EdgeGrpcClient {
 
     @Inject
     EdgeGrpcPortProvider portProvider;
+
+    void onStart(@Observes StartupEvent event) {
+        log.info("Edge node runtime marker: 2026-05-21-active-poll-skip-v2");
+        log.info("Edge node connection type: {}", connectionType);
+        if ("ACTIVE_POLL".equalsIgnoreCase(connectionType)) {
+            log.info("ACTIVE_POLL mode enabled, scheduled heartbeat is disabled");
+        }
+    }
 
     @Scheduled(every = "30s")
     void sendHeartbeat() {
@@ -46,6 +60,7 @@ public class EdgeGrpcClient {
                 .putAllMetrics(getMetrics())
                 .build();
 
+        MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub edgeService = edgeServiceInstance.get();
         edgeService.heartbeat(request)
                 .subscribe().with(
                         response -> {
@@ -53,7 +68,7 @@ public class EdgeGrpcClient {
                                     response.getConfig().getNodesCount());
                             currentConfig.set(response.getConfig());
                         },
-                        error -> log.error("Failed to send heartbeat to main node: {}", error.getMessage())
+                        error -> log.error("Failed to send heartbeat to main node", error)
                 );
     }
 

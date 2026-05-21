@@ -30,8 +30,6 @@ public class GrpcChannelFactory {
         try {
             String channelTarget = resolveChannelTarget(grpcAddress);
             File caFile = new File(CERT_DIR + "/ca.crt");
-            File clientCertFile = new File(CERT_DIR + "/client.crt");
-            File clientKeyFile = new File(CERT_DIR + "/client.key");
 
             if (!caFile.exists()) {
                 LOGGER.warn("CA 证书文件缺失，回退到明文模式: {}", channelTarget);
@@ -39,12 +37,7 @@ public class GrpcChannelFactory {
             }
 
             SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient().trustManager(caFile);
-            if (clientCertFile.exists() && clientKeyFile.exists()) {
-                sslContextBuilder.keyManager(clientCertFile, clientKeyFile);
-                LOGGER.info("正在为 {} 创建加密的 gRPC 通道 (mTLS)", channelTarget);
-            } else {
-                LOGGER.warn("客户端证书文件缺失，使用仅校验服务端证书的 TLS 通道: {}", channelTarget);
-            }
+            LOGGER.info("正在为 {} 创建加密的 gRPC 通道", channelTarget);
 
             SslContext sslContext = sslContextBuilder.build();
 

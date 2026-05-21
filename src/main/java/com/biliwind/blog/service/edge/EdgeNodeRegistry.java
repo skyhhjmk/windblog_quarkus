@@ -185,11 +185,26 @@ public class EdgeNodeRegistry {
                                 },
                                 error -> {
                                     log.error("Failed to poll edge node {} at {}", node.nodeId, pollingGrpcAddress, error);
+                                    removeCachedChannel(node.nodeId);
                                 }
                         );
             } catch (Exception e) {
                 log.error("Error creating gRPC client for node {} at {}", node.nodeId, grpcAddress, e);
+                removeCachedChannel(node.nodeId);
             }
+        }
+    }
+
+    private void removeCachedChannel(String nodeId) {
+        ChannelEntry entry = channelCache.remove(nodeId);
+        if (entry == null) {
+            return;
+        }
+
+        try {
+            entry.channel.shutdownNow();
+        } catch (Exception exception) {
+            log.error("Failed to shutdown failed channel for node {}", nodeId, exception);
         }
     }
 

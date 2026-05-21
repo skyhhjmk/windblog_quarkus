@@ -203,6 +203,14 @@ public class EdgeDataSyncService {
         );
     }
 
+    private void removeCachedStub(EdgeNode node) {
+        String grpcAddress = resolveGrpcAddress(node);
+        if (grpcAddress == null || grpcAddress.isEmpty()) {
+            return;
+        }
+        stubCache.remove(grpcAddress);
+    }
+
     private void pushToNode(EdgeNode node, String entityType, String action, String entityId, String payload) {
         pushToNodeAsync(node, entityType, action, entityId, payload).subscribe().with(
                 success -> {
@@ -240,10 +248,12 @@ public class EdgeDataSyncService {
                     })
                     .onFailure().recoverWithItem(error -> {
                         log.error("Error pushing to node {}", node.nodeId, error);
+                        removeCachedStub(node);
                         return false;
                     });
         } catch (Exception e) {
             log.error("Failed to initiate sync to node {}", node.nodeId, e);
+            removeCachedStub(node);
             return Uni.createFrom().item(false);
         }
     }
@@ -468,6 +478,7 @@ public class EdgeDataSyncService {
                         })
                         .onFailure().recoverWithItem(error -> {
                             log.error("Error pushing to node {}", node.nodeId, error);
+                            removeCachedStub(node);
                             return false;
                         })
                         .await().atMost(java.time.Duration.ofSeconds(timeoutSeconds));
@@ -477,6 +488,7 @@ public class EdgeDataSyncService {
                 }
             } catch (Exception e) {
                 log.error("Failed attempt to push {} {} to node {}", entityType, entityId, node.nodeId, e);
+                removeCachedStub(node);
             }
 
             attempt = attempt + 1;

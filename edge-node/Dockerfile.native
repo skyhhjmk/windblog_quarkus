@@ -18,6 +18,7 @@ RUN chown 1001 /work \
 COPY --chown=1001:root --chmod=0755 target/*-runner /work/application
 
 EXPOSE 8081
+EXPOSE 9001
 USER 1001
 
 ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]
