@@ -177,17 +177,18 @@ public class EdgeNodeRegistry {
                         .setConfig(config)
                         .build();
 
+                String pollingGrpcAddress = grpcAddress;
                 stub.poll(request)
                         .subscribe().with(
                                 response -> {
                                     updateNodeStatus(response.getNodeId(), response.getMetricsMap());
                                 },
                                 error -> {
-                                    log.error("Failed to poll edge node {}: {}", node.nodeId, error.getMessage());
+                                    log.error("Failed to poll edge node {} at {}", node.nodeId, pollingGrpcAddress, error);
                                 }
                         );
             } catch (Exception e) {
-                log.error("Error creating gRPC client for node {}: {}", node.nodeId, e.getMessage());
+                log.error("Error creating gRPC client for node {} at {}", node.nodeId, grpcAddress, e);
             }
         }
     }

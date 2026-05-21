@@ -189,6 +189,7 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_DATASOURCE_PASSWORD=${EDGE_DB_PASSWORD}\n");
         sb.append("      - QUARKUS_REDIS_HOSTS=${EDGE_REDIS_URL}\n");
         sb.append("      - QUARKUS_HTTP_PORT=8081\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_HOST=0.0.0.0\n");
         sb.append("      - QUARKUS_GRPC_SERVER_PORT=${EDGE_GRPC_PORT}\n");
         sb.append("      - QUARKUS_GRPC_SERVER_PLAIN_TEXT=false\n");
         sb.append("      - QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/server.crt}\n");
@@ -196,6 +197,7 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=${EDGE_CLIENT_CERT_PATH:-certs/server.crt}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=${EDGE_CLIENT_KEY_PATH:-certs/server.key}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca.crt}\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_OVERRIDE_AUTHORITY=main-node\n");
         sb.append("      - EDGE_NODE_ID=${EDGE_NODE_ID}\n");
         sb.append("      - EDGE_NODE_REGION=${EDGE_NODE_REGION}\n");
         sb.append("      - EDGE_CONNECTION_TYPE=${EDGE_CONNECTION_TYPE}\n");

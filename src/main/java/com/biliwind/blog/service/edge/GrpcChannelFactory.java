@@ -4,11 +4,15 @@ import io.grpc.ManagedChannel;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 
 /**
  * gRPC 通道工厂，负责创建支持 mTLS 的安全通道。
@@ -24,29 +28,107 @@ public class GrpcChannelFactory {
      */
     public ManagedChannel createChannel(String grpcAddress, String nodeId) {
         try {
+            String channelTarget = resolveChannelTarget(grpcAddress);
             File caFile = new File(CERT_DIR + "/ca.crt");
             File clientCertFile = new File(CERT_DIR + "/client.crt");
             File clientKeyFile = new File(CERT_DIR + "/client.key");
 
-            if (!caFile.exists() || !clientCertFile.exists() || !clientKeyFile.exists()) {
-                LOGGER.warn("TLS 证书文件缺失，回退到明文模式: {}", grpcAddress);
-                return io.grpc.ManagedChannelBuilder.forTarget(grpcAddress).usePlaintext().build();
+            if (!caFile.exists()) {
+                LOGGER.warn("CA 证书文件缺失，回退到明文模式: {}", channelTarget);
+                return io.grpc.ManagedChannelBuilder.forTarget(channelTarget).usePlaintext().build();
             }
 
-            // 构建 SSL 上下文 (mTLS)
-            SslContext sslContext = GrpcSslContexts.forClient()
-                    .trustManager(caFile)
-                    .keyManager(clientCertFile, clientKeyFile)
-                    .build();
+            SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient().trustManager(caFile);
+            if (clientCertFile.exists() && clientKeyFile.exists()) {
+                sslContextBuilder.keyManager(clientCertFile, clientKeyFile);
+                LOGGER.info("正在为 {} 创建加密的 gRPC 通道 (mTLS)", channelTarget);
+            } else {
+                LOGGER.warn("客户端证书文件缺失，使用仅校验服务端证书的 TLS 通道: {}", channelTarget);
+            }
 
-            LOGGER.info("正在为 {} 创建加密的 gRPC 通道 (mTLS)", grpcAddress);
-            return NettyChannelBuilder.forTarget(grpcAddress)
+            SslContext sslContext = sslContextBuilder.build();
+
+            return NettyChannelBuilder.forTarget(channelTarget)
                     .overrideAuthority(nodeId)
                     .sslContext(sslContext)
                     .build();
         } catch (Exception e) {
-            LOGGER.error("构建加密 gRPC 通道失败: {}，回退到明文模式", e.getMessage());
-            return io.grpc.ManagedChannelBuilder.forTarget(grpcAddress).usePlaintext().build();
+            LOGGER.error("构建加密 gRPC 通道失败: {}", grpcAddress, e);
+            throw new IllegalStateException("构建加密 gRPC 通道失败: " + grpcAddress, e);
+        }
+    }
+
+    private String resolveChannelTarget(String grpcAddress) {
+        HostAndPort hostAndPort = parseHostAndPort(grpcAddress);
+        if (hostAndPort == null) {
+            return grpcAddress;
+        }
+
+        if (!isLocalAddress(hostAndPort.host)) {
+            return grpcAddress;
+        }
+
+        String loopbackTarget = "127.0.0.1:" + hostAndPort.port;
+        if (!loopbackTarget.equals(grpcAddress)) {
+            LOGGER.info("gRPC 目标地址 {} 是本机地址，改用 {} 连接", grpcAddress, loopbackTarget);
+        }
+        return loopbackTarget;
+    }
+
+    private HostAndPort parseHostAndPort(String grpcAddress) {
+        if (grpcAddress == null || grpcAddress.isEmpty()) {
+            return null;
+        }
+
+        int lastColonIndex = grpcAddress.lastIndexOf(':');
+        if (lastColonIndex <= 0) {
+            return null;
+        }
+
+        if (lastColonIndex == grpcAddress.length() - 1) {
+            return null;
+        }
+
+        String host = grpcAddress.substring(0, lastColonIndex);
+        String port = grpcAddress.substring(lastColonIndex + 1);
+        if (host.isEmpty() || port.isEmpty()) {
+            return null;
+        }
+
+        return new HostAndPort(host, port);
+    }
+
+    private boolean isLocalAddress(String host) {
+        try {
+            InetAddress targetAddress = InetAddress.getByName(host);
+            if (targetAddress.isAnyLocalAddress() || targetAddress.isLoopbackAddress()) {
+                return true;
+            }
+
+            Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+            while (networkInterfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = networkInterfaces.nextElement();
+                Enumeration<InetAddress> interfaceAddresses = networkInterface.getInetAddresses();
+                while (interfaceAddresses.hasMoreElements()) {
+                    InetAddress interfaceAddress = interfaceAddresses.nextElement();
+                    if (interfaceAddress.equals(targetAddress)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception exception) {
+            LOGGER.debug("无法判断 gRPC 目标地址是否为本机地址: {}", host, exception);
+        }
+        return false;
+    }
+
+    private static class HostAndPort {
+        final String host;
+        final String port;
+
+        HostAndPort(String host, String port) {
+            this.host = host;
+            this.port = port;
         }
     }
 }

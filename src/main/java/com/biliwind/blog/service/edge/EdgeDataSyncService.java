@@ -210,7 +210,7 @@ public class EdgeDataSyncService {
                         log.debug("Successfully pushed {} {} to node {}", entityType, entityId, node.nodeId);
                     }
                 },
-                error -> log.error("Failed to push {} {} to node {}: {}", entityType, entityId, node.nodeId, error.getMessage())
+                error -> log.error("Failed to push {} {} to node {}", entityType, entityId, node.nodeId, error)
         );
     }
 
@@ -239,11 +239,11 @@ public class EdgeDataSyncService {
                         }
                     })
                     .onFailure().recoverWithItem(error -> {
-                        log.error("Error pushing to node {}: {}", node.nodeId, error.getMessage());
+                        log.error("Error pushing to node {}", node.nodeId, error);
                         return false;
                     });
         } catch (Exception e) {
-            log.error("Failed to initiate sync to node {}: {}", node.nodeId, e.getMessage());
+            log.error("Failed to initiate sync to node {}", node.nodeId, e);
             return Uni.createFrom().item(false);
         }
     }
@@ -467,7 +467,7 @@ public class EdgeDataSyncService {
                             }
                         })
                         .onFailure().recoverWithItem(error -> {
-                            log.error("Error pushing to node {}: {}", node.nodeId, error.getMessage());
+                            log.error("Error pushing to node {}", node.nodeId, error);
                             return false;
                         })
                         .await().atMost(java.time.Duration.ofSeconds(timeoutSeconds));
@@ -476,7 +476,7 @@ public class EdgeDataSyncService {
                     return true;
                 }
             } catch (Exception e) {
-                log.error("Failed attempt to push {} {} to node {}: {}", entityType, entityId, node.nodeId, e.getMessage());
+                log.error("Failed attempt to push {} {} to node {}", entityType, entityId, node.nodeId, e);
             }
 
             attempt = attempt + 1;
