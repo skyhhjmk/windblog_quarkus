@@ -33,6 +33,9 @@ public class AdminEdgeNodeApiController {
     com.biliwind.blog.service.edge.PrimaryEdgeChannelRegistry primaryEdgeChannelRegistry;
 
     @Inject
+    com.biliwind.blog.service.edge.EdgeNodeAvailabilityService edgeNodeAvailabilityService;
+
+    @Inject
     CertificateService certificateService;
 
     @Inject
@@ -220,8 +223,23 @@ public class AdminEdgeNodeApiController {
                 primaryEdgeChannelRegistry.getConnectedAt(nodeId),
                 node.lastHeartbeat,
                 node.metrics,
+                edgeNodeAvailabilityService.calculateRates(nodeId),
                 syncService.getSyncStatus(nodeId)
         );
+    }
+
+    @GET
+    @Path("/{nodeId}/availability-history")
+    @Operation(summary = "获取边缘节点在线历史", description = "返回近 1-30 天在线率采样、在线时段和日历数据")
+    public com.biliwind.blog.service.edge.EdgeNodeAvailabilityService.AvailabilityHistory getAvailabilityHistory(
+            @PathParam("nodeId") String nodeId,
+            @QueryParam("days") @DefaultValue("30") int days) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node == null) {
+            throw new NotFoundException("节点不存在");
+        }
+
+        return edgeNodeAvailabilityService.getHistory(nodeId, days);
     }
 
     @POST

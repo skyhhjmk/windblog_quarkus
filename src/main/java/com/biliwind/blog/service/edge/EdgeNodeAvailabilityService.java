@@ -1,0 +1,242 @@
+package com.biliwind.blog.service.edge;
+
+import com.biliwind.blog.model.EdgeNode;
+import com.biliwind.blog.model.EdgeNodeAvailabilitySample;
+import io.quarkus.scheduler.Scheduled;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@ApplicationScoped
+public class EdgeNodeAvailabilityService {
+
+    @Inject
+    NodeRoleService nodeRoleService;
+
+    @Inject
+    PrimaryEdgeChannelRegistry primaryEdgeChannelRegistry;
+
+    @Scheduled(every = "60s")
+    @Transactional
+    public void sampleAvailability() {
+        if (!nodeRoleService.isPrimaryNode()) {
+            return;
+        }
+
+        OffsetDateTime sampledAt = OffsetDateTime.now(ZoneOffset.UTC);
+        List<EdgeNode> nodes = EdgeNode.listAll();
+        for (EdgeNode node : nodes) {
+            if (!Boolean.TRUE.equals(node.isEnabled)) {
+                continue;
+            }
+
+            EdgeNodeAvailabilitySample sample = new EdgeNodeAvailabilitySample();
+            sample.nodeId = node.nodeId;
+            sample.sampledAt = sampledAt;
+            sample.online = primaryEdgeChannelRegistry.hasOnlineChannel(node.nodeId);
+            sample.persist();
+        }
+
+        deleteExpiredSamples(sampledAt);
+    }
+
+    public AvailabilityRates calculateRates(String nodeId) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        return new AvailabilityRates(
+                calculateRate(nodeId, now.minusHours(1)),
+                calculateRate(nodeId, now.minusHours(24)),
+                calculateRate(nodeId, now.minusDays(7)),
+                calculateRate(nodeId, now.minusDays(30))
+        );
+    }
+
+    public AvailabilityHistory getHistory(String nodeId, int days) {
+        int safeDays = days;
+        if (safeDays <= 0) {
+            safeDays = 30;
+        }
+        if (safeDays > 30) {
+            safeDays = 30;
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime since = now.minusDays(safeDays);
+        List<EdgeNodeAvailabilitySample> samples = EdgeNodeAvailabilitySample.list(
+                "nodeId = ?1 and sampledAt >= ?2 order by sampledAt asc",
+                nodeId,
+                since
+        );
+
+        List<AvailabilitySamplePoint> points = buildSamplePoints(samples);
+        List<AvailabilityOnlinePeriod> onlinePeriods = buildOnlinePeriods(samples, now);
+        List<AvailabilityCalendarDay> calendarDays = buildCalendarDays(samples, since, now);
+        AvailabilityRates rates = calculateRates(nodeId);
+
+        return new AvailabilityHistory(nodeId, since, now, rates, points, onlinePeriods, calendarDays);
+    }
+
+    private AvailabilityRate calculateRate(String nodeId, OffsetDateTime since) {
+        long totalSamples = EdgeNodeAvailabilitySample.count(
+                "nodeId = ?1 and sampledAt >= ?2",
+                nodeId,
+                since
+        );
+        if (totalSamples == 0) {
+            return new AvailabilityRate(null, 0L, 0L);
+        }
+
+        long onlineSamples = EdgeNodeAvailabilitySample.count(
+                "nodeId = ?1 and sampledAt >= ?2 and online = true",
+                nodeId,
+                since
+        );
+        double onlineRate = onlineSamples * 100.0D / totalSamples;
+        return new AvailabilityRate(Double.valueOf(onlineRate), totalSamples, onlineSamples);
+    }
+
+    private void deleteExpiredSamples(OffsetDateTime now) {
+        OffsetDateTime expiredBefore = now.minusDays(31);
+        EdgeNodeAvailabilitySample.delete("sampledAt < ?1", expiredBefore);
+    }
+
+    private List<AvailabilitySamplePoint> buildSamplePoints(List<EdgeNodeAvailabilitySample> samples) {
+        List<AvailabilitySamplePoint> points = new ArrayList<>();
+        for (EdgeNodeAvailabilitySample sample : samples) {
+            points.add(new AvailabilitySamplePoint(sample.sampledAt, sample.online));
+        }
+        return points;
+    }
+
+    private List<AvailabilityOnlinePeriod> buildOnlinePeriods(List<EdgeNodeAvailabilitySample> samples,
+                                                              OffsetDateTime now) {
+        List<AvailabilityOnlinePeriod> onlinePeriods = new ArrayList<>();
+        OffsetDateTime currentOnlineStart = null;
+        OffsetDateTime lastOnlineSampleTime = null;
+
+        for (EdgeNodeAvailabilitySample sample : samples) {
+            if (sample.online) {
+                if (currentOnlineStart == null) {
+                    currentOnlineStart = sample.sampledAt;
+                }
+                lastOnlineSampleTime = sample.sampledAt;
+                continue;
+            }
+
+            if (currentOnlineStart != null) {
+                onlinePeriods.add(new AvailabilityOnlinePeriod(currentOnlineStart, sample.sampledAt));
+                currentOnlineStart = null;
+                lastOnlineSampleTime = null;
+            }
+        }
+
+        if (currentOnlineStart != null) {
+            OffsetDateTime endAt = now;
+            if (lastOnlineSampleTime != null && lastOnlineSampleTime.plusMinutes(2).isBefore(now)) {
+                endAt = lastOnlineSampleTime.plusMinutes(1);
+            }
+            onlinePeriods.add(new AvailabilityOnlinePeriod(currentOnlineStart, endAt));
+        }
+
+        return onlinePeriods;
+    }
+
+    private List<AvailabilityCalendarDay> buildCalendarDays(List<EdgeNodeAvailabilitySample> samples,
+                                                            OffsetDateTime since,
+                                                            OffsetDateTime now) {
+        Map<LocalDate, CalendarCounter> counterMap = new LinkedHashMap<>();
+        LocalDate currentDate = since.toLocalDate();
+        LocalDate endDate = now.toLocalDate();
+
+        while (!currentDate.isAfter(endDate)) {
+            counterMap.put(currentDate, new CalendarCounter());
+            currentDate = currentDate.plusDays(1);
+        }
+
+        for (EdgeNodeAvailabilitySample sample : samples) {
+            LocalDate sampleDate = sample.sampledAt.toLocalDate();
+            CalendarCounter counter = counterMap.get(sampleDate);
+            if (counter == null) {
+                continue;
+            }
+            counter.totalSamples = counter.totalSamples + 1L;
+            if (sample.online) {
+                counter.onlineSamples = counter.onlineSamples + 1L;
+            }
+        }
+
+        List<AvailabilityCalendarDay> days = new ArrayList<>();
+        for (Map.Entry<LocalDate, CalendarCounter> entry : counterMap.entrySet()) {
+            CalendarCounter counter = entry.getValue();
+            Double onlineRate = null;
+            if (counter.totalSamples > 0) {
+                onlineRate = Double.valueOf(counter.onlineSamples * 100.0D / counter.totalSamples);
+            }
+            days.add(new AvailabilityCalendarDay(
+                    entry.getKey().toString(),
+                    onlineRate,
+                    counter.totalSamples,
+                    counter.onlineSamples
+            ));
+        }
+        return days;
+    }
+
+    public record AvailabilityRates(
+            AvailabilityRate lastHour,
+            AvailabilityRate last24Hours,
+            AvailabilityRate last7Days,
+            AvailabilityRate last30Days
+    ) {
+    }
+
+    public record AvailabilityRate(
+            Double onlineRate,
+            long totalSamples,
+            long onlineSamples
+    ) {
+    }
+
+    public record AvailabilityHistory(
+            String nodeId,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            AvailabilityRates rates,
+            List<AvailabilitySamplePoint> samples,
+            List<AvailabilityOnlinePeriod> onlinePeriods,
+            List<AvailabilityCalendarDay> calendarDays
+    ) {
+    }
+
+    public record AvailabilitySamplePoint(
+            OffsetDateTime sampledAt,
+            boolean online
+    ) {
+    }
+
+    public record AvailabilityOnlinePeriod(
+            OffsetDateTime startAt,
+            OffsetDateTime endAt
+    ) {
+    }
+
+    public record AvailabilityCalendarDay(
+            String date,
+            Double onlineRate,
+            long totalSamples,
+            long onlineSamples
+    ) {
+    }
+
+    private static class CalendarCounter {
+        long totalSamples;
+        long onlineSamples;
+    }
+}
