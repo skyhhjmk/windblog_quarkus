@@ -3,6 +3,7 @@ package com.biliwind.blog.service.ai;
 import com.biliwind.blog.model.DeadLetterMessage;
 import io.vertx.core.json.JsonObject;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
@@ -22,6 +23,9 @@ public class DeadLetterConsumer {
     private static final String ERROR_MARK = "!!!!";
     private static final String WARN_MARK = "----";
 
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
     private void logMqWarn(String marker, String message, Object... args) {
         log.warn("{} {} {}", MQ_TAG, marker, String.format(message, args));
     }
@@ -34,6 +38,9 @@ public class DeadLetterConsumer {
     @Incoming("ai-summary-dead-letter-in")
     @Transactional
     public CompletionStage<Void> consume(Message<JsonObject> message) {
+        if (nodeRoleService.isEdgeNode()) {
+            return message.ack().toCompletableFuture();
+        }
         AiSummaryTask task;
         try {
             task = message.getPayload().mapTo(AiSummaryTask.class);

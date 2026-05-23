@@ -33,6 +33,8 @@ public class EdgeDataSyncService {
     com.biliwind.blog.common.helper.RsaHelper rsaHelper;
     @Inject
     GrpcChannelFactory channelFactory;
+    @Inject
+    PrimaryEdgeChannelRegistry primaryEdgeChannelRegistry;
 
     void onStart(@Observes StartupEvent ev) {
         log.info("EdgeDataSyncService started");
@@ -76,7 +78,41 @@ public class EdgeDataSyncService {
             syncLink(event.getEntityId(), event.getAction());
         } else if ("MEDIA".equals(event.getEntityType())) {
             syncMedia(event.getEntityId(), event.getAction());
+        } else if ("USER".equals(event.getEntityType())) {
+            syncUser(event.getEntityId(), event.getAction());
+        } else if ("SYSTEM_SETTING".equals(event.getEntityType())) {
+            syncSystemSetting(event.getEntityId(), event.getAction());
         }
+    }
+
+    private void syncUser(Long userId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            User user = User.findById(userId);
+            if (user == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(user);
+            } catch (Exception e) {
+                log.error("Failed to serialize user: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("USER", action, userId.toString(), payload);
+    }
+
+    private void syncSystemSetting(Long settingId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            SystemSetting setting = SystemSetting.findById(settingId);
+            if (setting == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(setting);
+            } catch (Exception e) {
+                log.error("Failed to serialize system setting: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("SYSTEM_SETTING", action, settingId.toString(), payload);
     }
 
     private void syncCategory(Long categoryId, String action) {
@@ -229,19 +265,24 @@ public class EdgeDataSyncService {
 
     private Uni<Boolean> pushToNodeAsync(EdgeNode node, String entityType, String action, String entityId, String payload) {
         String grpcAddress = resolveGrpcAddress(node);
+        EdgeServiceProto.SyncDataRequest request = EdgeServiceProto.SyncDataRequest.newBuilder()
+                .setEntityType(entityType)
+                .setAction(action)
+                .setPayload(payload)
+                .setEntityId(parseEntityId(entityId))
+                .build();
+
+        boolean sentByPersistentChannel = sendByPersistentChannel(node, request);
+        if (sentByPersistentChannel) {
+            return Uni.createFrom().item(true);
+        }
+
         if (grpcAddress == null || grpcAddress.isEmpty()) {
             return Uni.createFrom().item(false);
         }
 
         try {
             MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = getStub(node);
-
-            EdgeServiceProto.SyncDataRequest request = EdgeServiceProto.SyncDataRequest.newBuilder()
-                    .setEntityType(entityType)
-                    .setAction(action)
-                    .setPayload(payload)
-                    .setEntityId(parseEntityId(entityId))
-                    .build();
 
             return stub.syncData(request)
                     .map(response -> {
@@ -262,6 +303,20 @@ public class EdgeDataSyncService {
             removeCachedStub(node);
             return Uni.createFrom().item(false);
         }
+    }
+
+    private boolean sendByPersistentChannel(EdgeNode node, EdgeServiceProto.SyncDataRequest request) {
+        if (node == null || node.nodeId == null || node.nodeId.isBlank()) {
+            return false;
+        }
+
+        EdgeServiceProto.EdgeChannelMessage message = EdgeServiceProto.EdgeChannelMessage.newBuilder()
+                .setRequestId(java.util.UUID.randomUUID().toString())
+                .setNodeId("main")
+                .setTimestamp(System.currentTimeMillis())
+                .setSyncData(request)
+                .build();
+        return primaryEdgeChannelRegistry.sendToNode(node.nodeId, message);
     }
 
     /**
@@ -310,19 +365,57 @@ public class EdgeDataSyncService {
         try {
             log.info("Performing full sync internal for node {}", nodeId);
 
+            List<User> users = User.list("deletedAt is null");
+            List<SystemSetting> settings = SystemSetting.listAll();
             List<Tag> tags = Tag.listAll();
             List<Category> categories = Category.listAll();
             List<Link> links = Link.listAll();
             List<Media> mediaList = Media.listAll();
             List<Post> posts = Post.list("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null", PostStatus.PUBLISHED);
-            int total = tags.size() + categories.size() + links.size() + mediaList.size() + posts.size();
+            int total = users.size() + settings.size() + tags.size() + categories.size() + links.size() + mediaList.size() + posts.size();
 
-            syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Syncing tags..."));
+            syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Syncing users..."));
 
             int processed = 0;
             int failedCount = 0;
 
+            for (User user : users) {
+                try {
+                    String userPayload = objectMapper.writeValueAsString(user);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "USER", action, user.id.toString(), userPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push user {} to node {}", user.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing user {} to node {}: {}", user.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing users (" + processed + "/" + total + ")"));
+            }
+
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing settings..."));
+            for (SystemSetting setting : settings) {
+                try {
+                    String settingPayload = objectMapper.writeValueAsString(setting);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "SYSTEM_SETTING", action, setting.id.toString(), settingPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push setting {} to node {}", setting.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing setting {} to node {}: {}", setting.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing settings (" + processed + "/" + total + ")"));
+            }
+
             // 1. 同步标签
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing tags..."));
             for (Tag tag : tags) {
                 try {
                     String tagPayload = objectMapper.writeValueAsString(tag);
@@ -458,6 +551,17 @@ public class EdgeDataSyncService {
     }
 
     private boolean pushToNodeWithRetry(EdgeNode node, String entityType, String action, String entityId, String payload, int timeoutSeconds) {
+        EdgeServiceProto.SyncDataRequest persistentRequest = EdgeServiceProto.SyncDataRequest.newBuilder()
+                .setEntityType(entityType)
+                .setAction(action)
+                .setPayload(payload)
+                .setEntityId(parseEntityId(entityId))
+                .build();
+        boolean sentByPersistentChannel = sendByPersistentChannel(node, persistentRequest);
+        if (sentByPersistentChannel) {
+            return true;
+        }
+
         String grpcAddress = resolveGrpcAddress(node);
         if (grpcAddress == null || grpcAddress.isEmpty()) {
             return false;

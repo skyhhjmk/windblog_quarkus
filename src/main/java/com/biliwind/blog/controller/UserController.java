@@ -82,6 +82,9 @@ public class UserController {
     com.biliwind.blog.service.WalletService walletService;
 
     @Inject
+    jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
+    @Inject
     com.biliwind.blog.service.CheckInService checkInService;
 
     @Inject
@@ -231,6 +234,7 @@ public class UserController {
         user.status = 1;
         user.roleName = RoleConstant.USER;
         user.persist();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("USER", user.id, "UPSERT"));
 
         // 生成JWT Token
         String token = generateUserToken(user);

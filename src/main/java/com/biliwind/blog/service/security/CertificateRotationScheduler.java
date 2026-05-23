@@ -22,9 +22,15 @@ public class CertificateRotationScheduler {
     @Inject
     CertificateService certificateService;
 
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
     @Scheduled(every = "12h")
     @Transactional
     public void rotateCertificates() {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
         LOGGER.info("正在执行边缘节点证书过期检查...");
 
         // 查找即将过期（剩余不足 6 小时）且未被吊销的节点

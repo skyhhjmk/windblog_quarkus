@@ -9,6 +9,7 @@ import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,8 +29,13 @@ public class EdgeNodeRegistry {
     @Inject
     GrpcChannelFactory channelFactory;
     @Inject
+    NodeRoleService nodeRoleService;
+    @Inject
     @GrpcService // 必须带上此限定符，因为 EdgeNodeGrpcService 在 CDI 容器中仅带有 @GrpcService 限定符。由于注入类型是具体的实现类而非接口或 Stub，这依然是纯本地方法调用，不会产生 gRPC 网络请求。
     EdgeNodeGrpcService edgeNodeGrpcService;
+
+    @ConfigProperty(name = "windblog.edge.legacy-active-poll.enabled", defaultValue = "false")
+    boolean legacyActivePollEnabled;
 
     @Transactional
     public void toggleNodeEnabled(String nodeId, boolean enabled) {
@@ -130,6 +136,12 @@ public class EdgeNodeRegistry {
      */
     @Scheduled(every = "30s")
     public void pollActiveNodes() {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
+        if (!legacyActivePollEnabled) {
+            return;
+        }
         List<EdgeNode> activeNodes = EdgeNode.list(
                 "connectionType = ?1 AND isEnabled = true AND isTrusted = true",
                 EdgeConnectionType.ACTIVE_POLL
@@ -211,6 +223,9 @@ public class EdgeNodeRegistry {
     @Scheduled(every = "60s")
     @Transactional
     void checkNodeHealth() {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
         OffsetDateTime threshold = OffsetDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(90);
         List<EdgeNode> nodes = EdgeNode.list("status = 'ONLINE'");
         for (EdgeNode node : nodes) {

@@ -7,6 +7,10 @@ option java_outer_classname = "EdgeServiceProto";
 
 service EdgeNodeService {
 
+  // 从节点主动建立的双向持久通道。主节点通过该通道下发同步事件，
+  // 从节点通过该通道上报心跳并转发需要写数据库的请求。
+  rpc OpenNodeChannel(stream EdgeChannelMessage) returns (stream EdgeChannelMessage);
+
   // 心跳注册 + 状态上报 + 附带最新配置
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 
@@ -31,6 +35,7 @@ message SyncDataRequest {
   string entity_type = 2; // POST, TAG
   string payload = 3; // JSON 格式的数据内容
   int64 entity_id = 4; // DELETE 可不带 payload，但必须带实体 id
+  int64 entity_version = 5;
 }
 
 message SyncDataResponse {
@@ -117,4 +122,46 @@ message DownloadChunk {
   bytes data = 1;
   int64 offset = 2;
   bool is_last = 3;
+}
+
+message EdgeChannelMessage {
+  string request_id = 1;
+  string node_id = 2;
+  int64 timestamp = 3;
+
+  oneof payload {
+    EdgeHeartbeatMessage heartbeat = 10;
+    EdgeNodeStatusMessage node_status = 11;
+    SyncDataRequest sync_data = 12;
+    RoutedHttpRequest routed_http_request = 13;
+    RoutedHttpResponse routed_http_response = 14;
+  }
+}
+
+message EdgeHeartbeatMessage {
+  string region = 1;
+  map<string, string> metrics = 2;
+  int32 grpc_port = 3;
+  int64 last_sync_version = 4;
+}
+
+message EdgeNodeStatusMessage {
+  bool primary_online = 1;
+  bool read_only = 2;
+  string message = 3;
+}
+
+message RoutedHttpRequest {
+  string method = 1;
+  string path = 2;
+  string query = 3;
+  map<string, string> headers = 4;
+  bytes body = 5;
+}
+
+message RoutedHttpResponse {
+  int32 status = 1;
+  map<string, string> headers = 2;
+  bytes body = 3;
+  string error_message = 4;
 }

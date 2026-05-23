@@ -35,6 +35,9 @@ public class AdminUserController {
     @Inject
     com.biliwind.blog.service.AuditService auditService;
 
+    @Inject
+    jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
     @GET
     @Operation(summary = "用户列表")
     public PageResult<AdminUserItem> list(
@@ -98,6 +101,7 @@ public class AdminUserController {
 
         user.updatedAt = OffsetDateTime.now();
         user.persist();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("USER", user.id, "UPSERT"));
         auditService.log("user", user.id, "update", null, java.util.Map.of("username", user.username, "role", user.roleName, "status", user.status));
         return toItem(user);
     }

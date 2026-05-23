@@ -21,10 +21,17 @@ public class StorageSyncConsumer {
     @Channel("storage-sync-tasks")
     Emitter<StorageSyncMessage> syncEmitter;
 
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
     @Incoming("storage-sync-in")
     @Acknowledgment(Acknowledgment.Strategy.MANUAL)
     @io.smallrye.reactive.messaging.annotations.Blocking
     public CompletionStage<Void> consumeSyncTask(Message<StorageSyncMessage> message) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.info("从节点跳过存储同步消费");
+            return message.ack();
+        }
         StorageSyncMessage msg = message.getPayload();
         log.info("开始处理存储同步: mediaId={}, provider={}, variant={}, retry={}",
                 msg.mediaId(), msg.providerName(), msg.variantType(), msg.retryCount());

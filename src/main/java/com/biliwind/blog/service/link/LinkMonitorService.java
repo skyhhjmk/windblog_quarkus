@@ -30,6 +30,9 @@ public class LinkMonitorService {
     @jakarta.inject.Inject
     com.biliwind.blog.service.ConfigManager configManager;
 
+    @jakarta.inject.Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
     /**
      * 提取所有潜在可点击的元素
      */
@@ -141,6 +144,9 @@ public class LinkMonitorService {
     @Scheduled(every = "6h", identity = "link-monitor")
     @Transactional
     public void scheduleCheck() {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
         LOG.info("=== Link Monitor Scheduler: Triggered ===");
         try {
             checkAllLinks();

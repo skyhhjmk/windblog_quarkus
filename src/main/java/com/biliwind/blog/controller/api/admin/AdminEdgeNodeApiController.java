@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.controller.api.admin.dto.EdgeNodeDataStatusResponse;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
@@ -27,6 +28,9 @@ public class AdminEdgeNodeApiController {
 
     @Inject
     com.biliwind.blog.service.edge.EdgeDataSyncService syncService;
+
+    @Inject
+    com.biliwind.blog.service.edge.PrimaryEdgeChannelRegistry primaryEdgeChannelRegistry;
 
     @Inject
     CertificateService certificateService;
@@ -166,6 +170,58 @@ public class AdminEdgeNodeApiController {
     @Operation(summary = "获取同步进度", description = "获取当前节点的同步进度（仅包含正在进行或最近一次的手动同步任务）")
     public com.biliwind.blog.service.edge.EdgeDataSyncService.SyncProgress getSyncStatus(@PathParam("nodeId") String nodeId) {
         return syncService.getSyncStatus(nodeId);
+    }
+
+    @GET
+    @Path("/{nodeId}/data-status")
+    @Operation(summary = "获取边缘节点数据通道状态", description = "返回持久通道、只读模式、心跳指标和同步进度")
+    public EdgeNodeDataStatusResponse getDataStatus(@PathParam("nodeId") String nodeId) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node == null) {
+            throw new NotFoundException("节点不存在");
+        }
+
+        boolean channelOnline = primaryEdgeChannelRegistry.hasOnlineChannel(nodeId);
+        String effectiveNodeStatus = node.status;
+        if (channelOnline) {
+            effectiveNodeStatus = "ONLINE";
+        }
+        boolean primaryOnline = channelOnline;
+        boolean readOnly = !channelOnline;
+        String readOnlyMessage = "";
+        if (readOnly) {
+            readOnlyMessage = "持久数据通道未连接，节点离线时应处于只读模式";
+        }
+
+        if (node.metrics != null) {
+            String metricPrimaryOnline = node.metrics.get("primaryOnline");
+            if (metricPrimaryOnline != null) {
+                primaryOnline = Boolean.parseBoolean(metricPrimaryOnline);
+            }
+            String metricReadOnly = node.metrics.get("readOnly");
+            if (metricReadOnly != null) {
+                readOnly = Boolean.parseBoolean(metricReadOnly);
+            }
+            String metricReadOnlyMessage = node.metrics.get("readOnlyMessage");
+            if (metricReadOnlyMessage != null && !metricReadOnlyMessage.isBlank()) {
+                readOnlyMessage = metricReadOnlyMessage;
+            }
+        }
+
+        return new EdgeNodeDataStatusResponse(
+                node.nodeId,
+                effectiveNodeStatus,
+                Boolean.TRUE.equals(node.isEnabled),
+                node.isTrusted,
+                channelOnline,
+                primaryOnline,
+                readOnly,
+                readOnlyMessage,
+                primaryEdgeChannelRegistry.getConnectedAt(nodeId),
+                node.lastHeartbeat,
+                node.metrics,
+                syncService.getSyncStatus(nodeId)
+        );
     }
 
     @POST

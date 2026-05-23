@@ -30,8 +30,24 @@ public class DeploymentPackageService {
     String userJwtIssuer;
 
     @Inject
+    @ConfigProperty(name = "admin.jwt.secret", defaultValue = "windblog-admin-dev-secret-change-me")
+    String adminJwtSecret;
+
+    @Inject
+    @ConfigProperty(name = "admin.jwt.issuer", defaultValue = "windblog-admin")
+    String adminJwtIssuer;
+
+    @Inject
     @ConfigProperty(name = "blog.url", defaultValue = "http://localhost:8080")
     String blogUrl;
+
+    @Inject
+    @ConfigProperty(name = "windblog.primary.grpc.advertised-host", defaultValue = "host.docker.internal")
+    String primaryGrpcAdvertisedHost;
+
+    @Inject
+    @ConfigProperty(name = "windblog.primary.grpc.advertised-port", defaultValue = "9000")
+    int primaryGrpcAdvertisedPort;
 
     /**
      * 为边缘节点生成完整的部署 ZIP 包。
@@ -90,17 +106,8 @@ public class DeploymentPackageService {
         StringBuilder sb = new StringBuilder();
         sb.append("EDGE_NODE_ID=").append(node.nodeId).append("\n");
         sb.append("EDGE_NODE_REGION=").append(node.region.getCode()).append("\n");
-        String mainHost = node.grpcAddress;
-        if (mainHost == null || mainHost.isEmpty()) {
-            mainHost = "host.docker.internal";
-        }
-        String hostOnly = mainHost;
-        int colonIndex = mainHost.lastIndexOf(":");
-        if (colonIndex > 0) {
-            hostOnly = mainHost.substring(0, colonIndex);
-        }
-        sb.append("MAIN_NODE_GRPC_HOST=").append(hostOnly).append("\n");
-        sb.append("MAIN_NODE_GRPC_PORT=9000\n");
+        sb.append("MAIN_NODE_GRPC_HOST=").append(primaryGrpcAdvertisedHost).append("\n");
+        sb.append("MAIN_NODE_GRPC_PORT=").append(primaryGrpcAdvertisedPort).append("\n");
 
         int grpcPort = 9001;
         if (node.edgeGrpcPort != null) {
@@ -114,6 +121,11 @@ public class DeploymentPackageService {
         sb.append("EDGE_APP_GRPC_PORT=").append(grpcPort).append("\n");
 
         sb.append("EDGE_CONNECTION_TYPE=").append(node.connectionType.name()).append("\n");
+        sb.append("WINDBLOG_NODE_ROLE=edge\n");
+        sb.append("GRPC_CLIENT_CA_CERTIFICATE=certs/ca.crt\n");
+        sb.append("GRPC_CLIENT_CERTIFICATE=certs/server.crt\n");
+        sb.append("GRPC_CLIENT_KEY=certs/server.key\n");
+        sb.append("GRPC_CLIENT_REWRITE_LOCAL_TARGET=false\n");
 
         sb.append("EDGE_DB_USER=windblog\n");
         sb.append("EDGE_DB_PASSWORD=windblog_edge_pwd\n");
@@ -128,6 +140,8 @@ public class DeploymentPackageService {
 
         sb.append("USER_JWT_SECRET=").append(this.userJwtSecret).append("\n");
         sb.append("USER_JWT_ISSUER=").append(this.userJwtIssuer).append("\n");
+        sb.append("ADMIN_JWT_SECRET=").append(this.adminJwtSecret).append("\n");
+        sb.append("ADMIN_JWT_ISSUER=").append(this.adminJwtIssuer).append("\n");
         sb.append("BLOG_URL=").append(this.blogUrl).append("\n");
 
         return sb.toString();
@@ -201,18 +215,26 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_GRPC_SERVER_PLAIN_TEXT=false\n");
         sb.append("      - QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/server.crt}\n");
         sb.append("      - QUARKUS_GRPC_SERVER_SSL_KEY=${EDGE_KEY_PATH:-certs/server.key}\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_CLIENT_AUTH=none\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=${EDGE_CLIENT_CERT_PATH:-certs/server.crt}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=${EDGE_CLIENT_KEY_PATH:-certs/server.key}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca.crt}\n");
+        sb.append("      - GRPC_CLIENT_CA_CERTIFICATE=${GRPC_CLIENT_CA_CERTIFICATE}\n");
+        sb.append("      - GRPC_CLIENT_CERTIFICATE=${GRPC_CLIENT_CERTIFICATE}\n");
+        sb.append("      - GRPC_CLIENT_KEY=${GRPC_CLIENT_KEY}\n");
+        sb.append("      - GRPC_CLIENT_REWRITE_LOCAL_TARGET=${GRPC_CLIENT_REWRITE_LOCAL_TARGET}\n");
         sb.append("      - MAIN_NODE_GRPC_OVERRIDE_AUTHORITY=main-node\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS__MAIN_NODE__OVERRIDE_AUTHORITY=main-node\n");
         sb.append("      - EDGE_NODE_ID=${EDGE_NODE_ID}\n");
         sb.append("      - EDGE_NODE_REGION=${EDGE_NODE_REGION}\n");
         sb.append("      - EDGE_CONNECTION_TYPE=${EDGE_CONNECTION_TYPE}\n");
+        sb.append("      - WINDBLOG_NODE_ROLE=${WINDBLOG_NODE_ROLE}\n");
         sb.append("      - MAIN_NODE_GRPC_HOST=${MAIN_NODE_GRPC_HOST}\n");
         sb.append("      - MAIN_NODE_GRPC_PORT=${MAIN_NODE_GRPC_PORT}\n");
         sb.append("      - USER_JWT_SECRET=${USER_JWT_SECRET}\n");
         sb.append("      - USER_JWT_ISSUER=${USER_JWT_ISSUER}\n");
+        sb.append("      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}\n");
+        sb.append("      - ADMIN_JWT_ISSUER=${ADMIN_JWT_ISSUER}\n");
         sb.append("      - BLOG_URL=${BLOG_URL}\n");
         sb.append("    depends_on:\n");
         sb.append("      edge-db:\n");

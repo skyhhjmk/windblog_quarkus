@@ -4,6 +4,7 @@ import com.biliwind.blog.model.EdgeNode;
 import io.grpc.*;
 import io.quarkus.grpc.GlobalInterceptor;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,9 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
 
     private static final Context.Key<String> AUTHENTICATED_NODE_ID_KEY = Context.key("authenticatedNodeId");
 
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
     /**
      * 从当前 gRPC Context 中获取已通过 mTLS 认证的节点 ID。
      * 如果当前请求没有经过 mTLS 认证，返回 null。
@@ -41,6 +45,10 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
             ServerCallHandler<ReqT, RespT> next) {
 
         java.net.SocketAddress remoteAddress = call.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+
+        if (nodeRoleService != null && nodeRoleService.isEdgeNode()) {
+            return next.startCall(call, headers);
+        }
 
         SSLSession sslSession = call.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
         if (sslSession == null) {

@@ -9,10 +9,12 @@ import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.protobuf.ByteString;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.MultiEmitter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -22,6 +24,9 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @GrpcService
@@ -36,8 +41,171 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    NodeRoleService nodeRoleService;
+
+    @Inject
+    PrimaryEdgeChannelRegistry primaryEdgeChannelRegistry;
+
+    @Inject
+    PrimaryRoutedHttpExecutor primaryRoutedHttpExecutor;
+
+    @Inject
+    EdgeSyncDataApplyService syncDataApplyService;
+
+    @Inject
+    EdgePersistentChannelClient edgePersistentChannelClient;
+
     private StorageService getStorageService() {
         return io.quarkus.arc.Arc.container().instance(StorageService.class).get();
+    }
+
+    @Override
+    public Multi<EdgeChannelMessage> openNodeChannel(Multi<EdgeChannelMessage> request) {
+        AtomicReference<String> nodeIdReference = new AtomicReference<>();
+        AtomicReference<MultiEmitter<? super EdgeChannelMessage>> emitterReference = new AtomicReference<>();
+
+        Multi<EdgeChannelMessage> outboundMessages = Multi.createFrom().emitter(new Consumer<MultiEmitter<? super EdgeChannelMessage>>() {
+            @Override
+            public void accept(MultiEmitter<? super EdgeChannelMessage> emitter) {
+                emitterReference.set(emitter);
+                if (nodeRoleService.isEdgeNode()) {
+                    edgePersistentChannelClient.registerServerSideEmitter(emitter);
+                }
+            }
+        });
+
+        request.subscribe().with(new Consumer<EdgeChannelMessage>() {
+            @Override
+            public void accept(EdgeChannelMessage message) {
+                handleChannelMessage(message, nodeIdReference, emitterReference);
+            }
+        }, new Consumer<Throwable>() {
+            @Override
+            public void accept(Throwable throwable) {
+                String nodeId = nodeIdReference.get();
+                if (nodeId != null) {
+                    primaryEdgeChannelRegistry.unregister(nodeId);
+                }
+                if (nodeRoleService.isEdgeNode()) {
+                    edgePersistentChannelClient.clearServerSideEmitter();
+                }
+                log.error("边缘节点持久通道输入流异常", throwable);
+            }
+        }, new Runnable() {
+            @Override
+            public void run() {
+                String nodeId = nodeIdReference.get();
+                if (nodeId != null) {
+                    primaryEdgeChannelRegistry.unregister(nodeId);
+                }
+                if (nodeRoleService.isEdgeNode()) {
+                    edgePersistentChannelClient.clearServerSideEmitter();
+                }
+            }
+        });
+
+        return outboundMessages;
+    }
+
+    private void handleChannelMessage(EdgeChannelMessage message,
+                                      AtomicReference<String> nodeIdReference,
+                                      AtomicReference<MultiEmitter<? super EdgeChannelMessage>> emitterReference) {
+        String authenticatedNodeId = com.biliwind.blog.service.security.GrpcMtlsInterceptor.getAuthenticatedNodeId();
+        if (authenticatedNodeId != null && !authenticatedNodeId.equals(message.getNodeId())) {
+            log.warn("持久通道 nodeId 与 mTLS 认证身份不一致: request={}, cert={}", message.getNodeId(), authenticatedNodeId);
+            return;
+        }
+
+        String nodeId = message.getNodeId();
+        if (nodeId == null || nodeId.isBlank()) {
+            return;
+        }
+
+        if (nodeIdReference.get() == null) {
+            nodeIdReference.set(nodeId);
+            MultiEmitter<? super EdgeChannelMessage> emitter = emitterReference.get();
+            if (emitter != null && nodeRoleService.isPrimaryNode()) {
+                primaryEdgeChannelRegistry.register(nodeId, emitter);
+                sendNodeStatus(emitter, nodeId, true, false, "主节点在线");
+            }
+        }
+
+        if (message.hasHeartbeat()) {
+            EdgeHeartbeatMessage heartbeatMessage = message.getHeartbeat();
+            registry.updateHeartbeat(nodeId, heartbeatMessage.getMetricsMap(), heartbeatMessage.getGrpcPort());
+            return;
+        }
+
+        if (message.hasRoutedHttpRequest()) {
+            handleRoutedHttpRequest(message, emitterReference.get());
+            return;
+        }
+
+        if (message.hasSyncData()) {
+            syncDataApplyService.apply(message.getSyncData());
+        }
+    }
+
+    private void handleRoutedHttpRequest(EdgeChannelMessage message,
+                                         MultiEmitter<? super EdgeChannelMessage> emitter) {
+        if (emitter == null) {
+            return;
+        }
+
+        RoutedHttpRequest routedRequest = message.getRoutedHttpRequest();
+        RoutedHttpExchange.Request request = new RoutedHttpExchange.Request(
+                routedRequest.getMethod(),
+                routedRequest.getPath(),
+                routedRequest.getQuery(),
+                routedRequest.getHeadersMap(),
+                routedRequest.getBody().toByteArray()
+        );
+        RoutedHttpExchange.Response response = primaryRoutedHttpExecutor.execute(request);
+
+        RoutedHttpResponse.Builder responseBuilder = RoutedHttpResponse.newBuilder()
+                .setStatus(response.status());
+        if (response.headers() != null) {
+            responseBuilder.putAllHeaders(response.headers());
+        }
+        if (response.body() != null) {
+            responseBuilder.setBody(ByteString.copyFrom(response.body()));
+        }
+        if (response.errorMessage() != null) {
+            responseBuilder.setErrorMessage(response.errorMessage());
+        }
+
+        EdgeChannelMessage responseMessage = EdgeChannelMessage.newBuilder()
+                .setRequestId(message.getRequestId())
+                .setNodeId("main")
+                .setTimestamp(System.currentTimeMillis())
+                .setRoutedHttpResponse(responseBuilder.build())
+                .build();
+
+        try {
+            emitter.emit(responseMessage);
+        } catch (Exception exception) {
+            log.error("发送写请求回源响应失败: {}", message.getRequestId(), exception);
+        }
+    }
+
+    private void sendNodeStatus(MultiEmitter<? super EdgeChannelMessage> emitter,
+                                String nodeId,
+                                boolean primaryOnline,
+                                boolean readOnly,
+                                String message) {
+        EdgeNodeStatusMessage nodeStatusMessage = EdgeNodeStatusMessage.newBuilder()
+                .setPrimaryOnline(primaryOnline)
+                .setReadOnly(readOnly)
+                .setMessage(message)
+                .build();
+        EdgeChannelMessage channelMessage = EdgeChannelMessage.newBuilder()
+                .setRequestId(UUID.randomUUID().toString())
+                .setNodeId(nodeId)
+                .setTimestamp(System.currentTimeMillis())
+                .setNodeStatus(nodeStatusMessage)
+                .build();
+        emitter.emit(channelMessage);
     }
 
     @Override
@@ -244,6 +412,14 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Override
     public Uni<SyncDataResponse> syncData(SyncDataRequest request) {
+        if (nodeRoleService.isEdgeNode()) {
+            syncDataApplyService.apply(request);
+            return Uni.createFrom().item(SyncDataResponse.newBuilder()
+                    .setSuccess(true)
+                    .setMessage("同步完成")
+                    .build());
+        }
+
         return Uni.createFrom().failure(new UnsupportedOperationException("Main node does not support receiving sync data."));
     }
 }

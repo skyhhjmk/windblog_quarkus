@@ -43,6 +43,9 @@ public class AdminSystemSettingsController {
     @Inject
     com.biliwind.blog.service.AuditService auditService;
 
+    @Inject
+    Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
     @GET
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "获取所有设置项")
@@ -118,6 +121,7 @@ public class AdminSystemSettingsController {
         setting.version += 1;
         setting.isFrozen = true; // 进入锁定验证期
         setting.persist();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
 
         // 触发热更新
         configChangedEvent.fire(new ConfigChangedEvent(key, newValue));
@@ -145,6 +149,7 @@ public class AdminSystemSettingsController {
         }
         setting.isFrozen = false;
         setting.persist();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
         auditService.log("system_setting", String.valueOf(setting.id), "confirm", null, Map.of("key", key));
         return Response.ok(Map.of("success", true, "message", "配置已确认")).build();
     }
@@ -212,6 +217,7 @@ public class AdminSystemSettingsController {
         setting.version += 1;
         setting.isFrozen = true;
         setting.persist();
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
 
         // 触发热更新和 Watchdog
         configChangedEvent.fire(new ConfigChangedEvent(key, newValue));

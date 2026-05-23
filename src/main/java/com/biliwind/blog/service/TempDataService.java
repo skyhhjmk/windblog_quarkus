@@ -28,6 +28,9 @@ public class TempDataService {
     @Channel("es-sync-tasks")
     Emitter<EsSyncTask> esSyncEmitter;
 
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
     @Transactional
     public void save(String type, String target, JsonNode payload) {
         TempData data = new TempData();
@@ -42,6 +45,9 @@ public class TempDataService {
     @Scheduled(every = "60s")
     @Transactional
     public void retryPendingTasks() {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
         retryTasksByType(ES_SYNC_TASK_TYPE);
     }
 

@@ -32,6 +32,9 @@ public class AiTaskConsumer {
     @Inject
     AiManager aiManager;
 
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
     private volatile int maxRetries;
 
     @PostConstruct
@@ -67,6 +70,10 @@ public class AiTaskConsumer {
     @Blocking
     @ActivateRequestContext
     public java.util.concurrent.CompletionStage<Void> consume(Message<JsonObject> message) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.info("{} 从节点跳过 AI 摘要消费", MQ_TAG);
+            return safeAck(message);
+        }
         log.info("{} 收到消息", MQ_TAG);
 
         AiSummaryTask task;
@@ -112,6 +119,10 @@ public class AiTaskConsumer {
     @Blocking
     @ActivateRequestContext
     public java.util.concurrent.CompletionStage<Void> consumeAudit(Message<JsonObject> message) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.info("{} 从节点跳过 AI 审核消费", MQ_TAG);
+            return safeAck(message);
+        }
         log.info("{} 收到审核消息", MQ_TAG);
 
         AiAuditTask task;
