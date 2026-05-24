@@ -5,6 +5,7 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
+import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -42,8 +43,15 @@ public class ElasticsearchPostSearchService {
     private static final String ILM_POLICY_NAME = "windblog-posts-policy";
     @Inject
     ElasticsearchConnectionManager connectionManager;
+    @Inject
+    NodeRoleService nodeRoleService;
 
     void onStart(@Observes StartupEvent event) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.info("当前节点是边缘节点，跳过 Elasticsearch 文章索引初始化");
+            return;
+        }
+
         log.debug("ElasticsearchPostSearchService startup initiated");
         log.debug("Registering article index initialization callback...");
         connectionManager.onAvailable(this::initializeIndex);
@@ -101,6 +109,9 @@ public class ElasticsearchPostSearchService {
      * Check if service is available
      */
     public boolean isAvailable() {
+        if (nodeRoleService.isEdgeNode()) {
+            return false;
+        }
         return connectionManager.isAvailable() && indexInitialized.get();
     }
 
@@ -108,6 +119,9 @@ public class ElasticsearchPostSearchService {
      * Get service status
      */
     public ServiceStatus getServiceStatus() {
+        if (nodeRoleService.isEdgeNode()) {
+            return new ServiceStatus(false, false, "DISABLED");
+        }
         return new ServiceStatus(
                 connectionManager.isAvailable(),
                 indexInitialized.get(),

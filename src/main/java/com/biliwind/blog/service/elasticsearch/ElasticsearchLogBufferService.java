@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.service.edge.NodeRoleService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PostConstruct;
@@ -46,6 +47,8 @@ public class ElasticsearchLogBufferService {
     private final AtomicLong sentLogs = new AtomicLong(0);
     @Inject
     ElasticsearchConnectionManager connectionManager;
+    @Inject
+    NodeRoleService nodeRoleService;
     @ConfigProperty(name = "elasticsearch.log.buffer.dir", defaultValue = "logs/es-buffer")
     String bufferDir;
     @ConfigProperty(name = "elasticsearch.log.buffer.max-file-size-mb", defaultValue = "100")
@@ -63,6 +66,12 @@ public class ElasticsearchLogBufferService {
 
     @PostConstruct
     void init() {
+        if (nodeRoleService.isEdgeNode()) {
+            running.set(false);
+            log.info("当前节点是边缘节点，跳过 Elasticsearch 日志缓冲服务初始化");
+            return;
+        }
+
         // 初始化队列（在配置注入后）
         int queueSize = maxQueueSize > 0 ? maxQueueSize : DEFAULT_QUEUE_SIZE;
         logQueue = new LinkedBlockingQueue<>(queueSize);
@@ -115,6 +124,9 @@ public class ElasticsearchLogBufferService {
     @PreDestroy
     void destroy() {
         running.set(false);
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
 
         flushRemainingLogs();
 
@@ -131,6 +143,10 @@ public class ElasticsearchLogBufferService {
      * 如果 ElasticSearch 可用则直接发送，否则缓存到文件
      */
     public void bufferLog(String level, String message, String loggerName, String threadName, Throwable throwable) {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
+
         LogEntry entry = new LogEntry(
                 OffsetDateTime.now(),
                 level,

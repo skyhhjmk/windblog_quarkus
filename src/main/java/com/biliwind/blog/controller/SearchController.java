@@ -4,7 +4,12 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
+import com.biliwind.blog.service.edge.NodeRoleService;
+import com.biliwind.blog.service.edge.RoutedHttpExchange;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -21,8 +26,10 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Path("/search")
 public class SearchController {
@@ -30,6 +37,7 @@ public class SearchController {
     private static final Logger log = Logger.getLogger(SearchController.class);
     private static final int PAGE_SIZE = 10;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Inject
     @Location("blog/search.html")
@@ -44,6 +52,10 @@ public class SearchController {
 
     @Inject
     ElasticsearchPostSearchService postSearchService;
+    @Inject
+    NodeRoleService nodeRoleService;
+    @Inject
+    EdgePersistentChannelClient edgePersistentChannelClient;
 
     @Inject
     com.biliwind.blog.context.RegionContext regionContext;
@@ -58,6 +70,7 @@ public class SearchController {
                                   @QueryParam("type") @DefaultValue("all") String type,
                                   @QueryParam("sort") @DefaultValue("") String sort,
                                   @QueryParam("date") @DefaultValue("") String date,
+                                  @QueryParam("deep") @DefaultValue("false") boolean deep,
                                   @QueryParam("page") @DefaultValue("1") Integer page,
                                   @Context HttpHeaders httpHeaders) {
         int currentPage = page == null || page < 1 ? 1 : page;
@@ -70,8 +83,17 @@ public class SearchController {
         List<SearchHit> allHits;
         boolean usedElasticsearch = false;
         boolean esDegraded = false;
+        boolean edgeNode = nodeRoleService.isEdgeNode();
+        boolean deepSearchRequested = deep && edgeNode;
+        boolean deepSearchFailed = false;
 
-        if (useElasticsearch && !searchKeyword.isBlank() && ("all".equals(searchType) || "post".equals(searchType))) {
+        if (deepSearchRequested && !searchKeyword.isBlank() && canUseDeepSearch(searchType)) {
+            ElasticsearchResult primaryResult = searchPrimaryWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
+            allHits = primaryResult.hits();
+            usedElasticsearch = primaryResult.usedElasticsearch();
+            esDegraded = primaryResult.degraded();
+            deepSearchFailed = primaryResult.degraded();
+        } else if (!edgeNode && useElasticsearch && !searchKeyword.isBlank() && ("all".equals(searchType) || "post".equals(searchType))) {
             ElasticsearchResult esResult = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
             allHits = esResult.hits();
             usedElasticsearch = esResult.usedElasticsearch();
@@ -111,7 +133,11 @@ public class SearchController {
                 .data("dateLinks", buildDateLinks(searchKeyword, searchType, searchSort, searchDate))
                 .data("hits", pageItems)
                 .data("usedElasticsearch", usedElasticsearch)
-                .data("esDegraded", esDegraded);
+                .data("esDegraded", esDegraded)
+                .data("edgeNode", edgeNode)
+                .data("deepSearchRequested", deepSearchRequested)
+                .data("deepSearchFailed", deepSearchFailed)
+                .data("deepSearchUrl", buildDeepSearchUrl(searchKeyword, searchType, searchSort, searchDate));
     }
 
     @GET
@@ -121,12 +147,41 @@ public class SearchController {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
         }
+        if (nodeRoleService.isEdgeNode()) {
+            return buildLocalSuggestions(keyword);
+        }
         try {
             return postSearchService.suggestPosts(keyword);
         } catch (Exception e) {
             log.error("获取搜索建议失败", e);
             return List.of();
         }
+    }
+
+    @GET
+    @Path("/internal/deep")
+    @Produces(MediaType.APPLICATION_JSON)
+    public DeepSearchResponse deepSearch(@QueryParam("q") String keyword,
+                                         @QueryParam("type") @DefaultValue("all") String type,
+                                         @QueryParam("sort") @DefaultValue("") String sort,
+                                         @QueryParam("date") @DefaultValue("") String date,
+                                         @QueryParam("page") @DefaultValue("1") Integer page,
+                                         @QueryParam("lang") @DefaultValue("zh-cn") String lang,
+                                         @HeaderParam("X-WindBlog-Routed-From-Edge") String routedFromEdge) {
+        if (!nodeRoleService.isPrimaryNode()) {
+            throw new NotFoundException();
+        }
+        if (!"true".equalsIgnoreCase(routedFromEdge)) {
+            throw new NotFoundException();
+        }
+
+        int currentPage = page == null || page < 1 ? 1 : page;
+        String searchKeyword = safe(keyword);
+        String searchType = normalizeType(type);
+        String searchSort = normalizeSort(sort);
+        String searchDate = normalizeDate(date);
+        ElasticsearchResult result = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
+        return new DeepSearchResponse(result.hits(), result.usedElasticsearch(), result.degraded());
     }
 
     private List<SearchHit> buildHits(String keyword, String type, String sort, String date, String lang) {
@@ -171,6 +226,118 @@ public class SearchController {
 
         hits.sort(hitComparator(sort));
         return hits;
+    }
+
+    private ElasticsearchResult searchPrimaryWithElasticsearch(String keyword, String type, String sort, String date, String lang, int page) {
+        try {
+            String query = buildDeepSearchQuery(keyword, type, sort, date, page, lang);
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Accept", MediaType.APPLICATION_JSON);
+
+            RoutedHttpExchange.Request request = new RoutedHttpExchange.Request(
+                    "GET",
+                    "/search/internal/deep",
+                    query,
+                    headers,
+                    new byte[0]
+            );
+
+            RoutedHttpExchange.Response response = edgePersistentChannelClient.forwardWriteRequest(request);
+            if (response.status() != 200) {
+                log.warnf("深度搜索回源失败，状态码: %d", response.status());
+                return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+            }
+            return parseDeepSearchResponse(response.body(), keyword, type, sort, date, lang);
+        } catch (Exception exception) {
+            log.error("深度搜索回源失败，使用边缘本地数据库搜索", exception);
+            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+        }
+    }
+
+    private ElasticsearchResult parseDeepSearchResponse(byte[] responseBody,
+                                                        String keyword,
+                                                        String type,
+                                                        String sort,
+                                                        String date,
+                                                        String lang) throws Exception {
+        if (responseBody == null || responseBody.length == 0) {
+            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+        }
+
+        JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
+        List<SearchHit> hits = new ArrayList<>();
+        JsonNode hitNodes = rootNode.path("hits");
+        if (hitNodes.isArray()) {
+            for (JsonNode hitNode : hitNodes) {
+                hits.add(parseSearchHit(hitNode));
+            }
+        }
+
+        boolean usedElasticsearch = rootNode.path("usedElasticsearch").asBoolean(false);
+        boolean degraded = rootNode.path("degraded").asBoolean(false);
+        return new ElasticsearchResult(hits, usedElasticsearch, degraded);
+    }
+
+    private SearchHit parseSearchHit(JsonNode hitNode) {
+        OffsetDateTime date = null;
+        String dateText = hitNode.path("dateText").asText("unknown");
+        String dateValue = hitNode.path("date").asText("");
+        if (!dateValue.isBlank()) {
+            try {
+                date = OffsetDateTime.parse(dateValue);
+            } catch (Exception exception) {
+                date = null;
+            }
+        }
+
+        List<IndexController.TagItem> tags = new ArrayList<>();
+        JsonNode tagNodes = hitNode.path("tags");
+        if (tagNodes.isArray()) {
+            for (JsonNode tagNode : tagNodes) {
+                String tagName = tagNode.path("name").asText("");
+                String tagSlug = tagNode.path("slug").asText("");
+                tags.add(new IndexController.TagItem(tagName, tagSlug));
+            }
+        }
+
+        return new SearchHit(
+                hitNode.path("type").asText("post"),
+                hitNode.path("typeLabel").asText("Post"),
+                hitNode.path("title").asText(""),
+                hitNode.path("summary").asText(""),
+                hitNode.path("url").asText(""),
+                date,
+                dateText,
+                hitNode.path("meta").asText(""),
+                hitNode.path("actionLabel").asText("[Read More]"),
+                textOrNull(hitNode.path("categoryName")),
+                textOrNull(hitNode.path("categorySlug")),
+                tags
+        );
+    }
+
+    private List<String> buildLocalSuggestions(String keyword) {
+        String searchKeyword = safe(keyword);
+        if (searchKeyword.isBlank()) {
+            return List.of();
+        }
+
+        String lang = languageContext.getLang();
+        List<SearchHit> hits = buildHits(searchKeyword, "all", "", "", lang);
+        List<String> suggestions = new ArrayList<>();
+        for (SearchHit hit : hits) {
+            if (suggestions.size() >= 10) {
+                break;
+            }
+            if (hit.title == null || hit.title.isBlank()) {
+                continue;
+            }
+            if (suggestions.contains(hit.title)) {
+                continue;
+            }
+            suggestions.add(hit.title);
+        }
+        return suggestions;
     }
 
     /**
@@ -412,6 +579,30 @@ public class SearchController {
         return url.toString();
     }
 
+    private String buildDeepSearchUrl(String keyword, String type, String sort, String date) {
+        StringBuilder url = new StringBuilder(buildSearchUrl(keyword, type, sort, date, 1));
+        url.append("&deep=true");
+        return url.toString();
+    }
+
+    private String buildDeepSearchQuery(String keyword, String type, String sort, String date, Integer page, String lang) {
+        StringBuilder query = new StringBuilder();
+        query.append("q=").append(urlEncode(keyword));
+        query.append("&type=").append(urlEncode(type));
+        query.append("&sort=").append(urlEncode(sort));
+        query.append("&date=").append(urlEncode(date));
+        query.append("&page=").append(page);
+        query.append("&lang=").append(urlEncode(lang));
+        return query.toString();
+    }
+
+    private boolean canUseDeepSearch(String searchType) {
+        if ("all".equals(searchType)) {
+            return true;
+        }
+        return "post".equals(searchType);
+    }
+
     private List<FilterLink> buildTypeLinks(String keyword, String currentType, String sort, String date) {
         return List.of(
                 new FilterLink("All", buildSearchUrl(keyword, "all", sort, date, 1), cssClass("all".equals(currentType))),
@@ -467,6 +658,17 @@ public class SearchController {
         return value == null ? "" : value.trim();
     }
 
+    private String textOrNull(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        String text = node.asText();
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        return text;
+    }
+
     private String urlEncode(String value) {
         return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
     }
@@ -494,6 +696,13 @@ public class SearchController {
      * Elasticsearch 搜索结果包装类
      */
     private record ElasticsearchResult(
+            List<SearchHit> hits,
+            boolean usedElasticsearch,
+            boolean degraded
+    ) {
+    }
+
+    public record DeepSearchResponse(
             List<SearchHit> hits,
             boolean usedElasticsearch,
             boolean degraded

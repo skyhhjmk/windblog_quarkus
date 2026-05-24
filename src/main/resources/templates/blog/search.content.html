@@ -19,6 +19,18 @@
                 {#if hasKeyword}
                     <p class="text-lg text-gray-400">找到 {totalCount ?: 0} 个匹配项，关键词：<span
                                 class="text-main font-semibold">"{searchKeyword ?: ''}"</span></p>
+                    {#if edgeNode && !deepSearchRequested}
+                        <p class="text-sm text-gray-500">
+                            当前为边缘节点本地搜索。没有想找的？
+                            <a href="{deepSearchUrl}" class="text-accent hover:text-main transition-colors">深度搜索</a>
+                        </p>
+                    {/if}
+                    {#if deepSearchRequested && usedElasticsearch}
+                        <p class="text-sm text-gray-500">已通过主节点 Elasticsearch 完成深度搜索。</p>
+                    {/if}
+                    {#if deepSearchFailed}
+                        <p class="text-sm text-amber-400">深度搜索暂不可用，已显示边缘节点本地数据库搜索结果。</p>
+                    {/if}
                 {#else}
                     <p class="text-lg text-gray-400">输入关键词以发现相关内容。</p>
                 {/if}

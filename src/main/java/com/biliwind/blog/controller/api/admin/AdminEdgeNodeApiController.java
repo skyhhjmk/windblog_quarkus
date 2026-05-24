@@ -16,6 +16,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Path("/api/admin/edge-nodes")
 @Produces(MediaType.APPLICATION_JSON)
@@ -97,10 +98,11 @@ public class AdminEdgeNodeApiController {
         if (reqPort != null) {
             node.edgeGrpcPort = reqPort;
         } else {
-            java.util.Random random = new java.util.Random();
-            int randomPort = random.nextInt(40000) + 20000;
-            node.edgeGrpcPort = Integer.valueOf(randomPort);
+            node.edgeGrpcPort = Integer.valueOf(generateRandomHighPort());
         }
+        node.edgeDbPort = Integer.valueOf(generateRandomHighPort());
+        node.edgeRedisPort = Integer.valueOf(generateRandomHighPort());
+        node.edgeHttpPort = Integer.valueOf(generateRandomHighPort());
 
         // 主动连接模式校验和通信地址填充
         if (node.connectionType == EdgeConnectionType.ACTIVE_POLL) {
@@ -296,5 +298,9 @@ public class AdminEdgeNodeApiController {
             Integer edgeGrpcPort,
             String nodeIp
     ) {
+    }
+
+    private int generateRandomHighPort() {
+        return ThreadLocalRandom.current().nextInt(20000, 60000);
     }
 }

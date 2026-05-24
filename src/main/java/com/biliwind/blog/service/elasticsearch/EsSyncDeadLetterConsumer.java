@@ -15,9 +15,16 @@ public class EsSyncDeadLetterConsumer {
 
     @Inject
     TempDataService tempDataService;
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     @Incoming("es-sync-tasks-dlq-in")
     public void consume(EsSyncTask task) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.debug("当前节点是边缘节点，忽略 ES 死信同步任务");
+            return;
+        }
+
         log.errorf("收到 ES 同步死信任务: postId=%d, action=%s", task.postId(), task.actionType());
 
         JsonNode payload = tempDataService.createSyncTaskPayload(task.postId(), task.actionType());

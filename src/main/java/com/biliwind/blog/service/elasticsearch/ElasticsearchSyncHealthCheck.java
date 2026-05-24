@@ -16,10 +16,18 @@ public class ElasticsearchSyncHealthCheck implements HealthCheck {
 
     @Inject
     ElasticsearchPostSearchService postSearchService;
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     @Override
     public HealthCheckResponse call() {
         HealthCheckResponseBuilder builder = HealthCheckResponse.named("elasticsearch-sync");
+        if (nodeRoleService.isEdgeNode()) {
+            return builder.up()
+                    .withData("disabled", true)
+                    .withData("reason", "edge node does not use Elasticsearch")
+                    .build();
+        }
 
         boolean connectionOk = connectionManager.isAvailable();
         boolean indexOk = postSearchService.isAvailable();

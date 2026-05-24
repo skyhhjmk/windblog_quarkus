@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -14,6 +15,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,12 +35,14 @@ public class ElasticsearchConnectionManager {
     private final CopyOnWriteArrayList<Runnable> onAvailableCallbacks = new CopyOnWriteArrayList<>();
     @Inject
     HttpClient httpClient;
+    @Inject
+    NodeRoleService nodeRoleService;
     @ConfigProperty(name = "elasticsearch.hosts")
     String elasticsearchHosts;
-    @ConfigProperty(name = "elasticsearch.username", defaultValue = "")
-    String username;
-    @ConfigProperty(name = "elasticsearch.password", defaultValue = "")
-    String password;
+    @ConfigProperty(name = "elasticsearch.username")
+    Optional<String> username;
+    @ConfigProperty(name = "elasticsearch.password")
+    Optional<String> password;
     @ConfigProperty(name = "elasticsearch.health-check.interval-seconds", defaultValue = "30")
     int healthCheckIntervalSeconds;
     @ConfigProperty(name = "elasticsearch.init.max-wait-seconds", defaultValue = "300")
@@ -46,6 +50,15 @@ public class ElasticsearchConnectionManager {
     private ScheduledExecutorService healthCheckExecutor;
 
     void onStart(@Observes StartupEvent event) {
+        if (nodeRoleService.isEdgeNode()) {
+            initialized.set(true);
+            available.set(false);
+            healthStatus.set(HealthStatus.DISABLED);
+            lastError.set("边缘节点不启用 Elasticsearch");
+            log.info("当前节点是边缘节点，跳过 Elasticsearch 连接初始化");
+            return;
+        }
+
         log.debug("ElasticsearchConnectionManager startup initiated, starting async initialization...");
         healthStatus.set(HealthStatus.INITIALIZING);
 
@@ -219,8 +232,17 @@ public class ElasticsearchConnectionManager {
             }
         });
 
-        if (username != null && !username.isEmpty() && password != null) {
-            String auth = username + ":" + password;
+        String configuredUsername = "";
+        if (username != null && username.isPresent()) {
+            configuredUsername = username.get();
+        }
+        String configuredPassword = "";
+        if (password != null && password.isPresent()) {
+            configuredPassword = password.get();
+        }
+
+        if (configuredUsername != null && !configuredUsername.isEmpty() && configuredPassword != null) {
+            String auth = configuredUsername + ":" + configuredPassword;
             String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
             builder.header("Authorization", "Basic " + encodedAuth);
         }
@@ -278,6 +300,7 @@ public class ElasticsearchConnectionManager {
 
     public enum HealthStatus {
         UNINITIALIZED,
+        DISABLED,
         INITIALIZING,
         AVAILABLE,
         DEGRADED,

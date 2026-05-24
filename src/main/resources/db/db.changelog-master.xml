@@ -76,4 +76,5 @@
     <include file="db/migration/072-create-repost-affiliate-tracking.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/073-add-link-public-token.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/074-create-link-article-references.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/075-add-edge-node-fixed-deployment-ports.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

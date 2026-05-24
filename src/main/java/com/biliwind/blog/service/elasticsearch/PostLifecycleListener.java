@@ -4,6 +4,7 @@ import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.service.TempDataService;
+import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.runtime.StartupEvent;
@@ -41,6 +42,8 @@ public class PostLifecycleListener {
 
     @Inject
     CacheService cacheService;
+    @Inject
+    NodeRoleService nodeRoleService;
 
     private void invalidatePostCaches() {
         // 清理首页缓存 (1-5页)
@@ -52,12 +55,21 @@ public class PostLifecycleListener {
     }
 
     void onStart(@Observes StartupEvent event) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.info("当前节点是边缘节点，跳过 Elasticsearch 文章生命周期监听初始化");
+            return;
+        }
         log.info("========================================");
         log.info("PostLifecycleListener 初始化完成");
         log.info("========================================");
     }
 
     public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
+        if (nodeRoleService.isEdgeNode()) {
+            invalidatePostCaches();
+            return;
+        }
+
         log.debug("[onPostSynced] 收到文章同步事件: " + event.getPostId());
 
         if (!connectionManager.isAvailable()) {
@@ -78,6 +90,10 @@ public class PostLifecycleListener {
      * 核心业务逻辑：将数据库文章状态同步到 ES
      */
     public void processPostUpdate(Long postId) throws Exception {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
+
         log.debugf("开始处理文章同步, postId=%d", postId);
 
         if (!connectionManager.isAvailable()) {
@@ -119,6 +135,11 @@ public class PostLifecycleListener {
     }
 
     public void processPostDelete(Long postId) throws Exception {
+        if (nodeRoleService.isEdgeNode()) {
+            invalidatePostCaches();
+            return;
+        }
+
         log.infof("检测到文章硬删除事件: %d", postId);
         postSearchService.deletePostIndex(postId);
         invalidatePostCaches();

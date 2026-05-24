@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -28,6 +29,8 @@ public class ElasticsearchIndexService {
     private final AtomicBoolean indexInitialized = new AtomicBoolean(false);
     @Inject
     ElasticsearchConnectionManager connectionManager;
+    @Inject
+    NodeRoleService nodeRoleService;
 
     @ConfigProperty(name = "elasticsearch.hosts")
     String elasticsearchHosts;
@@ -43,6 +46,11 @@ public class ElasticsearchIndexService {
     }
 
     void onStart(@Observes StartupEvent event) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.info("当前节点是边缘节点，跳过 Elasticsearch 日志索引初始化");
+            return;
+        }
+
         log.debug("ElasticsearchIndexService startup initiated");
         log.debug("connectionManager status: " + (connectionManager != null ? "injected" : "NULL"));
         log.debug("Registering log index initialization callback...");
@@ -157,6 +165,9 @@ public class ElasticsearchIndexService {
      * Check if service is available
      */
     public boolean isAvailable() {
+        if (nodeRoleService.isEdgeNode()) {
+            return false;
+        }
         return connectionManager.isAvailable() && indexInitialized.get();
     }
 
@@ -164,6 +175,9 @@ public class ElasticsearchIndexService {
      * Get service status
      */
     public ServiceStatus getServiceStatus() {
+        if (nodeRoleService.isEdgeNode()) {
+            return new ServiceStatus(false, false, "DISABLED");
+        }
         return new ServiceStatus(
                 connectionManager.isAvailable(),
                 indexInitialized.get(),

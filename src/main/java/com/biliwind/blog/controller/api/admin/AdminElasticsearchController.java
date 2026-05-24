@@ -5,6 +5,7 @@ import com.biliwind.blog.service.elasticsearch.ElasticsearchConnectionManager;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchIndexService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchLogBufferService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
+import com.biliwind.blog.service.edge.NodeRoleService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -35,12 +36,18 @@ public class AdminElasticsearchController {
 
     @Inject
     ElasticsearchLogBufferService logBufferService;
+    @Inject
+    NodeRoleService nodeRoleService;
 
     @GET
     @Path("/health")
     @Operation(summary = "Elasticsearch 健康检查", description = "检查 Elasticsearch 连接状态、ILM 策略和索引模板是否存在")
     @APIResponse(responseCode = "200", description = "健康检查结果")
     public Response health() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.ok(edgeDisabledResponse()).build();
+        }
+
         var connectionStatus = connectionManager.getStatus();
         var postSearchStatus = postSearchService.getServiceStatus();
         var indexServiceStatus = indexService.getServiceStatus();
@@ -88,6 +95,10 @@ public class AdminElasticsearchController {
     @Operation(summary = "获取详细状态", description = "获取 Elasticsearch 各组件的详细状态信息")
     @APIResponse(responseCode = "200", description = "详细状态信息")
     public Response status() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.ok(edgeDisabledResponse()).build();
+        }
+
         Map<String, Object> result = new HashMap<>();
 
         var connectionStatus = connectionManager.getStatus();
@@ -129,6 +140,12 @@ public class AdminElasticsearchController {
     @APIResponse(responseCode = "200", description = "ILM 策略详情")
     @APIResponse(responseCode = "503", description = "Elasticsearch 服务不可用")
     public Response getIlmPolicy() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
         try {
             if (!connectionManager.isAvailable()) {
                 return Response.status(Response.Status.SERVICE_UNAVAILABLE)
@@ -160,6 +177,12 @@ public class AdminElasticsearchController {
     @APIResponse(responseCode = "200", description = "索引模板详情")
     @APIResponse(responseCode = "503", description = "Elasticsearch 服务不可用")
     public Response getIndexTemplate() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
         try {
             if (!connectionManager.isAvailable()) {
                 return Response.status(Response.Status.SERVICE_UNAVAILABLE)
@@ -195,6 +218,12 @@ public class AdminElasticsearchController {
             @QueryParam("region") @DefaultValue("global") String region,
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("size") @DefaultValue("10") int size) {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
         try {
             if (!postSearchService.isAvailable()) {
                 return Response.status(Response.Status.SERVICE_UNAVAILABLE)
@@ -243,6 +272,12 @@ public class AdminElasticsearchController {
     @APIResponse(responseCode = "503", description = "Elasticsearch 服务不可用")
     @APIResponse(responseCode = "500", description = "索引失败")
     public Response indexPost(@PathParam("id") Long id) {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
         try {
             if (!connectionManager.isAvailable()) {
                 return Response.status(Response.Status.SERVICE_UNAVAILABLE)
@@ -286,6 +321,12 @@ public class AdminElasticsearchController {
     @APIResponse(responseCode = "503", description = "Elasticsearch 服务不可用")
     @APIResponse(responseCode = "500", description = "删除失败")
     public Response deletePostIndex(@PathParam("id") Long id) {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
         try {
             if (!connectionManager.isAvailable()) {
                 return Response.status(Response.Status.SERVICE_UNAVAILABLE)
@@ -317,6 +358,12 @@ public class AdminElasticsearchController {
     @Operation(summary = "全量索引文章", description = "将所有已发布的文章重新索引到 Elasticsearch，用于更新索引结构或修复数据")
     @APIResponse(responseCode = "200", description = "索引任务启动成功")
     public Response reindexAll() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
         try {
             List<Post> posts = Post.list(
                     "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
@@ -335,5 +382,13 @@ public class AdminElasticsearchController {
         } catch (Exception e) {
             return Response.serverError().entity(Map.of("error", e.getMessage())).build();
         }
+    }
+
+    private Map<String, Object> edgeDisabledResponse() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("disabled", true);
+        result.put("status", "disabled");
+        result.put("message", "当前节点是边缘节点，不运行 Elasticsearch。普通搜索使用本地数据库，深度搜索通过 gRPC 回源主节点。");
+        return result;
     }
 }

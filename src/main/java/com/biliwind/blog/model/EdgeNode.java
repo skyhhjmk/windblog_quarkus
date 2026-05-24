@@ -65,6 +65,27 @@ public class EdgeNode extends PanacheEntityBase {
     public Integer edgeGrpcPort;
 
     /**
+     * 边缘节点本地 PostgreSQL 对外映射端口。
+     */
+    @Column(name = "edge_db_port")
+    @JsonProperty("edgeDbPort")
+    public Integer edgeDbPort;
+
+    /**
+     * 边缘节点本地 Redis 对外映射端口。
+     */
+    @Column(name = "edge_redis_port")
+    @JsonProperty("edgeRedisPort")
+    public Integer edgeRedisPort;
+
+    /**
+     * 边缘节点 HTTP 对外映射端口。
+     */
+    @Column(name = "edge_http_port")
+    @JsonProperty("edgeHttpPort")
+    public Integer edgeHttpPort;
+
+    /**
      * 节点地址 (已废弃，保留向后兼容)
      */
     @Deprecated

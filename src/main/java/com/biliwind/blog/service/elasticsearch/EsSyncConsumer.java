@@ -22,11 +22,18 @@ public class EsSyncConsumer {
 
     @Inject
     PostLifecycleListener lifecycleListener;
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     @Incoming("es-sync-tasks-in")
     @Blocking
     @Transactional
     public CompletionStage<Void> consume(Message<EsSyncTask> message) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.debug("当前节点是边缘节点，忽略 ES 同步任务");
+            return message.ack();
+        }
+
         EsSyncTask task = message.getPayload();
         log.infof("收到 ES 同步任务: postId=%d, action=%s", task.postId(), task.actionType());
 

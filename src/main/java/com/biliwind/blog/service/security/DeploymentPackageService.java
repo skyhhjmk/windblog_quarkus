@@ -8,8 +8,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -66,6 +71,8 @@ public class DeploymentPackageService {
      * </pre>
      */
     public byte[] buildDeploymentZip(EdgeNode node) throws Exception {
+        ensureFixedDeploymentPorts(node);
+
         CertificateService.GeneratedCertificate primary = certificateService.generateNodeCertificate(node.nodeId, 24);
         CertificateService.GeneratedCertificate backup = certificateService.generateNodeCertificate(node.nodeId, 72);
 
@@ -85,6 +92,7 @@ public class DeploymentPackageService {
         addTextEntry(zipOutputStream, baseDir + "/certs/backup.crt", backup.certificatePem());
         addTextEntry(zipOutputStream, baseDir + "/certs/backup.key", backup.privateKeyPem());
         addTextEntry(zipOutputStream, baseDir + "/certs/ca.crt", primary.caCertificatePem());
+        addBinaryEntry(zipOutputStream, baseDir + "/certs/ca/truststore.p12", buildTrustStoreBytes(primary.caCertificatePem()));
 
         String envContent = buildEnvContent(node);
         addTextEntry(zipOutputStream, baseDir + "/.env", envContent);
@@ -113,9 +121,9 @@ public class DeploymentPackageService {
         if (node.edgeGrpcPort != null) {
             grpcPort = node.edgeGrpcPort.intValue();
         }
-        int dbPort = generateRandomHighPort();
-        int redisPort = generateRandomHighPort();
-        int httpPort = generateRandomHighPort();
+        int dbPort = node.edgeDbPort.intValue();
+        int redisPort = node.edgeRedisPort.intValue();
+        int httpPort = node.edgeHttpPort.intValue();
 
         sb.append("EDGE_GRPC_PORT=").append(grpcPort).append("\n");
         sb.append("EDGE_APP_GRPC_PORT=").append(grpcPort).append("\n");
@@ -309,9 +317,43 @@ public class DeploymentPackageService {
         zipOutputStream.closeEntry();
     }
 
+    private void addBinaryEntry(ZipOutputStream zipOutputStream, String entryPath, byte[] content) throws IOException {
+        ZipEntry entry = new ZipEntry(entryPath);
+        zipOutputStream.putNextEntry(entry);
+        zipOutputStream.write(content);
+        zipOutputStream.closeEntry();
+    }
+
     private int generateRandomHighPort() {
-        java.util.Random random = new java.util.Random();
-        int randomPort = random.nextInt(40000) + 20000;
-        return randomPort;
+        return ThreadLocalRandom.current().nextInt(20000, 60000);
+    }
+
+    private void ensureFixedDeploymentPorts(EdgeNode node) {
+        if (node.edgeGrpcPort == null) {
+            node.edgeGrpcPort = Integer.valueOf(generateRandomHighPort());
+        }
+        if (node.edgeDbPort == null) {
+            node.edgeDbPort = Integer.valueOf(generateRandomHighPort());
+        }
+        if (node.edgeRedisPort == null) {
+            node.edgeRedisPort = Integer.valueOf(generateRandomHighPort());
+        }
+        if (node.edgeHttpPort == null) {
+            node.edgeHttpPort = Integer.valueOf(generateRandomHighPort());
+        }
+    }
+
+    private byte[] buildTrustStoreBytes(String caCertificatePem) throws Exception {
+        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+        ByteArrayInputStream certificateInputStream = new ByteArrayInputStream(caCertificatePem.getBytes(StandardCharsets.UTF_8));
+        X509Certificate caCertificate = (X509Certificate) certificateFactory.generateCertificate(certificateInputStream);
+
+        KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        keyStore.load(null, null);
+        keyStore.setCertificateEntry("ca", caCertificate);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        keyStore.store(outputStream, "changeit".toCharArray());
+        return outputStream.toByteArray();
     }
 }
