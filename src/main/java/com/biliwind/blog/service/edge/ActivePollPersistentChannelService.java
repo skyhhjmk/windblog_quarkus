@@ -56,6 +56,30 @@ public class ActivePollPersistentChannelService {
         }
     }
 
+    @Scheduled(every = "10s")
+    public void keepActivePollChannelsAlive() {
+        if (!nodeRoleService.isPrimaryNode()) {
+            return;
+        }
+
+        List<EdgeNode> activePollNodes = EdgeNode.list(
+                "connectionType = ?1 AND isEnabled = true AND isTrusted = true",
+                EdgeConnectionType.ACTIVE_POLL
+        );
+
+        for (EdgeNode node : activePollNodes) {
+            if (!channelRegistry.hasOnlineChannel(node.nodeId)) {
+                continue;
+            }
+
+            EdgeServiceProto.EdgeChannelMessage channelMessage = buildPrimaryStatusMessage("主节点在线");
+            boolean sent = channelRegistry.sendToNode(node.nodeId, channelMessage);
+            if (!sent) {
+                channelRegistry.unregister(node.nodeId);
+            }
+        }
+    }
+
     private void openChannel(EdgeNode node) {
         String grpcAddress = resolveGrpcAddress(node);
         if (grpcAddress == null || grpcAddress.isBlank()) {
@@ -143,18 +167,22 @@ public class ActivePollPersistentChannelService {
     }
 
     private void sendPrimaryStatus(MultiEmitter<? super EdgeServiceProto.EdgeChannelMessage> emitter, String nodeId) {
+        EdgeServiceProto.EdgeChannelMessage channelMessage = buildPrimaryStatusMessage("主节点已建立主动持久通道");
+        emitter.emit(channelMessage);
+    }
+
+    private EdgeServiceProto.EdgeChannelMessage buildPrimaryStatusMessage(String message) {
         EdgeServiceProto.EdgeNodeStatusMessage statusMessage = EdgeServiceProto.EdgeNodeStatusMessage.newBuilder()
                 .setPrimaryOnline(true)
                 .setReadOnly(false)
-                .setMessage("主节点已建立主动持久通道")
+                .setMessage(message)
                 .build();
-        EdgeServiceProto.EdgeChannelMessage channelMessage = EdgeServiceProto.EdgeChannelMessage.newBuilder()
+        return EdgeServiceProto.EdgeChannelMessage.newBuilder()
                 .setRequestId(UUID.randomUUID().toString())
                 .setNodeId("main")
                 .setTimestamp(System.currentTimeMillis())
                 .setNodeStatus(statusMessage)
                 .build();
-        emitter.emit(channelMessage);
     }
 
     private String resolveGrpcAddress(EdgeNode node) {

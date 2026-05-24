@@ -14,15 +14,6 @@ import java.util.Collections;
 
 @TemplateData
 public final class MarkdownHelper {
-    private static final String BLOG_URL = ConfigProvider.getConfig().getOptionalValue("blog.url", String.class).orElse("http://localhost:8080");
-
-    private static final MutableDataSet OPTIONS = new MutableDataSet()
-            .set(Parser.EXTENSIONS, Collections.singletonList(MdProtocolExtension.create()))
-            .set(HtmlRenderer.SOFT_BREAK, "<br />\n");
-
-    private static final Parser PARSER = Parser.builder(OPTIONS).build();
-    private static final HtmlRenderer HTML_RENDERER = HtmlRenderer.builder(OPTIONS).build();
-
     // 文章内容允许的标签（比评论更宽松，允许图片、表格等）
     private static final Safelist POST_SAFE_LIST = Safelist.relaxed()
             .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "button", "svg", "path", "rect", "line", "polyline")
@@ -30,6 +21,9 @@ public final class MarkdownHelper {
             .addAttributes("pre", "class")
             .addAttributes("span", "class", "style")
             .addAttributes("div", "class", "id", "style")
+            .addAttributes("a", "href", "target", "rel", "class", "title",
+                    "data-article-link-preview", "data-link-name", "data-link-url",
+                    "data-link-description", "data-link-icon")
             .addAttributes("table", "class")
             .addAttributes("th", "align")
             .addAttributes("td", "align")
@@ -49,15 +43,35 @@ public final class MarkdownHelper {
         if (markdown == null || markdown.isBlank()) {
             return "";
         }
-        String unsafeHtml = HTML_RENDERER.render(PARSER.parse(markdown));
+        String unsafeHtml = FlexmarkHolder.HTML_RENDERER.render(FlexmarkHolder.PARSER.parse(markdown));
 
         // 执行 HTML 净化，并提供基础 URL 以补全相对路径
         Document.OutputSettings outputSettings = new Document.OutputSettings().prettyPrint(false);
-        return Jsoup.clean(unsafeHtml, BLOG_URL, POST_SAFE_LIST, outputSettings);
+        return Jsoup.clean(unsafeHtml, FlexmarkHolder.BLOG_URL, POST_SAFE_LIST, outputSettings);
+    }
+
+    private static MutableDataSet createFlexmarkOptions() {
+        MutableDataSet flexmarkOptions = new MutableDataSet();
+        flexmarkOptions.set(Parser.EXTENSIONS, Collections.singletonList(MdProtocolExtension.create()));
+        flexmarkOptions.set(HtmlRenderer.SOFT_BREAK, "<br />\n");
+        return flexmarkOptions;
     }
 
     public String toHtml(Object markdown) {
-        if (markdown == null) return "";
+        if (markdown == null) {
+            return "";
+        }
         return toHtml(markdown.toString());
+    }
+
+    private static final class FlexmarkHolder {
+        private static final String BLOG_URL = ConfigProvider.getConfig()
+                .getOptionalValue("blog.url", String.class)
+                .orElse("http://localhost:8080");
+
+        private static final MutableDataSet OPTIONS = createFlexmarkOptions();
+
+        private static final Parser PARSER = Parser.builder(OPTIONS).build();
+        private static final HtmlRenderer HTML_RENDERER = HtmlRenderer.builder(OPTIONS).build();
     }
 }

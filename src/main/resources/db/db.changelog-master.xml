@@ -73,4 +73,6 @@
     <include file="db/migration/069-add-edge-node-grpc-port.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/070-add-post-published-revision.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/071-create-edge-node-availability-samples.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/072-create-repost-affiliate-tracking.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/073-add-link-public-token.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

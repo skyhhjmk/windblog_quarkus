@@ -82,6 +82,16 @@ public class EdgeDataSyncService {
             syncUser(event.getEntityId(), event.getAction());
         } else if ("SYSTEM_SETTING".equals(event.getEntityType())) {
             syncSystemSetting(event.getEntityId(), event.getAction());
+        } else if ("AFFILIATE_LINK".equals(event.getEntityType())) {
+            syncAffiliateLink(event.getEntityId(), event.getAction());
+        } else if ("REPOST_LICENSE".equals(event.getEntityType())) {
+            syncRepostLicense(event.getEntityId(), event.getAction());
+        } else if ("AFFILIATE_TOKEN".equals(event.getEntityType())) {
+            syncAffiliateToken(event.getEntityId(), event.getAction());
+        } else if ("BLOCKED_DOMAIN".equals(event.getEntityType())) {
+            syncBlockedDomain(event.getEntityId(), event.getAction());
+        } else if ("RISK_DEVICE".equals(event.getEntityType())) {
+            syncRiskDevice(event.getEntityId(), event.getAction());
         }
     }
 
@@ -174,6 +184,81 @@ public class EdgeDataSyncService {
         }
 
         broadcastSync("TAG", action, tagId.toString(), payload);
+    }
+
+    private void syncAffiliateLink(Long affiliateLinkId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            AffiliateLink affiliateLink = AffiliateLink.findById(affiliateLinkId);
+            if (affiliateLink == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(affiliateLink);
+            } catch (Exception e) {
+                log.error("Failed to serialize affiliate link: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("AFFILIATE_LINK", action, affiliateLinkId.toString(), payload);
+    }
+
+    private void syncRepostLicense(Long repostLicenseId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            RepostLicense repostLicense = RepostLicense.findById(repostLicenseId);
+            if (repostLicense == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(repostLicense);
+            } catch (Exception e) {
+                log.error("Failed to serialize repost license: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("REPOST_LICENSE", action, repostLicenseId.toString(), payload);
+    }
+
+    private void syncAffiliateToken(Long affiliateTokenId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            AffiliateToken affiliateToken = AffiliateToken.findById(affiliateTokenId);
+            if (affiliateToken == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(affiliateToken);
+            } catch (Exception e) {
+                log.error("Failed to serialize affiliate token: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("AFFILIATE_TOKEN", action, affiliateTokenId.toString(), payload);
+    }
+
+    private void syncBlockedDomain(Long blockedDomainId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            BlockedDomain blockedDomain = BlockedDomain.findById(blockedDomainId);
+            if (blockedDomain == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(blockedDomain);
+            } catch (Exception e) {
+                log.error("Failed to serialize blocked domain: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("BLOCKED_DOMAIN", action, blockedDomainId.toString(), payload);
+    }
+
+    private void syncRiskDevice(Long riskDeviceId, String action) {
+        String payload = "{}";
+        if ("UPSERT".equals(action)) {
+            RiskDevice riskDevice = RiskDevice.findById(riskDeviceId);
+            if (riskDevice == null) return;
+            try {
+                payload = objectMapper.writeValueAsString(riskDevice);
+            } catch (Exception e) {
+                log.error("Failed to serialize risk device: {}", e.getMessage());
+                return;
+            }
+        }
+        broadcastSync("RISK_DEVICE", action, riskDeviceId.toString(), payload);
     }
 
     private void syncPost(Long postId) {
@@ -372,7 +457,13 @@ public class EdgeDataSyncService {
             List<Link> links = Link.listAll();
             List<Media> mediaList = Media.listAll();
             List<Post> posts = Post.list("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null", PostStatus.PUBLISHED);
-            int total = users.size() + settings.size() + tags.size() + categories.size() + links.size() + mediaList.size() + posts.size();
+            List<AffiliateLink> affiliateLinks = AffiliateLink.list("status = 1");
+            List<RepostLicense> repostLicenses = RepostLicense.listAll();
+            List<AffiliateToken> affiliateTokens = AffiliateToken.listAll();
+            List<BlockedDomain> blockedDomains = BlockedDomain.list("status = 1");
+            List<RiskDevice> riskDevices = RiskDevice.list("status = 1");
+            int total = users.size() + settings.size() + tags.size() + categories.size() + links.size() + mediaList.size() + posts.size()
+                    + affiliateLinks.size() + repostLicenses.size() + affiliateTokens.size() + blockedDomains.size() + riskDevices.size();
 
             syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Syncing users..."));
 
@@ -470,6 +561,96 @@ public class EdgeDataSyncService {
                 }
                 processed++;
                 syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing links (" + processed + "/" + total + ")"));
+            }
+
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate links..."));
+            for (AffiliateLink affiliateLink : affiliateLinks) {
+                try {
+                    String affiliateLinkPayload = objectMapper.writeValueAsString(affiliateLink);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "AFFILIATE_LINK", action, affiliateLink.id.toString(), affiliateLinkPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push affiliate link {} to node {}", affiliateLink.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing affiliate link {} to node {}: {}", affiliateLink.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate links (" + processed + "/" + total + ")"));
+            }
+
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing repost licenses..."));
+            for (RepostLicense repostLicense : repostLicenses) {
+                try {
+                    String repostLicensePayload = objectMapper.writeValueAsString(repostLicense);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "REPOST_LICENSE", action, repostLicense.id.toString(), repostLicensePayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push repost license {} to node {}", repostLicense.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing repost license {} to node {}: {}", repostLicense.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing repost licenses (" + processed + "/" + total + ")"));
+            }
+
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate tokens..."));
+            for (AffiliateToken affiliateToken : affiliateTokens) {
+                try {
+                    String affiliateTokenPayload = objectMapper.writeValueAsString(affiliateToken);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "AFFILIATE_TOKEN", action, affiliateToken.id.toString(), affiliateTokenPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push affiliate token {} to node {}", affiliateToken.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing affiliate token {} to node {}: {}", affiliateToken.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate tokens (" + processed + "/" + total + ")"));
+            }
+
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing blocked domains..."));
+            for (BlockedDomain blockedDomain : blockedDomains) {
+                try {
+                    String blockedDomainPayload = objectMapper.writeValueAsString(blockedDomain);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "BLOCKED_DOMAIN", action, blockedDomain.id.toString(), blockedDomainPayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push blocked domain {} to node {}", blockedDomain.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing blocked domain {} to node {}: {}", blockedDomain.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing blocked domains (" + processed + "/" + total + ")"));
+            }
+
+            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing risk devices..."));
+            for (RiskDevice riskDevice : riskDevices) {
+                try {
+                    String riskDevicePayload = objectMapper.writeValueAsString(riskDevice);
+                    String action = force ? "FORCE_UPSERT" : "UPSERT";
+                    boolean success = pushToNodeWithRetry(node, "RISK_DEVICE", action, riskDevice.id.toString(), riskDevicePayload, 15);
+                    if (!success) {
+                        failedCount++;
+                        log.warn("Failed to push risk device {} to node {}", riskDevice.id, nodeId);
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error syncing risk device {} to node {}: {}", riskDevice.id, nodeId, e.getMessage());
+                }
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing risk devices (" + processed + "/" + total + ")"));
             }
 
             // 1.3 同步媒体元数据

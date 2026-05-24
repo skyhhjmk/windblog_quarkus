@@ -190,6 +190,19 @@
                         </span>
                     </div>
                 </div>
+                <div class="rounded-lg border border-border/60 bg-card-bg/40 p-4 text-sm text-body flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <p class="font-bold text-main">授权转载声明</p>
+                        <p class="mt-1 text-gray-500">转载本文必须保留原文链接、授权码和文中 go/affiliate 链接。</p>
+                    </div>
+                    <button type="button"
+                            id="request-repost-license-button"
+                            data-post-id="{postId}"
+                            data-logged-in="{repostUserLoggedIn}"
+                            class="inline-flex items-center justify-center rounded-lg border border-accent/40 px-4 py-2 text-sm font-bold text-accent hover:bg-accent/10 transition-colors">
+                        我要转载
+                    </button>
+                </div>
             </header>
 
             {#if aiSummary && ! aiSummary.isEmpty}
@@ -250,8 +263,13 @@
                 {/for}
             </div>
 
-            <!-- 安全的付费内容加载脚本 -->
-            <script src="/assets/js/post-premium.js" defer></script>
+            <section class="mt-12 rounded-lg border border-border/60 bg-card-bg/40 p-5 text-sm text-body">
+                <p class="font-bold text-main">转载要求</p>
+                <p class="mt-2 text-gray-500">转载需先申请授权，并在转载页保留原文链接：<a href="{repostOriginalUrl}"
+                                                                                         class="text-accent hover:underline">{repostOriginalUrl}</a>。
+                </p>
+            </section>
+
         </article>
     </div>
 

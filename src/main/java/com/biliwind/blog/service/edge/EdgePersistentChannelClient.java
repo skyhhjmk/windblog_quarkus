@@ -151,6 +151,17 @@ public class EdgePersistentChannelClient {
     }
 
     public void clearServerSideEmitter() {
+        clearServerSideEmitter(outboundEmitter);
+    }
+
+    public void clearServerSideEmitter(MultiEmitter<? super EdgeChannelMessage> emitter) {
+        if (emitter == null) {
+            return;
+        }
+        if (outboundEmitter != emitter) {
+            LOGGER.debug("忽略过期主节点主动通道关闭事件");
+            return;
+        }
         outboundEmitter = null;
         readOnlyState.markPrimaryOffline("主节点主动通道已断开，当前从节点处于只读模式");
         failPendingRequests();

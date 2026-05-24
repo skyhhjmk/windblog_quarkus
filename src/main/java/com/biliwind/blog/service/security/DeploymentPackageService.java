@@ -137,6 +137,7 @@ public class DeploymentPackageService {
         sb.append("EDGE_REDIS_URL=redis://edge-redis:6379\n");
 
         sb.append("EDGE_APP_HTTP_PORT=").append(httpPort).append("\n");
+        sb.append("WINDBLOG_EDGE_IMAGE=biliwind/windblog:latest\n");
 
         sb.append("USER_JWT_SECRET=").append(this.userJwtSecret).append("\n");
         sb.append("USER_JWT_ISSUER=").append(this.userJwtIssuer).append("\n");
@@ -193,7 +194,7 @@ public class DeploymentPackageService {
 
         sb.append("  edge-node:\n");
         sb.append("    container_name: ").append(containerPrefix).append("-node\n");
-        sb.append("    image: biliwind/windblog-edge-node:latest\n");
+        sb.append("    image: ${WINDBLOG_EDGE_IMAGE}\n");
         sb.append("    restart: unless-stopped\n");
         sb.append("    networks:\n");
         sb.append("      - app-network\n");
@@ -271,6 +272,7 @@ public class DeploymentPackageService {
         sb.append("（证书到期前主节点会自动签发新证书，需要重新部署更新）\n");
         sb.append("注意: 从节点启动时会自动生成自签名证书到 certs/ 目录\n");
         sb.append("       主节点签发的证书用于 mTLS 身份验证\n");
+        sb.append("       必须使用完整 WindBlog 应用镜像运行从节点，旧的 windblog-edge-node 轻量镜像不包含后台 API 和双向持久通道。\n");
         sb.append("\n");
         sb.append("========================================\n");
         sb.append("部署步骤\n");

@@ -47,6 +47,15 @@ public class PostController {
     @Inject
     com.biliwind.blog.service.storage.StorageService storageService;
 
+    @Inject
+    com.biliwind.blog.service.repost.AffiliateContentRenderService affiliateContentRenderService;
+
+    @Inject
+    com.biliwind.blog.service.repost.RepostLicenseService repostLicenseService;
+
+    @Inject
+    com.biliwind.blog.service.link.ArticleExternalLinkService articleExternalLinkService;
+
     @GET
     @Path("/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
@@ -148,6 +157,11 @@ public class PostController {
         localizedContent = postAccessService.getCachedPreviewContent(postEntity, resolvedLang, localizedContent, postPrice);
 
         PostBodyView postBody = resolvePostBody(postEntity.renderType, localizedContent);
+        if (postBody.html()) {
+            String rewrittenPostBody = affiliateContentRenderService.rewriteCommercialLinks(postEntity, postBody.body());
+            rewrittenPostBody = articleExternalLinkService.rewriteArticleExternalLinks(rewrittenPostBody);
+            postBody = new PostBodyView(rewrittenPostBody, true, postBody.renderType());
+        }
 
         String localizedAiSummary =
                 LanguageHelper.resolveLocalizedValue(postEntity.aiSummary, resolvedLang);
@@ -260,9 +274,11 @@ public class PostController {
                 .data("postCategorySlug", postCategorySlug)
                 .data("postPrice", postPrice)
                 .data("hasPurchased", hasPurchased)
+                .data("repostUserLoggedIn", currentUserId != null)
                 .data("postTags", postTags)
                 .data("attachments", attachments)
                 .data("relatedStoreItems", resolveRelatedStoreItems(postEntity))
+                .data("repostOriginalUrl", repostLicenseService.buildPostUrl(postEntity))
                 .data("canonicalUrl", buildCanonicalUrl(slug))
                 .data("ogData", buildOgData(postEntity, localizedTitle, localizedAiSummary, resolvedLang))
                 .data("jsonLd", buildJsonLd(postEntity, localizedTitle, localizedAiSummary, resolvedLang));

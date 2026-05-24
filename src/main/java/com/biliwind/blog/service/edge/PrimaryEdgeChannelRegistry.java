@@ -51,6 +51,26 @@ public class PrimaryEdgeChannelRegistry {
         }
     }
 
+    public void unregister(String nodeId, MultiEmitter<? super EdgeChannelMessage> emitter) {
+        if (nodeId == null || nodeId.isBlank()) {
+            return;
+        }
+        if (emitter == null) {
+            return;
+        }
+
+        ChannelEntry currentEntry = channelEntries.get(nodeId);
+        if (currentEntry == null) {
+            return;
+        }
+        if (currentEntry.emitter != emitter) {
+            LOGGER.debug("忽略过期持久通道关闭事件: {}", nodeId);
+            return;
+        }
+
+        unregister(nodeId);
+    }
+
     public boolean sendToNode(String nodeId, EdgeChannelMessage message) {
         ChannelEntry entry = channelEntries.get(nodeId);
         if (entry == null) {

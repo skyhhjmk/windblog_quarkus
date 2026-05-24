@@ -147,7 +147,7 @@
                 }
 
                 const html = await response.text();
-                container.innerHTML = html;
+                container.innerHTML = extractPjaxHtml(html);
 
                 const titleHolder = container.querySelector('[data-page-title]');
                 if (titleHolder) {
@@ -174,6 +174,26 @@
                 dispatch('pjax:end', { url: url, error: error });
                 window.location.href = url;
             }
+        }
+
+        function extractPjaxHtml(html) {
+            if (!html) {
+                return '';
+            }
+
+            const parser = new DOMParser();
+            const documentSnapshot = parser.parseFromString(html, 'text/html');
+            const contentRoot = documentSnapshot.querySelector('#pjax-content-root');
+            if (contentRoot) {
+                return contentRoot.outerHTML;
+            }
+
+            const pjaxContainer = documentSnapshot.querySelector('#pjax-container');
+            if (pjaxContainer) {
+                return pjaxContainer.innerHTML;
+            }
+
+            return html;
         }
 
         function formatTimestamps(root = document) {
@@ -212,6 +232,179 @@
                 }
             });
         }
+
+        let articleLinkPreviewCard = null;
+        let articleLinkPreviewHideTimer = null;
+        let articleLinkPreviewCurrentAnchor = null;
+
+        function ensureArticleLinkPreviewCard() {
+            if (articleLinkPreviewCard) {
+                return articleLinkPreviewCard;
+            }
+
+            articleLinkPreviewCard = document.createElement('div');
+            articleLinkPreviewCard.className = 'article-link-preview-card';
+            articleLinkPreviewCard.innerHTML =
+                '<div class="article-link-preview-arrow"></div>' +
+                '<div class="article-link-preview-head">' +
+                '<img class="article-link-preview-icon" alt="">' +
+                '<div class="article-link-preview-title"></div>' +
+                '</div>' +
+                '<div class="article-link-preview-url"></div>' +
+                '<div class="article-link-preview-description"></div>';
+            document.body.appendChild(articleLinkPreviewCard);
+
+            articleLinkPreviewCard.addEventListener('mouseenter', () => {
+                clearTimeout(articleLinkPreviewHideTimer);
+            });
+            articleLinkPreviewCard.addEventListener('mouseleave', () => {
+                scheduleArticleLinkPreviewHide();
+            });
+
+            return articleLinkPreviewCard;
+        }
+
+        function showArticleLinkPreview(anchor) {
+            clearTimeout(articleLinkPreviewHideTimer);
+            articleLinkPreviewCurrentAnchor = anchor;
+
+            const card = ensureArticleLinkPreviewCard();
+            const title = anchor.dataset.linkName || anchor.textContent || '文章外链';
+            const url = anchor.dataset.linkUrl || anchor.getAttribute('href') || '';
+            const description = anchor.dataset.linkDescription || '';
+            const icon = anchor.dataset.linkIcon || '';
+
+            const iconNode = card.querySelector('.article-link-preview-icon');
+            const titleNode = card.querySelector('.article-link-preview-title');
+            const urlNode = card.querySelector('.article-link-preview-url');
+            const descriptionNode = card.querySelector('.article-link-preview-description');
+
+            titleNode.textContent = title;
+            urlNode.textContent = url;
+            descriptionNode.textContent = description || '已接入站内文章外链管理。';
+
+            if (icon) {
+                iconNode.src = icon;
+                iconNode.classList.remove('hidden');
+            } else {
+                iconNode.removeAttribute('src');
+                iconNode.classList.add('hidden');
+            }
+
+            const rect = anchor.getBoundingClientRect();
+            card.classList.add('is-measuring');
+            card.classList.add('is-visible');
+            card.classList.remove('is-below');
+            card.classList.remove('is-above');
+
+            let placement = 'above';
+            let top = window.scrollY + rect.top - card.offsetHeight - 12;
+            if (top < window.scrollY + 12) {
+                placement = 'below';
+                top = window.scrollY + rect.bottom + 12;
+            }
+
+            let left = window.scrollX + rect.left + rect.width / 2 - card.offsetWidth / 2;
+            const maxLeft = window.scrollX + document.documentElement.clientWidth - card.offsetWidth - 16;
+            if (left > maxLeft) {
+                left = maxLeft;
+            }
+            if (left < 16) {
+                left = 16;
+            }
+            card.style.top = top + 'px';
+            card.style.left = left + 'px';
+
+            const anchorCenterX = window.scrollX + rect.left + rect.width / 2;
+            let arrowLeft = anchorCenterX - left;
+            if (arrowLeft < 18) {
+                arrowLeft = 18;
+            }
+            if (arrowLeft > card.offsetWidth - 18) {
+                arrowLeft = card.offsetWidth - 18;
+            }
+            card.style.setProperty('--article-link-arrow-left', arrowLeft + 'px');
+
+            if (placement === 'below') {
+                card.classList.add('is-below');
+            } else {
+                card.classList.add('is-above');
+            }
+
+            card.classList.remove('is-measuring');
+        }
+
+        function scheduleArticleLinkPreviewHide() {
+            clearTimeout(articleLinkPreviewHideTimer);
+            articleLinkPreviewHideTimer = setTimeout(() => {
+                hideArticleLinkPreview();
+            }, 140);
+        }
+
+        function hideArticleLinkPreview() {
+            if (!articleLinkPreviewCard) {
+                return;
+            }
+            articleLinkPreviewCard.classList.remove('is-visible');
+            articleLinkPreviewCard.classList.remove('is-above');
+            articleLinkPreviewCard.classList.remove('is-below');
+            articleLinkPreviewCurrentAnchor = null;
+        }
+
+        document.addEventListener('mouseover', (event) => {
+            const anchor = event.target.closest('a[data-article-link-preview="true"]');
+            if (!anchor) {
+                return;
+            }
+            if (anchor.contains(event.relatedTarget)) {
+                return;
+            }
+            showArticleLinkPreview(anchor);
+        });
+
+        document.addEventListener('mouseout', (event) => {
+            const anchor = event.target.closest('a[data-article-link-preview="true"]');
+            if (!anchor) {
+                return;
+            }
+            if (anchor.contains(event.relatedTarget)) {
+                return;
+            }
+            if (articleLinkPreviewCard && articleLinkPreviewCard.contains(event.relatedTarget)) {
+                return;
+            }
+            scheduleArticleLinkPreviewHide();
+        });
+
+        document.addEventListener('focusin', (event) => {
+            const anchor = event.target.closest('a[data-article-link-preview="true"]');
+            if (!anchor) {
+                return;
+            }
+            showArticleLinkPreview(anchor);
+        });
+
+        document.addEventListener('focusout', (event) => {
+            const anchor = event.target.closest('a[data-article-link-preview="true"]');
+            if (!anchor) {
+                return;
+            }
+            scheduleArticleLinkPreviewHide();
+        });
+
+        document.addEventListener('scroll', () => {
+            if (!articleLinkPreviewCurrentAnchor) {
+                return;
+            }
+            showArticleLinkPreview(articleLinkPreviewCurrentAnchor);
+        }, true);
+
+        window.addEventListener('resize', () => {
+            if (!articleLinkPreviewCurrentAnchor) {
+                return;
+            }
+            showArticleLinkPreview(articleLinkPreviewCurrentAnchor);
+        });
 
         // MutationObserver to handle dynamic content
         const observer = new MutationObserver((mutations) => {

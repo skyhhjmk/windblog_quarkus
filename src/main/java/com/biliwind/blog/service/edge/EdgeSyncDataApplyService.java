@@ -73,6 +73,26 @@ public class EdgeSyncDataApplyService {
             mergeEntity(objectMapper.readValue(payload, Media.class));
             return;
         }
+        if ("AFFILIATE_LINK".equals(entityType)) {
+            mergeEntity(objectMapper.readValue(payload, AffiliateLink.class));
+            return;
+        }
+        if ("REPOST_LICENSE".equals(entityType)) {
+            mergeEntity(objectMapper.readValue(payload, RepostLicense.class));
+            return;
+        }
+        if ("AFFILIATE_TOKEN".equals(entityType)) {
+            mergeEntity(objectMapper.readValue(payload, AffiliateToken.class));
+            return;
+        }
+        if ("BLOCKED_DOMAIN".equals(entityType)) {
+            mergeEntity(objectMapper.readValue(payload, BlockedDomain.class));
+            return;
+        }
+        if ("RISK_DEVICE".equals(entityType)) {
+            mergeEntity(objectMapper.readValue(payload, RiskDevice.class));
+            return;
+        }
         if ("POST".equals(entityType)) {
             upsertPostBundle(payload);
             return;
@@ -195,6 +215,26 @@ public class EdgeSyncDataApplyService {
         }
         if ("MEDIA".equals(entityType)) {
             Media.deleteById(entityId);
+            return;
+        }
+        if ("AFFILIATE_LINK".equals(entityType)) {
+            AffiliateLink.deleteById(entityId);
+            return;
+        }
+        if ("REPOST_LICENSE".equals(entityType)) {
+            RepostLicense.deleteById(entityId);
+            return;
+        }
+        if ("AFFILIATE_TOKEN".equals(entityType)) {
+            AffiliateToken.deleteById(entityId);
+            return;
+        }
+        if ("BLOCKED_DOMAIN".equals(entityType)) {
+            BlockedDomain.deleteById(entityId);
+            return;
+        }
+        if ("RISK_DEVICE".equals(entityType)) {
+            RiskDevice.deleteById(entityId);
             return;
         }
         if ("POST".equals(entityType)) {

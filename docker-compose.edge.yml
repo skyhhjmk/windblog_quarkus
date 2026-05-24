@@ -36,9 +36,7 @@ services:
   # 边缘节点应用
   edge-node:
     container_name: windblog-edge-node
-    build:
-      context: ./edge-node
-      dockerfile: Dockerfile.native
+    image: ${WINDBLOG_EDGE_IMAGE:-biliwind/windblog:latest}
     restart: unless-stopped
     networks:
       - app-network

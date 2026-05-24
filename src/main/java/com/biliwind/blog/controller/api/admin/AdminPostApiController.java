@@ -60,6 +60,9 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.common.security.PasswordHasher passwordHasher;
 
+    @Inject
+    com.biliwind.blog.service.link.ArticleExternalLinkService articleExternalLinkService;
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -194,6 +197,7 @@ public class AdminPostApiController {
 
         post.currentRevision = revision;
         mediaService.syncPostReferences(post, revision.contentMarkdown);
+        articleExternalLinkService.syncMarkdownLinks(post, revision.contentMarkdown);
 
         // 设置标签关联
         if (request.tagIds() != null && !request.tagIds().isEmpty()) {
@@ -656,6 +660,7 @@ public class AdminPostApiController {
 
                 post.currentRevision = nextRevision;
                 mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
+                articleExternalLinkService.syncMarkdownLinks(post, nextRevision.contentMarkdown);
                 post.title = nextRevision.title;
                 return true;
             }
@@ -763,6 +768,7 @@ public class AdminPostApiController {
         post.updatedAt = now;
 
         mediaService.syncPostReferences(post, newRevision.contentMarkdown);
+        articleExternalLinkService.syncMarkdownLinks(post, newRevision.contentMarkdown);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
 
         return toDetail(post);

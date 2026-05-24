@@ -31,6 +31,12 @@ public class Link extends PanacheEntityBase {
     @Column(nullable = false, unique = true, columnDefinition = "text")
     public String url;
 
+    /**
+     * 前台跳转使用的随机公开 token
+     */
+    @Column(name = "public_token", length = 64, unique = true)
+    public String publicToken;
+
     /** 链接描述 */
     @Column(columnDefinition = "text")
     public String description;

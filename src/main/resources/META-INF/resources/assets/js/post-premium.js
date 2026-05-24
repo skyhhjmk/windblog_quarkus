@@ -6,6 +6,7 @@
 (function () {
     // Wait for DOM to be ready
     document.addEventListener('DOMContentLoaded', initPostPremium);
+    document.addEventListener('pjax:complete', initPostPremium);
 
     // Global variables (will be initialized from data attributes)
     let config = {
@@ -13,6 +14,8 @@
         postPrice: 0,
         hasPurchased: false
     };
+    let buyButtonListenerBound = false;
+    let repostButtonListenerBound = false;
 
     function initPostPremium() {
         const container = document.getElementById('post-content-section');
@@ -24,11 +27,16 @@
         config.hasPurchased = container.dataset.hasPurchased === 'true';
 
         initBuyButtons();
+        initRepostLicenseButton();
         checkAuthorization();
     }
 
     // Initialize purchase button event listeners (using delegation)
     function initBuyButtons() {
+        if (buyButtonListenerBound) {
+            return;
+        }
+        buyButtonListenerBound = true;
         document.addEventListener('click', async function (e) {
             const target = e.target.closest('.buy-post-btn');
             if (target) {
@@ -38,6 +46,65 @@
                 const bId = target.dataset.blockId;
 
                 await buyCurrentPost(pid, pPrice, target, bId);
+            }
+        });
+    }
+
+    function initRepostLicenseButton() {
+        if (repostButtonListenerBound) {
+            return;
+        }
+        repostButtonListenerBound = true;
+
+        document.addEventListener('click', async function (event) {
+            const button = event.target.closest('#request-repost-license-button');
+            if (!button) {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (button.dataset.loggedIn !== 'true') {
+                await window.alert('请先登录后再申请转载授权');
+                return;
+            }
+
+            const targetUrl = await window.prompt('请输入转载页面 URL', 'https://');
+            if (!targetUrl) {
+                return;
+            }
+
+            if (window.setLoading) {
+                window.setLoading(button, true, {text: '申请中'});
+            }
+
+            try {
+                const response = await fetch('/api/user/repost/licenses', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        postId: Number(button.dataset.postId),
+                        targetUrl: targetUrl
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    const message = result.message || '申请失败';
+                    await window.alert(message);
+                    return;
+                }
+
+                await window.showModal({
+                    title: '转载授权已生成',
+                    message: result.data.copy.markdown,
+                    showCancel: false
+                });
+            } catch (error) {
+                await window.alert('申请失败，请稍后重试');
+            } finally {
+                if (window.setLoading) {
+                    window.setLoading(button, false, {text: '我要转载'});
+                }
             }
         });
     }

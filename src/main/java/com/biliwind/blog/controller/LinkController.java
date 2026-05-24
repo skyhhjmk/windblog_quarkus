@@ -8,6 +8,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -46,6 +47,9 @@ public class LinkController {
     @Inject
     @Location("system/go.html")
     Template goTemplate;
+
+    @Inject
+    com.biliwind.blog.service.link.LinkPublicTokenService linkPublicTokenService;
 
         @GET
         @Produces(MediaType.TEXT_HTML)
@@ -140,11 +144,15 @@ public class LinkController {
     }
 
     @GET
-    @Path("/go/{id}")
+    @Path("/go/{publicToken}")
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance go(@PathParam("id") Long id) {
-        Link linkEntity = Link.findById(id);
+    @Transactional
+    public TemplateInstance go(@PathParam("publicToken") String publicToken) {
+        Link linkEntity = linkPublicTokenService.findByPublicToken(publicToken);
         if (linkEntity == null) {
+            throw new WebApplicationException(404);
+        }
+        if (linkEntity.status != 1) {
             throw new WebApplicationException(404);
         }
 
@@ -153,9 +161,14 @@ public class LinkController {
             throw new RedirectionException(jakarta.ws.rs.core.Response.Status.SEE_OTHER, java.net.URI.create(linkEntity.url));
         }
 
+        String linkName = linkEntity.name;
+        if (linkName == null || linkName.isBlank()) {
+            linkName = "本站";
+        }
+
         // 默认显示中间页
         return goTemplate
-                .data("pageTitle", "正在离开 " + (linkEntity.name != null ? linkEntity.name : "本站"))
+                .data("pageTitle", "正在离开 " + linkName)
                 .data("language", languageContext.getLang())
                 .data("targetUrl", linkEntity.url)
                 .data("linkName", linkEntity.name);

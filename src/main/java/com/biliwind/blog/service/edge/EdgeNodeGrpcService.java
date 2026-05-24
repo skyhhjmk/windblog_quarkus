@@ -84,11 +84,12 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
             @Override
             public void accept(Throwable throwable) {
                 String nodeId = nodeIdReference.get();
+                MultiEmitter<? super EdgeChannelMessage> emitter = emitterReference.get();
                 if (nodeId != null) {
-                    primaryEdgeChannelRegistry.unregister(nodeId);
+                    primaryEdgeChannelRegistry.unregister(nodeId, emitter);
                 }
                 if (nodeRoleService.isEdgeNode()) {
-                    edgePersistentChannelClient.clearServerSideEmitter();
+                    edgePersistentChannelClient.clearServerSideEmitter(emitter);
                 }
                 log.error("边缘节点持久通道输入流异常", throwable);
             }
@@ -96,11 +97,12 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
             @Override
             public void run() {
                 String nodeId = nodeIdReference.get();
+                MultiEmitter<? super EdgeChannelMessage> emitter = emitterReference.get();
                 if (nodeId != null) {
-                    primaryEdgeChannelRegistry.unregister(nodeId);
+                    primaryEdgeChannelRegistry.unregister(nodeId, emitter);
                 }
                 if (nodeRoleService.isEdgeNode()) {
-                    edgePersistentChannelClient.clearServerSideEmitter();
+                    edgePersistentChannelClient.clearServerSideEmitter(emitter);
                 }
             }
         });

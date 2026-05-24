@@ -46,6 +46,12 @@ public class AdminLinkController {
     @Inject
     jakarta.enterprise.event.Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
 
+    @Inject
+    com.biliwind.blog.service.link.ArticleExternalLinkService articleExternalLinkService;
+
+    @Inject
+    com.biliwind.blog.service.link.LinkPublicTokenService linkPublicTokenService;
+
     @GET
     @Operation(summary = "所有友链")
     public List<AdminLinkItem> list() {
@@ -53,6 +59,21 @@ public class AdminLinkController {
                 .map(l -> (Link) l)
                 .map(this::toItem)
                 .collect(Collectors.toList());
+    }
+
+    @GET
+    @Path("/article-link")
+    @Operation(summary = "按 URL 查询文章外链")
+    public AdminLinkItem findArticleLink(@QueryParam("url") String url) {
+        if (url == null || url.isBlank()) {
+            throw new BadRequestException("url 不能为空");
+        }
+
+        Link link = articleExternalLinkService.findArticleLinkByUrl(url);
+        if (link == null) {
+            throw new NotFoundException("文章外链不存在");
+        }
+        return toItem(link);
     }
 
     @POST
@@ -259,6 +280,7 @@ public class AdminLinkController {
         l.seoTitle = req.seoTitle();
         l.seoKeywords = req.seoKeywords();
         l.seoDescription = req.seoDescription();
+        l.publicToken = linkPublicTokenService.ensurePublicToken(l);
 
         l.createdAt = OffsetDateTime.now();
         l.updatedAt = OffsetDateTime.now();
@@ -310,6 +332,7 @@ public class AdminLinkController {
         if (req.seoDescription() != null)
             l.seoDescription = req.seoDescription();
 
+        linkPublicTokenService.ensurePublicToken(l);
         l.updatedAt = OffsetDateTime.now();
         auditService.log("link", String.valueOf(l.id), "update", null, java.util.Map.of("name", l.name, "url", l.url)); // For simplicity, just log key info
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", l.id, "UPSERT"));
