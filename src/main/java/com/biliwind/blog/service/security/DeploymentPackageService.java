@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.security;
 
 import com.biliwind.blog.model.EdgeNode;
+import com.biliwind.blog.common.helper.RsaHelper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -25,6 +26,9 @@ public class DeploymentPackageService {
 
     @Inject
     CertificateService certificateService;
+
+    @Inject
+    RsaHelper rsaHelper;
 
     @Inject
     @ConfigProperty(name = "user.jwt.secret", defaultValue = "windblog-user-dev-secret-change-me")
@@ -152,8 +156,21 @@ public class DeploymentPackageService {
         sb.append("ADMIN_JWT_SECRET=").append(this.adminJwtSecret).append("\n");
         sb.append("ADMIN_JWT_ISSUER=").append(this.adminJwtIssuer).append("\n");
         sb.append("BLOG_URL=").append(this.blogUrl).append("\n");
+        appendClusterPublicKey(sb);
 
         return sb.toString();
+    }
+
+    private void appendClusterPublicKey(StringBuilder sb) {
+        String clusterPublicKey = rsaHelper.getPublicKeyEncoded();
+        if (clusterPublicKey == null) {
+            return;
+        }
+        if (clusterPublicKey.isBlank()) {
+            return;
+        }
+
+        sb.append("WINDBLOG_CLUSTER_PUBLIC_KEY=").append(clusterPublicKey).append("\n");
     }
 
     private String buildDockerCompose(EdgeNode node) {

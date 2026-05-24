@@ -2,6 +2,7 @@ package com.biliwind.blog.common.helper;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,6 +18,7 @@ import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
+import java.util.Optional;
 
 /**
  * RSA 助手类，用于处理系统中独立的密钥对、加密和解密。
@@ -28,6 +30,10 @@ public class RsaHelper {
     private static final String KEY_DIRECTORY = "rsa_keys";
     private PrivateKey privateKey;
     private PublicKey publicKey;
+    private PublicKey clusterPublicKey;
+
+    @ConfigProperty(name = "windblog.cluster.public-key")
+    Optional<String> configuredClusterPublicKey;
 
     @PostConstruct
     public void init() {
@@ -43,6 +49,13 @@ public class RsaHelper {
                 }
             } else {
                 generateAndSaveKeys();
+            }
+
+            if (configuredClusterPublicKey.isPresent()) {
+                String configuredPublicKey = configuredClusterPublicKey.get();
+                if (configuredPublicKey.isBlank() == false) {
+                    setClusterPublicKey(configuredPublicKey);
+                }
             }
         } catch (Exception e) {
             LOGGER.error("初始化 RSA 密钥失败: " + e.getMessage(), e);
@@ -80,8 +93,6 @@ public class RsaHelper {
 
         LOGGER.info("已生成并保存新的 RSA 密钥对到 " + KEY_DIRECTORY);
     }
-
-    private PublicKey clusterPublicKey;
 
     /**
      * 使用 RSA+AES 混合加密文本。

@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.edge;
 
 import com.biliwind.blog.edge.EdgeServiceProto.SyncDataRequest;
+import com.biliwind.blog.common.helper.RsaHelper;
 import com.biliwind.blog.model.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +22,9 @@ public class EdgeSyncDataApplyService {
 
     @Inject
     EntityManager entityManager;
+
+    @Inject
+    RsaHelper rsaHelper;
 
     @Transactional
     public void apply(SyncDataRequest request) {
@@ -98,6 +102,7 @@ public class EdgeSyncDataApplyService {
             return;
         }
         if ("CLUSTER_PUBLIC_KEY".equals(entityType)) {
+            rsaHelper.setClusterPublicKey(payload);
             return;
         }
         LOGGER.warn("忽略暂不支持的同步实体类型: {}", entityType);

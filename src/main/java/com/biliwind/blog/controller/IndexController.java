@@ -10,6 +10,7 @@ import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
+import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -227,8 +228,10 @@ public class IndexController {
         );
     }
 
+    @TemplateData
     public record TagItem(String name, String slug) {}
 
+    @TemplateData
     public record IndexPostItem(
             Long id,
             String slug,

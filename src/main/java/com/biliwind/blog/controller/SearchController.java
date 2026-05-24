@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
+import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -305,6 +306,7 @@ public class SearchController {
                 hitNode.path("typeLabel").asText("Post"),
                 hitNode.path("title").asText(""),
                 hitNode.path("summary").asText(""),
+                hitNode.path("aiSummary").asText(""),
                 hitNode.path("url").asText(""),
                 date,
                 dateText,
@@ -374,6 +376,7 @@ public class SearchController {
                     "Post",
                     post.title(),
                     post.summary(),
+                    post.aiSummary(),
                     "/post/" + post.slug(),
                     post.publishedAt() != null ? OffsetDateTime.parse(post.publishedAt()) : null,
                     post.publishedAt() != null ? formatDate(OffsetDateTime.parse(post.publishedAt())) : "unknown",
@@ -431,6 +434,7 @@ public class SearchController {
                 "Post",
                 title,
                 summary,
+                LanguageHelper.resolveLocalizedValue(post.aiSummary, lang),
                 "/post/" + post.slug,
                 displayDate,
                 formatDate(displayDate),
@@ -458,6 +462,7 @@ public class SearchController {
                 "Tag",
                 name,
                 description,
+                null,
                 "/tag/" + tag.slug,
                 tag.createdAt,
                 formatDate(tag.createdAt),
@@ -485,6 +490,7 @@ public class SearchController {
                 "Category",
                 name,
                 description,
+                null,
                 "/category/" + category.slug,
                 category.createdAt,
                 formatDate(category.createdAt),
@@ -673,11 +679,13 @@ public class SearchController {
         return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
     }
 
+    @TemplateData
     public record SearchHit(
             String type,
             String typeLabel,
             String title,
             String summary,
+            String aiSummary,
             String url,
             OffsetDateTime date,
             String dateText,
@@ -689,6 +697,7 @@ public class SearchController {
     ) {
     }
 
+    @TemplateData
     public record FilterLink(String label, String url, String cssClass) {
     }
 
