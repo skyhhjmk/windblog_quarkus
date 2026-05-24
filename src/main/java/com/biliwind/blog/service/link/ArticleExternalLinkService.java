@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.link;
 
 import com.biliwind.blog.model.Link;
+import com.biliwind.blog.model.LinkArticleReference;
 import com.biliwind.blog.model.LinkType;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.service.edge.DataSyncEvent;
@@ -48,8 +49,22 @@ public class ArticleExternalLinkService {
             return;
         }
 
+        LinkArticleReference.delete("post.id = ?1", post.id);
+
+        Map<Long, LinkReferenceDraft> referenceDraftByLinkId = new HashMap<>();
         for (Map.Entry<String, String> entry : contentMarkdownByLanguage.entrySet()) {
-            syncSingleMarkdown(post, entry.getValue());
+            syncSingleMarkdown(post, entry.getValue(), referenceDraftByLinkId);
+        }
+
+        for (Map.Entry<Long, LinkReferenceDraft> entry : referenceDraftByLinkId.entrySet()) {
+            LinkReferenceDraft referenceDraft = entry.getValue();
+            LinkArticleReference reference = new LinkArticleReference();
+            reference.link = referenceDraft.link;
+            reference.post = post;
+            reference.anchorText = referenceDraft.anchorText;
+            reference.normalizedUrl = referenceDraft.normalizedUrl;
+            reference.referenceCount = referenceDraft.referenceCount;
+            reference.persist();
         }
     }
 
@@ -120,7 +135,35 @@ public class ArticleExternalLinkService {
         return null;
     }
 
-    private void syncSingleMarkdown(Post post, String markdown) {
+    public List<LinkArticleReference> listReferences(Long linkId) {
+        if (linkId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return LinkArticleReference.list("link.id = ?1 order by updatedAt desc", linkId);
+    }
+
+    public long countReferencedPosts(Long linkId) {
+        if (linkId == null) {
+            return 0L;
+        }
+        return LinkArticleReference.count("link.id = ?1", linkId);
+    }
+
+    public long countReferences(Long linkId) {
+        if (linkId == null) {
+            return 0L;
+        }
+        List<LinkArticleReference> references = listReferences(linkId);
+        long count = 0L;
+        for (LinkArticleReference reference : references) {
+            if (reference.referenceCount != null) {
+                count = count + reference.referenceCount.longValue();
+            }
+        }
+        return count;
+    }
+
+    private void syncSingleMarkdown(Post post, String markdown, Map<Long, LinkReferenceDraft> referenceDraftByLinkId) {
         if (markdown == null || markdown.isBlank()) {
             return;
         }
@@ -129,40 +172,43 @@ public class ArticleExternalLinkService {
         while (matcher.find()) {
             String linkText = matcher.group(1);
             String rawUrl = matcher.group(2);
-            syncOneMarkdownLink(post, linkText, rawUrl);
+            Link link = syncOneMarkdownLink(post, linkText, rawUrl);
+            if (link != null) {
+                addReferenceDraft(referenceDraftByLinkId, link, linkText, rawUrl);
+            }
         }
     }
 
-    private void syncOneMarkdownLink(Post post, String linkText, String rawUrl) {
+    private Link syncOneMarkdownLink(Post post, String linkText, String rawUrl) {
         if (rawUrl == null || rawUrl.isBlank()) {
-            return;
+            return null;
         }
         if (rawUrl.startsWith("#")) {
-            return;
+            return null;
         }
         if (rawUrl.startsWith("/")) {
-            return;
+            return null;
         }
 
         URI uri = parseUri(rawUrl);
         if (uri == null) {
-            return;
+            return null;
         }
         String scheme = uri.getScheme();
         if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-            return;
+            return null;
         }
         if (isFirstPartyHost(uri.getHost())) {
-            return;
+            return null;
         }
 
         Link existingLink = findAnyLinkByUrl(rawUrl);
         if (existingLink != null) {
             if (existingLink.type != LinkType.EXTERNAL_ARTICLE) {
-                return;
+                return null;
             }
             updateExistingArticleLink(existingLink, post, linkText);
-            return;
+            return existingLink;
         }
 
         Link link = new Link();
@@ -186,6 +232,32 @@ public class ArticleExternalLinkService {
         link.updatedAt = OffsetDateTime.now();
         link.persist();
         dataSyncEvent.fire(new DataSyncEvent("LINK", link.id, "UPSERT"));
+        return link;
+    }
+
+    private void addReferenceDraft(Map<Long, LinkReferenceDraft> referenceDraftByLinkId,
+                                   Link link,
+                                   String linkText,
+                                   String rawUrl) {
+        if (link == null || link.id == null) {
+            return;
+        }
+
+        LinkReferenceDraft referenceDraft = referenceDraftByLinkId.get(link.id);
+        if (referenceDraft == null) {
+            referenceDraft = new LinkReferenceDraft();
+            referenceDraft.link = link;
+            referenceDraft.anchorText = linkText;
+            referenceDraft.normalizedUrl = normalizeUrl(rawUrl);
+            referenceDraft.referenceCount = 1;
+            referenceDraftByLinkId.put(link.id, referenceDraft);
+            return;
+        }
+
+        referenceDraft.referenceCount = referenceDraft.referenceCount + 1;
+        if (referenceDraft.anchorText == null || referenceDraft.anchorText.isBlank()) {
+            referenceDraft.anchorText = linkText;
+        }
     }
 
     private void updateExistingArticleLink(Link existingLink, Post post, String linkText) {
@@ -310,5 +382,12 @@ public class ArticleExternalLinkService {
             return "";
         }
         return text;
+    }
+
+    private static class LinkReferenceDraft {
+        Link link;
+        String anchorText;
+        String normalizedUrl;
+        Integer referenceCount;
     }
 }

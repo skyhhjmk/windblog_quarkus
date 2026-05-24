@@ -22,8 +22,21 @@ public class AdminLinkDtos {
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription,
+                        long referencedPostCount,
+                        long referenceCount,
                         OffsetDateTime createdAt) {
         }
+
+    public record AdminLinkReferenceItem(
+            Long id,
+            Long postId,
+            String postSlug,
+            String postTitle,
+            String anchorText,
+            String normalizedUrl,
+            Integer referenceCount,
+            OffsetDateTime updatedAt) {
+    }
 
         public record LinkCreateRequest(
                         String name,

@@ -2,10 +2,7 @@ package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.*;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
-import com.biliwind.blog.model.Link;
-import com.biliwind.blog.model.LinkAudit;
-import com.biliwind.blog.model.LinkMonitorLog;
-import com.biliwind.blog.model.LinkType;
+import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.link.LinkMonitorService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
@@ -74,6 +71,23 @@ public class AdminLinkController {
             throw new NotFoundException("文章外链不存在");
         }
         return toItem(link);
+    }
+
+    @GET
+    @Path("/{id}/references")
+    @Operation(summary = "查询文章外链引用文章")
+    public List<AdminLinkReferenceItem> listReferences(@PathParam("id") Long id) {
+        Link link = Link.findById(id);
+        if (link == null) {
+            throw new NotFoundException("链接不存在");
+        }
+
+        List<LinkArticleReference> references = articleExternalLinkService.listReferences(id);
+        java.util.ArrayList<AdminLinkReferenceItem> items = new java.util.ArrayList<>();
+        for (LinkArticleReference reference : references) {
+            items.add(toReferenceItem(reference));
+        }
+        return items;
     }
 
     @POST
@@ -370,7 +384,41 @@ public class AdminLinkController {
                 l.seoTitle,
                 l.seoKeywords,
                 l.seoDescription,
+                articleExternalLinkService.countReferencedPosts(l.id),
+                articleExternalLinkService.countReferences(l.id),
                 l.createdAt);
+    }
+
+    private AdminLinkReferenceItem toReferenceItem(LinkArticleReference reference) {
+        String postTitle = "";
+        String postSlug = "";
+        Long postId = null;
+        if (reference.post != null) {
+            postId = reference.post.id;
+            postSlug = reference.post.slug;
+            postTitle = resolvePostTitle(reference.post);
+        }
+
+        return new AdminLinkReferenceItem(
+                reference.id,
+                postId,
+                postSlug,
+                postTitle,
+                reference.anchorText,
+                reference.normalizedUrl,
+                reference.referenceCount,
+                reference.updatedAt);
+    }
+
+    private String resolvePostTitle(com.biliwind.blog.model.Post post) {
+        if (post == null) {
+            return "";
+        }
+        String title = com.biliwind.blog.common.helper.LanguageHelper.resolveLocalizedValue(post.title, "zh-cn");
+        if (title == null || title.isBlank()) {
+            return post.slug;
+        }
+        return title;
     }
 
     private AdminLinkMonitorLogItem toLogItem(LinkMonitorLog log) {
