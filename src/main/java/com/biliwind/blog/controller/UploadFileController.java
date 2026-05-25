@@ -5,8 +5,10 @@ import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.nio.file.Files;
@@ -23,7 +25,7 @@ public class UploadFileController {
     @GET
     @Path("/{fileName}")
     @Produces(MediaType.WILDCARD)
-    public Response getFile(@PathParam("fileName") String fileName) {
+    public Response getFile(@PathParam("fileName") String fileName, @Context UriInfo uriInfo) {
         if (fileName == null || fileName.isBlank() || fileName.contains("/") || fileName.contains("\\")) {
             throw new NotFoundException();
         }
@@ -34,9 +36,11 @@ public class UploadFileController {
             if (media != null && media.storageProviders != null) {
                 String bestUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
                 if (bestUrl != null && !bestUrl.isBlank()) {
-                    return Response.status(Response.Status.FOUND)
-                            .header("Location", bestUrl)
-                            .build();
+                    if (isSameRequestUrl(bestUrl, uriInfo) == false) {
+                        return Response.status(Response.Status.FOUND)
+                                .header("Location", bestUrl)
+                                .build();
+                    }
                 }
             }
         } catch (Exception ignored) {
@@ -74,6 +78,42 @@ public class UploadFileController {
             return base + ".webp";
         }
         return fileName;
+    }
+
+    private boolean isSameRequestUrl(String targetUrl, UriInfo uriInfo) {
+        if (targetUrl == null) {
+            return false;
+        }
+        if (uriInfo == null) {
+            return false;
+        }
+
+        String normalizedTargetUrl = normalizeUrlForComparison(targetUrl);
+        String requestPath = uriInfo.getRequestUri().getRawPath();
+        String normalizedRequestPath = normalizeUrlForComparison(requestPath);
+        if (normalizedTargetUrl.equals(normalizedRequestPath)) {
+            return true;
+        }
+
+        String absoluteRequestUrl = uriInfo.getRequestUri().toString();
+        String normalizedAbsoluteRequestUrl = normalizeUrlForComparison(absoluteRequestUrl);
+        return normalizedTargetUrl.equals(normalizedAbsoluteRequestUrl);
+    }
+
+    private String normalizeUrlForComparison(String url) {
+        String normalizedUrl = url.trim();
+        int fragmentIndex = normalizedUrl.indexOf('#');
+        if (fragmentIndex >= 0) {
+            normalizedUrl = normalizedUrl.substring(0, fragmentIndex);
+        }
+        int queryIndex = normalizedUrl.indexOf('?');
+        if (queryIndex >= 0) {
+            normalizedUrl = normalizedUrl.substring(0, queryIndex);
+        }
+        while (normalizedUrl.endsWith("/") && normalizedUrl.length() > 1) {
+            normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
+        }
+        return normalizedUrl;
     }
 
     private String probeMimeType(java.nio.file.Path path) {
