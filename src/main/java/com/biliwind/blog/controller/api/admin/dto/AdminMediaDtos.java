@@ -2,6 +2,7 @@ package com.biliwind.blog.controller.api.admin.dto;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 public final class AdminMediaDtos {
 
@@ -35,11 +36,18 @@ public final class AdminMediaDtos {
             boolean referenced,
             List<MediaReferenceItem> references,
             List<String> visibilityRegions,
-            java.util.Map<String, Object> metadata) {
+            List<String> hiddenRegions,
+            List<String> syncStorageClasses,
+            List<String> skipStorageClasses,
+            Map<String, Object> storageClasses,
+            Map<String, Object> metadata) {
     }
 
     public record MediaUpdateRequest(
-            List<String> visibilityRegions) {
+            List<String> visibilityRegions,
+            List<String> hiddenRegions,
+            List<String> syncStorageClasses,
+            List<String> skipStorageClasses) {
     }
 
     public record MediaListResult(

@@ -34,26 +34,26 @@ public class StorageSyncConsumer {
         }
         StorageSyncMessage msg = message.getPayload();
         log.info("开始处理存储同步: mediaId={}, provider={}, variant={}, retry={}",
-                msg.mediaId(), msg.providerName(), msg.variantType(), msg.retryCount());
+                msg.mediaId(), msg.storageClassName(), msg.variantType(), msg.retryCount());
 
         try {
             VariantType variant = VariantType.valueOf(msg.variantType().toUpperCase());
             SyncResult result = storageService.executeSync(
                     msg.mediaId(),
-                    msg.providerName(),
+                    msg.storageClassName(),
                     variant,
                     msg.retryCount());
 
             if (result.success()) {
                 log.info("存储同步成功: mediaId={}, provider={}, variant={}",
-                        msg.mediaId(), msg.providerName(), msg.variantType());
+                        msg.mediaId(), msg.storageClassName(), msg.variantType());
                 return message.ack();
             } else {
                 return handleFailure(message, msg, result.errorMessage());
             }
         } catch (Exception e) {
             log.error("存储同步异常: mediaId={}, provider={}, variant={}",
-                    msg.mediaId(), msg.providerName(), msg.variantType(), e);
+                    msg.mediaId(), msg.storageClassName(), msg.variantType(), e);
             return handleFailure(message, msg, e.getMessage());
         }
     }
@@ -63,13 +63,13 @@ public class StorageSyncConsumer {
         int nextRetryCount = msg.retryCount() + 1;
         if (nextRetryCount >= 3) {
             log.error("同步达到最大重试次数，进行 NACK 进入死信队列: mediaId={}, provider={}, variant={}",
-                    msg.mediaId(), msg.providerName(), msg.variantType());
+                    msg.mediaId(), msg.storageClassName(), msg.variantType());
             return message.nack(new RuntimeException("Max retries reached: " + errorReason));
         } else {
             log.warn("同步失败，准备第 {} 次重试: mediaId={}, provider={}, reason={}",
-                    nextRetryCount, msg.mediaId(), msg.providerName(), errorReason);
+                    nextRetryCount, msg.mediaId(), msg.storageClassName(), errorReason);
             StorageSyncMessage retryMsg = new StorageSyncMessage(
-                    msg.mediaId(), msg.providerName(), msg.variantType(), nextRetryCount);
+                    msg.mediaId(), msg.storageClassName(), msg.variantType(), nextRetryCount);
             syncEmitter.send(retryMsg);
             return message.ack();
         }

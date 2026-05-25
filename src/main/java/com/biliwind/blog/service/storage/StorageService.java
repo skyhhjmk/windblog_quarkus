@@ -1,7 +1,7 @@
 package com.biliwind.blog.service.storage;
 
 import com.biliwind.blog.model.Media;
-import com.biliwind.blog.model.StorageProviderEntity;
+import com.biliwind.blog.model.StorageClassEntity;
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +25,7 @@ public class StorageService {
 
     private static final Logger log = LoggerFactory.getLogger(StorageService.class);
 
-    private final List<StorageProvider> enabledProviders = new ArrayList<>();
+    private final List<StorageClass> enabledProviders = new ArrayList<>();
     @Inject
     ObjectMapper objectMapper;
     @Inject
@@ -33,16 +33,16 @@ public class StorageService {
     @Inject
     @Channel("storage-sync-tasks")
     Emitter<StorageSyncMessage> syncEmitter;
-    private StorageProvider primaryProvider;
+    private StorageClass primaryProvider;
 
     @PostConstruct
     void init() {
         io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
             @Override
             public void run() {
-                long count = StorageProviderEntity.count();
+                long count = StorageClassEntity.count();
                 if (count == 0) {
-                    log.info("No storage providers found, initializing default local_fs provider...");
+                    log.info("No storage classes found, initializing default local_fs storage class...");
                     String rootPath = org.eclipse.microprofile.config.ConfigProvider.getConfig()
                             .getOptionalValue("storage.path", String.class)
                             .orElse(org.eclipse.microprofile.config.ConfigProvider.getConfig()
@@ -50,7 +50,7 @@ public class StorageService {
                     String baseUrl = org.eclipse.microprofile.config.ConfigProvider.getConfig()
                             .getOptionalValue("media.upload.path", String.class).orElse("/uploads");
 
-                    StorageProviderEntity defaultProvider = new StorageProviderEntity();
+                    StorageClassEntity defaultProvider = new StorageClassEntity();
                     defaultProvider.name = "local";
                     defaultProvider.displayName = "默认本地存储";
                     defaultProvider.providerType = "local_fs";
@@ -70,16 +70,16 @@ public class StorageService {
                     defaultProvider.persist();
                 }
 
-                List<StorageProviderEntity> entities = StorageProviderEntity.list("isEnabled = true ORDER BY priority ASC");
-                for (StorageProviderEntity entity : entities) {
-                    StorageProvider provider = createProvider(entity);
+                List<StorageClassEntity> entities = StorageClassEntity.list("isEnabled = true ORDER BY priority ASC");
+                for (StorageClassEntity entity : entities) {
+                    StorageClass provider = createProvider(entity);
                     if (provider == null) {
                         continue;
                     }
                     try {
                         JsonNode configJson = objectMapper.readTree(entity.configJson);
                         ArrayList<String> supportedTypes = parseSupportedTypes(entity.supportedTypes);
-                        StorageProviderConfig config = new StorageProviderConfig(
+                        StorageClassConfig config = new StorageClassConfig(
                                 configJson, supportedTypes, entity.cdnDomain, entity.cdnEnabled);
                         provider.initialize(config);
 
@@ -129,37 +129,45 @@ public class StorageService {
         return result;
     }
 
-    private StorageProvider createProvider(StorageProviderEntity entity) {
-        StorageProvider provider = null;
-        if ("oss_aliyun".equals(entity.providerType)) {
-            provider = new AliyunOssStorageProvider();
+    private StorageClass createProvider(StorageClassEntity entity) {
+        StorageClass provider = null;
+        if ("oss_aliyun".equals(entity.providerType) || "aliyun_oss_v2".equals(entity.providerType)) {
+            provider = new AliyunOssStorageClass();
         } else if ("local_fs".equals(entity.providerType)) {
-            provider = new LocalFsStorageProvider();
+            provider = new LocalFsStorageClass();
         } else {
             log.warn("Unknown provider type: {}", entity.providerType);
             return null;
         }
 
-        if (provider instanceof AliyunOssStorageProvider) {
-            ((AliyunOssStorageProvider) provider).setName(entity.name);
-        } else if (provider instanceof LocalFsStorageProvider) {
-            ((LocalFsStorageProvider) provider).setName(entity.name);
+        if (provider instanceof AliyunOssStorageClass) {
+            ((AliyunOssStorageClass) provider).setName(entity.name);
+        } else if (provider instanceof LocalFsStorageClass) {
+            ((LocalFsStorageClass) provider).setName(entity.name);
         }
         return provider;
     }
 
-    public StorageProvider getPrimaryProvider() {
+    public StorageClass getPrimaryProvider() {
         return primaryProvider;
     }
 
-    public List<StorageProvider> getNonPrimaryProviders() {
-        List<StorageProvider> result = new ArrayList<>();
-        for (StorageProvider provider : enabledProviders) {
+    public StorageClass getPrimaryStorageClass() {
+        return primaryProvider;
+    }
+
+    public List<StorageClass> getNonPrimaryProviders() {
+        List<StorageClass> result = new ArrayList<>();
+        for (StorageClass provider : enabledProviders) {
             if (provider != primaryProvider) {
                 result.add(provider);
             }
         }
         return result;
+    }
+
+    public List<StorageClass> getNonPrimaryStorageClasses() {
+        return getNonPrimaryProviders();
     }
 
     public String getPrimaryProviderName() {
@@ -169,24 +177,40 @@ public class StorageService {
         return primaryProvider.getName();
     }
 
-    public List<StorageProviderEntity> getAllProviderEntities() {
-        return StorageProviderEntity.list("isEnabled = true ORDER BY priority ASC");
+    public String getPrimaryStorageClassName() {
+        return getPrimaryProviderName();
     }
 
-    public StorageProviderEntity getProviderEntityByName(String name) {
-        return StorageProviderEntity.find("name", name).firstResult();
+    public List<StorageClassEntity> getAllProviderEntities() {
+        return StorageClassEntity.list("isEnabled = true ORDER BY priority ASC");
     }
 
-    public List<StorageProviderEntity> getNonPrimaryProviderEntities() {
-        List<StorageProviderEntity> allEntities = getAllProviderEntities();
-        List<StorageProviderEntity> result = new ArrayList<>();
+    public List<StorageClassEntity> getAllStorageClassEntities() {
+        return getAllProviderEntities();
+    }
+
+    public StorageClassEntity getProviderEntityByName(String name) {
+        return StorageClassEntity.find("name", name).firstResult();
+    }
+
+    public StorageClassEntity getStorageClassEntityByName(String name) {
+        return getProviderEntityByName(name);
+    }
+
+    public List<StorageClassEntity> getNonPrimaryProviderEntities() {
+        List<StorageClassEntity> allEntities = getAllProviderEntities();
+        List<StorageClassEntity> result = new ArrayList<>();
         String primaryName = getPrimaryProviderName();
-        for (StorageProviderEntity entity : allEntities) {
+        for (StorageClassEntity entity : allEntities) {
             if (entity.isPrimary == null || !entity.isPrimary) {
                 result.add(entity);
             }
         }
         return result;
+    }
+
+    public List<StorageClassEntity> getNonPrimaryStorageClassEntities() {
+        return getNonPrimaryProviderEntities();
     }
 
     public UploadResult uploadToPrimary(Long mediaId, VariantType variant, InputStream data, String contentType) {
@@ -238,14 +262,32 @@ public class StorageService {
     }
 
     public void scheduleSync(Long mediaId, Set<VariantType> variants) {
-        List<StorageProvider> nonPrimaryProviders = getNonPrimaryProviders();
-        for (StorageProvider provider : nonPrimaryProviders) {
-            String providerName = provider.getName();
-            for (VariantType variant : variants) {
-                StorageSyncMessage message = new StorageSyncMessage(
-                        mediaId, providerName, variant.name(), 0);
-                syncEmitter.send(message);
+        Media media = Media.findById(mediaId);
+        if (media == null) {
+            return;
+        }
+        List<StorageClass> nonPrimaryStorageClasses = getNonPrimaryStorageClasses();
+        StorageClass originStorageClass = findOriginLoadedStorageClass();
+        if (originStorageClass != null) {
+            scheduleSyncToStorageClass(media, originStorageClass, variants);
+        }
+        for (StorageClass storageClass : nonPrimaryStorageClasses) {
+            if (originStorageClass != null && originStorageClass.getName().equals(storageClass.getName())) {
+                continue;
             }
+            scheduleSyncToStorageClass(media, storageClass, variants);
+        }
+    }
+
+    private void scheduleSyncToStorageClass(Media media, StorageClass storageClass, Set<VariantType> variants) {
+        String storageClassName = storageClass.getName();
+        if (!shouldSyncToStorageClass(media, storageClassName)) {
+            return;
+        }
+        for (VariantType variant : variants) {
+            StorageSyncMessage message = new StorageSyncMessage(
+                    media.id, storageClassName, variant.name(), 0);
+            syncEmitter.send(message);
         }
     }
 
@@ -254,12 +296,12 @@ public class StorageService {
         if (media == null) {
             return;
         }
-        if (media.storageProviders == null) {
+        if (media.storageClasses == null) {
             return;
         }
         HashSet<VariantType> variants = new HashSet<>();
-        for (String providerName : media.storageProviders.keySet()) {
-            Object providerValue = media.storageProviders.get(providerName);
+        for (String storageClassName : media.storageClasses.keySet()) {
+            Object providerValue = media.storageClasses.get(storageClassName);
             if (providerValue instanceof Map) {
                 Map<String, Object> providerData = (Map<String, Object>) providerValue;
                 for (String variantName : providerData.keySet()) {
@@ -281,7 +323,7 @@ public class StorageService {
         }
     }
 
-    public SyncResult executeSync(Long mediaId, String providerName, VariantType variant, int retryCount) {
+    public SyncResult executeSync(Long mediaId, String storageClassName, VariantType variant, int retryCount) {
         try {
             Media media = Media.findById(mediaId);
             if (media == null) {
@@ -290,42 +332,55 @@ public class StorageService {
                 return new SyncResult(false, errorMsg);
             }
 
-            if (media.storageProviders == null) {
-                String errorMsg = "Media has no storage_providers: " + mediaId;
+            if (media.storageClasses == null) {
+                String errorMsg = "Media has no storage_classes: " + mediaId;
                 log.error(errorMsg);
+                return new SyncResult(false, errorMsg);
+            }
+
+            if (!shouldSyncToStorageClass(media, storageClassName)) {
+                String errorMsg = "Storage class is skipped by media policy: " + storageClassName;
+                log.info(errorMsg);
                 return new SyncResult(false, errorMsg);
             }
 
             int currentVersion = media.version;
             boolean casSuccess = updateVariantStatusWithLock(
-                    mediaId, providerName, variant, "syncing", null, null, currentVersion);
+                    mediaId, storageClassName, variant, "syncing", null, null, currentVersion);
             if (!casSuccess) {
                 log.info("CAS update failed for mediaId={}, provider={}, variant={}, version={}",
-                        mediaId, providerName, variant.name(), currentVersion);
+                        mediaId, storageClassName, variant.name(), currentVersion);
                 return new SyncResult(false, "CAS version mismatch");
             }
 
-            StorageProvider targetProvider = findProviderByName(providerName);
+            StorageClass targetProvider = findProviderByName(storageClassName);
             if (targetProvider == null) {
-                String errorMsg = "Target provider not found: " + providerName;
+                String errorMsg = "Target provider not found: " + storageClassName;
                 log.error(errorMsg);
                 updateVariantStatus(
-                        mediaId, providerName, variant, "failed", null, null, currentVersion + 1);
+                        mediaId, storageClassName, variant, "failed", null, null, currentVersion + 1);
                 return new SyncResult(false, errorMsg);
             }
 
-            String sourcePath = getSourcePathFromStorageProviders(media, variant);
-            if (sourcePath == null || sourcePath.isEmpty()) {
+            SyncSource syncSource = findSyncSource(media, variant, storageClassName);
+            if (syncSource == null) {
                 String errorMsg = "No source path found for variant: " + variant.name();
                 log.error(errorMsg);
                 updateVariantStatus(
-                        mediaId, providerName, variant, "failed", null, null, currentVersion + 1);
+                        mediaId, storageClassName, variant, "failed", null, null, currentVersion + 1);
+                return new SyncResult(false, errorMsg);
+            }
+            if (syncSource.waitingForOrigin) {
+                String errorMsg = "Origin storage class is not ready for variant: " + variant.name();
+                log.info(errorMsg);
+                updateVariantStatus(
+                        mediaId, storageClassName, variant, "pending", null, null, currentVersion + 1);
                 return new SyncResult(false, errorMsg);
             }
 
             String targetPath = generateTargetPath(variant, media.mimeType);
             String uploadedPath;
-            try (InputStream downloadStream = primaryProvider.download(sourcePath)) {
+            try (InputStream downloadStream = syncSource.storageClass.download(syncSource.path)) {
                 uploadedPath = targetProvider.upload(downloadStream, targetPath, media.mimeType);
             }
 
@@ -334,18 +389,18 @@ public class StorageService {
             Media refreshedMedia = Media.findById(mediaId);
             int newVersion = refreshedMedia.version;
             updateVariantStatus(
-                    mediaId, providerName, variant, "synced", uploadedPath, fileSize, newVersion);
+                    mediaId, storageClassName, variant, "synced", uploadedPath, fileSize, newVersion);
 
             return new SyncResult(true, null);
         } catch (Exception e) {
             log.error("Storage sync failed for mediaId={}, provider={}, variant={}",
-                    mediaId, providerName, variant.name(), e);
+                    mediaId, storageClassName, variant.name(), e);
             return new SyncResult(false, e.getMessage());
         }
     }
 
-    private StorageProvider findProviderByName(String name) {
-        for (StorageProvider provider : enabledProviders) {
+    private StorageClass findProviderByName(String name) {
+        for (StorageClass provider : enabledProviders) {
             if (provider.getName().equals(name)) {
                 return provider;
             }
@@ -353,9 +408,49 @@ public class StorageService {
         return null;
     }
 
-    private String getSourcePathFromStorageProviders(Media media, VariantType variant) {
+    private SyncSource findSyncSource(Media media, VariantType variant, String targetStorageClassName) {
+        StorageClassEntity originStorageClass = findOriginStorageClass();
+        if (originStorageClass != null && !originStorageClass.name.equals(targetStorageClassName)) {
+            String originPath = getSourcePathFromStorageClasses(media, variant, originStorageClass.name);
+            if (originPath != null && !originPath.isEmpty()) {
+                StorageClass originProvider = findProviderByName(originStorageClass.name);
+                if (originProvider != null) {
+                    return new SyncSource(originProvider, originPath, false);
+                }
+            }
+            if (shouldSyncToStorageClass(media, originStorageClass.name)) {
+                return new SyncSource(null, null, true);
+            }
+        }
+
         String primaryName = getPrimaryProviderName();
-        Object providerDataObj = media.storageProviders.get(primaryName);
+        String primaryPath = getSourcePathFromStorageClasses(media, variant, primaryName);
+        if (primaryPath == null || primaryPath.isEmpty()) {
+            return null;
+        }
+        return new SyncSource(primaryProvider, primaryPath, false);
+    }
+
+    private StorageClassEntity findOriginStorageClass() {
+        List<StorageClassEntity> allEntities = getAllProviderEntities();
+        for (StorageClassEntity entity : allEntities) {
+            if (entity.role != null && "origin".equals(entity.role)) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
+    private StorageClass findOriginLoadedStorageClass() {
+        StorageClassEntity originStorageClass = findOriginStorageClass();
+        if (originStorageClass == null) {
+            return null;
+        }
+        return findProviderByName(originStorageClass.name);
+    }
+
+    private String getSourcePathFromStorageClasses(Media media, VariantType variant, String storageClassName) {
+        Object providerDataObj = media.storageClasses.get(storageClassName);
         if (!(providerDataObj instanceof Map)) {
             return null;
         }
@@ -372,8 +467,20 @@ public class StorageService {
         return pathObj.toString();
     }
 
+    private static class SyncSource {
+        StorageClass storageClass;
+        String path;
+        boolean waitingForOrigin;
+
+        SyncSource(StorageClass storageClass, String path, boolean waitingForOrigin) {
+            this.storageClass = storageClass;
+            this.path = path;
+            this.waitingForOrigin = waitingForOrigin;
+        }
+    }
+
     @Transactional
-    public boolean updateVariantStatusWithLock(Long mediaId, String providerName,
+    public boolean updateVariantStatusWithLock(Long mediaId, String storageClassName,
                                                VariantType variant, String status,
                                                String path, Long size, int expectedVersion) {
         String variantKey = variant.name().toLowerCase();
@@ -391,8 +498,8 @@ public class StorageService {
         }
 
         String sql = "UPDATE media SET "
-                + "storage_providers = jsonb_set("
-                + "  jsonb_set(storage_providers, ARRAY[?1::text], COALESCE(storage_providers -> ?1, '{}'::jsonb), true),"
+                + "storage_classes = jsonb_set("
+                + "  jsonb_set(storage_classes, ARRAY[?1::text], COALESCE(storage_classes -> ?1, '{}'::jsonb), true),"
                 + "  ARRAY[?1::text, ?2::text],"
                 + "  CAST(?3 AS jsonb)"
                 + "), "
@@ -400,7 +507,7 @@ public class StorageService {
                 + "WHERE id = ?4 AND version = ?5";
 
         jakarta.persistence.Query query = entityManager.createNativeQuery(sql);
-        query.setParameter(1, providerName);
+        query.setParameter(1, storageClassName);
         query.setParameter(2, variantKey);
         query.setParameter(3, jsonPayload);
         query.setParameter(4, mediaId);
@@ -411,19 +518,19 @@ public class StorageService {
     }
 
     @Transactional
-    public void updateVariantStatus(Long mediaId, String providerName, VariantType variant,
+    public void updateVariantStatus(Long mediaId, String storageClassName, VariantType variant,
                                     String status, String path, Long size, int expectedVersion) {
-        updateVariantStatusWithLock(mediaId, providerName, variant, status, path, size, expectedVersion);
+        updateVariantStatusWithLock(mediaId, storageClassName, variant, status, path, size, expectedVersion);
     }
 
     public String getBestAccessUrl(Media media, VariantType variant) {
-        if (media == null || media.storageProviders == null) {
+        if (media == null || media.storageClasses == null) {
             return null;
         }
 
-        for (StorageProvider provider : enabledProviders) {
-            String providerName = provider.getName();
-            Object providerDataObj = media.storageProviders.get(providerName);
+        for (StorageClass provider : enabledProviders) {
+            String storageClassName = provider.getName();
+            Object providerDataObj = media.storageClasses.get(storageClassName);
             if (!(providerDataObj instanceof Map)) {
                 continue;
             }
@@ -444,7 +551,11 @@ public class StorageService {
             }
             String path = pathObj.toString();
 
-            StorageProviderEntity entity = getProviderEntityByName(providerName);
+            if (!shouldReadFromStorageClass(media, storageClassName)) {
+                continue;
+            }
+
+            StorageClassEntity entity = getProviderEntityByName(storageClassName);
             if (entity != null && entity.cdnEnabled != null && entity.cdnEnabled
                     && entity.cdnDomain != null && !entity.cdnDomain.isEmpty()) {
                 return "https://" + entity.cdnDomain + "/" + path;
@@ -459,13 +570,17 @@ public class StorageService {
         if (media == null) {
             return null;
         }
-        if (media.storageProviders == null) {
+        if (media.storageClasses == null) {
             return null;
         }
 
-        for (StorageProvider provider : enabledProviders) {
-            String providerName = provider.getName();
-            Object providerDataObj = media.storageProviders.get(providerName);
+        for (StorageClass provider : enabledProviders) {
+            String storageClassName = provider.getName();
+            if (!shouldReadFromStorageClass(media, storageClassName)) {
+                continue;
+            }
+
+            Object providerDataObj = media.storageClasses.get(storageClassName);
             if (!(providerDataObj instanceof Map)) {
                 continue;
             }
@@ -492,13 +607,17 @@ public class StorageService {
     }
 
     public InputStream fallbackDownload(Media media, VariantType variant) {
-        if (media == null || media.storageProviders == null) {
+        if (media == null || media.storageClasses == null) {
             throw new StorageException("No storage information available for download");
         }
 
-        for (StorageProvider provider : enabledProviders) {
-            String providerName = provider.getName();
-            Object providerDataObj = media.storageProviders.get(providerName);
+        for (StorageClass provider : enabledProviders) {
+            String storageClassName = provider.getName();
+            if (!shouldReadFromStorageClass(media, storageClassName)) {
+                continue;
+            }
+
+            Object providerDataObj = media.storageClasses.get(storageClassName);
             if (!(providerDataObj instanceof Map)) {
                 continue;
             }
@@ -521,7 +640,7 @@ public class StorageService {
             try {
                 return provider.download(path);
             } catch (Exception e) {
-                log.warn("Download failed from provider {}, trying next", providerName, e);
+                log.warn("Download failed from provider {}, trying next", storageClassName, e);
             }
         }
 
@@ -542,9 +661,9 @@ public class StorageService {
         status.failedCount = 0;
         status.details = new LinkedHashMap<>();
 
-        if (media.storageProviders != null) {
-            for (Map.Entry<String, Object> entry : media.storageProviders.entrySet()) {
-                String providerName = entry.getKey();
+        if (media.storageClasses != null) {
+            for (Map.Entry<String, Object> entry : media.storageClasses.entrySet()) {
+                String storageClassName = entry.getKey();
                 Object providerDataObj = entry.getValue();
                 if (!(providerDataObj instanceof Map)) {
                     continue;
@@ -575,10 +694,107 @@ public class StorageService {
                     }
                 }
 
-                status.details.put(providerName, providerVariants);
+                status.details.put(storageClassName, providerVariants);
             }
         }
 
         return status;
+    }
+
+    @Transactional
+    public void initializeStorageClassesForMedia(Long mediaId) {
+        Media media = Media.findById(mediaId);
+        if (media == null || media.storageClasses == null) {
+            return;
+        }
+
+        Map<String, Object> primaryStorageClassData = findPrimaryStorageClassData(media);
+        if (primaryStorageClassData == null || primaryStorageClassData.isEmpty()) {
+            return;
+        }
+
+        List<String> variantNames = new ArrayList<>();
+        for (String variantName : primaryStorageClassData.keySet()) {
+            variantNames.add(variantName);
+        }
+
+        List<StorageClassEntity> storageClasses = getNonPrimaryStorageClassEntities();
+        for (StorageClassEntity storageClassEntity : storageClasses) {
+            String storageClassName = storageClassEntity.name;
+            if (!shouldSyncToStorageClass(media, storageClassName)) {
+                media.storageClasses.remove(storageClassName);
+                continue;
+            }
+            Object existingData = media.storageClasses.get(storageClassName);
+            Map<String, Object> storageClassData;
+            if (existingData instanceof Map) {
+                storageClassData = (Map<String, Object>) existingData;
+            } else {
+                storageClassData = new LinkedHashMap<>();
+                media.storageClasses.put(storageClassName, storageClassData);
+            }
+            for (String variantName : variantNames) {
+                if (!storageClassData.containsKey(variantName)) {
+                    Map<String, Object> pendingVariant = new LinkedHashMap<>();
+                    pendingVariant.put("status", "pending");
+                    pendingVariant.put("path", null);
+                    storageClassData.put(variantName, pendingVariant);
+                }
+            }
+        }
+        media.persist();
+    }
+
+    private Map<String, Object> findPrimaryStorageClassData(Media media) {
+        String primaryName = getPrimaryProviderName();
+        Object primaryData = media.storageClasses.get(primaryName);
+        if (primaryData instanceof Map) {
+            return (Map<String, Object>) primaryData;
+        }
+        return null;
+    }
+
+    private boolean shouldReadFromStorageClass(Media media, String storageClassName) {
+        if (media == null || storageClassName == null) {
+            return false;
+        }
+        String primaryName = getPrimaryProviderName();
+        if (storageClassName.equals(primaryName)) {
+            return true;
+        }
+        return shouldSyncToStorageClass(media, storageClassName);
+    }
+
+    public boolean shouldSyncToStorageClass(Media media, String storageClassName) {
+        if (media == null || storageClassName == null || storageClassName.isBlank()) {
+            return false;
+        }
+
+        String primaryName = getPrimaryProviderName();
+        if (storageClassName.equals(primaryName)) {
+            return false;
+        }
+
+        if (containsName(media.skipStorageClasses, storageClassName)) {
+            return false;
+        }
+
+        if (media.syncStorageClasses == null || media.syncStorageClasses.isEmpty()) {
+            return true;
+        }
+
+        return containsName(media.syncStorageClasses, storageClassName);
+    }
+
+    private boolean containsName(List<String> names, String expectedName) {
+        if (names == null || expectedName == null) {
+            return false;
+        }
+        for (String name : names) {
+            if (name != null && name.equals(expectedName)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

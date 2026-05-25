@@ -143,12 +143,15 @@ public class AdminDeadLetterApi {
             } else if (content.containsKey("mediaId")) {
                 // 处理存储同步任务
                 Long mediaId = ((Number) content.get("mediaId")).longValue();
-                String providerName = (String) content.get("providerName");
+                String storageClassName = (String) content.get("storageClassName");
+                if (storageClassName == null) {
+                    storageClassName = (String) content.get("providerName");
+                }
                 String variantType = (String) content.get("variantType");
 
                 com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                         new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
-                                mediaId, providerName, variantType, 0);
+                                mediaId, storageClassName, variantType, 0);
                 storageSyncEmitter.send(syncMsg);
 
                 message.markAsProcessed("手动重试存储同步 - 已重新发送");
@@ -207,12 +210,15 @@ public class AdminDeadLetterApi {
                     successCount++;
                 } else if (content.containsKey("mediaId")) {
                     Long mediaId = ((Number) content.get("mediaId")).longValue();
-                    String providerName = (String) content.get("providerName");
+                    String storageClassName = (String) content.get("storageClassName");
+                    if (storageClassName == null) {
+                        storageClassName = (String) content.get("providerName");
+                    }
                     String variantType = (String) content.get("variantType");
 
                     com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                             new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
-                                    mediaId, providerName, variantType, 0);
+                                    mediaId, storageClassName, variantType, 0);
                     storageSyncEmitter.send(syncMsg);
 
                     message.markAsProcessed("批量重试同步 - 已重新发送");

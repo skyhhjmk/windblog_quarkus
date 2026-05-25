@@ -16,9 +16,9 @@ import java.time.Duration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class AliyunOssStorageProvider implements StorageProvider {
+public class AliyunOssStorageClass implements StorageClass {
 
-    private static final Logger log = LoggerFactory.getLogger(AliyunOssStorageProvider.class);
+    private static final Logger log = LoggerFactory.getLogger(AliyunOssStorageClass.class);
     private static final Pattern ENV_VAR_PATTERN = Pattern.compile("\\$\\{env:([^}]+)\\}");
     private String name;
     private OSSClient ossClient;
@@ -105,10 +105,10 @@ public class AliyunOssStorageProvider implements StorageProvider {
     private java.util.List<String> supportedTypes;
 
     @Override
-    public void initialize(StorageProviderConfig config) {
+    public void initialize(StorageClassConfig config) {
         JsonNode json = config.getConfigJson();
         if (json == null) {
-            throw new StorageException("Config JSON is missing for AliyunOssStorageProvider");
+            throw new StorageException("Config JSON is missing for AliyunOssStorageClass");
         }
 
         this.region = resolveEnvVars(json.path("region").asText("cn-hangzhou"));
@@ -122,7 +122,7 @@ public class AliyunOssStorageProvider implements StorageProvider {
         this.cdnEnabled = config.isCdnEnabled();
 
         if (this.bucketName == null || accessKeyId == null || accessKeySecret == null) {
-            throw new StorageException("Missing required configuration for AliyunOssStorageProvider");
+            throw new StorageException("Missing required configuration for AliyunOssStorageClass");
         }
 
         if (this.region == null || this.region.isEmpty()) {

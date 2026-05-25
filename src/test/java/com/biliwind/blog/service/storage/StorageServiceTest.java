@@ -25,7 +25,7 @@ public class StorageServiceTest {
 
     @Test
     public void testGetAllProviderEntities() {
-        java.util.List<com.biliwind.blog.model.StorageProviderEntity> entities = storageService.getAllProviderEntities();
+        java.util.List<com.biliwind.blog.model.StorageClassEntity> entities = storageService.getAllProviderEntities();
         assertNotNull(entities);
     }
 }

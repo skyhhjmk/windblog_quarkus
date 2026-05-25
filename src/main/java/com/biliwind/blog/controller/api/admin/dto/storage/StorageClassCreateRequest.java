@@ -1,6 +1,6 @@
 package com.biliwind.blog.controller.api.admin.dto.storage;
 
-public record StorageProviderCreateRequest(
+public record StorageClassCreateRequest(
         String name,
         String displayName,
         String providerType,
@@ -11,7 +11,7 @@ public record StorageProviderCreateRequest(
         String supportedTypes,
         String cdnDomain,
         Boolean cdnEnabled,
-        String region,
+        String serviceRegion,
         Integer priority
 ) {
 }

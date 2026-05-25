@@ -10,14 +10,14 @@ import java.util.Collections;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class AliyunOssStorageProviderMockTest {
+public class AliyunOssStorageClassMockTest {
 
-    private AliyunOssStorageProvider provider;
+    private AliyunOssStorageClass provider;
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        provider = new AliyunOssStorageProvider();
+        provider = new AliyunOssStorageClass();
         provider.setName("aliyun-test");
     }
 
@@ -31,7 +31,7 @@ public class AliyunOssStorageProviderMockTest {
                 "\"basePath\":\"media/\"" +
                 "}";
 
-        StorageProviderConfig config = new StorageProviderConfig(
+        StorageClassConfig config = new StorageClassConfig(
                 objectMapper.readTree(configJson),
                 Collections.singletonList("image/*"),
                 "cdn.example.com",
@@ -51,7 +51,7 @@ public class AliyunOssStorageProviderMockTest {
     void testSupportsVariant() throws IOException {
         String configJson = "{\"bucketName\":\"test\", \"accessKeyId\":\"test\", \"accessKeySecret\":\"test\"}";
 
-        StorageProviderConfig config1 = new StorageProviderConfig(
+        StorageClassConfig config1 = new StorageClassConfig(
                 objectMapper.readTree(configJson),
                 java.util.List.of("image/*"),
                 null,
@@ -61,7 +61,7 @@ public class AliyunOssStorageProviderMockTest {
         assertTrue(provider.supportsVariant("image/png", "original"));
         assertFalse(provider.supportsVariant("video/mp4", "original"));
 
-        StorageProviderConfig config2 = new StorageProviderConfig(
+        StorageClassConfig config2 = new StorageClassConfig(
                 objectMapper.readTree(configJson),
                 java.util.List.of("*"),
                 null,

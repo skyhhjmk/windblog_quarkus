@@ -1,8 +1,8 @@
 package com.biliwind.blog.controller.api.admin.dto.storage;
 
-import com.biliwind.blog.model.StorageProviderEntity;
+import com.biliwind.blog.model.StorageClassEntity;
 
-public record StorageProviderResponse(
+public record StorageClassResponse(
         Long id,
         String name,
         String displayName,
@@ -14,11 +14,11 @@ public record StorageProviderResponse(
         String supportedTypes,
         String cdnDomain,
         Boolean cdnEnabled,
-        String region,
+        String serviceRegion,
         Integer priority
 ) {
-    public static StorageProviderResponse fromEntity(StorageProviderEntity entity) {
-        return new StorageProviderResponse(
+    public static StorageClassResponse fromEntity(StorageClassEntity entity) {
+        return new StorageClassResponse(
                 entity.id,
                 entity.name,
                 entity.displayName,
@@ -30,7 +30,7 @@ public record StorageProviderResponse(
                 entity.supportedTypes,
                 entity.cdnDomain,
                 entity.cdnEnabled,
-                entity.region == null ? null : entity.region.getCode(),
+                entity.serviceRegion,
                 entity.priority
         );
     }

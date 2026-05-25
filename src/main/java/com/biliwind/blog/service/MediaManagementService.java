@@ -406,7 +406,7 @@ public class MediaManagementService {
         media.createdAt = OffsetDateTime.now();
         media.deletedAt = null;
         media.version = 0;
-        media.storageProviders = new LinkedHashMap<>();
+        media.storageClasses = new LinkedHashMap<>();
         media.processingStatus = "PENDING";
         media.processingProgress = 0;
 
@@ -451,10 +451,10 @@ public class MediaManagementService {
                 variantInfo.put("path", vKey);
                 primaryProviderJson.put(variant.name().toLowerCase(), variantInfo);
             }
-            media.storageProviders.put(storageService.getPrimaryProviderName(), primaryProviderJson);
+            media.storageClasses.put(storageService.getPrimaryStorageClassName(), primaryProviderJson);
 
-            // 初始化其他提供者状态为 pending
-            for (StorageProviderEntity nonPrimary : storageService.getNonPrimaryProviderEntities()) {
+            // 初始化其他存储类状态为 pending
+            for (StorageClassEntity nonPrimary : storageService.getNonPrimaryStorageClassEntities()) {
                 Map<String, Object> pendingProviderJson = new LinkedHashMap<>();
                 for (VariantType variant : generatedVariants.keySet()) {
                     Map<String, Object> pendingVariant = new LinkedHashMap<>();
@@ -462,7 +462,7 @@ public class MediaManagementService {
                     pendingVariant.put("path", null);
                     pendingProviderJson.put(variant.name().toLowerCase(), pendingVariant);
                 }
-                media.storageProviders.put(nonPrimary.name, pendingProviderJson);
+                media.storageClasses.put(nonPrimary.name, pendingProviderJson);
             }
 
             media.processingStatus = "COMPLETED";
@@ -889,7 +889,7 @@ public class MediaManagementService {
         }
 
         String originalUrl = media.url;
-        if (media.storageProviders != null) {
+        if (media.storageClasses != null) {
             String bestOriginalUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
             if (bestOriginalUrl != null && !bestOriginalUrl.isBlank()) {
                 originalUrl = bestOriginalUrl;
@@ -897,7 +897,7 @@ public class MediaManagementService {
         }
 
         String thumbnailUrl = metadataString(media, "thumbnailUrl");
-        if (media.storageProviders != null) {
+        if (media.storageClasses != null) {
             String bestThumbnailUrl = storageService.getBestAccessUrl(media, VariantType.WEBP);
             if (bestThumbnailUrl != null && !bestThumbnailUrl.isBlank()) {
                 thumbnailUrl = bestThumbnailUrl;
@@ -905,7 +905,7 @@ public class MediaManagementService {
         }
 
         String previewUrl = metadataString(media, "previewUrl");
-        if (media.storageProviders != null) {
+        if (media.storageClasses != null) {
             String bestPreviewUrl = storageService.getBestAccessUrl(media, VariantType.PLACEHOLDER);
             if (bestPreviewUrl != null && !bestPreviewUrl.isBlank()) {
                 previewUrl = bestPreviewUrl;
@@ -931,6 +931,10 @@ public class MediaManagementService {
                 referencedBy > 0,
                 refItems,
                 media.visibilityRegions,
+                media.hiddenRegions,
+                media.syncStorageClasses,
+                media.skipStorageClasses,
+                media.storageClasses,
                 media.metadata
         );
     }

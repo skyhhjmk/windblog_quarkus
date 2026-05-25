@@ -64,6 +64,19 @@ public class AdminMediaController {
         return mediaService.toDto(media, references);
     }
 
+    @GET
+    @Path("/{id}")
+    @Operation(summary = "获取媒体详情")
+    public AdminMediaDtos.MediaItem get(@PathParam("id") Long id) {
+        mustFindOperator();
+        Media media = Media.findById(id);
+        if (media == null || media.deletedAt != null) {
+            throw new NotFoundException("媒体不存在");
+        }
+        List<com.biliwind.blog.model.PostMedia> references = com.biliwind.blog.model.PostMedia.find("media.id = ?1", media.id).list();
+        return mediaService.toDto(media, references);
+    }
+
     @POST
     @Path("/upload")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
@@ -131,7 +144,23 @@ public class AdminMediaController {
         if (request.visibilityRegions() != null) {
             media.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
         }
+        if (request.hiddenRegions() != null) {
+            media.hiddenRegions = regionValidationService.validateAndFilterRegions(request.hiddenRegions());
+        }
+        boolean syncPolicyChanged = false;
+        if (request.syncStorageClasses() != null) {
+            media.syncStorageClasses = validateStorageClassNames(request.syncStorageClasses());
+            syncPolicyChanged = true;
+        }
+        if (request.skipStorageClasses() != null) {
+            media.skipStorageClasses = validateStorageClassNames(request.skipStorageClasses());
+            syncPolicyChanged = true;
+        }
         media.persist();
+        if (syncPolicyChanged) {
+            storageService.initializeStorageClassesForMedia(media.id);
+            storageService.scheduleSyncForMedia(media.id);
+        }
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("MEDIA", media.id, "UPSERT"));
         return mediaService.toDto(media, List.of());
     }
@@ -154,5 +183,29 @@ public class AdminMediaController {
                 .type(MediaType.APPLICATION_JSON_TYPE)
                 .entity(Map.of("success", false, "message", "需要登录后操作"))
                 .build());
+    }
+
+    @Inject
+    com.biliwind.blog.service.storage.StorageService storageService;
+
+    private List<String> validateStorageClassNames(List<String> storageClassNames) {
+        java.util.ArrayList<String> validNames = new java.util.ArrayList<>();
+        if (storageClassNames == null) {
+            return validNames;
+        }
+        List<com.biliwind.blog.model.StorageClassEntity> storageClasses = storageService.getAllStorageClassEntities();
+        for (String requestedName : storageClassNames) {
+            if (requestedName == null || requestedName.isBlank()) {
+                continue;
+            }
+            String trimmedName = requestedName.trim();
+            for (com.biliwind.blog.model.StorageClassEntity storageClass : storageClasses) {
+                if (trimmedName.equals(storageClass.name)) {
+                    validNames.add(trimmedName);
+                    break;
+                }
+            }
+        }
+        return validNames;
     }
 }

@@ -10,8 +10,8 @@ import org.hibernate.type.SqlTypes;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "storage_provider")
-public class StorageProviderEntity extends PanacheEntityBase {
+@Table(name = "storage_class")
+public class StorageClassEntity extends PanacheEntityBase {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,8 +49,8 @@ public class StorageProviderEntity extends PanacheEntityBase {
     @Column(name = "cdn_enabled", nullable = false)
     public Boolean cdnEnabled = false;
 
-    @Column(nullable = false, length = 20)
-    public BlogRegion region = BlogRegion.GLOBAL;
+    @Column(name = "service_region", length = 50)
+    public String serviceRegion;
 
     @Column(nullable = false)
     public Integer priority = 0;

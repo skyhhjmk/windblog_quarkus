@@ -6,6 +6,6 @@ public record MediaSyncDetailResponse(
         Long mediaId,
         String fileName,
         String mimeType,
-        Map<String, Object> storageProviders
+        Map<String, Object> storageClasses
 ) {
 }

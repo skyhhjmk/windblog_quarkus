@@ -69,11 +69,11 @@ public class Media extends PanacheEntityBase {
     public Map<String, Object> metadata;
 
     /**
-     * 各存储提供者的状态矩阵
+     * 各存储类的状态矩阵
      */
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "storage_providers", columnDefinition = "jsonb")
-    public Map<String, Object> storageProviders;
+    @Column(name = "storage_classes", columnDefinition = "jsonb")
+    public Map<String, Object> storageClasses;
 
     /**
      * 乐观锁版本号
@@ -123,6 +123,27 @@ public class Media extends PanacheEntityBase {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "visibility_regions", columnDefinition = "jsonb")
     public java.util.List<String> visibilityRegions;
+
+    /**
+     * 区域不可见性设置 (JSON数组)
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "hidden_regions", columnDefinition = "jsonb")
+    public java.util.List<String> hiddenRegions;
+
+    /**
+     * 指定需要同步的存储类，空值表示同步所有启用的非主存储类
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "sync_storage_classes", columnDefinition = "jsonb")
+    public java.util.List<String> syncStorageClasses;
+
+    /**
+     * 指定不同步的存储类
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "skip_storage_classes", columnDefinition = "jsonb")
+    public java.util.List<String> skipStorageClasses;
 
     /**
      * @return size

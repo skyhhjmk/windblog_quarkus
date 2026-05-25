@@ -13,24 +13,24 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class LocalFsStorageProviderTest {
+public class LocalFsStorageClassTest {
 
     @TempDir
     Path tempDir;
 
-    private LocalFsStorageProvider provider;
+    private LocalFsStorageClass provider;
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() throws IOException {
-        provider = new LocalFsStorageProvider();
+        provider = new LocalFsStorageClass();
         provider.setName("local-test");
 
         Path rootPath = tempDir.resolve("uploads");
         Files.createDirectories(rootPath);
 
         String configJson = "{\"rootPath\":\"" + rootPath.toString().replace("\\", "\\\\") + "\", \"baseUrl\":\"/uploads\"}";
-        StorageProviderConfig config = new StorageProviderConfig(
+        StorageClassConfig config = new StorageClassConfig(
                 objectMapper.readTree(configJson),
                 java.util.List.of("*"),
                 null,

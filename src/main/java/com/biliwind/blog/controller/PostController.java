@@ -48,6 +48,9 @@ public class PostController {
     com.biliwind.blog.service.storage.StorageService storageService;
 
     @Inject
+    com.biliwind.blog.service.MediaAccessService mediaAccessService;
+
+    @Inject
     com.biliwind.blog.service.repost.AffiliateContentRenderService affiliateContentRenderService;
 
     @Inject
@@ -200,6 +203,9 @@ public class PostController {
         List<AttachmentView> attachments = new java.util.ArrayList<>();
         for (PostMedia pm : rawPostMedia) {
             if (pm.usageType == 3) { // 3 = 附件
+                if (!mediaAccessService.canAccess(pm.media, regionContext.getCurrentRegion())) {
+                    continue;
+                }
                 String attachmentUrl = "";
                 if (hasPurchased) {
                     attachmentUrl = storageService.getBestSignedUrl(pm.media, VariantType.ORIGINAL, java.time.Duration.ofMinutes(10));

@@ -1,6 +1,6 @@
 package com.biliwind.blog.controller.api.admin.dto.storage;
 
-public record StorageProviderUpdateRequest(
+public record StorageClassUpdateRequest(
         String displayName,
         Boolean isEnabled,
         Boolean isPrimary,
@@ -9,7 +9,7 @@ public record StorageProviderUpdateRequest(
         String supportedTypes,
         String cdnDomain,
         Boolean cdnEnabled,
-        String region,
+        String serviceRegion,
         Integer priority
 ) {
 }

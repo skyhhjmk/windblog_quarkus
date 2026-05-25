@@ -7,13 +7,13 @@ import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class StorageProviderConfigTest {
+public class StorageClassConfigTest {
 
     @Test
     public void testDefaultConfig() {
         ArrayList<String> types = new ArrayList<>();
         types.add("*");
-        StorageProviderConfig config = new StorageProviderConfig(null, types, null, false);
+        StorageClassConfig config = new StorageClassConfig(null, types, null, false);
         assertNull(config.getConfigJson());
         assertEquals(1, config.getSupportedTypes().size());
         assertEquals("*", config.getSupportedTypes().get(0));
@@ -27,7 +27,7 @@ public class StorageProviderConfigTest {
         String configJson = "{\"bucketName\":\"test-bucket\",\"region\":\"cn-hangzhou\"}";
         String supportedTypes = "[\"image/jpeg\",\"image/png\",\"image/webp\"]";
 
-        StorageProviderConfig config = StorageProviderConfig.fromEntityJson(
+        StorageClassConfig config = StorageClassConfig.fromEntityJson(
                 configJson, supportedTypes, "cdn.example.com", true, mapper);
 
         assertNotNull(config.getConfigJson());
@@ -40,7 +40,7 @@ public class StorageProviderConfigTest {
     @Test
     public void testParseWithNullSupportedTypes() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        StorageProviderConfig config = StorageProviderConfig.fromEntityJson(
+        StorageClassConfig config = StorageClassConfig.fromEntityJson(
                 null, null, null, false, mapper);
 
         assertEquals(1, config.getSupportedTypes().size());

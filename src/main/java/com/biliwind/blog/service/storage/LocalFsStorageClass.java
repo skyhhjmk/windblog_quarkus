@@ -11,9 +11,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 
-public class LocalFsStorageProvider implements StorageProvider {
+public class LocalFsStorageClass implements StorageClass {
 
-    private static final Logger log = LoggerFactory.getLogger(LocalFsStorageProvider.class);
+    private static final Logger log = LoggerFactory.getLogger(LocalFsStorageClass.class);
 
     private String name;
     private Path rootPath;
@@ -45,7 +45,7 @@ public class LocalFsStorageProvider implements StorageProvider {
     }
 
     @Override
-    public void initialize(StorageProviderConfig config) {
+    public void initialize(StorageClassConfig config) {
         JsonNode json = config.getConfigJson();
         if (json != null && json.has("rootPath")) {
             this.rootPath = Paths.get(json.get("rootPath").asText());
@@ -64,7 +64,7 @@ public class LocalFsStorageProvider implements StorageProvider {
                 Files.createDirectories(this.rootPath);
             }
         } catch (Exception e) {
-            throw new StorageException("Failed to initialize LocalFsStorageProvider: " + e.getMessage(), e);
+            throw new StorageException("Failed to initialize LocalFsStorageClass: " + e.getMessage(), e);
         }
         this.supportedTypes = config.getSupportedTypes();
     }

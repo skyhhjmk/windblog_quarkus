@@ -2,7 +2,7 @@ package com.biliwind.blog.service.storage.dto;
 
 public record StorageSyncMessage(
         Long mediaId,
-        String providerName,
+        String storageClassName,
         String variantType,
         int retryCount
 ) {

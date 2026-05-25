@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller;
 
 import com.biliwind.blog.model.Media;
+import com.biliwind.blog.service.MediaAccessService;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
 import jakarta.inject.Inject;
@@ -22,6 +23,12 @@ public class UploadFileController {
     @Inject
     StorageService storageService;
 
+    @Inject
+    MediaAccessService mediaAccessService;
+
+    @Inject
+    com.biliwind.blog.context.RegionContext regionContext;
+
     @GET
     @Path("/{fileName}")
     @Produces(MediaType.WILDCARD)
@@ -33,7 +40,10 @@ public class UploadFileController {
         try {
             String storageKeyCandidate = extractStorageKey(fileName);
             Media media = Media.find("storageKey = ?1 AND deletedAt IS NULL", storageKeyCandidate).firstResult();
-            if (media != null && media.storageProviders != null) {
+            if (media != null && !mediaAccessService.canAccess(media, regionContext.getCurrentRegion())) {
+                throw new NotFoundException();
+            }
+            if (media != null && media.storageClasses != null) {
                 String bestUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
                 if (bestUrl != null && !bestUrl.isBlank()) {
                     if (isSameRequestUrl(bestUrl, uriInfo) == false) {
@@ -43,6 +53,8 @@ public class UploadFileController {
                     }
                 }
             }
+        } catch (NotFoundException notFoundException) {
+            throw notFoundException;
         } catch (Exception ignored) {
         }
 

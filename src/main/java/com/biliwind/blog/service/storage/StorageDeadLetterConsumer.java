@@ -28,14 +28,14 @@ public class StorageDeadLetterConsumer {
         }
         StorageSyncMessage msg = message.getPayload();
         Log.warn("死信队列收到失败的同步任务: mediaId=" + msg.mediaId()
-                + ", provider=" + msg.providerName()
+                + ", provider=" + msg.storageClassName()
                 + ", variant=" + msg.variantType()
                 + ", retryCount=" + msg.retryCount());
 
         // 1. 更新 Media 状态为 failed
         VariantType variant = VariantType.valueOf(msg.variantType().toUpperCase());
         storageService.updateVariantStatus(
-                msg.mediaId(), msg.providerName(), variant, "failed", null, null, 0);
+                msg.mediaId(), msg.storageClassName(), variant, "failed", null, null, 0);
 
         // 2. 持久化到死信表
         try {
@@ -49,7 +49,7 @@ public class StorageDeadLetterConsumer {
             // 将 Record 转换为 Map 存储
             java.util.Map<String, Object> content = new java.util.HashMap<>();
             content.put("mediaId", msg.mediaId());
-            content.put("providerName", msg.providerName());
+            content.put("storageClassName", msg.storageClassName());
             content.put("variantType", msg.variantType());
             content.put("retryCount", msg.retryCount());
             dlMsg.messageContent = content;

@@ -8,16 +8,16 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
-public class StorageProviderConfig {
+public class StorageClassConfig {
 
-    private static final Logger log = LoggerFactory.getLogger(StorageProviderConfig.class);
+    private static final Logger log = LoggerFactory.getLogger(StorageClassConfig.class);
 
     private final JsonNode configJson;
     private final List<String> supportedTypes;
     private final String cdnDomain;
     private final boolean cdnEnabled;
 
-    public StorageProviderConfig(JsonNode configJson, List<String> supportedTypes,
+    public StorageClassConfig(JsonNode configJson, List<String> supportedTypes,
                                  String cdnDomain, boolean cdnEnabled) {
         this.configJson = configJson;
         this.supportedTypes = supportedTypes;
@@ -25,7 +25,7 @@ public class StorageProviderConfig {
         this.cdnEnabled = cdnEnabled;
     }
 
-    public static StorageProviderConfig fromEntityJson(String configJsonStr, String supportedTypesStr,
+    public static StorageClassConfig fromEntityJson(String configJsonStr, String supportedTypesStr,
                                                        String cdnDomain, boolean cdnEnabled,
                                                        ObjectMapper objectMapper) {
         JsonNode configJson = null;
@@ -56,7 +56,7 @@ public class StorageProviderConfig {
             supportedTypes.add("*");
         }
 
-        return new StorageProviderConfig(configJson, supportedTypes, cdnDomain, cdnEnabled);
+        return new StorageClassConfig(configJson, supportedTypes, cdnDomain, cdnEnabled);
     }
 
     public JsonNode getConfigJson() {

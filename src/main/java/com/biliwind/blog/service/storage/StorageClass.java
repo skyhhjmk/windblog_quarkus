@@ -3,11 +3,11 @@ package com.biliwind.blog.service.storage;
 import java.io.InputStream;
 import java.time.Duration;
 
-public interface StorageProvider {
+public interface StorageClass {
 
     String getName();
 
-    void initialize(StorageProviderConfig config);
+    void initialize(StorageClassConfig config);
 
     boolean isAvailable();
 

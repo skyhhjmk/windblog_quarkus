@@ -3,8 +3,8 @@ package com.biliwind.blog.service.edge;
 import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.model.Media;
-import com.biliwind.blog.model.StorageProviderEntity;
-import com.biliwind.blog.service.storage.StorageProvider;
+import com.biliwind.blog.model.StorageClassEntity;
+import com.biliwind.blog.service.storage.StorageClass;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -247,7 +247,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Override
     public Uni<StorageConfigResponse> getStorageConfig(ConfigRequest request) {
-        List<StorageProviderEntity> entities = StorageProviderEntity.list("isEnabled = true ORDER BY priority ASC");
+        List<StorageClassEntity> entities = StorageClassEntity.list("isEnabled = true ORDER BY priority ASC");
 
         List<StorageNodeConfig> configs = entities.stream().map(e -> StorageNodeConfig.newBuilder()
                 .setName(e.name)
@@ -299,7 +299,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                 .setMimeType(media.mimeType != null ? media.mimeType : "")
                 .setVersion(media.version != null ? media.version : 1);
 
-        if (media.storageProviders != null) {
+        if (media.storageClasses != null) {
             // Get all possible variants
             for (VariantType vt : VariantType.values()) {
                 String variantName = vt.name().toLowerCase();
@@ -310,8 +310,8 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                     variantBuilder.setBestUrl(bestUrl);
                 }
 
-                for (Map.Entry<String, Object> providerEntry : media.storageProviders.entrySet()) {
-                    String providerName = providerEntry.getKey();
+                for (Map.Entry<String, Object> providerEntry : media.storageClasses.entrySet()) {
+                    String storageClassName = providerEntry.getKey();
                     if (providerEntry.getValue() instanceof Map) {
                         Map<String, Object> providerData = (Map<String, Object>) providerEntry.getValue();
                         Object variantDataObj = providerData.get(variantName);
@@ -325,7 +325,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                             if (variantData.get("size") != null)
                                 statusBuilder.setSize(((Number) variantData.get("size")).longValue());
 
-                            variantBuilder.putNodes(providerName, statusBuilder.build());
+                            variantBuilder.putNodes(storageClassName, statusBuilder.build());
                         }
                     }
                 }
@@ -345,7 +345,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                 .onItem().transformToMulti(req -> {
                     Multi<DownloadChunk> multi;
                     try {
-                        StorageProvider provider = getStorageService().getPrimaryProvider();
+                        StorageClass provider = getStorageService().getPrimaryProvider();
                         if (provider == null) {
                             multi = Multi.createFrom().failure(new Exception("Primary provider not found"));
                         } else {
@@ -354,7 +354,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                                 multi = Multi.createFrom().failure(new Exception("Media not found: " + req.getMediaId()));
                             } else {
                                 String variantName = req.getVariantType().toLowerCase();
-                                Object providerDataObj = media.storageProviders.get(getStorageService().getPrimaryProviderName());
+                                Object providerDataObj = media.storageClasses.get(getStorageService().getPrimaryProviderName());
                                 if (!(providerDataObj instanceof Map)) {
                                     multi = Multi.createFrom().failure(new Exception("Primary provider data not found"));
                                 } else {
