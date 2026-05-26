@@ -44,11 +44,45 @@ public class SidebarTemplateData {
         List<PostView> result = new ArrayList<>();
         for (Post p : posts) {
             String title = LanguageHelper.resolveLocalizedValue(p.title, lang);
-            result.add(new PostView(p.id, title, p.slug, p.publishedAt, p.createdAt));
+            String safeTitle = resolvePostTitle(title, p.slug, p.id);
+            String titleInitial = resolveTitleInitial(safeTitle);
+            result.add(new PostView(p.id, safeTitle, titleInitial, p.slug, p.publishedAt, p.createdAt));
         }
 
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
         return result;
+    }
+
+    private static String resolvePostTitle(String localizedTitle, String postSlug, Long postId) {
+        if (localizedTitle != null) {
+            if (!localizedTitle.isBlank()) {
+                return localizedTitle;
+            }
+        }
+
+        if (postSlug != null) {
+            if (!postSlug.isBlank()) {
+                return postSlug;
+            }
+        }
+
+        if (postId != null) {
+            return "文章 " + postId;
+        }
+
+        return "未命名文章";
+    }
+
+    private static String resolveTitleInitial(String title) {
+        if (title == null) {
+            return "?";
+        }
+
+        if (title.isBlank()) {
+            return "?";
+        }
+
+        return title.substring(0, 1);
     }
 
     @TemplateExtension(namespace = "sidebar")
@@ -118,7 +152,7 @@ public class SidebarTemplateData {
     }
 
     @TemplateData
-    public record PostView(Long id, String title, String slug, java.time.OffsetDateTime publishedAt,
+    public record PostView(Long id, String title, String titleInitial, String slug, java.time.OffsetDateTime publishedAt,
                            java.time.OffsetDateTime createdAt) {
     }
 
