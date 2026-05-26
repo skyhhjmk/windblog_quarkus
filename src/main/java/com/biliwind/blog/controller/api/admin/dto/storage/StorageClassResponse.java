@@ -15,6 +15,7 @@ public record StorageClassResponse(
         String cdnDomain,
         Boolean cdnEnabled,
         String serviceRegion,
+        java.util.List<String> contentRegions,
         Integer priority
 ) {
     public static StorageClassResponse fromEntity(StorageClassEntity entity) {
@@ -31,6 +32,7 @@ public record StorageClassResponse(
                 entity.cdnDomain,
                 entity.cdnEnabled,
                 entity.serviceRegion,
+                entity.contentRegions,
                 entity.priority
         );
     }

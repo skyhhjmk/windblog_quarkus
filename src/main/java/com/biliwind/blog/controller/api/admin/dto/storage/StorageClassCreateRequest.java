@@ -12,6 +12,7 @@ public record StorageClassCreateRequest(
         String cdnDomain,
         Boolean cdnEnabled,
         String serviceRegion,
+        java.util.List<String> contentRegions,
         Integer priority
 ) {
 }

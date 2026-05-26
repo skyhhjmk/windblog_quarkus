@@ -8,6 +8,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "storage_class")
@@ -51,6 +52,10 @@ public class StorageClassEntity extends PanacheEntityBase {
 
     @Column(name = "service_region", length = 50)
     public String serviceRegion;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "content_regions", columnDefinition = "jsonb")
+    public List<String> contentRegions;
 
     @Column(nullable = false)
     public Integer priority = 0;

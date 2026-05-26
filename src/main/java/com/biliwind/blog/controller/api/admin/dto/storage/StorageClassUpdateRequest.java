@@ -10,6 +10,7 @@ public record StorageClassUpdateRequest(
         String cdnDomain,
         Boolean cdnEnabled,
         String serviceRegion,
+        java.util.List<String> contentRegions,
         Integer priority
 ) {
 }

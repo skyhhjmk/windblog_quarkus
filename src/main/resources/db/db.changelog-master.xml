@@ -78,4 +78,5 @@
     <include file="db/migration/074-create-link-article-references.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/075-add-edge-node-fixed-deployment-ports.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/076-rename-storage-provider-to-class.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/077-add-storage-class-content-regions.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

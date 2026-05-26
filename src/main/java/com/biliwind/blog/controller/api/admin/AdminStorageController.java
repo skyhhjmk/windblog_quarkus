@@ -3,6 +3,7 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.controller.api.admin.dto.storage.*;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageClassEntity;
+import com.biliwind.blog.service.RegionValidationService;
 import com.biliwind.blog.service.storage.MediaSyncStatus;
 import com.biliwind.blog.service.storage.StorageClass;
 import com.biliwind.blog.service.storage.StorageService;
@@ -29,6 +30,9 @@ public class AdminStorageController {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    RegionValidationService regionValidationService;
 
     @GET
     @Path("/classes")
@@ -106,6 +110,7 @@ public class AdminStorageController {
         entity.cdnDomain = request.cdnDomain();
         entity.cdnEnabled = request.cdnEnabled() != null ? request.cdnEnabled() : false;
         entity.serviceRegion = normalizeOptionalText(request.serviceRegion());
+        entity.contentRegions = normalizeContentRegions(request.contentRegions());
         entity.priority = request.priority() != null ? request.priority() : 0;
 
         entity.persist();
@@ -176,6 +181,9 @@ public class AdminStorageController {
         existing.cdnEnabled = request.cdnEnabled() != null ? request.cdnEnabled() : existing.cdnEnabled;
         if (request.serviceRegion() != null) {
             existing.serviceRegion = normalizeOptionalText(request.serviceRegion());
+        }
+        if (request.contentRegions() != null) {
+            existing.contentRegions = normalizeContentRegions(request.contentRegions());
         }
         existing.priority = request.priority() != null ? request.priority() : existing.priority;
 
@@ -356,5 +364,13 @@ public class AdminStorageController {
             return null;
         }
         return trimmedText;
+    }
+
+    private List<String> normalizeContentRegions(List<String> contentRegions) {
+        List<String> normalizedContentRegions = regionValidationService.validateAndFilterRegions(contentRegions);
+        if (normalizedContentRegions == null || normalizedContentRegions.isEmpty()) {
+            return null;
+        }
+        return normalizedContentRegions;
     }
 }

@@ -112,7 +112,10 @@ public class ElasticsearchPostSearchService {
         if (nodeRoleService.isEdgeNode()) {
             return false;
         }
-        return connectionManager.isAvailable() && indexInitialized.get();
+        if (!connectionManager.isAvailable()) {
+            return false;
+        }
+        return isPostIndexInitialized();
     }
 
     /**
@@ -122,11 +125,33 @@ public class ElasticsearchPostSearchService {
         if (nodeRoleService.isEdgeNode()) {
             return new ServiceStatus(false, false, "DISABLED");
         }
+        boolean connectionAvailable = connectionManager.isAvailable();
+        boolean postIndexInitialized = false;
+        if (connectionAvailable) {
+            postIndexInitialized = isPostIndexInitialized();
+        }
         return new ServiceStatus(
-                connectionManager.isAvailable(),
-                indexInitialized.get(),
+                connectionAvailable,
+                postIndexInitialized,
                 connectionManager.getHealthStatus().name()
         );
+    }
+
+    private boolean isPostIndexInitialized() {
+        if (indexInitialized.get()) {
+            return true;
+        }
+
+        HealthResult healthResult = checkHealth();
+        boolean existingIndexSetupReady = "healthy".equals(healthResult.status())
+                && healthResult.ilmPolicyExists()
+                && healthResult.indexTemplateExists();
+        if (existingIndexSetupReady) {
+            indexInitialized.set(true);
+            log.info("Elasticsearch article index status restored from existing ES metadata");
+            return true;
+        }
+        return false;
     }
 
     private void createIlmPolicy() throws Exception {
