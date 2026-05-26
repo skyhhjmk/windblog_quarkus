@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.arc.Arc;
 import io.quarkus.qute.TemplateData;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -20,6 +21,19 @@ public class ConfigTemplateData {
         return configManager().getString("site_info", "title", "WindBlog");
     }
 
+    public static String siteTitleInitial() {
+        String siteTitle = siteTitle();
+        if (siteTitle == null) {
+            return "W";
+        }
+
+        if (siteTitle.isBlank()) {
+            return "W";
+        }
+
+        return siteTitle.substring(0, 1);
+    }
+
     public static String siteSubtitle() {
         return configManager().getString("site_info", "subtitle", "");
     }
@@ -29,14 +43,16 @@ public class ConfigTemplateData {
     }
 
     public static String siteKeywords() {
-        var node = configManager().get("site_info");
-        if (node != null && node.has("keywords") && node.get("keywords").isArray()) {
-            StringBuilder sb = new StringBuilder();
-            for (var item : node.get("keywords")) {
-                if (!sb.isEmpty()) sb.append(", ");
-                sb.append(item.asText());
+        JsonNode siteInfoNode = configManager().get("site_info");
+        if (siteInfoNode != null && siteInfoNode.has("keywords") && siteInfoNode.get("keywords").isArray()) {
+            StringBuilder keywordsText = new StringBuilder();
+            for (JsonNode keywordNode : siteInfoNode.get("keywords")) {
+                if (!keywordsText.isEmpty()) {
+                    keywordsText.append(", ");
+                }
+                keywordsText.append(keywordNode.asText());
             }
-            return sb.toString();
+            return keywordsText.toString();
         }
         return "";
     }
