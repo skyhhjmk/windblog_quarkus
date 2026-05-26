@@ -2,15 +2,17 @@
     <div id="pjax-nav-path" class="hidden">
         home {#if subPage && subPage > 1}/ page-{subPage}{/if}
     </div>
-    <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-8">
+    {#if pjaxRequest}
+        <div id="pjax-sidebar-html" class="hidden">
+            <div class="space-y-8">
 
                 {#include sidebar/stats.html /}
                 {#include sidebar/recent_posts.html /}
                 {#include sidebar/categories.html /}
                 {#include sidebar/tags.html /}
+            </div>
         </div>
-    </div>
+    {/if}
 
     <section class="space-y-16">
         <div class="space-y-2">

@@ -146,8 +146,10 @@ public class IndexController {
             }
         }
 
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+
         Template template;
-        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
+        if (pjaxRequest) {
             template = indexContent;
         } else {
             template = index;
@@ -163,6 +165,7 @@ public class IndexController {
                 .data("hasNextPage", subPage < totalPages)
                 .data("prevPage", Math.max(1, subPage - 1))
                 .data("nextPage", Math.min(totalPages, subPage + 1))
+                .data("pjaxRequest", pjaxRequest)
                 .data("posts", postItems);
     }
 

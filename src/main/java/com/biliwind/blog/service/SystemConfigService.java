@@ -18,11 +18,9 @@ public class SystemConfigService {
     private static final String CACHE_PREFIX = "windblog:config:";
 
     private final ValueCommands<String, String> valueCommands;
-    private final RedisDataSource redisDataSource;
     private final ObjectMapper mapper;
 
     public SystemConfigService(RedisDataSource redisDataSource, ObjectMapper mapper) {
-        this.redisDataSource = redisDataSource;
         this.mapper = mapper;
         this.valueCommands = redisDataSource.value(String.class);
     }
@@ -32,7 +30,12 @@ public class SystemConfigService {
      */
     public JsonNode getConfig(String key) {
         String cacheKey = CACHE_PREFIX + key;
-        String cachedValue = valueCommands.get(cacheKey);
+        String cachedValue = null;
+        try {
+            cachedValue = valueCommands.get(cacheKey);
+        } catch (Exception e) {
+            log.warnf("读取 Redis 配置缓存失败，改用数据库配置: %s, 错误: %s", key, e.getMessage());
+        }
 
         if (cachedValue != null) {
             try {
@@ -64,14 +67,20 @@ public class SystemConfigService {
 
     public String getString(String key, String defaultValue) {
         JsonNode node = getConfig(key);
-        return (node != null && node.isTextual()) ? node.asText() : defaultValue;
+        if (node != null && node.isTextual()) {
+            return node.asText();
+        }
+        return defaultValue;
     }
 
     public String getString(String key, String field, String defaultValue) {
         JsonNode node = getConfig(key);
         if (node != null && node.has(field)) {
             JsonNode fieldNode = node.get(field);
-            return fieldNode.isTextual() ? fieldNode.asText() : fieldNode.toString();
+            if (fieldNode.isTextual()) {
+                return fieldNode.asText();
+            }
+            return fieldNode.toString();
         }
         return defaultValue;
     }
@@ -85,7 +94,11 @@ public class SystemConfigService {
     }
 
     public void evictCache(String key) {
-        valueCommands.getdel(CACHE_PREFIX + key);
-        log.infof("配置缓存已清除: %s", key);
+        try {
+            valueCommands.getdel(CACHE_PREFIX + key);
+            log.infof("配置缓存已清除: %s", key);
+        } catch (Exception e) {
+            log.warnf("清除 Redis 配置缓存失败: %s, 错误: %s", key, e.getMessage());
+        }
     }
 }

@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -35,12 +36,11 @@ public class ConfigManager {
 
     @Transactional
     public void refreshAll() {
-        SystemSetting.listAll().forEach(item -> {
-            SystemSetting setting = (SystemSetting) item;
+        List<SystemSetting> settings = SystemSetting.listAll();
+        for (SystemSetting setting : settings) {
             localCache.put(setting.configKey, setting.configValue);
-            // 同时更新 Redis 二级缓存
             systemConfigService.updateCache(setting.configKey, setting.configValue);
-        });
+        }
         LOG.info("ConfigManager 本地与 Redis 缓存已刷新。总键数: " + localCache.size());
     }
 
@@ -60,34 +60,58 @@ public class ConfigManager {
     }
 
     public String getString(String key, String defaultValue) {
-        return systemConfigService.getString(key, defaultValue);
+        JsonNode node = get(key);
+        if (node != null && node.isTextual()) {
+            return node.asText();
+        }
+        return defaultValue;
     }
 
     public String getString(String key, String field, String defaultValue) {
-        return systemConfigService.getString(key, field, defaultValue);
+        JsonNode node = get(key);
+        if (node != null && node.has(field)) {
+            JsonNode fieldNode = node.get(field);
+            if (fieldNode.isTextual()) {
+                return fieldNode.asText();
+            }
+            return fieldNode.toString();
+        }
+        return defaultValue;
     }
 
     public Integer getInt(String key, Integer defaultValue) {
         JsonNode node = get(key);
-        return (node != null && node.canConvertToInt()) ? node.asInt() : defaultValue;
+        if (node != null && node.canConvertToInt()) {
+            return node.asInt();
+        }
+        return defaultValue;
     }
 
     public Integer getInt(String key, String field, Integer defaultValue) {
         JsonNode node = get(key);
         if (node != null && node.has(field)) {
             JsonNode fieldNode = node.get(field);
-            return fieldNode.canConvertToInt() ? fieldNode.asInt() : defaultValue;
+            if (fieldNode.canConvertToInt()) {
+                return fieldNode.asInt();
+            }
         }
         return defaultValue;
     }
 
     public Boolean getBoolean(String key, Boolean defaultValue) {
         JsonNode node = get(key);
-        return (node != null && node.isBoolean()) ? node.asBoolean() : defaultValue;
+        if (node != null && node.isBoolean()) {
+            return node.asBoolean();
+        }
+        return defaultValue;
     }
 
     public Boolean getBoolean(String key, String field, Boolean defaultValue) {
-        return systemConfigService.getBoolean(key, field, defaultValue);
+        JsonNode node = get(key);
+        if (node != null && node.has(field)) {
+            return node.get(field).asBoolean();
+        }
+        return defaultValue;
     }
 
     /**
