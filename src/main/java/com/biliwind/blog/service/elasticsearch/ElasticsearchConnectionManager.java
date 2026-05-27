@@ -18,6 +18,7 @@ import java.util.Base64;
 import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -32,6 +33,8 @@ public class ElasticsearchConnectionManager {
     private final AtomicBoolean available = new AtomicBoolean(false);
     private final AtomicReference<String> lastError = new AtomicReference<>();
     private final AtomicReference<HealthStatus> healthStatus = new AtomicReference<>(HealthStatus.UNINITIALIZED);
+    private final AtomicInteger consecutiveHealthCheckFailures = new AtomicInteger(0);
+    private final AtomicInteger consecutiveHealthCheckSuccesses = new AtomicInteger(0);
     private final CopyOnWriteArrayList<Runnable> onAvailableCallbacks = new CopyOnWriteArrayList<>();
     @Inject
     HttpClient httpClient;
@@ -45,6 +48,12 @@ public class ElasticsearchConnectionManager {
     Optional<String> password;
     @ConfigProperty(name = "elasticsearch.health-check.interval-seconds", defaultValue = "30")
     int healthCheckIntervalSeconds;
+    @ConfigProperty(name = "elasticsearch.health-check.failure-threshold", defaultValue = "3")
+    int healthCheckFailureThreshold;
+    @ConfigProperty(name = "elasticsearch.health-check.recovery-threshold", defaultValue = "2")
+    int healthCheckRecoveryThreshold;
+    @ConfigProperty(name = "elasticsearch.health-check.timeout-seconds", defaultValue = "5")
+    int healthCheckTimeoutSeconds;
     @ConfigProperty(name = "elasticsearch.init.max-wait-seconds", defaultValue = "300")
     int maxWaitSeconds;
     private ScheduledExecutorService healthCheckExecutor;
@@ -130,6 +139,7 @@ public class ElasticsearchConnectionManager {
                     available.set(true);
                     healthStatus.set(HealthStatus.AVAILABLE);
                     lastError.set(null);
+                    resetHealthCheckCounters();
                     log.debug("ElasticSearch connection initialized successfully");
                     log.debugf("Preparing to execute %d callbacks", onAvailableCallbacks.size());
 
@@ -170,34 +180,78 @@ public class ElasticsearchConnectionManager {
      */
     private void performHealthCheck() {
         try {
-            boolean wasAvailable = available.get();
-            boolean nowAvailable = checkElasticsearchConnection();
-
-            available.set(nowAvailable);
-
-            if (nowAvailable && !wasAvailable) {
-                healthStatus.set(HealthStatus.AVAILABLE);
-                lastError.set(null);
-                log.debug("ElasticSearch service recovered");
-
-                // Execute registered callbacks
-                for (Runnable callback : onAvailableCallbacks) {
-                    try {
-                        callback.run();
-                    } catch (Exception e) {
-                        log.error("Callback execution failed", e);
-                    }
-                }
-                onAvailableCallbacks.clear();
-            } else if (!nowAvailable && wasAvailable) {
-                healthStatus.set(HealthStatus.UNAVAILABLE);
-                log.warn("ElasticSearch service became unavailable");
-            }
+            recordHealthCheckResult(checkElasticsearchConnection(), null);
         } catch (Exception e) {
-            available.set(false);
-            healthStatus.set(HealthStatus.UNAVAILABLE);
-            lastError.set(e.getMessage());
+            recordHealthCheckResult(false, e.getMessage());
         }
+    }
+
+    void recordHealthCheckResult(boolean success, String errorMessage) {
+        if (success) {
+            int successes = consecutiveHealthCheckSuccesses.incrementAndGet();
+            consecutiveHealthCheckFailures.set(0);
+
+            if (!available.get() && successes < normalizedRecoveryThreshold()) {
+                healthStatus.set(HealthStatus.DEGRADED);
+                lastError.set(null);
+                log.debugf("ElasticSearch health check recovered once, waiting for %d/%d successful checks",
+                        successes, normalizedRecoveryThreshold());
+                return;
+            }
+
+            boolean wasAvailable = available.getAndSet(true);
+            healthStatus.set(HealthStatus.AVAILABLE);
+            lastError.set(null);
+
+            if (!wasAvailable) {
+                log.info("ElasticSearch service recovered");
+                executeAvailableCallbacks();
+            }
+            return;
+        }
+
+        int failures = consecutiveHealthCheckFailures.incrementAndGet();
+        consecutiveHealthCheckSuccesses.set(0);
+        if (errorMessage != null && !errorMessage.isBlank()) {
+            lastError.set(errorMessage);
+        }
+
+        if (available.get() && failures < normalizedFailureThreshold()) {
+            healthStatus.set(HealthStatus.DEGRADED);
+            log.debugf("ElasticSearch health check failed %d/%d, keeping service available during transient pressure",
+                    failures, normalizedFailureThreshold());
+            return;
+        }
+
+        boolean wasAvailable = available.getAndSet(false);
+        healthStatus.set(HealthStatus.UNAVAILABLE);
+        if (wasAvailable) {
+            log.warnf("ElasticSearch service became unavailable after %d consecutive failed health checks", failures);
+        }
+    }
+
+    private void executeAvailableCallbacks() {
+        for (Runnable callback : onAvailableCallbacks) {
+            try {
+                callback.run();
+            } catch (Exception e) {
+                log.error("Callback execution failed", e);
+            }
+        }
+        onAvailableCallbacks.clear();
+    }
+
+    private void resetHealthCheckCounters() {
+        consecutiveHealthCheckFailures.set(0);
+        consecutiveHealthCheckSuccesses.set(0);
+    }
+
+    private int normalizedFailureThreshold() {
+        return Math.max(1, healthCheckFailureThreshold);
+    }
+
+    private int normalizedRecoveryThreshold() {
+        return Math.max(1, healthCheckRecoveryThreshold);
     }
 
     /**
@@ -207,7 +261,7 @@ public class ElasticsearchConnectionManager {
         try {
             var request = HttpRequest.newBuilder()
                     .uri(URI.create(elasticsearchHosts + "/_cluster/health"))
-                    .timeout(java.time.Duration.ofSeconds(5))
+                    .timeout(java.time.Duration.ofSeconds(Math.max(1, healthCheckTimeoutSeconds)))
                     .GET()
                     .build();
 
