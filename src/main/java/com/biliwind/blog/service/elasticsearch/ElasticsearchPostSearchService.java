@@ -487,7 +487,7 @@ public class ElasticsearchPostSearchService {
             throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
         }
 
-        log.infof("Searching articles: query=%s, page=%d, size=%d, status=%s, category=%s",
+        log.debugf("Searching articles: query=%s, page=%d, size=%d, status=%s, category=%s",
                  query, page, size, status, category);
 
         int from = (page - 1) * size;
