@@ -22,6 +22,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -38,7 +39,9 @@ public class IndexController {
 
     private static final int PAGE_SIZE = 10;
     private static final long LOCAL_CACHE_TTL_MILLIS = 3000L;
+    private static final long RENDERED_PAGE_CACHE_TTL_MILLIS = 1000L;
     private static final ConcurrentHashMap<String, LocalIndexPageCache> LOCAL_INDEX_PAGE_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, RenderedPageCache> RENDERED_PAGE_CACHE = new ConcurrentHashMap<>();
 
     @Inject
     @Location("blog/index.html")
@@ -59,15 +62,15 @@ public class IndexController {
 
     @GET
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance index(@Context HttpHeaders httpHeaders) {
+    public Response index(@Context HttpHeaders httpHeaders) {
         return subPage(1, httpHeaders);
     }
 
     @Path("/page/{subPage}")
     @GET
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance subPage(@PathParam("subPage") Integer subPage,
-                                    @Context HttpHeaders httpHeaders) {
+    public Response subPage(@PathParam("subPage") Integer subPage,
+                            @Context HttpHeaders httpHeaders) {
         if (subPage == null) {
             subPage = 1;
         }
@@ -78,14 +81,19 @@ public class IndexController {
         String language = languageContext.getLang();
         String currentRegion = regionContext.getCurrentRegion().getCode();
         String cacheKey = com.biliwind.blog.common.CacheService.Keys.indexPage(subPage, language + ":" + currentRegion);
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+        String renderedPageCacheKey = buildRenderedPageCacheKey(cacheKey, pjaxRequest);
+
+        String cachedHtml = getRenderedPageHtml(renderedPageCacheKey);
+        if (cachedHtml != null) {
+            return buildHtmlResponse(cachedHtml);
+        }
 
         IndexPageCache pageCache = getIndexPageCache(cacheKey, subPage, language, currentRegion);
 
         long totalPostsCount = pageCache.totalPostsCount;
         long totalPages = pageCache.totalPages;
         List<IndexPostItem> postItems = pageCache.postItems;
-
-        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
 
         Template template;
         if (pjaxRequest) {
@@ -94,7 +102,7 @@ public class IndexController {
             template = index;
         }
 
-        return template
+        String renderedHtml = template
                 .data("language", language)
                 .data("subPage", subPage)
                 .data("pageSize", PAGE_SIZE)
@@ -105,7 +113,49 @@ public class IndexController {
                 .data("prevPage", Math.max(1, subPage - 1))
                 .data("nextPage", Math.min(totalPages, subPage + 1))
                 .data("pjaxRequest", pjaxRequest)
-                .data("posts", postItems);
+                .data("posts", postItems)
+                .render();
+
+        setRenderedPageHtml(renderedPageCacheKey, renderedHtml);
+        return buildHtmlResponse(renderedHtml);
+    }
+
+    private String buildRenderedPageCacheKey(String cacheKey, boolean pjaxRequest) {
+        String cacheType;
+        if (pjaxRequest) {
+            cacheType = "pjax";
+        } else {
+            cacheType = "full";
+        }
+        return cacheType + ":" + cacheKey;
+    }
+
+    private String getRenderedPageHtml(String renderedPageCacheKey) {
+        RenderedPageCache renderedPageCache = RENDERED_PAGE_CACHE.get(renderedPageCacheKey);
+        if (renderedPageCache == null) {
+            return null;
+        }
+
+        long now = System.currentTimeMillis();
+        if (renderedPageCache.expiresAtMillis <= now) {
+            RENDERED_PAGE_CACHE.remove(renderedPageCacheKey);
+            return null;
+        }
+
+        return renderedPageCache.html;
+    }
+
+    private void setRenderedPageHtml(String renderedPageCacheKey, String renderedHtml) {
+        long expiresAtMillis = System.currentTimeMillis() + RENDERED_PAGE_CACHE_TTL_MILLIS;
+        RenderedPageCache renderedPageCache = new RenderedPageCache(renderedHtml, expiresAtMillis);
+        RENDERED_PAGE_CACHE.put(renderedPageCacheKey, renderedPageCache);
+    }
+
+    private Response buildHtmlResponse(String html) {
+        return Response.ok(html)
+                .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"))
+                .header("Cache-Control", "no-cache")
+                .build();
     }
 
     private IndexPageCache getIndexPageCache(String cacheKey, int subPage, String language, String currentRegion) {
@@ -296,6 +346,12 @@ public class IndexController {
 
     private record LocalIndexPageCache(
             IndexPageCache pageCache,
+            long expiresAtMillis
+    ) {
+    }
+
+    private record RenderedPageCache(
+            String html,
             long expiresAtMillis
     ) {
     }
