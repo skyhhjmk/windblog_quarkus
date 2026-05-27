@@ -27,6 +27,8 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 首页控制器
@@ -35,6 +37,8 @@ import java.util.Map;
 public class IndexController {
 
     private static final int PAGE_SIZE = 10;
+    private static final long LOCAL_CACHE_TTL_MILLIS = 3000L;
+    private static final ConcurrentHashMap<String, LocalIndexPageCache> LOCAL_INDEX_PAGE_CACHE = new ConcurrentHashMap<>();
 
     @Inject
     @Location("blog/index.html")
@@ -75,76 +79,11 @@ public class IndexController {
         String currentRegion = regionContext.getCurrentRegion().getCode();
         String cacheKey = com.biliwind.blog.common.CacheService.Keys.indexPage(subPage, language + ":" + currentRegion);
 
-        long totalPostsCount;
-        long totalPages;
-        List<IndexPostItem> postItems;
+        IndexPageCache pageCache = getIndexPageCache(cacheKey, subPage, language, currentRegion);
 
-        // 仅缓存前 5 页
-        java.util.Optional<IndexPageCache> cached = java.util.Optional.empty();
-        if (subPage <= 5) {
-            cached = cacheService.get(cacheKey, IndexPageCache.class);
-        }
-
-        if (cached.isPresent()) {
-            IndexPageCache cache = cached.get();
-            postItems = cache.postItems;
-            totalPostsCount = cache.totalPostsCount;
-            totalPages = cache.totalPages;
-        } else {
-            Map<String, Object> parameters = Map.of(
-                    "status", PostStatus.PUBLISHED,
-                    "regionPattern", "%\"" + currentRegion + "\"%"
-            );
-
-            PanacheQuery<Post> postQuery = Post.find(
-                    "status = :status and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern) order by publishedAt desc nulls last, createdAt desc",
-                    parameters
-            );
-
-            totalPostsCount = postQuery.count();
-            List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
-
-            List<Long> postIds = new ArrayList<>();
-            for (Post post : posts) {
-                postIds.add(post.id);
-            }
-
-            Map<Long, List<PostTag>> tagsMap = new java.util.HashMap<>();
-            if (!postIds.isEmpty()) {
-                List<PostTag> allTags = PostTag.find("post.id in ?1", postIds).list();
-                for (PostTag pt : allTags) {
-                    Long pId = pt.post.id;
-                    List<PostTag> list = tagsMap.get(pId);
-                    if (list == null) {
-                        list = new ArrayList<>();
-                        tagsMap.put(pId, list);
-                    }
-                    list.add(pt);
-                }
-            }
-
-            if (totalPostsCount == 0) {
-                totalPages = 1;
-            } else {
-                totalPages = (long) Math.ceil((double) totalPostsCount / PAGE_SIZE);
-            }
-
-            postItems = new ArrayList<>();
-            for (Post post : posts) {
-                List<PostTag> tagsForPost = tagsMap.get(post.id);
-                if (tagsForPost == null) {
-                    tagsForPost = new ArrayList<>();
-                }
-                IndexPostItem postItem = toIndexItem(post, language, tagsForPost);
-                postItems.add(postItem);
-            }
-
-            // 存入缓存
-            if (subPage <= 5) {
-                IndexPageCache cacheData = new IndexPageCache(postItems, totalPostsCount, totalPages);
-                cacheService.set(cacheKey, cacheData, java.time.Duration.ofMinutes(30));
-            }
-        }
+        long totalPostsCount = pageCache.totalPostsCount;
+        long totalPages = pageCache.totalPages;
+        List<IndexPostItem> postItems = pageCache.postItems;
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
 
@@ -167,6 +106,103 @@ public class IndexController {
                 .data("nextPage", Math.min(totalPages, subPage + 1))
                 .data("pjaxRequest", pjaxRequest)
                 .data("posts", postItems);
+    }
+
+    private IndexPageCache getIndexPageCache(String cacheKey, int subPage, String language, String currentRegion) {
+        long now = System.currentTimeMillis();
+        LocalIndexPageCache localCache = LOCAL_INDEX_PAGE_CACHE.get(cacheKey);
+        if (localCache != null) {
+            if (localCache.expiresAtMillis > now) {
+                return localCache.pageCache;
+            }
+        }
+
+        synchronized (LOCAL_INDEX_PAGE_CACHE) {
+            now = System.currentTimeMillis();
+            localCache = LOCAL_INDEX_PAGE_CACHE.get(cacheKey);
+            if (localCache != null) {
+                if (localCache.expiresAtMillis > now) {
+                    return localCache.pageCache;
+                }
+            }
+
+            IndexPageCache pageCache = loadIndexPageCache(cacheKey, subPage, language, currentRegion);
+            LocalIndexPageCache nextLocalCache = new LocalIndexPageCache(pageCache, now + LOCAL_CACHE_TTL_MILLIS);
+            LOCAL_INDEX_PAGE_CACHE.put(cacheKey, nextLocalCache);
+            return pageCache;
+        }
+    }
+
+    private IndexPageCache loadIndexPageCache(String cacheKey, int subPage, String language, String currentRegion) {
+        Optional<IndexPageCache> cached = Optional.empty();
+        if (subPage <= 5) {
+            cached = cacheService.get(cacheKey, IndexPageCache.class);
+        }
+
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        IndexPageCache pageCache = queryIndexPageCache(subPage, language, currentRegion);
+
+        if (subPage <= 5) {
+            cacheService.set(cacheKey, pageCache, java.time.Duration.ofMinutes(30));
+        }
+
+        return pageCache;
+    }
+
+    private IndexPageCache queryIndexPageCache(int subPage, String language, String currentRegion) {
+        Map<String, Object> parameters = Map.of(
+                "status", PostStatus.PUBLISHED,
+                "regionPattern", "%\"" + currentRegion + "\"%"
+        );
+
+        PanacheQuery<Post> postQuery = Post.find(
+                "status = :status and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern) order by publishedAt desc nulls last, createdAt desc",
+                parameters
+        );
+
+        long totalPostsCount = postQuery.count();
+        List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
+
+        List<Long> postIds = new ArrayList<>();
+        for (Post post : posts) {
+            postIds.add(post.id);
+        }
+
+        Map<Long, List<PostTag>> tagsMap = new java.util.HashMap<>();
+        if (!postIds.isEmpty()) {
+            List<PostTag> allTags = PostTag.find("post.id in ?1", postIds).list();
+            for (PostTag postTag : allTags) {
+                Long postId = postTag.post.id;
+                List<PostTag> tagsForPost = tagsMap.get(postId);
+                if (tagsForPost == null) {
+                    tagsForPost = new ArrayList<>();
+                    tagsMap.put(postId, tagsForPost);
+                }
+                tagsForPost.add(postTag);
+            }
+        }
+
+        long totalPages;
+        if (totalPostsCount == 0) {
+            totalPages = 1;
+        } else {
+            totalPages = (long) Math.ceil((double) totalPostsCount / PAGE_SIZE);
+        }
+
+        List<IndexPostItem> postItems = new ArrayList<>();
+        for (Post post : posts) {
+            List<PostTag> tagsForPost = tagsMap.get(post.id);
+            if (tagsForPost == null) {
+                tagsForPost = new ArrayList<>();
+            }
+            IndexPostItem postItem = toIndexItem(post, language, tagsForPost);
+            postItems.add(postItem);
+        }
+
+        return new IndexPageCache(postItems, totalPostsCount, totalPages);
     }
 
     private IndexPostItem toIndexItem(Post post, String language, List<PostTag> postTags) {
@@ -255,6 +291,12 @@ public class IndexController {
             List<IndexPostItem> postItems,
             long totalPostsCount,
             long totalPages
+    ) {
+    }
+
+    private record LocalIndexPageCache(
+            IndexPageCache pageCache,
+            long expiresAtMillis
     ) {
     }
 }

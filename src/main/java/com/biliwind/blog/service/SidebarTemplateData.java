@@ -13,8 +13,12 @@ import io.quarkus.qute.TemplateExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SidebarTemplateData {
+
+    private static final long LOCAL_CACHE_TTL_MILLIS = 10000L;
+    private static final ConcurrentHashMap<String, LocalCacheEntry> LOCAL_CACHE = new ConcurrentHashMap<>();
 
     private static LanguageContext getLanguageContext() {
         return jakarta.enterprise.inject.spi.CDI.current().select(LanguageContext.class).get();
@@ -28,11 +32,17 @@ public class SidebarTemplateData {
     public static List<PostView> recentPosts(int limit) {
         String lang = getLanguageContext().getLang();
         String cacheKey = CacheService.Keys.recentPosts(lang, limit);
+        Object localValue = getLocalValue(cacheKey);
+        if (localValue instanceof List) {
+            return (List<PostView>) localValue;
+        }
 
         java.util.Optional<List<PostView>> cached = getCacheService().get(cacheKey, new com.fasterxml.jackson.core.type.TypeReference<List<PostView>>() {
         });
         if (cached.isPresent()) {
-            return cached.get();
+            List<PostView> cachedPosts = cached.get();
+            setLocalValue(cacheKey, cachedPosts);
+            return cachedPosts;
         }
 
         List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
@@ -50,6 +60,7 @@ public class SidebarTemplateData {
         }
 
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
+        setLocalValue(cacheKey, result);
         return result;
     }
 
@@ -89,11 +100,17 @@ public class SidebarTemplateData {
     public static List<CategoryView> categories() {
         String lang = getLanguageContext().getLang();
         String cacheKey = CacheService.Keys.categories(lang);
+        Object localValue = getLocalValue(cacheKey);
+        if (localValue instanceof List) {
+            return (List<CategoryView>) localValue;
+        }
 
         java.util.Optional<List<CategoryView>> cached = getCacheService().get(cacheKey, new com.fasterxml.jackson.core.type.TypeReference<List<CategoryView>>() {
         });
         if (cached.isPresent()) {
-            return cached.get();
+            List<CategoryView> cachedCategories = cached.get();
+            setLocalValue(cacheKey, cachedCategories);
+            return cachedCategories;
         }
 
         List<Category> categories = Category.listAll(Sort.ascending("path"));
@@ -105,6 +122,7 @@ public class SidebarTemplateData {
         }
 
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
+        setLocalValue(cacheKey, result);
         return result;
     }
 
@@ -112,11 +130,17 @@ public class SidebarTemplateData {
     public static List<TagView> tags() {
         String lang = getLanguageContext().getLang();
         String cacheKey = CacheService.Keys.tags(lang);
+        Object localValue = getLocalValue(cacheKey);
+        if (localValue instanceof List) {
+            return (List<TagView>) localValue;
+        }
 
         java.util.Optional<List<TagView>> cached = getCacheService().get(cacheKey, new com.fasterxml.jackson.core.type.TypeReference<List<TagView>>() {
         });
         if (cached.isPresent()) {
-            return cached.get();
+            List<TagView> cachedTags = cached.get();
+            setLocalValue(cacheKey, cachedTags);
+            return cachedTags;
         }
 
         List<Tag> tags = Tag.listAll();
@@ -128,16 +152,23 @@ public class SidebarTemplateData {
         }
 
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
+        setLocalValue(cacheKey, result);
         return result;
     }
 
     @TemplateExtension(namespace = "sidebar")
     public static StatsView stats() {
         String cacheKey = CacheService.Keys.SIDEBAR_STATS;
+        Object localValue = getLocalValue(cacheKey);
+        if (localValue instanceof StatsView) {
+            return (StatsView) localValue;
+        }
 
         java.util.Optional<StatsView> cached = getCacheService().get(cacheKey, StatsView.class);
         if (cached.isPresent()) {
-            return cached.get();
+            StatsView cachedStats = cached.get();
+            setLocalValue(cacheKey, cachedStats);
+            return cachedStats;
         }
 
         long postCount = Post.count("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
@@ -148,7 +179,29 @@ public class SidebarTemplateData {
 
         StatsView result = new StatsView(postCount, categoryCount, tagCount, commentCount);
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
+        setLocalValue(cacheKey, result);
         return result;
+    }
+
+    private static Object getLocalValue(String cacheKey) {
+        LocalCacheEntry localCacheEntry = LOCAL_CACHE.get(cacheKey);
+        if (localCacheEntry == null) {
+            return null;
+        }
+
+        long now = System.currentTimeMillis();
+        if (localCacheEntry.expiresAtMillis <= now) {
+            LOCAL_CACHE.remove(cacheKey);
+            return null;
+        }
+
+        return localCacheEntry.value;
+    }
+
+    private static void setLocalValue(String cacheKey, Object value) {
+        long expiresAtMillis = System.currentTimeMillis() + LOCAL_CACHE_TTL_MILLIS;
+        LocalCacheEntry localCacheEntry = new LocalCacheEntry(value, expiresAtMillis);
+        LOCAL_CACHE.put(cacheKey, localCacheEntry);
     }
 
     @TemplateData
@@ -166,5 +219,8 @@ public class SidebarTemplateData {
 
     @TemplateData
     public record StatsView(long posts, long categories, long tags, long comments) {
+    }
+
+    private record LocalCacheEntry(Object value, long expiresAtMillis) {
     }
 }
