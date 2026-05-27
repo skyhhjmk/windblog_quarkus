@@ -64,11 +64,13 @@ public class DeploymentPackageService {
      * <pre>
      * windblog-edge-{nodeId}/
      *   certs/
-     *     server.crt
-     *     server.key
-     *     backup.crt
-     *     backup.key
-     *     ca.crt
+     *     ca/
+     *       server.crt
+     *       server.key
+     *       backup.crt
+     *       backup.key
+     *       ca.crt
+     *       truststore.p12
      *   .env
      *   docker-compose.yml
      *   README.txt
@@ -91,11 +93,11 @@ public class DeploymentPackageService {
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         ZipOutputStream zipOutputStream = new ZipOutputStream(byteArrayOutputStream);
 
-        addTextEntry(zipOutputStream, baseDir + "/certs/server.crt", primary.certificatePem());
-        addTextEntry(zipOutputStream, baseDir + "/certs/server.key", primary.privateKeyPem());
-        addTextEntry(zipOutputStream, baseDir + "/certs/backup.crt", backup.certificatePem());
-        addTextEntry(zipOutputStream, baseDir + "/certs/backup.key", backup.privateKeyPem());
-        addTextEntry(zipOutputStream, baseDir + "/certs/ca.crt", primary.caCertificatePem());
+        addTextEntry(zipOutputStream, baseDir + "/certs/ca/server.crt", primary.certificatePem());
+        addTextEntry(zipOutputStream, baseDir + "/certs/ca/server.key", primary.privateKeyPem());
+        addTextEntry(zipOutputStream, baseDir + "/certs/ca/backup.crt", backup.certificatePem());
+        addTextEntry(zipOutputStream, baseDir + "/certs/ca/backup.key", backup.privateKeyPem());
+        addTextEntry(zipOutputStream, baseDir + "/certs/ca/ca.crt", primary.caCertificatePem());
         addBinaryEntry(zipOutputStream, baseDir + "/certs/ca/truststore.p12", buildTrustStoreBytes(primary.caCertificatePem()));
 
         String envContent = buildEnvContent(node);
@@ -134,9 +136,9 @@ public class DeploymentPackageService {
 
         sb.append("EDGE_CONNECTION_TYPE=").append(node.connectionType.name()).append("\n");
         sb.append("WINDBLOG_NODE_ROLE=edge\n");
-        sb.append("GRPC_CLIENT_CA_CERTIFICATE=certs/ca.crt\n");
-        sb.append("GRPC_CLIENT_CERTIFICATE=certs/server.crt\n");
-        sb.append("GRPC_CLIENT_KEY=certs/server.key\n");
+        sb.append("GRPC_CLIENT_CA_CERTIFICATE=certs/ca/ca.crt\n");
+        sb.append("GRPC_CLIENT_CERTIFICATE=certs/ca/server.crt\n");
+        sb.append("GRPC_CLIENT_KEY=certs/ca/server.key\n");
         sb.append("GRPC_CLIENT_REWRITE_LOCAL_TARGET=false\n");
 
         sb.append("EDGE_DB_USER=windblog\n");
@@ -239,12 +241,12 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_GRPC_SERVER_HOST=0.0.0.0\n");
         sb.append("      - QUARKUS_GRPC_SERVER_PORT=${EDGE_GRPC_PORT}\n");
         sb.append("      - QUARKUS_GRPC_SERVER_PLAIN_TEXT=false\n");
-        sb.append("      - QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/server.crt}\n");
-        sb.append("      - QUARKUS_GRPC_SERVER_SSL_KEY=${EDGE_KEY_PATH:-certs/server.key}\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/ca/server.crt}\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_KEY=${EDGE_KEY_PATH:-certs/ca/server.key}\n");
         sb.append("      - QUARKUS_GRPC_SERVER_SSL_CLIENT_AUTH=none\n");
-        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=${EDGE_CLIENT_CERT_PATH:-certs/server.crt}\n");
-        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=${EDGE_CLIENT_KEY_PATH:-certs/server.key}\n");
-        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca.crt}\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=${EDGE_CLIENT_CERT_PATH:-certs/ca/server.crt}\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=${EDGE_CLIENT_KEY_PATH:-certs/ca/server.key}\n");
+        sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca/ca.crt}\n");
         sb.append("      - GRPC_CLIENT_CA_CERTIFICATE=${GRPC_CLIENT_CA_CERTIFICATE}\n");
         sb.append("      - GRPC_CLIENT_CERTIFICATE=${GRPC_CLIENT_CERTIFICATE}\n");
         sb.append("      - GRPC_CLIENT_KEY=${GRPC_CLIENT_KEY}\n");

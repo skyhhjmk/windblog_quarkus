@@ -44,8 +44,8 @@ public class GrpcChannelFactory {
             String channelTarget = resolveChannelTarget(grpcAddress);
             File caFile = findFirstExistingFile(
                     configuredCaCertificatePath,
-                    "certs/ca.crt",
-                    "certs/ca/ca.crt"
+                    "certs/ca/ca.crt",
+                    "certs/ca.crt"
             );
 
             if (caFile == null) {
@@ -56,13 +56,13 @@ public class GrpcChannelFactory {
             SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient().trustManager(caFile);
             File clientCertificateFile = findFirstExistingFile(
                     configuredClientCertificatePath,
-                    "certs/server.crt",
-                    "certs/ca/server.crt"
+                    "certs/ca/server.crt",
+                    "certs/server.crt"
             );
             File clientKeyFile = findFirstExistingFile(
                     configuredClientKeyPath,
-                    "certs/server.key",
-                    "certs/ca/server.key"
+                    "certs/ca/server.key",
+                    "certs/server.key"
             );
             if (clientCertificateFile != null && clientKeyFile != null) {
                 sslContextBuilder.keyManager(clientCertificateFile, clientKeyFile);

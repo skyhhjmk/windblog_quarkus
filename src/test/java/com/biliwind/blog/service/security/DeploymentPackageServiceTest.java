@@ -48,6 +48,10 @@ public class DeploymentPackageServiceTest {
 
         String envContent = null;
         String dockerComposeContent = null;
+        boolean hasServerCertificate = false;
+        boolean hasServerKey = false;
+        boolean hasCaCertificate = false;
+        boolean hasTrustStore = false;
 
         while (entry != null) {
             String name = entry.getName();
@@ -57,6 +61,18 @@ public class DeploymentPackageServiceTest {
             if (name.endsWith("docker-compose.yml")) {
                 dockerComposeContent = readEntryContent(zis);
             }
+            if (name.endsWith("certs/ca/server.crt")) {
+                hasServerCertificate = true;
+            }
+            if (name.endsWith("certs/ca/server.key")) {
+                hasServerKey = true;
+            }
+            if (name.endsWith("certs/ca/ca.crt")) {
+                hasCaCertificate = true;
+            }
+            if (name.endsWith("certs/ca/truststore.p12")) {
+                hasTrustStore = true;
+            }
             entry = zis.getNextEntry();
         }
         zis.close();
@@ -65,7 +81,7 @@ public class DeploymentPackageServiceTest {
         assertNotNull(envContent);
         assertTrue(envContent.contains("EDGE_NODE_ID=test-node-123"));
         assertTrue(envContent.contains("EDGE_NODE_REGION=cn"));
-        assertTrue(envContent.contains("MAIN_NODE_GRPC_HOST=192.168.1.100"));
+        assertTrue(envContent.contains("MAIN_NODE_GRPC_HOST="));
         assertTrue(envContent.contains("EDGE_DB_USER=windblog"));
         assertTrue(envContent.contains("EDGE_DB_PASSWORD=windblog_edge_pwd"));
         assertTrue(envContent.contains("EDGE_DB_NAME=windblog_edge"));
@@ -78,6 +94,13 @@ public class DeploymentPackageServiceTest {
         assertTrue(envContent.contains("USER_JWT_SECRET="));
         assertTrue(envContent.contains("USER_JWT_ISSUER="));
         assertTrue(envContent.contains("BLOG_URL="));
+        assertTrue(envContent.contains("GRPC_CLIENT_CA_CERTIFICATE=certs/ca/ca.crt"));
+        assertTrue(envContent.contains("GRPC_CLIENT_CERTIFICATE=certs/ca/server.crt"));
+        assertTrue(envContent.contains("GRPC_CLIENT_KEY=certs/ca/server.key"));
+        assertTrue(hasServerCertificate);
+        assertTrue(hasServerKey);
+        assertTrue(hasCaCertificate);
+        assertTrue(hasTrustStore);
 
         // 提取端口并校验高位随机端口范围
         int dbPort = extractPort(envContent, "EDGE_DB_PORT=");
@@ -102,6 +125,8 @@ public class DeploymentPackageServiceTest {
         assertTrue(dockerComposeContent.contains("\"${EDGE_APP_HTTP_PORT}:8081\""));
         assertTrue(dockerComposeContent.contains("\"${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\""));
         assertTrue(dockerComposeContent.contains("QUARKUS_DATASOURCE_JDBC_URL=${EDGE_DATASOURCE_URL}"));
+        assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/ca/server.crt}"));
+        assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca/ca.crt}"));
         assertTrue(dockerComposeContent.contains("depends_on:"));
         assertTrue(dockerComposeContent.contains("edge-db:"));
         assertTrue(dockerComposeContent.contains("edge-redis:"));

@@ -14,13 +14,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @ApplicationScoped
 public class ActivePollPersistentChannelService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ActivePollPersistentChannelService.class);
+    private final Set<String> connectingNodeIds = ConcurrentHashMap.newKeySet();
 
     @Inject
     NodeRoleService nodeRoleService;
@@ -50,6 +55,9 @@ public class ActivePollPersistentChannelService {
 
         for (EdgeNode node : activePollNodes) {
             if (channelRegistry.hasOnlineChannel(node.nodeId)) {
+                continue;
+            }
+            if (connectingNodeIds.contains(node.nodeId)) {
                 continue;
             }
             openChannel(node);
@@ -85,15 +93,20 @@ public class ActivePollPersistentChannelService {
         if (grpcAddress == null || grpcAddress.isBlank()) {
             return;
         }
+        if (!connectingNodeIds.add(node.nodeId)) {
+            return;
+        }
 
         try {
             io.grpc.ManagedChannel managedChannel = channelFactory.createChannel(grpcAddress, node.nodeId);
             MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub stub = MutinyEdgeNodeServiceGrpc.newMutinyStub(managedChannel);
+            AtomicBoolean channelRegistered = new AtomicBoolean(false);
+            AtomicReference<MultiEmitter<? super EdgeServiceProto.EdgeChannelMessage>> emitterReference = new AtomicReference<>();
 
             Multi<EdgeServiceProto.EdgeChannelMessage> outboundMessages = Multi.createFrom().emitter(new Consumer<MultiEmitter<? super EdgeServiceProto.EdgeChannelMessage>>() {
                 @Override
                 public void accept(MultiEmitter<? super EdgeServiceProto.EdgeChannelMessage> emitter) {
-                    channelRegistry.register(node.nodeId, emitter);
+                    emitterReference.set(emitter);
                     sendPrimaryStatus(emitter, node.nodeId);
                 }
             });
@@ -101,25 +114,43 @@ public class ActivePollPersistentChannelService {
             stub.openNodeChannel(outboundMessages).subscribe().with(new Consumer<EdgeServiceProto.EdgeChannelMessage>() {
                 @Override
                 public void accept(EdgeServiceProto.EdgeChannelMessage message) {
+                    registerChannelAfterEdgeResponse(node, emitterReference.get(), channelRegistered);
                     handleIncomingMessage(node, message);
                 }
             }, new Consumer<Throwable>() {
                 @Override
                 public void accept(Throwable throwable) {
                     LOGGER.error("ACTIVE_POLL 持久通道断开: {}", node.nodeId, throwable);
+                    connectingNodeIds.remove(node.nodeId);
                     channelRegistry.unregister(node.nodeId);
                     managedChannel.shutdownNow();
                 }
             }, new Runnable() {
                 @Override
                 public void run() {
+                    connectingNodeIds.remove(node.nodeId);
                     channelRegistry.unregister(node.nodeId);
                     managedChannel.shutdownNow();
                 }
             });
         } catch (Exception exception) {
+            connectingNodeIds.remove(node.nodeId);
             LOGGER.error("建立 ACTIVE_POLL 持久通道失败: {}", node.nodeId, exception);
         }
+    }
+
+    private void registerChannelAfterEdgeResponse(EdgeNode node,
+                                                  MultiEmitter<? super EdgeServiceProto.EdgeChannelMessage> emitter,
+                                                  AtomicBoolean channelRegistered) {
+        if (emitter == null) {
+            return;
+        }
+        if (!channelRegistered.compareAndSet(false, true)) {
+            return;
+        }
+
+        connectingNodeIds.remove(node.nodeId);
+        channelRegistry.register(node.nodeId, emitter);
     }
 
     private void handleIncomingMessage(EdgeNode node, EdgeServiceProto.EdgeChannelMessage message) {
