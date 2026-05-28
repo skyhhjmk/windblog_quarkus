@@ -205,6 +205,7 @@ class PostAccessServiceTest {
         revision.persist();
 
         post.currentRevision = revision;
+        post.publishedRevision = revision;
         return post;
     }
 }
