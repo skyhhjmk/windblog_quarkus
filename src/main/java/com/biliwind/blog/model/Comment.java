@@ -21,7 +21,6 @@ public class Comment extends PanacheEntityBase {
 
     /** 所属文章 */
     @ManyToOne(fetch = FetchType.LAZY)
-    @NotFound(action = NotFoundAction.IGNORE)
     @JoinColumn(name = "post_id", nullable = false)
     public Post post;
 

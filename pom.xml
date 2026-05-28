@@ -224,9 +224,6 @@
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
-                        <quarkus.jacoco.data-file>${project.build.directory}/jacoco.exec</quarkus.jacoco.data-file>
-                        <quarkus.jacoco.report-location>${project.build.directory}/coverage
-                        </quarkus.jacoco.report-location>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -248,9 +245,6 @@
                         </native.image.path>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
-                        <quarkus.jacoco.data-file>${project.build.directory}/jacoco.exec</quarkus.jacoco.data-file>
-                        <quarkus.jacoco.report-location>${project.build.directory}/coverage
-                        </quarkus.jacoco.report-location>
                         <quarkus.test.arg-line>${argLine}</quarkus.test.arg-line>
                     </systemPropertyVariables>
                 </configuration>
