@@ -1,6 +1,7 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.constant.RoleConstant;
+import com.biliwind.blog.common.helper.MediaPathHelper;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.storage.StorageService;
@@ -23,8 +24,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -1108,13 +1107,7 @@ public class MediaManagementService {
      * @return 规范化后的路径
      */
     private String normalizePublicPath(String path) {
-        if (path == null || path.isBlank()) {
-            return "/uploads";
-        }
-        if (path.endsWith("/")) {
-            return path.substring(0, path.length() - 1);
-        }
-        return path;
+        return MediaPathHelper.normalizePublicPath(path);
     }
 
     /**
@@ -1203,39 +1196,6 @@ public class MediaManagementService {
      * 归一化 URL/路径：解码、移除协议域名、转小写、移除前导斜杠
      */
     private String normalizeUrlToPath(String rawUrl) {
-        if (rawUrl == null || rawUrl.isBlank()) {
-            return "";
-        }
-        try {
-            // 1. URL 解码
-            String decoded = URLDecoder.decode(rawUrl, StandardCharsets.UTF_8);
-
-            // 2. 剥离协议和域名
-            if (decoded.contains("://")) {
-                try {
-                    decoded = new URI(decoded).getPath();
-                } catch (Exception e) {
-                    int slashIdx = decoded.indexOf("/", decoded.indexOf("://") + 3);
-                    if (slashIdx != -1) {
-                        decoded = decoded.substring(slashIdx);
-                    }
-                }
-            }
-
-            // 3. 移除查询参数
-            int queryIdx = decoded.indexOf("?");
-            if (queryIdx != -1) {
-                decoded = decoded.substring(0, queryIdx);
-            }
-
-            // 4. 标准化格式
-            String path = decoded.toLowerCase().trim();
-            while (path.startsWith("/")) {
-                path = path.substring(1);
-            }
-            return path;
-        } catch (Exception e) {
-            return rawUrl.toLowerCase().trim();
-        }
+        return MediaPathHelper.normalizeUrlToPathKey(rawUrl);
     }
 }

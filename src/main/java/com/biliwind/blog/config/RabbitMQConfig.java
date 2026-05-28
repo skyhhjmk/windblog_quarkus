@@ -36,8 +36,16 @@ public class RabbitMQConfig {
     @ConfigProperty(name = "rabbitmq-password", defaultValue = "guest")
     String rabbitmqPassword;
 
+    @ConfigProperty(name = "windblog.node.role", defaultValue = "primary")
+    String nodeRole;
+
     @PostConstruct
     void init() {
+        if ("edge".equalsIgnoreCase(nodeRole)) {
+            log.info("当前节点是边缘节点，跳过 RabbitMQ 初始化");
+            return;
+        }
+
         // SmallRye Messaging 已负责创建所有 Exchange 和 Queue。
         // 这里只做一次初始化日志，不再手动声明任何 AMQP 资源，避免与 SmallRye 配置冲突。
         log.info("RabbitMQ 配置就绪，主机={}:{}", rabbitmqHost, rabbitmqPort);

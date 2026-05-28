@@ -5,6 +5,7 @@ import com.biliwind.blog.common.helper.SlugHelper;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportProgressEvent;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportResult;
+import com.biliwind.blog.common.helper.MediaPathHelper;
 import com.biliwind.blog.model.*;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.smallrye.mutiny.Multi;
@@ -325,14 +326,7 @@ public class ImportService {
     }
 
     private String normalizeOldRelUrl(String path) {
-        if (path == null) return "";
-        String p = path.replace("#", "%23"); // 处理特殊字符
-        if (p.startsWith("uploads/")) return "/" + p;
-        if (p.startsWith("/uploads/")) return p;
-        if (p.startsWith("/")) return p;
-        // 如果既不是以 / 开头，也不是以 uploads/ 开头，假设它是在 uploads 目录下的相对路径
-        // 这是为了兼容一些直接使用 2023/05/abc.jpg 的引用
-        return "/uploads/" + p;
+        return MediaPathHelper.normalizeLegacyUploadPath(path);
     }
 
     private int importPosts(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
@@ -459,19 +453,7 @@ public class ImportService {
      * 格式化 URL，补全前缀并合并双斜杠（忽略协议部分的 //）
      */
     private String formatUrl(String prefix, String path) {
-        if (prefix == null) prefix = "";
-        if (path == null) path = "";
-
-        String combined = prefix + (prefix.endsWith("/") || path.startsWith("/") ? "" : "/") + path;
-
-        // 使用正则处理非协议部分的双斜杠
-        // 匹配 http:// 或 https:// 之后的所有 // 并替换为 /
-        if (combined.contains("://")) {
-            String protocol = combined.substring(0, combined.indexOf("://") + 3);
-            String rest = combined.substring(combined.indexOf("://") + 3);
-            return protocol + rest.replaceAll("/+", "/");
-        }
-        return combined.replaceAll("/+", "/");
+        return MediaPathHelper.joinUrl(prefix, path);
     }
 
     private void processRetryQueue(User operator, ImportContext ctx) {

@@ -699,9 +699,6 @@ public class PostAccessService {
         if (post == null) {
             return null;
         }
-        if (post.publishedRevision != null) {
-            return post.publishedRevision;
-        }
-        return post.currentRevision;
+        return post.publishedRevision;
     }
 }

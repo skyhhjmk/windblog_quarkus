@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 @ApplicationScoped
 public class EdgeDataSyncService {
@@ -338,13 +339,26 @@ public class EdgeDataSyncService {
     }
 
     private void pushToNode(EdgeNode node, String entityType, String action, String entityId, String payload) {
+        Long syncRecordId = createSyncRecord(node, entityType, action, entityId, 0);
         pushToNodeAsync(node, entityType, action, entityId, payload).subscribe().with(
-                success -> {
-                    if (success) {
-                        log.debug("Successfully pushed {} {} to node {}", entityType, entityId, node.nodeId);
+                new Consumer<Boolean>() {
+                    @Override
+                    public void accept(Boolean success) {
+                        if (success) {
+                            log.debug("Successfully pushed {} {} to node {}", entityType, entityId, node.nodeId);
+                            updateSyncRecord(syncRecordId, "SUCCESS", null);
+                        } else {
+                            updateSyncRecord(syncRecordId, "FAILED", "节点未确认同步请求");
+                        }
                     }
                 },
-                error -> log.error("Failed to push {} {} to node {}", entityType, entityId, node.nodeId, error)
+                new Consumer<Throwable>() {
+                    @Override
+                    public void accept(Throwable error) {
+                        log.error("Failed to push {} {} to node {}", entityType, entityId, node.nodeId, error);
+                        updateSyncRecord(syncRecordId, "FAILED", error.getMessage());
+                    }
+                }
         );
     }
 
@@ -732,6 +746,7 @@ public class EdgeDataSyncService {
     }
 
     private boolean pushToNodeWithRetry(EdgeNode node, String entityType, String action, String entityId, String payload, int timeoutSeconds) {
+        Long syncRecordId = createSyncRecord(node, entityType, action, entityId, 0);
         EdgeServiceProto.SyncDataRequest persistentRequest = EdgeServiceProto.SyncDataRequest.newBuilder()
                 .setEntityType(entityType)
                 .setAction(action)
@@ -740,11 +755,13 @@ public class EdgeDataSyncService {
                 .build();
         boolean sentByPersistentChannel = sendByPersistentChannel(node, persistentRequest);
         if (sentByPersistentChannel) {
+            updateSyncRecord(syncRecordId, "SUCCESS", null);
             return true;
         }
 
         String grpcAddress = resolveGrpcAddress(node);
         if (grpcAddress == null || grpcAddress.isEmpty()) {
+            updateSyncRecord(syncRecordId, "FAILED", "节点 gRPC 地址为空");
             return false;
         }
 
@@ -780,6 +797,7 @@ public class EdgeDataSyncService {
                         .await().atMost(java.time.Duration.ofSeconds(timeoutSeconds));
 
                 if (result != null && result) {
+                    updateSyncRecord(syncRecordId, "SUCCESS", null);
                     return true;
                 }
             } catch (Exception e) {
@@ -808,6 +826,7 @@ public class EdgeDataSyncService {
                 }
             }
         }
+        updateSyncRecord(syncRecordId, "FAILED", "达到最大重试次数后仍未同步成功");
         return false;
     }
 
@@ -837,6 +856,66 @@ public class EdgeDataSyncService {
             return false;
         }
         return post.publishedRevision != null;
+    }
+
+    private Long createSyncRecord(EdgeNode node, String entityType, String action, String entityId, int retryCount) {
+        final Long[] syncRecordIdHolder = new Long[1];
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
+            @Override
+            public void run() {
+                EdgeSyncRecord syncRecord = new EdgeSyncRecord();
+                syncRecord.nodeId = resolveNodeId(node);
+                syncRecord.entityType = entityType;
+                syncRecord.entityId = entityId;
+                syncRecord.action = action;
+                syncRecord.status = "PENDING";
+                syncRecord.retryCount = retryCount;
+                syncRecord.createdAt = java.time.OffsetDateTime.now();
+                syncRecord.updatedAt = syncRecord.createdAt;
+                syncRecord.persist();
+                syncRecordIdHolder[0] = syncRecord.id;
+            }
+        });
+        return syncRecordIdHolder[0];
+    }
+
+    private void updateSyncRecord(Long syncRecordId, String status, String errorMessage) {
+        if (syncRecordId == null) {
+            return;
+        }
+
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(new Runnable() {
+            @Override
+            public void run() {
+                EdgeSyncRecord syncRecord = EdgeSyncRecord.findById(syncRecordId);
+                if (syncRecord == null) {
+                    return;
+                }
+                syncRecord.status = status;
+                syncRecord.errorMessage = truncateErrorMessage(errorMessage);
+                syncRecord.updatedAt = java.time.OffsetDateTime.now();
+            }
+        });
+    }
+
+    private String resolveNodeId(EdgeNode node) {
+        if (node == null) {
+            return "unknown";
+        }
+        if (node.nodeId == null || node.nodeId.isBlank()) {
+            return "unknown";
+        }
+        return node.nodeId;
+    }
+
+    private String truncateErrorMessage(String errorMessage) {
+        if (errorMessage == null) {
+            return null;
+        }
+        if (errorMessage.length() <= 1000) {
+            return errorMessage;
+        }
+        return errorMessage.substring(0, 1000);
     }
 
     public record SyncProgress(int total, int processed, String status, String lastError) {

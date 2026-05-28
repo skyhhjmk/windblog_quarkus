@@ -136,6 +136,7 @@ public class DeploymentPackageService {
 
         sb.append("EDGE_CONNECTION_TYPE=").append(node.connectionType.name()).append("\n");
         sb.append("WINDBLOG_NODE_ROLE=edge\n");
+        sb.append("QUARKUS_PROFILE=edge\n");
         sb.append("GRPC_CLIENT_CA_CERTIFICATE=certs/ca/ca.crt\n");
         sb.append("GRPC_CLIENT_CERTIFICATE=certs/ca/server.crt\n");
         sb.append("GRPC_CLIENT_KEY=certs/ca/server.key\n");
@@ -257,6 +258,7 @@ public class DeploymentPackageService {
         sb.append("      - EDGE_NODE_REGION=${EDGE_NODE_REGION}\n");
         sb.append("      - EDGE_CONNECTION_TYPE=${EDGE_CONNECTION_TYPE}\n");
         sb.append("      - WINDBLOG_NODE_ROLE=${WINDBLOG_NODE_ROLE}\n");
+        sb.append("      - QUARKUS_PROFILE=${QUARKUS_PROFILE}\n");
         sb.append("      - MAIN_NODE_GRPC_HOST=${MAIN_NODE_GRPC_HOST}\n");
         sb.append("      - MAIN_NODE_GRPC_PORT=${MAIN_NODE_GRPC_PORT}\n");
         sb.append("      - USER_JWT_SECRET=${USER_JWT_SECRET}\n");

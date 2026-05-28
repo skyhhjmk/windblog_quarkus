@@ -111,6 +111,7 @@ public class DeploymentPackageServiceTest {
 
         int httpPort = extractPort(envContent, "EDGE_APP_HTTP_PORT=");
         assertTrue(httpPort >= 20000 && httpPort <= 60000);
+        assertTrue(envContent.contains("QUARKUS_PROFILE=edge"));
 
         // 验证 docker-compose.yml 内容
         assertNotNull(dockerComposeContent);
@@ -125,6 +126,7 @@ public class DeploymentPackageServiceTest {
         assertTrue(dockerComposeContent.contains("\"${EDGE_APP_HTTP_PORT}:8081\""));
         assertTrue(dockerComposeContent.contains("\"${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\""));
         assertTrue(dockerComposeContent.contains("QUARKUS_DATASOURCE_JDBC_URL=${EDGE_DATASOURCE_URL}"));
+        assertTrue(dockerComposeContent.contains("QUARKUS_PROFILE=${QUARKUS_PROFILE}"));
         assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/ca/server.crt}"));
         assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca/ca.crt}"));
         assertTrue(dockerComposeContent.contains("depends_on:"));

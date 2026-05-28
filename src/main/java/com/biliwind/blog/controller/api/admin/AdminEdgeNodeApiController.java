@@ -4,7 +4,9 @@ import com.biliwind.blog.controller.api.admin.dto.EdgeNodeDataStatusResponse;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
+import com.biliwind.blog.model.EdgeSyncRecord;
 import com.biliwind.blog.service.edge.EdgeNodeRegistry;
+import io.quarkus.panache.common.Page;
 import com.biliwind.blog.service.security.CertificateService;
 import com.biliwind.blog.service.security.DeploymentPackageService;
 import jakarta.inject.Inject;
@@ -175,6 +177,44 @@ public class AdminEdgeNodeApiController {
     @Operation(summary = "获取同步进度", description = "获取当前节点的同步进度（仅包含正在进行或最近一次的手动同步任务）")
     public com.biliwind.blog.service.edge.EdgeDataSyncService.SyncProgress getSyncStatus(@PathParam("nodeId") String nodeId) {
         return syncService.getSyncStatus(nodeId);
+    }
+
+    @GET
+    @Path("/{nodeId}/sync-records")
+    @Operation(summary = "获取边缘节点同步记录", description = "返回最近的增量和全量同步投递记录，用于排查失败、漏同步和节点收敛问题")
+    public List<EdgeSyncRecord> getSyncRecords(@PathParam("nodeId") String nodeId,
+                                               @QueryParam("status") String status,
+                                               @QueryParam("page") @DefaultValue("1") int page,
+                                               @QueryParam("pageSize") @DefaultValue("50") int pageSize) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node == null) {
+            throw new NotFoundException("节点不存在");
+        }
+
+        int safePage = page;
+        if (safePage < 1) {
+            safePage = 1;
+        }
+        int safePageSize = pageSize;
+        if (safePageSize < 1) {
+            safePageSize = 50;
+        }
+        if (safePageSize > 200) {
+            safePageSize = 200;
+        }
+
+        if (status != null && !status.isBlank()) {
+            return EdgeSyncRecord.find(
+                            "nodeId = ?1 and status = ?2 order by updatedAt desc",
+                            nodeId,
+                            status.trim())
+                    .page(Page.of(safePage - 1, safePageSize))
+                    .list();
+        }
+
+        return EdgeSyncRecord.find("nodeId = ?1 order by updatedAt desc", nodeId)
+                .page(Page.of(safePage - 1, safePageSize))
+                .list();
     }
 
     @GET
