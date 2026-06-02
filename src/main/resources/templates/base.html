@@ -62,13 +62,11 @@
     <meta name="color-scheme" content="dark" />
     <meta name="csrf-token" content="{csrfToken ?: ''}">
 
-    <!-- Font Awesome 7.0.1 -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
-          integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw=="
-          crossorigin="anonymous" referrerpolicy="no-referrer"/>
+    <!-- 本地化 Font Awesome，避免运行时依赖外部 CDN -->
+    <link rel="stylesheet" href="/assets/vendor/fontawesome/css/all.min.css"/>
 
-    <!-- Tailwind -->
-    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <!-- 本地化 Tailwind CDN 运行时脚本，保持现有模板写法不变 -->
+    <script src="/assets/vendor/tailwind/tailwind-cdn.min.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -235,6 +233,9 @@
             <span class="meta-mono">{config:copyright}</span>
             {#if config:icp}
                 <span class="text-xs text-meta">{config:icp}</span>
+            {/if}
+            {#if config:publicSecurityRecord}
+                <span class="text-xs text-meta">{config:publicSecurityRecord}</span>
             {/if}
         </div>
         <div class="flex gap-6 items-center">

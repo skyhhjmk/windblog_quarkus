@@ -1,6 +1,6 @@
 package com.biliwind.blog.service;
 
-import com.biliwind.blog.model.SystemSetting;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.runtime.StartupEvent;
@@ -11,7 +11,11 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+
+import com.biliwind.blog.model.SystemSetting;
 
 @ApplicationScoped
 public class ConfigInitializer {
@@ -42,12 +46,22 @@ public class ConfigInitializer {
                 setting.persist();
                 LOG.infof("Added missing setting: %s", def.key);
             } else {
+                boolean definitionChanged = false;
                 if (!setting.uiSchema.equals(def.uiSchema) || !setting.groupName.equals(def.group) || !setting.description.equals(def.description)) {
                     setting.uiSchema = def.uiSchema;
                     setting.groupName = def.group;
                     setting.description = def.description;
+                    definitionChanged = true;
+                }
+
+                boolean defaultValueChanged = false;
+                if (setting.configValue != null && def.defaultValue != null && setting.configValue.isObject() && def.defaultValue.isObject()) {
+                    defaultValueChanged = mergeMissingObjectFields((ObjectNode) setting.configValue, def.defaultValue);
+                }
+
+                if (definitionChanged || defaultValueChanged) {
                     setting.persist();
-                    LOG.infof("Updated metadata for setting: %s", def.key);
+                    LOG.infof("Updated setting definition or default values: %s", def.key);
                 }
             }
         }
@@ -82,12 +96,14 @@ public class ConfigInitializer {
         footerSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode footerFields = footerSchema.putArray("fields");
         footerFields.addObject().put("key", "copyright").put("label", "版权信息").put("widget", "input");
-        footerFields.addObject().put("key", "icp").put("label", "备案信息").put("widget", "input");
+        footerFields.addObject().put("key", "icp").put("label", "ICP备案号").put("widget", "input");
+        footerFields.addObject().put("key", "public_security_record").put("label", "公安备案号").put("widget", "input");
         footerFields.addObject().put("key", "custom_html").put("label", "自定义页脚HTML").put("widget", "textarea");
 
         ObjectNode footerValue = mapper.createObjectNode();
         footerValue.put("copyright", "© 2026 WindBlog. All rights reserved.");
         footerValue.put("icp", "粤ICP备XXXXXXXX号");
+        footerValue.put("public_security_record", "公网安备 XXXXXXXXXXXX号");
         footerValue.put("custom_html", "");
 
         list.add(new SettingDefinition("site_footer", footerValue, "object", "basic", footerSchema, "网站页脚设置"));
@@ -151,6 +167,20 @@ public class ConfigInitializer {
         list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "system", aiAuditSchema, "AI 评论审核设置"));
 
         return list;
+    }
+
+    private boolean mergeMissingObjectFields(ObjectNode currentValue, JsonNode defaultValue) {
+        boolean changed = false;
+        Iterator<Map.Entry<String, JsonNode>> defaultFields = defaultValue.fields();
+        while (defaultFields.hasNext()) {
+            Map.Entry<String, JsonNode> field = defaultFields.next();
+            String fieldKey = field.getKey();
+            if (!currentValue.has(fieldKey)) {
+                currentValue.set(fieldKey, field.getValue().deepCopy());
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     private static class SettingDefinition {

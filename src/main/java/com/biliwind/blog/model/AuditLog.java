@@ -44,6 +44,26 @@ public class AuditLog extends PanacheEntityBase {
     @Column(name = "new_value", columnDefinition = "jsonb")
     public Object newValue;
 
+    /** 请求标识，用于串联同一次管理端操作 */
+    @Column(name = "request_id", length = 64)
+    public String requestId;
+
+    /** 请求方法，例如 GET、POST、PUT、DELETE */
+    @Column(name = "request_method", length = 16)
+    public String requestMethod;
+
+    /** 请求路径 */
+    @Column(name = "request_path", length = 512)
+    public String requestPath;
+
+    /** 客户端 IP */
+    @Column(name = "client_ip", length = 128)
+    public String clientIp;
+
+    /** 用户代理字符串 */
+    @Column(name = "user_agent", length = 1024)
+    public String userAgent;
+
     /**
      * 扩展信息，用于存储 AI Token、IP 地址、TraceID 等
      */

@@ -80,4 +80,5 @@
     <include file="db/migration/076-rename-storage-provider-to-class.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/077-add-storage-class-content-regions.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/078-create-edge-sync-records.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/079-add-audit-log-request-context.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

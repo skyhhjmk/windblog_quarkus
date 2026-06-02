@@ -65,6 +65,10 @@ public class ConfigTemplateData {
         return configManager().getString("site_footer", "icp", "");
     }
 
+    public static String publicSecurityRecord() {
+        return configManager().getString("site_footer", "public_security_record", "");
+    }
+
     public static String footerHtml() {
         return configManager().getString("site_footer", "custom_html", "");
     }

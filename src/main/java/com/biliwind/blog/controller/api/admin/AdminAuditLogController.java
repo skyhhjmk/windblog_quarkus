@@ -13,6 +13,9 @@ import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +38,8 @@ public class AdminAuditLogController {
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("pageSize") @DefaultValue("10") int pageSize,
             @QueryParam("entityType") String entityType,
-            @QueryParam("action") String action) {
+            @QueryParam("action") String action,
+            @QueryParam("requestId") String requestId) {
 
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(1, Math.min(pageSize, 100));
@@ -43,14 +47,19 @@ public class AdminAuditLogController {
         StringBuilder query = new StringBuilder("1=1");
         Map<String, Object> params = new HashMap<>();
 
-        if (entityType != null && !entityType.isBlank()) {
+        if (!isBlank(entityType)) {
             query.append(" and entityType = :entityType");
             params.put("entityType", entityType.trim());
         }
 
-        if (action != null && !action.isBlank()) {
+        if (!isBlank(action)) {
             query.append(" and action = :action");
             params.put("action", action.trim());
+        }
+
+        if (!isBlank(requestId)) {
+            query.append(" and requestId = :requestId");
+            params.put("requestId", requestId.trim());
         }
 
         PanacheQuery<AuditLog> panacheQuery = AuditLog.find(
@@ -61,27 +70,10 @@ public class AdminAuditLogController {
 
         List<AuditLog> logs = panacheQuery.page(Page.of(safePage - 1, safePageSize)).list();
 
-        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH时mm分ss秒SSS毫秒");
-        List<AuditLogItem> items = new java.util.ArrayList<>();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH时mm分ss秒SSS毫秒");
+        List<AuditLogItem> items = new ArrayList<>();
         for (AuditLog log : logs) {
-            String formattedTime = "";
-            if (log.createdAt != null) {
-                formattedTime = log.createdAt.atZoneSameInstant(java.time.ZoneId.systemDefault()).format(formatter);
-            }
-
-            items.add(new AuditLogItem(
-                log.id,
-                log.entityType,
-                    log.entityId, // 现为 String
-                log.action,
-                log.oldValue,
-                log.newValue,
-                    log.extInfo, // 新增扩展字段
-                log.performedBy != null ? log.performedBy.id : null,
-                log.performedBy != null ? log.performedBy.username : null,
-                    log.createdAt,
-                    formattedTime
-            ));
+            items.add(buildAuditLogItem(log, formatter));
         }
 
         return new PageResult<>(items, panacheQuery.count(), safePage, safePageSize);
@@ -100,8 +92,50 @@ public class AdminAuditLogController {
             Object extInfo,
             Long performedById,
             String performedByUsername,
+            String requestId,
+            String requestMethod,
+            String requestPath,
+            String clientIp,
+            String userAgent,
             OffsetDateTime createdAt,
             String createdAtFormatted
     ) {
+    }
+
+    private AuditLogItem buildAuditLogItem(AuditLog log, DateTimeFormatter formatter) {
+        String formattedTime = "";
+        if (log.createdAt != null) {
+            formattedTime = log.createdAt.atZoneSameInstant(ZoneId.systemDefault()).format(formatter);
+        }
+
+        Long performedById = null;
+        String performedByUsername = null;
+        if (log.performedBy != null) {
+            performedById = log.performedBy.id;
+            performedByUsername = log.performedBy.username;
+        }
+
+        return new AuditLogItem(
+                log.id,
+                log.entityType,
+                log.entityId,
+                log.action,
+                log.oldValue,
+                log.newValue,
+                log.extInfo,
+                performedById,
+                performedByUsername,
+                log.requestId,
+                log.requestMethod,
+                log.requestPath,
+                log.clientIp,
+                log.userAgent,
+                log.createdAt,
+                formattedTime
+        );
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }
