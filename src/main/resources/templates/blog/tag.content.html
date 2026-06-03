@@ -29,7 +29,7 @@
             {#if posts && posts.size > 0}
                 <div class="grid grid-cols-1 gap-8">
                     {#for post in posts}
-                        <article class="group card p-8 transition-all duration-300 relative">
+                        <article class="group card p-8 transition-all duration-300 relative" data-article-transition-slug="{post.slug}">
                             <div class="flex flex-col md:flex-row gap-8">
                                 <!-- Left Indicator -->
                                 <div class="hidden md:block w-[3px] h-20 bg-cyan-900 rounded-full group-hover:bg-cyan-500 transition-colors duration-500"></div>
@@ -42,7 +42,9 @@
                                     </div>
 
                                     <!-- Title -->
-                                    <h3 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight">
+                                    <h3 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight"
+                                        data-article-transition-part="title"
+                                        data-article-transition-slug="{post.slug}">
                                         <a href="/post/{post.slug}" class="block after:absolute after:inset-0">
                                             {post.title}
                                         </a>

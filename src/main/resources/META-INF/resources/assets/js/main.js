@@ -109,6 +109,160 @@
             return true;
         }
 
+        function isArticleDetailUrl(url) {
+            try {
+                const parsedUrl = new URL(url, window.location.href);
+                const pathParts = parsedUrl.pathname.split('/').filter(function (part) {
+                    return part;
+                });
+                const postIndex = pathParts.indexOf('post');
+                return postIndex >= 0 && postIndex < pathParts.length - 1;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function getArticleSlugFromUrl(url) {
+            try {
+                const parsedUrl = new URL(url, window.location.href);
+                const pathParts = parsedUrl.pathname.split('/').filter(function (part) {
+                    return part;
+                });
+                const postIndex = pathParts.indexOf('post');
+                if (postIndex < 0 || postIndex >= pathParts.length - 1) {
+                    return '';
+                }
+
+                return pathParts[postIndex + 1] || '';
+            } catch (error) {
+                return '';
+            }
+        }
+
+        function getCssSafeSelectorValue(value) {
+            if (!value) {
+                return '';
+            }
+
+            if (window.CSS && typeof window.CSS.escape === 'function') {
+                return window.CSS.escape(value);
+            }
+
+            return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        }
+
+        function getArticleTransitionSelector(slug, partName) {
+            if (!slug || !partName) {
+                return '';
+            }
+
+            return '[data-article-transition-slug="' + getCssSafeSelectorValue(slug) + '"][data-article-transition-part="' + partName + '"]';
+        }
+
+        function getArticleTransitionElements(root, slug) {
+            const elements = [];
+            if (!root || !slug) {
+                return elements;
+            }
+
+            const titleElement = root.querySelector(getArticleTransitionSelector(slug, 'title'));
+            if (titleElement) {
+                elements.push(titleElement);
+            }
+
+            const summaryElement = root.querySelector(getArticleTransitionSelector(slug, 'summary'));
+            if (summaryElement) {
+                elements.push(summaryElement);
+            }
+
+            return elements;
+        }
+
+        function hasArticleTransitionSource(root, slug) {
+            if (!root || !slug) {
+                return false;
+            }
+
+            return getArticleTransitionElements(root, slug).length > 0;
+        }
+
+        function getCurrentArticleTransitionSlug() {
+            if (!isArticleDetailUrl(window.location.href)) {
+                return '';
+            }
+
+            const articleElement = document.querySelector('[data-article-transition-slug][data-article-transition-part="title"]');
+            if (articleElement) {
+                const slug = articleElement.getAttribute('data-article-transition-slug');
+                if (slug) {
+                    return slug;
+                }
+            }
+
+            return getArticleSlugFromUrl(window.location.href);
+        }
+
+        function resolveArticleTransitionSlug(url, anchor) {
+            const targetIsPost = isArticleDetailUrl(url);
+            const currentSlug = getCurrentArticleTransitionSlug();
+            const clickedSlug = getClickedArticleTransitionSlug(anchor);
+
+            if (targetIsPost && clickedSlug && hasArticleTransitionSource(document, clickedSlug)) {
+                return clickedSlug;
+            }
+
+            if (!targetIsPost && currentSlug && hasArticleTransitionSource(document, currentSlug)) {
+                return currentSlug;
+            }
+
+            return '';
+        }
+
+        function getClickedArticleTransitionSlug(anchor) {
+            if (!anchor) {
+                return '';
+            }
+
+            const articleElement = anchor.closest('[data-article-transition-slug]');
+            if (!articleElement) {
+                return '';
+            }
+
+            const slug = articleElement.getAttribute('data-article-transition-slug');
+            if (!slug) {
+                return '';
+            }
+
+            return slug;
+        }
+
+        function updatePjaxContainerState(container, html, url, pushState) {
+            container.innerHTML = html;
+
+            const titleHolder = container.querySelector('[data-page-title]');
+            if (titleHolder) {
+                const title = titleHolder.getAttribute('data-page-title');
+                if (title) {
+                    document.title = title;
+                }
+            }
+
+            const navPathNode = document.getElementById('nav-path-text');
+            const navHolder = container.querySelector('#pjax-nav-path');
+            if (navHolder && navPathNode) {
+                const navPath = (navHolder.textContent || '').trim();
+                if (navPath) {
+                    navPathNode.textContent = navPath;
+                }
+            }
+
+            if (pushState) {
+                window.history.pushState({ pjax: true, url: url }, '', url);
+            }
+
+            document.dispatchEvent(new CustomEvent('page:ready', { detail: { url: url } }));
+        }
+
         function injectSidebar() {
             const template = document.querySelector('#pjax-sidebar-html');
             const container = document.getElementById('sidebar-container');
@@ -121,18 +275,246 @@
             // 只有当内容确实改变时才更新，避免闪烁
             if (container.innerHTML.trim() !== nextHtml.trim()) {
                 container.innerHTML = nextHtml;
-                dispatch('sidebar:updated');
+                document.dispatchEvent(new CustomEvent('sidebar:updated', { detail: {} }));
             }
         }
 
-        async function loadByPjax(url, pushState) {
+        function finalizePjaxLoad(url) {
+            document.dispatchEvent(new CustomEvent('pjax:complete', { detail: { url: url } }));
+            document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url } }));
+        }
+
+        function captureArticleTransitionItems(slug) {
+            const capturedItems = [];
+            if (!slug) {
+                return capturedItems;
+            }
+
+            const articleTransitionParts = ['title', 'summary'];
+            articleTransitionParts.forEach(function (partName) {
+                const sourceElement = document.querySelector(getArticleTransitionSelector(slug, partName));
+                if (!sourceElement) {
+                    return;
+                }
+
+                const sourceRect = sourceElement.getBoundingClientRect();
+                if (sourceRect.width <= 0 || sourceRect.height <= 0) {
+                    return;
+                }
+
+                capturedItems.push({
+                    partName: partName,
+                    sourceRect: sourceRect,
+                    sourceStyle: getArticleTransitionStyleSnapshot(sourceElement)
+                });
+            });
+
+            return capturedItems;
+        }
+
+        function getArticleTransitionStyleSnapshot(element) {
+            const computedStyle = window.getComputedStyle(element);
+            return {
+                backgroundColor: computedStyle.backgroundColor,
+                borderBottomColor: computedStyle.borderBottomColor,
+                borderBottomStyle: computedStyle.borderBottomStyle,
+                borderBottomWidth: computedStyle.borderBottomWidth,
+                borderLeftColor: computedStyle.borderLeftColor,
+                borderLeftStyle: computedStyle.borderLeftStyle,
+                borderLeftWidth: computedStyle.borderLeftWidth,
+                borderRightColor: computedStyle.borderRightColor,
+                borderRightStyle: computedStyle.borderRightStyle,
+                borderRightWidth: computedStyle.borderRightWidth,
+                borderTopColor: computedStyle.borderTopColor,
+                borderTopStyle: computedStyle.borderTopStyle,
+                borderTopWidth: computedStyle.borderTopWidth,
+                color: computedStyle.color,
+                fontFamily: computedStyle.fontFamily,
+                fontSize: computedStyle.fontSize,
+                fontStyle: computedStyle.fontStyle,
+                fontWeight: computedStyle.fontWeight,
+                letterSpacing: computedStyle.letterSpacing,
+                lineHeight: computedStyle.lineHeight,
+                paddingBottom: computedStyle.paddingBottom,
+                paddingLeft: computedStyle.paddingLeft,
+                paddingRight: computedStyle.paddingRight,
+                paddingTop: computedStyle.paddingTop,
+                textAlign: computedStyle.textAlign,
+                textTransform: computedStyle.textTransform
+            };
+        }
+
+        function applyArticleTransitionStyleSnapshot(element, styleSnapshot) {
+            element.style.backgroundColor = styleSnapshot.backgroundColor;
+            element.style.borderBottomColor = styleSnapshot.borderBottomColor;
+            element.style.borderBottomStyle = styleSnapshot.borderBottomStyle;
+            element.style.borderBottomWidth = styleSnapshot.borderBottomWidth;
+            element.style.borderLeftColor = styleSnapshot.borderLeftColor;
+            element.style.borderLeftStyle = styleSnapshot.borderLeftStyle;
+            element.style.borderLeftWidth = styleSnapshot.borderLeftWidth;
+            element.style.borderRightColor = styleSnapshot.borderRightColor;
+            element.style.borderRightStyle = styleSnapshot.borderRightStyle;
+            element.style.borderRightWidth = styleSnapshot.borderRightWidth;
+            element.style.borderTopColor = styleSnapshot.borderTopColor;
+            element.style.borderTopStyle = styleSnapshot.borderTopStyle;
+            element.style.borderTopWidth = styleSnapshot.borderTopWidth;
+            element.style.color = styleSnapshot.color;
+            element.style.fontFamily = styleSnapshot.fontFamily;
+            element.style.fontSize = styleSnapshot.fontSize;
+            element.style.fontStyle = styleSnapshot.fontStyle;
+            element.style.fontWeight = styleSnapshot.fontWeight;
+            element.style.letterSpacing = styleSnapshot.letterSpacing;
+            element.style.lineHeight = styleSnapshot.lineHeight;
+            element.style.paddingBottom = styleSnapshot.paddingBottom;
+            element.style.paddingLeft = styleSnapshot.paddingLeft;
+            element.style.paddingRight = styleSnapshot.paddingRight;
+            element.style.paddingTop = styleSnapshot.paddingTop;
+            element.style.textAlign = styleSnapshot.textAlign;
+            element.style.textTransform = styleSnapshot.textTransform;
+        }
+
+        function buildArticleTransitionKeyframe(rect, styleSnapshot) {
+            return {
+                backgroundColor: styleSnapshot.backgroundColor,
+                borderBottomColor: styleSnapshot.borderBottomColor,
+                borderBottomStyle: styleSnapshot.borderBottomStyle,
+                borderBottomWidth: styleSnapshot.borderBottomWidth,
+                borderLeftColor: styleSnapshot.borderLeftColor,
+                borderLeftStyle: styleSnapshot.borderLeftStyle,
+                borderLeftWidth: styleSnapshot.borderLeftWidth,
+                borderRightColor: styleSnapshot.borderRightColor,
+                borderRightStyle: styleSnapshot.borderRightStyle,
+                borderRightWidth: styleSnapshot.borderRightWidth,
+                borderTopColor: styleSnapshot.borderTopColor,
+                borderTopStyle: styleSnapshot.borderTopStyle,
+                borderTopWidth: styleSnapshot.borderTopWidth,
+                color: styleSnapshot.color,
+                fontFamily: styleSnapshot.fontFamily,
+                fontSize: styleSnapshot.fontSize,
+                fontStyle: styleSnapshot.fontStyle,
+                fontWeight: styleSnapshot.fontWeight,
+                height: rect.height + 'px',
+                left: rect.left + 'px',
+                letterSpacing: styleSnapshot.letterSpacing,
+                lineHeight: styleSnapshot.lineHeight,
+                paddingBottom: styleSnapshot.paddingBottom,
+                paddingLeft: styleSnapshot.paddingLeft,
+                paddingRight: styleSnapshot.paddingRight,
+                paddingTop: styleSnapshot.paddingTop,
+                textAlign: styleSnapshot.textAlign,
+                textTransform: styleSnapshot.textTransform,
+                top: rect.top + 'px',
+                width: rect.width + 'px'
+            };
+        }
+
+        function prepareArticleTransitionTargets(slug, capturedItems) {
+            const preparedItems = [];
+            if (!slug || !capturedItems || capturedItems.length === 0) {
+                return preparedItems;
+            }
+
+            capturedItems.forEach(function (capturedItem) {
+                const targetElement = document.querySelector(getArticleTransitionSelector(slug, capturedItem.partName));
+                if (!targetElement) {
+                    return;
+                }
+
+                const targetRect = targetElement.getBoundingClientRect();
+                if (targetRect.width <= 0 || targetRect.height <= 0) {
+                    return;
+                }
+
+                const cloneElement = targetElement.cloneNode(true);
+                cloneElement.classList.add('pjax-article-transition-clone');
+                cloneElement.classList.remove('pjax-article-transition-target-hidden');
+                cloneElement.removeAttribute('data-article-transition-part');
+                cloneElement.removeAttribute('data-article-transition-slug');
+                targetElement.classList.add('pjax-article-transition-target-hidden');
+
+                preparedItems.push({
+                    partName: capturedItem.partName,
+                    sourceRect: capturedItem.sourceRect,
+                    sourceStyle: capturedItem.sourceStyle,
+                    targetRect: targetRect,
+                    targetStyle: getArticleTransitionStyleSnapshot(targetElement),
+                    cloneElement: cloneElement,
+                    targetElement: targetElement
+                });
+            });
+
+            return preparedItems;
+        }
+
+        function animateArticleTransitionItems(preparedItems) {
+            if (!preparedItems || preparedItems.length === 0) {
+                return Promise.resolve();
+            }
+
+            const animations = [];
+            preparedItems.forEach(function (preparedItem) {
+                const cloneElement = preparedItem.cloneElement;
+                cloneElement.style.left = preparedItem.sourceRect.left + 'px';
+                cloneElement.style.top = preparedItem.sourceRect.top + 'px';
+                cloneElement.style.width = preparedItem.sourceRect.width + 'px';
+                cloneElement.style.height = preparedItem.sourceRect.height + 'px';
+                applyArticleTransitionStyleSnapshot(cloneElement, preparedItem.sourceStyle);
+                document.body.appendChild(cloneElement);
+
+                const animation = cloneElement.animate([
+                    buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
+                    buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
+                ], {
+                    duration: 460,
+                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                    fill: 'forwards'
+                });
+                animations.push(animation.finished);
+            });
+
+            return Promise.all(animations).then(function () {
+                cleanupArticleTransitionItems(preparedItems);
+            }).catch(function () {
+                cleanupArticleTransitionItems(preparedItems);
+            });
+        }
+
+        function cleanupArticleTransitionItems(preparedItems) {
+            preparedItems.forEach(function (preparedItem) {
+                preparedItem.targetElement.classList.remove('pjax-article-transition-target-hidden');
+                preparedItem.cloneElement.remove();
+            });
+        }
+
+        function logArticleTransitionMode(url, transitionSlug, usedManualTransition, fallbackReason) {
+            if (!transitionSlug) {
+                return;
+            }
+
+            if (usedManualTransition) {
+                console.info('[PJAX] article transition uses manual FLIP fallback', {
+                    url: url,
+                    slug: transitionSlug,
+                    reason: 'native view transition screenshots do not resize text reliably across these layouts'
+                });
+                return;
+            }
+
+            console.info('[PJAX] article transition uses plain pjax replacement', {
+                url: url,
+                slug: transitionSlug,
+                reason: fallbackReason || 'matching transition element unavailable'
+            });
+        }
+
+        async function loadByPjax(url, pushState, transitionSlug) {
             const container = document.getElementById('pjax-container');
             if (!container) {
                 window.location.href = url;
                 return;
             }
 
-            dispatch('pjax:start', { url: url });
+            document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
             try {
                 const response = await fetch(url, {
                     method: 'GET',
@@ -147,36 +529,39 @@
                 }
 
                 const html = await response.text();
-                container.innerHTML = extractPjaxHtml(html);
+                const hasArticleTransitionSourceOnCurrentPage = transitionSlug && hasArticleTransitionSource(document, transitionSlug);
+                const extractedHtml = extractPjaxHtml(html, transitionSlug);
 
-                const titleHolder = container.querySelector('[data-page-title]');
-                if (titleHolder) {
-                    const title = titleHolder.getAttribute('data-page-title');
-                    if (title) document.title = title;
-                }
-                const navPathNode = document.getElementById('nav-path-text');
-                const navHolder = container.querySelector('#pjax-nav-path');
-                if (navHolder && navPathNode) {
-                    const navPath = (navHolder.textContent || '').trim();
-                    if (navPath) {
-                        navPathNode.textContent = navPath;
+                if (hasArticleTransitionSourceOnCurrentPage) {
+                    const capturedItems = captureArticleTransitionItems(transitionSlug);
+                    updatePjaxContainerState(container, extractedHtml, url, pushState);
+                    const preparedItems = prepareArticleTransitionTargets(transitionSlug, capturedItems);
+
+                    if (preparedItems.length > 0) {
+                        logArticleTransitionMode(url, transitionSlug, true, '');
+                        animateArticleTransitionItems(preparedItems).then(function () {
+                            finalizePjaxLoad(url);
+                        });
+                    } else {
+                        logArticleTransitionMode(url, transitionSlug, false, 'target page does not expose a matching article transition target');
+                        finalizePjaxLoad(url);
                     }
+                } else {
+                    let fallbackReason = '';
+                    if (transitionSlug && !hasArticleTransitionSourceOnCurrentPage) {
+                        fallbackReason = 'current page does not expose a matching article transition source';
+                    }
+                    logArticleTransitionMode(url, transitionSlug, false, fallbackReason);
+                    updatePjaxContainerState(container, extractedHtml, url, pushState);
+                    finalizePjaxLoad(url);
                 }
-
-                if (pushState) {
-                    window.history.pushState({ pjax: true, url: url }, '', url);
-                }
-
-                dispatch('page:ready', { url: url });
-                dispatch('pjax:complete', { url: url });
-                dispatch('pjax:end', { url: url });
             } catch (error) {
-                dispatch('pjax:end', { url: url, error: error });
+                document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url, error: error } }));
                 window.location.href = url;
             }
         }
 
-        function extractPjaxHtml(html) {
+        function extractPjaxHtml(html, transitionSlug) {
             if (!html) {
                 return '';
             }
@@ -432,11 +817,11 @@
             if (url.href === window.location.href) return;
 
             event.preventDefault();
-            loadByPjax(url.href, true);
+            loadByPjax(url.href, true, resolveArticleTransitionSlug(url.href, anchor));
         });
 
         window.addEventListener('popstate', () => {
-            loadByPjax(window.location.href, false);
+            loadByPjax(window.location.href, false, resolveArticleTransitionSlug(window.location.href, null));
         });
 
         document.addEventListener('page:ready', () => {

@@ -83,7 +83,7 @@
         {#if hits && hits.size > 0}
             <div class="grid grid-cols-1 gap-8">
                 {#for hit in hits}
-                    <article class="group card p-8 transition-all duration-300 relative">
+                    <article class="group card p-8 transition-all duration-300 relative" data-article-transition-slug="{hit.slug}">
                         <div class="flex flex-col md:flex-row gap-8">
                             <!-- Left Indicator -->
                             <div class="hidden md:block w-[3px] h-20 bg-cyan-900 rounded-full group-hover:bg-cyan-500 transition-colors duration-500"></div>
@@ -97,7 +97,9 @@
                                 </div>
 
                                 <!-- Title -->
-                                <h2 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight">
+                                <h2 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight"
+                                    data-article-transition-part="title"
+                                    data-article-transition-slug="{hit.slug}">
                                     <a href="{hit.url}" class="block after:absolute after:inset-0">{hit.title}</a>
                                 </h2>
 
@@ -115,7 +117,9 @@
                                             AI 摘要
                                         </span>
                                     </div>
-                                    <p class="mt-4 text-sm italic text-gray-400 border-l-2 border-accent/30 pl-4 py-1 line-clamp-2">
+                                    <p class="mt-4 text-sm italic text-gray-400 border-l-2 border-accent/30 pl-4 py-1 line-clamp-2"
+                                       data-article-transition-part="summary"
+                                       data-article-transition-slug="{hit.slug}">
                                         {hit.aiSummary}
                                     </p>
                                 {/if}

@@ -13,9 +13,11 @@
         </div>
     </div>
 
-    <article class="space-y-4">
+    <article class="space-y-4" data-article-transition-slug="{postSlug}">
         <header>
-            <h1 class="text-3xl font-bold">{postTitle ?: '文章详情'}</h1>
+            <h1 class="text-3xl font-bold"
+                data-article-transition-part="title"
+                data-article-transition-slug="{postSlug}">{postTitle ?: '文章详情'}</h1>
             <p class="text-sm opacity-80">Slug: {postSlug}</p>
         </header>
 
