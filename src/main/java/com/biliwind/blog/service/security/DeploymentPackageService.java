@@ -301,7 +301,7 @@ public class DeploymentPackageService {
         sb.append("（证书到期前主节点会自动签发新证书，需要重新部署更新）\n");
         sb.append("注意: 从节点启动时会自动生成自签名证书到 certs/ 目录\n");
         sb.append("       主节点签发的证书用于 mTLS 身份验证\n");
-        sb.append("       必须使用完整 WindBlog 应用镜像运行从节点，旧的 windblog-edge-node 轻量镜像不包含后台 API 和双向持久通道。\n");
+        sb.append("       使用 edge profile 启动时会关闭 RabbitMQ 通道，只保留 gRPC 回源和本地数据库/Redis。\n");
         sb.append("\n");
         sb.append("========================================\n");
         sb.append("部署步骤\n");
