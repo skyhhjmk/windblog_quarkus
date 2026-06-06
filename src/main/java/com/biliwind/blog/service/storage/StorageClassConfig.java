@@ -35,7 +35,7 @@ public class StorageClassConfig {
             try {
                 configJson = objectMapper.readTree(configJsonStr);
             } catch (Exception e) {
-                log.error("Failed to parse config_json: {}", configJsonStr, e);
+                log.error("Failed to parse config_json", e);
             }
         }
 

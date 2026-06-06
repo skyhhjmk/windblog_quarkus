@@ -28,6 +28,9 @@ public class StorageService {
     private final List<StorageClass> enabledProviders = new ArrayList<>();
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    StorageConfigProtector storageConfigProtector;
     @Inject
     EntityManager entityManager;
     @Inject
@@ -77,7 +80,8 @@ public class StorageService {
                         continue;
                     }
                     try {
-                        JsonNode configJson = objectMapper.readTree(entity.configJson);
+                        String runtimeConfigJson = storageConfigProtector.revealForRuntime(entity.configJson);
+                        JsonNode configJson = objectMapper.readTree(runtimeConfigJson);
                         ArrayList<String> supportedTypes = parseSupportedTypes(entity.supportedTypes);
                         StorageClassConfig config = new StorageClassConfig(
                                 configJson, supportedTypes, entity.cdnDomain, entity.cdnEnabled);

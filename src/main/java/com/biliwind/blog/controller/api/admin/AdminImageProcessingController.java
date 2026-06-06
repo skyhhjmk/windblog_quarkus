@@ -1,6 +1,9 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.model.ImageProcessingConfig;
+import com.biliwind.blog.service.ExternalToolResolver;
+import com.biliwind.blog.service.ImageProcessingService;
+import com.biliwind.blog.service.VideoProcessingService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -9,7 +12,6 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
@@ -21,6 +23,12 @@ public class AdminImageProcessingController {
 
     @Inject
     EntityManager entityManager;
+
+    @Inject
+    ImageProcessingService imageProcessingService;
+
+    @Inject
+    VideoProcessingService videoProcessingService;
 
     @GET
     public Response listConfigs() {
@@ -50,23 +58,8 @@ public class AdminImageProcessingController {
             cwebpPath = cwebpConfig.configValue;
         }
 
-        java.nio.file.Path cwebpPathObj = java.nio.file.Path.of(cwebpPath);
-        boolean exists = Files.exists(cwebpPathObj);
-        boolean executable = false;
-        if (exists) {
-            executable = Files.isExecutable(cwebpPathObj);
-        }
-
-        String message = "cwebp 工具检测: ";
-        if (exists && executable) {
-            message = message + "存在且可执行";
-        } else if (exists) {
-            message = message + "存在但不可执行";
-        } else {
-            message = message + "不存在于路径: " + cwebpPath;
-        }
-
-        TestToolResult result = new TestToolResult("cwebp", exists && executable, message);
+        ExternalToolResolver.ToolResolution resolution = imageProcessingService.resolveCwebp(cwebpPath);
+        TestToolResult result = TestToolResult.fromResolution("cwebp", resolution);
         return Response.ok(result).build();
     }
 
@@ -79,23 +72,8 @@ public class AdminImageProcessingController {
             ffmpegPath = ffmpegConfig.configValue;
         }
 
-        java.nio.file.Path ffmpegPathObj = java.nio.file.Path.of(ffmpegPath);
-        boolean exists = Files.exists(ffmpegPathObj);
-        boolean executable = false;
-        if (exists) {
-            executable = Files.isExecutable(ffmpegPathObj);
-        }
-
-        String message = "FFmpeg 工具检测: ";
-        if (exists && executable) {
-            message = message + "存在且可执行";
-        } else if (exists) {
-            message = message + "存在但不可执行";
-        } else {
-            message = message + "不存在于路径: " + ffmpegPath;
-        }
-
-        TestToolResult result = new TestToolResult("ffmpeg", exists && executable, message);
+        ExternalToolResolver.ToolResolution resolution = videoProcessingService.resolveFfmpeg(ffmpegPath);
+        TestToolResult result = TestToolResult.fromResolution("ffmpeg", resolution);
         return Response.ok(result).build();
     }
 
@@ -151,7 +129,19 @@ public class AdminImageProcessingController {
         return Response.ok(metadata).build();
     }
 
-    public record TestToolResult(String tool, boolean available, String message) {
+    public record TestToolResult(String tool, boolean available, String resolvedPath,
+                                 boolean executable, String version, String message) {
+        public static TestToolResult fromResolution(String tool,
+                                                    ExternalToolResolver.ToolResolution resolution) {
+            return new TestToolResult(
+                    tool,
+                    resolution.available(),
+                    resolution.resolvedPath(),
+                    resolution.executable(),
+                    resolution.version(),
+                    resolution.message()
+            );
+        }
     }
 
     public record ImageProcessingConfigUpdateRequest(String configKey, String configValue) {

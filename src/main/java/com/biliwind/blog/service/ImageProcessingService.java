@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.ImageProcessingConfig;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,31 +16,41 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.List;
 
 @ApplicationScoped
 public class ImageProcessingService {
 
     private static final Logger log = LoggerFactory.getLogger(ImageProcessingService.class);
 
+    @Inject
+    ExternalToolResolver externalToolResolver;
+
     public Path convertToWebp(Path originalImagePath, Path outputWebpPath) throws IOException {
         String cwebpPath = getConfigValue("cwebp_path", "/usr/bin/cwebp");
         String qualityStr = getConfigValue("webp_quality", "0.82");
         String methodStr = getConfigValue("webp_method", "4");
 
-        Path cwebpPathObj = Path.of(cwebpPath);
-        if (!Files.exists(cwebpPathObj) || !Files.isExecutable(cwebpPathObj)) {
-            throw new IOException("cwebp 工具不可用: " + cwebpPath);
-        }
+        ExternalToolResolver.ToolResolution cwebpResolution = resolveCwebp(cwebpPath);
+        externalToolResolver.requireAvailable(cwebpResolution, "cwebp");
 
         double quality = Double.parseDouble(qualityStr);
         int qualityPercent = (int) (quality * 100);
 
         int method = Integer.parseInt(methodStr);
 
-        String command = cwebpPath + " -q " + qualityPercent + " -m " + method + " -mt "
-                + originalImagePath.toString() + " -o " + outputWebpPath.toString();
-
-        Process process = Runtime.getRuntime().exec(command);
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                cwebpResolution.resolvedPath(),
+                "-q",
+                String.valueOf(qualityPercent),
+                "-m",
+                String.valueOf(method),
+                "-mt",
+                originalImagePath.toString(),
+                "-o",
+                outputWebpPath.toString()
+        );
+        Process process = processBuilder.start();
 
         try {
             boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
@@ -139,5 +150,17 @@ public class ImageProcessingService {
             return config.configValue;
         }
         return defaultValue;
+    }
+
+    public ExternalToolResolver.ToolResolution resolveCwebp(String configuredPath) {
+        return externalToolResolver.resolveTool(
+                configuredPath,
+                "/usr/bin/cwebp",
+                "cwebp.exe",
+                List.of(
+                        "C:\\Program Files\\WebP\\bin\\cwebp.exe",
+                        "C:\\Program Files (x86)\\WebP\\bin\\cwebp.exe"
+                )
+        );
     }
 }

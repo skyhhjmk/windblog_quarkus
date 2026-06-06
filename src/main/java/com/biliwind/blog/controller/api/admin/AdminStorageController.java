@@ -3,9 +3,12 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.controller.api.admin.dto.storage.*;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageClassEntity;
+import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.service.RegionValidationService;
+import com.biliwind.blog.service.edge.EdgeWriteGuard;
 import com.biliwind.blog.service.storage.MediaSyncStatus;
 import com.biliwind.blog.service.storage.StorageClass;
+import com.biliwind.blog.service.storage.StorageConfigProtector;
 import com.biliwind.blog.service.storage.StorageService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,13 +37,22 @@ public class AdminStorageController {
     @Inject
     RegionValidationService regionValidationService;
 
+    @Inject
+    StorageConfigProtector storageConfigProtector;
+
+    @Inject
+    EdgeWriteGuard edgeWriteGuard;
+
+    @Inject
+    CacheService cacheService;
+
     @GET
     @Path("/classes")
     public Response listClasses() {
         List<StorageClassEntity> entities = storageService.getAllStorageClassEntities();
         ArrayList<StorageClassResponse> result = new ArrayList<>();
         for (StorageClassEntity entity : entities) {
-            StorageClassResponse response = StorageClassResponse.fromEntity(entity);
+            StorageClassResponse response = StorageClassResponse.fromEntity(entity, storageConfigProtector);
             result.add(response);
         }
         return Response.ok(result).build();
@@ -50,6 +62,7 @@ public class AdminStorageController {
     @Path("/classes")
     @Transactional
     public Response createClass(StorageClassCreateRequest request) {
+        edgeWriteGuard.rejectWriteOnEdge("创建存储类");
         StorageClassEntity existing = StorageClassEntity.find("name", request.name()).firstResult();
         if (existing != null) {
             throw new WebApplicationException("存储类名称已存在", Response.Status.CONFLICT);
@@ -61,7 +74,7 @@ public class AdminStorageController {
         } else {
             try {
                 JsonNode node = objectMapper.readTree(configJson);
-                configJson = node.toString();
+                configJson = storageConfigProtector.protectForStorage(node.toString());
             } catch (Exception e) {
                 throw new WebApplicationException("Invalid configJson format", Response.Status.BAD_REQUEST);
             }
@@ -114,13 +127,15 @@ public class AdminStorageController {
         entity.priority = request.priority() != null ? request.priority() : 0;
 
         entity.persist();
-        return Response.ok(StorageClassResponse.fromEntity(entity)).build();
+        invalidateMediaCache();
+        return Response.ok(StorageClassResponse.fromEntity(entity, storageConfigProtector)).build();
     }
 
     @PUT
     @Path("/classes/{id}")
     @Transactional
     public Response updateClass(@PathParam("id") Long id, StorageClassUpdateRequest request) {
+        edgeWriteGuard.rejectWriteOnEdge("更新存储类");
         StorageClassEntity existing = StorageClassEntity.findById(id);
         if (existing == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
@@ -128,11 +143,11 @@ public class AdminStorageController {
 
         String configJson = request.configJson();
         if (configJson == null || configJson.isBlank()) {
-            configJson = "{}";
+            configJson = existing.configJson;
         } else {
             try {
                 JsonNode node = objectMapper.readTree(configJson);
-                configJson = node.toString();
+                configJson = storageConfigProtector.protectForStorage(node.toString(), existing.configJson);
             } catch (Exception e) {
                 throw new WebApplicationException("Invalid configJson format", Response.Status.BAD_REQUEST);
             }
@@ -188,19 +203,22 @@ public class AdminStorageController {
         existing.priority = request.priority() != null ? request.priority() : existing.priority;
 
         existing.persist();
-        return Response.ok(StorageClassResponse.fromEntity(existing)).build();
+        invalidateMediaCache();
+        return Response.ok(StorageClassResponse.fromEntity(existing, storageConfigProtector)).build();
     }
 
     @DELETE
     @Path("/classes/{id}")
     @Transactional
     public Response deleteClass(@PathParam("id") Long id) {
+        edgeWriteGuard.rejectWriteOnEdge("删除存储类");
         StorageClassEntity existing = StorageClassEntity.findById(id);
         if (existing == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
         existing.isEnabled = false;
         existing.persist();
+        invalidateMediaCache();
         return Response.noContent().build();
     }
 
@@ -302,6 +320,7 @@ public class AdminStorageController {
     @POST
     @Path("/sync/trigger/{mediaId}")
     public Response triggerStorageSync(@PathParam("mediaId") Long mediaId) {
+        edgeWriteGuard.rejectWriteOnEdge("触发媒体存储同步");
         storageService.scheduleSyncForMedia(mediaId);
         return Response.noContent().build();
     }
@@ -309,6 +328,7 @@ public class AdminStorageController {
     @POST
     @Path("/sync/batch-trigger")
     public Response triggerBatchStorageSync() {
+        edgeWriteGuard.rejectWriteOnEdge("批量触发媒体存储同步");
         storageService.scheduleSyncForAllPending();
         return Response.noContent().build();
     }
@@ -372,5 +392,9 @@ public class AdminStorageController {
             return null;
         }
         return normalizedContentRegions;
+    }
+
+    private void invalidateMediaCache() {
+        cacheService.deletePattern(CacheService.Keys.MEDIA_META_PREFIX + "*");
     }
 }

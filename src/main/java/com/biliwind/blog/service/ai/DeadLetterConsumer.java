@@ -66,7 +66,7 @@ public class DeadLetterConsumer {
             return message.ack().toCompletableFuture();
         } catch (Exception e) {
             logMqError(ERROR_MARK, "处理死信消息时发生异常，postId=%d, error=%s", task.postId(), e.getMessage(), e);
-            return message.ack();
+            return message.nack(e);
         }
     }
 
@@ -103,60 +103,51 @@ public class DeadLetterConsumer {
         } catch (Exception e) {
             logMqError(ERROR_MARK, "处理审核死信消息时发生异常，commentId=%d, error=%s",
                     task.commentId(), e.getMessage(), e);
-            return message.ack();
+            return message.nack(e);
         }
     }
 
     private void saveDeadLetterMessage(AiSummaryTask task) {
-        try {
-            DeadLetterMessage dlm = new DeadLetterMessage();
-            dlm.sourceQueue = "ai-summary-tasks";
-            dlm.exchangeName = "ai-tasks-dlx";
-            dlm.routingKey = "summary-dead";
-            dlm.postId = task.postId();
-            dlm.priority = task.priority();
-            dlm.retryCount = task.retryCount();
-            dlm.errorReason = "AI 摘要处理失败（超过最大重试次数或处理超时）";
+        DeadLetterMessage dlm = new DeadLetterMessage();
+        dlm.sourceQueue = "ai-summary-tasks";
+        dlm.exchangeName = "ai-tasks-dlx";
+        dlm.routingKey = "summary-dead";
+        dlm.postId = task.postId();
+        dlm.priority = task.priority();
+        dlm.retryCount = task.retryCount();
+        dlm.errorReason = "AI 摘要处理失败（超过最大重试次数或处理超时）";
 
-            Map<String, Object> content = new HashMap<>();
-            content.put("postId", task.postId());
-            content.put("priority", task.priority());
-            content.put("retryCount", task.retryCount());
-            content.put("content", task.content());
-            dlm.messageContent = content;
+        Map<String, Object> content = new HashMap<>();
+        content.put("postId", task.postId());
+        content.put("priority", task.priority());
+        content.put("retryCount", task.retryCount());
+        content.put("content", task.content());
+        dlm.messageContent = content;
 
-            dlm.deadLetteredAt = Instant.now();
-            dlm.persist();
+        dlm.deadLetteredAt = Instant.now();
+        dlm.persist();
 
-            logMqWarn(WARN_MARK, "已保存死信消息记录，id=%d, postId=%d", dlm.id, task.postId());
-        } catch (Exception e) {
-            logMqError(ERROR_MARK, "保存死信消息记录失败，postId=%d, error=%s", task.postId(), e.getMessage(), e);
-        }
+        logMqWarn(WARN_MARK, "已保存死信消息记录，id=%d, postId=%d", dlm.id, task.postId());
     }
 
     private void saveAuditDeadLetterMessage(AiAuditTask task) {
-        try {
-            DeadLetterMessage deadLetterMessage = new DeadLetterMessage();
-            deadLetterMessage.sourceQueue = "ai-audit-tasks";
-            deadLetterMessage.exchangeName = "ai-audit-tasks-dlx";
-            deadLetterMessage.routingKey = "audit-dead";
-            deadLetterMessage.retryCount = task.retryCount();
-            deadLetterMessage.errorReason = "AI 评论审核失败（超过最大重试次数或处理超时）";
+        DeadLetterMessage deadLetterMessage = new DeadLetterMessage();
+        deadLetterMessage.sourceQueue = "ai-audit-tasks";
+        deadLetterMessage.exchangeName = "ai-audit-tasks-dlx";
+        deadLetterMessage.routingKey = "audit-dead";
+        deadLetterMessage.retryCount = task.retryCount();
+        deadLetterMessage.errorReason = "AI 评论审核失败（超过最大重试次数或处理超时）";
 
-            Map<String, Object> messageContent = new HashMap<>();
-            messageContent.put("commentId", task.commentId());
-            messageContent.put("retryCount", task.retryCount());
-            messageContent.put("content", task.content());
-            deadLetterMessage.messageContent = messageContent;
+        Map<String, Object> messageContent = new HashMap<>();
+        messageContent.put("commentId", task.commentId());
+        messageContent.put("retryCount", task.retryCount());
+        messageContent.put("content", task.content());
+        deadLetterMessage.messageContent = messageContent;
 
-            deadLetterMessage.deadLetteredAt = Instant.now();
-            deadLetterMessage.persist();
+        deadLetterMessage.deadLetteredAt = Instant.now();
+        deadLetterMessage.persist();
 
-            logMqWarn(WARN_MARK, "已保存审核死信消息记录，id=%d, commentId=%d",
-                    deadLetterMessage.id, task.commentId());
-        } catch (Exception e) {
-            logMqError(ERROR_MARK, "保存审核死信消息记录失败，commentId=%d, error=%s",
-                    task.commentId(), e.getMessage(), e);
-        }
+        logMqWarn(WARN_MARK, "已保存审核死信消息记录，id=%d, commentId=%d",
+                deadLetterMessage.id, task.commentId());
     }
 }

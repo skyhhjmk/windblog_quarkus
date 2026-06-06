@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.MediaManagementService;
+import com.biliwind.blog.service.edge.EdgeWriteGuard;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -39,6 +40,9 @@ public class AdminMediaController {
 
     @Inject
     com.biliwind.blog.service.RegionValidationService regionValidationService;
+
+    @Inject
+    EdgeWriteGuard edgeWriteGuard;
 
     @GET
     @Operation(summary = "列出媒体资源")
@@ -83,6 +87,7 @@ public class AdminMediaController {
     @Transactional
     @Operation(summary = "上传媒体文件")
     public AdminMediaDtos.MediaItem upload(@RestForm("file") FileUpload filePart) {
+        edgeWriteGuard.rejectWriteOnEdge("上传媒体");
         User operator = mustFindOperator();
         if (filePart == null) {
             throw new BadRequestException("缺少 file 字段");
@@ -136,6 +141,7 @@ public class AdminMediaController {
     @Transactional
     @Operation(summary = "更新媒体设置")
     public AdminMediaDtos.MediaItem update(@PathParam("id") Long id, AdminMediaDtos.MediaUpdateRequest request) {
+        edgeWriteGuard.rejectWriteOnEdge("更新媒体");
         mustFindOperator();
         Media media = Media.findById(id);
         if (media == null) {

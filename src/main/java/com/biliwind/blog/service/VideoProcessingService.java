@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.ImageProcessingConfig;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 @ApplicationScoped
 public class VideoProcessingService {
@@ -18,13 +20,14 @@ public class VideoProcessingService {
     @ConfigProperty(name = "media.upload.dir", defaultValue = "uploads")
     String mediaUploadDir;
 
+    @Inject
+    ExternalToolResolver externalToolResolver;
+
     public Path extractCoverFrame(Path videoFilePath, Path outputCoverPath) throws IOException {
         String ffmpegPath = getConfigValue("ffmpeg_path", "/usr/bin/ffmpeg");
 
-        Path ffmpegPathObj = Path.of(ffmpegPath).toAbsolutePath().normalize();
-        if (!Files.isRegularFile(ffmpegPathObj) || !Files.isExecutable(ffmpegPathObj)) {
-            throw new IOException("FFmpeg 工具不可用: " + ffmpegPath);
-        }
+        ExternalToolResolver.ToolResolution ffmpegResolution = resolveFfmpeg(ffmpegPath);
+        externalToolResolver.requireAvailable(ffmpegResolution, "FFmpeg");
 
         Path uploadRootPath = Path.of(mediaUploadDir).toAbsolutePath().normalize();
         Path normalizedVideoFilePath = videoFilePath.toAbsolutePath().normalize();
@@ -37,7 +40,7 @@ public class VideoProcessingService {
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(
-                ffmpegPathObj.toString(),
+                ffmpegResolution.resolvedPath(),
                 "-ss",
                 "3",
                 "-i",
@@ -85,5 +88,17 @@ public class VideoProcessingService {
             return config.configValue;
         }
         return defaultValue;
+    }
+
+    public ExternalToolResolver.ToolResolution resolveFfmpeg(String configuredPath) {
+        return externalToolResolver.resolveTool(
+                configuredPath,
+                "/usr/bin/ffmpeg",
+                "ffmpeg.exe",
+                List.of(
+                        "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+                        "C:\\ffmpeg\\bin\\ffmpeg.exe"
+                )
+        );
     }
 }

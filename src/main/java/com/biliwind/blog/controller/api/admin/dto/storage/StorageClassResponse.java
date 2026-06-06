@@ -27,7 +27,27 @@ public record StorageClassResponse(
                 entity.isEnabled,
                 entity.isPrimary,
                 entity.role,
-                entity.configJson,
+                "{}",
+                entity.supportedTypes,
+                entity.cdnDomain,
+                entity.cdnEnabled,
+                entity.serviceRegion,
+                entity.contentRegions,
+                entity.priority
+        );
+    }
+
+    public static StorageClassResponse fromEntity(StorageClassEntity entity,
+                                                  com.biliwind.blog.service.storage.StorageConfigProtector protector) {
+        return new StorageClassResponse(
+                entity.id,
+                entity.name,
+                entity.displayName,
+                entity.providerType,
+                entity.isEnabled,
+                entity.isPrimary,
+                entity.role,
+                protector.maskForResponse(entity.configJson),
                 entity.supportedTypes,
                 entity.cdnDomain,
                 entity.cdnEnabled,

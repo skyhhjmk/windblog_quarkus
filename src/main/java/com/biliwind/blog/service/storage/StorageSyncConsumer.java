@@ -7,12 +7,18 @@ import org.eclipse.microprofile.reactive.messaging.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @ApplicationScoped
 public class StorageSyncConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(StorageSyncConsumer.class);
+    private static final int MAX_RETRY_COUNT = 3;
+    private static final ScheduledExecutorService RETRY_SCHEDULER = Executors.newSingleThreadScheduledExecutor();
 
     @Inject
     StorageService storageService;
@@ -61,17 +67,50 @@ public class StorageSyncConsumer {
     private CompletionStage<Void> handleFailure(Message<StorageSyncMessage> message,
                                                 StorageSyncMessage msg, String errorReason) {
         int nextRetryCount = msg.retryCount() + 1;
-        if (nextRetryCount >= 3) {
+        if (nextRetryCount >= MAX_RETRY_COUNT) {
             log.error("同步达到最大重试次数，进行 NACK 进入死信队列: mediaId={}, provider={}, variant={}",
                     msg.mediaId(), msg.storageClassName(), msg.variantType());
             return message.nack(new RuntimeException("Max retries reached: " + errorReason));
         } else {
-            log.warn("同步失败，准备第 {} 次重试: mediaId={}, provider={}, reason={}",
-                    nextRetryCount, msg.mediaId(), msg.storageClassName(), errorReason);
+            long delaySeconds = calculateRetryDelaySeconds(nextRetryCount);
+            log.warn("同步失败，{} 秒后准备第 {} 次重试: mediaId={}, provider={}, reason={}",
+                    delaySeconds, nextRetryCount, msg.mediaId(), msg.storageClassName(), errorReason);
             StorageSyncMessage retryMsg = new StorageSyncMessage(
                     msg.mediaId(), msg.storageClassName(), msg.variantType(), nextRetryCount);
-            syncEmitter.send(retryMsg);
-            return message.ack();
+            return sendRetryAfterDelay(message, retryMsg, delaySeconds);
         }
+    }
+
+    private long calculateRetryDelaySeconds(int retryCount) {
+        long delaySeconds = 5;
+        for (int index = 1; index < retryCount; index++) {
+            delaySeconds = delaySeconds * 2;
+        }
+        return delaySeconds;
+    }
+
+    private CompletionStage<Void> sendRetryAfterDelay(Message<StorageSyncMessage> message,
+                                                      StorageSyncMessage retryMessage,
+                                                      long delaySeconds) {
+        CompletableFuture<Void> retryFuture = new CompletableFuture<>();
+        RETRY_SCHEDULER.schedule(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    syncEmitter.send(retryMessage);
+                    message.ack().whenComplete((ignoredResult, ackError) -> {
+                        if (ackError != null) {
+                            retryFuture.completeExceptionally(ackError);
+                        } else {
+                            retryFuture.complete(null);
+                        }
+                    });
+                } catch (Exception e) {
+                    message.nack(e);
+                    retryFuture.completeExceptionally(e);
+                }
+            }
+        }, delaySeconds, TimeUnit.SECONDS);
+        return retryFuture;
     }
 }

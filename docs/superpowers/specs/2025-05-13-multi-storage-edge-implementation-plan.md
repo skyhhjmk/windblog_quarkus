@@ -1,5 +1,7 @@
 # WindBlog 多存储管线与边缘节点 - 实现计划书
 
+> 当前仓库已将早期命名 `storage_provider` / `storage_nodes` 迁移为 `storage_class` / `media.storage_classes`。继续参考本文时，以当前仓库实体和 migration 为准，不要把旧名重新引入新代码。
+
 >
 基于设计文档: [2025-05-13-multi-storage-edge-architecture-design.md](./2025-05-13-multi-storage-edge-architecture-design.md)
 > 日期: 2025-05-13
@@ -1261,7 +1263,7 @@ CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '{PASSWORD}';
 -- 发布需要复制的表
 CREATE PUBLICATION edge_replication
     FOR TABLE media, posts, post_revisions, categories, tags,
-        post_tags, comments, post_media, storage_provider,
+        post_tags, comments, post_media, storage_class,
         image_processing_config, users, upload_roles;
 
 GRANT USAGE ON SCHEMA public TO replicator;
@@ -1275,8 +1277,16 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO replicator;
 CREATE SUBSCRIPTION main_node_subscription
     CONNECTION 'host={MAIN_NODE_HOST} port=5432 dbname=windblog user=replicator password={PASSWORD}'
     PUBLICATION edge_replication
-    WITH (synchronous_commit = off, copy_data = true);
+    WITH (
+        synchronous_commit = off,
+        copy_data = true,
+        slot_name = 'edge_{NODE_ID}_subscription'
+    );
 ```
+
+部署前必须确认主库满足逻辑复制前置条件：`wal_level = logical`、`max_replication_slots` 足够容纳所有边缘节点、`max_wal_senders` 足够容纳所有复制连接。云托管 PostgreSQL 开启这些配置通常需要重启实例。
+
+跨地域或公网复制不能按内网延迟估算。复制延迟超过 10 秒时，边缘节点应标记数据不可信，并优先走主节点回源。
 
 #### 任务 2.4.3: 复制健康检查
 
@@ -1284,6 +1294,7 @@ CREATE SUBSCRIPTION main_node_subscription
 
 - 主节点侧: 监控 replication slot 的 WAL 位置
 - 边缘节点侧: 查询 `pg_stat_subscription` 检查 lag
+- lag 超过 10 秒时标记边缘数据不可信
 
 ---
 

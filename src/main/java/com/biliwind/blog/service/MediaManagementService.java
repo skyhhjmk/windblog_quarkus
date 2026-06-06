@@ -4,12 +4,14 @@ import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.common.helper.MediaPathHelper;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.edge.EdgeWriteGuard;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
 import io.quarkus.logging.Log;
 import io.quarkus.panache.common.Page;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
@@ -69,6 +71,12 @@ public class MediaManagementService {
 
     @Inject
     StorageService storageService;
+
+    @Inject
+    Instance<MediaManagementService> selfProxy;
+
+    @Inject
+    EdgeWriteGuard edgeWriteGuard;
 
     private Path uploadRoot;
     private String normalizedPublicPath;
@@ -313,8 +321,8 @@ public class MediaManagementService {
      * @param declaredSize 声明的文件大小
      * @return 媒体对象
      */
-    @Transactional
     public Media storeUploadedMedia(User operator, InputStream source, String fileName, String mimeType, long declaredSize) {
+        edgeWriteGuard.rejectWriteOnEdge("保存上传媒体");
         // 验证用户身份
         if (operator == null || operator.id == null) {
             throw new ForbiddenException("上传操作需要有效的用户身份");
@@ -388,47 +396,23 @@ public class MediaManagementService {
             throw new BadRequestException("总上传大小超出限制");
         }
 
-        // 创建媒体对象并保存到数据库 (首先标记为 PENDING)
-        Media media = new Media();
-        media.storageKey = storageKey;
-        media.url = buildPublicUrl(storageKey);
-        media.mediaType = parseMediaType(normalizedMime);
-        media.mimeType = normalizedMime;
-        media.fileName = sanitizedFileName;
-        media.size = size;
-        media.uploadedBy = operator.id;
-        media.width = null;
-        media.height = null;
-        media.alt = Collections.emptyMap();
         Map<String, Object> metadata = new HashMap<>();
-        media.metadata = metadata;
-        media.createdAt = OffsetDateTime.now();
-        media.deletedAt = null;
-        media.version = 0;
-        media.storageClasses = new LinkedHashMap<>();
-        media.processingStatus = "PENDING";
-        media.processingProgress = 0;
-
-        media.persist();
-        // 刷新以确保 ID 已生成并可见
-        Media.getEntityManager().flush();
+        MediaManagementService transactionalSelf = selfProxy.get();
+        Media media = transactionalSelf.createPendingUploadedMedia(
+                storageKey, normalizedMime, sanitizedFileName, size, operator.id, metadata);
 
         try {
-            // 开始处理
-            updateProcessingStatus(media.id, "PROCESSING", 10, null);
+            transactionalSelf.updateProcessingStatus(media.id, "PROCESSING", 10, null);
 
-            // 如果是图片，提取尺寸信息并生成占位图和 WebP
             if (normalizedMime.startsWith("image/")) {
                 processImage(media, target, metadata);
-                updateProcessingStatus(media.id, "PROCESSING", 60, null);
+                transactionalSelf.updateProcessingStatus(media.id, "PROCESSING", 60, null);
             }
-            // 如果是视频，提取封面
             if (normalizedMime.startsWith("video/")) {
                 processVideo(media, target, storageKey, metadata);
-                updateProcessingStatus(media.id, "PROCESSING", 60, null);
+                transactionalSelf.updateProcessingStatus(media.id, "PROCESSING", 60, null);
             }
 
-            // 提取生成的变体信息
             Map<VariantType, String> generatedVariants = new HashMap<>();
             generatedVariants.put(VariantType.ORIGINAL, storageKey);
             if (metadata.containsKey("webpUrl")) {
@@ -440,42 +424,80 @@ public class MediaManagementService {
                 generatedVariants.put(VariantType.PLACEHOLDER, extractStorageKey(placeholderUrl));
             }
 
-            // 初始化主提供者状态为 synced
-            Map<String, Object> primaryProviderJson = new LinkedHashMap<>();
-            for (Map.Entry<VariantType, String> entry : generatedVariants.entrySet()) {
-                VariantType variant = entry.getKey();
-                String vKey = entry.getValue();
-                Map<String, Object> variantInfo = new LinkedHashMap<>();
-                variantInfo.put("status", "synced");
-                variantInfo.put("path", vKey);
-                primaryProviderJson.put(variant.name().toLowerCase(), variantInfo);
-            }
-            media.storageClasses.put(storageService.getPrimaryStorageClassName(), primaryProviderJson);
-
-            // 初始化其他存储类状态为 pending
-            for (StorageClassEntity nonPrimary : storageService.getNonPrimaryStorageClassEntities()) {
-                Map<String, Object> pendingProviderJson = new LinkedHashMap<>();
-                for (VariantType variant : generatedVariants.keySet()) {
-                    Map<String, Object> pendingVariant = new LinkedHashMap<>();
-                    pendingVariant.put("status", "pending");
-                    pendingVariant.put("path", null);
-                    pendingProviderJson.put(variant.name().toLowerCase(), pendingVariant);
-                }
-                media.storageClasses.put(nonPrimary.name, pendingProviderJson);
-            }
-
-            media.processingStatus = "COMPLETED";
-            media.processingProgress = 100;
-            media.persist();
-
-            // 触发异步同步
-            storageService.scheduleSyncForMedia(media.id);
+            media = transactionalSelf.completeUploadedMedia(media.id, media.width, media.height, metadata, generatedVariants);
 
         } catch (Exception e) {
             Log.error("媒体处理失败: " + media.id, e);
-            updateProcessingStatus(media.id, "FAILED", 0, e.getMessage());
+            transactionalSelf.updateProcessingStatus(media.id, "FAILED", 0, e.getMessage());
         }
 
+        return media;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media createPendingUploadedMedia(String storageKey, String normalizedMime, String sanitizedFileName,
+                                            long size, Long operatorId, Map<String, Object> metadata) {
+        Media media = new Media();
+        media.storageKey = storageKey;
+        media.url = buildPublicUrl(storageKey);
+        media.mediaType = parseMediaType(normalizedMime);
+        media.mimeType = normalizedMime;
+        media.fileName = sanitizedFileName;
+        media.size = size;
+        media.uploadedBy = operatorId;
+        media.width = null;
+        media.height = null;
+        media.alt = Collections.emptyMap();
+        media.metadata = metadata;
+        media.createdAt = OffsetDateTime.now();
+        media.deletedAt = null;
+        media.version = 0;
+        media.storageClasses = new LinkedHashMap<>();
+        media.processingStatus = "PENDING";
+        media.processingProgress = 0;
+        media.persist();
+        Media.getEntityManager().flush();
+        return media;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media completeUploadedMedia(Long mediaId, Integer width, Integer height, Map<String, Object> metadata,
+                                       Map<VariantType, String> generatedVariants) {
+        Media media = Media.findById(mediaId);
+        if (media == null) {
+            throw new IllegalStateException("媒体记录不存在: " + mediaId);
+        }
+        media.width = width;
+        media.height = height;
+        media.metadata = metadata;
+        media.storageClasses = new LinkedHashMap<>();
+
+        Map<String, Object> primaryProviderJson = new LinkedHashMap<>();
+        for (Map.Entry<VariantType, String> entry : generatedVariants.entrySet()) {
+            VariantType variant = entry.getKey();
+            String variantStorageKey = entry.getValue();
+            Map<String, Object> variantInfo = new LinkedHashMap<>();
+            variantInfo.put("status", "synced");
+            variantInfo.put("path", variantStorageKey);
+            primaryProviderJson.put(variant.name().toLowerCase(), variantInfo);
+        }
+        media.storageClasses.put(storageService.getPrimaryStorageClassName(), primaryProviderJson);
+
+        for (StorageClassEntity nonPrimary : storageService.getNonPrimaryStorageClassEntities()) {
+            Map<String, Object> pendingProviderJson = new LinkedHashMap<>();
+            for (VariantType variant : generatedVariants.keySet()) {
+                Map<String, Object> pendingVariant = new LinkedHashMap<>();
+                pendingVariant.put("status", "pending");
+                pendingVariant.put("path", null);
+                pendingProviderJson.put(variant.name().toLowerCase(), pendingVariant);
+            }
+            media.storageClasses.put(nonPrimary.name, pendingProviderJson);
+        }
+
+        media.processingStatus = "COMPLETED";
+        media.processingProgress = 100;
+        media.persist();
+        storageService.scheduleSyncForMedia(media.id);
         return media;
     }
 

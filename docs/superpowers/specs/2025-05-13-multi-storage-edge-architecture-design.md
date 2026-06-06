@@ -1,5 +1,7 @@
 # WindBlog 多存储管线与边缘节点架构设计文档
 
+> 当前仓库已将早期命名 `storage_provider` / `storage_nodes` 迁移为 `storage_class` / `media.storage_classes`。继续参考本文时，以当前仓库实体和 migration 为准，不要把旧名重新引入新代码。
+
 > 日期: 2025-05-13
 > 状态: 待审核
 > 范围: Phase 1 - 核心媒体管线改造 + 边缘节点最小原型
@@ -795,7 +797,7 @@ CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '{strong_password}';
 -- 创建发布（包含边缘节点需要读取的表）
 CREATE PUBLICATION edge_replication
 FOR TABLE media, posts, post_revisions, categories, tags,
-     post_tags, comments, post_media, storage_provider,
+     post_tags, comments, post_media, storage_class,
      image_processing_config;
 
 -- 授权复制角色读取相关表
@@ -812,16 +814,20 @@ CONNECTION 'host={main_node_ip} port=5432 dbname=windblog user=replicator passwo
 PUBLICATION edge_replication
 WITH (
   synchronous_commit = off,        -- 异步，不等待主节点确认
-  copy_data = true                  -- 初始复制已有数据
+  copy_data = true,                 -- 初始复制已有数据
+  slot_name = 'edge_{node_id}_subscription'
 );
 ```
+
+部署前必须确认主库满足 `wal_level = logical`、`max_replication_slots`、`max_wal_senders` 要求。云 RDS 开启逻辑复制配置通常需要重启实例。
 
 **延迟预期分析：**
 
 - WAL 记录传输延迟 ≈ 网络 RTT（200ms+）
 - 对于博客场景（低写入频率），WAL 积压量很小
-- 边缘节点读取延迟通常在 **200ms ~ 2s** 范围内
-- 这是**完全可接受**的最终一致性窗口
+- 只有低延迟内网场景才能按 **200ms ~ 2s** 估算
+- 跨地域或公网复制 lag 超过 10 秒时，边缘节点应标记数据不可信
+- 只有 lag 在业务阈值内时，这才是可接受的最终一致性窗口
 
 ### 7.5 边缘节点启动流程
 

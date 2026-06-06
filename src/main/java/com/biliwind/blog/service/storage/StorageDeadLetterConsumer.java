@@ -8,6 +8,9 @@ import org.eclipse.microprofile.reactive.messaging.Acknowledgment;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
 
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletionStage;
 
 @ApplicationScoped
@@ -32,34 +35,34 @@ public class StorageDeadLetterConsumer {
                 + ", variant=" + msg.variantType()
                 + ", retryCount=" + msg.retryCount());
 
-        // 1. 更新 Media 状态为 failed
-        VariantType variant = VariantType.valueOf(msg.variantType().toUpperCase());
-        storageService.updateVariantStatus(
-                msg.mediaId(), msg.storageClassName(), variant, "failed", null, null, 0);
-
-        // 2. 持久化到死信表
         try {
-            com.biliwind.blog.model.DeadLetterMessage dlMsg = new com.biliwind.blog.model.DeadLetterMessage();
-            dlMsg.sourceQueue = "storage-sync-tasks";
-            dlMsg.exchangeName = "storage-sync-tasks";
-            dlMsg.routingKey = "";
-            dlMsg.retryCount = msg.retryCount();
-            dlMsg.errorReason = "存储同步失败，达到最大重试次数";
-
-            // 将 Record 转换为 Map 存储
-            java.util.Map<String, Object> content = new java.util.HashMap<>();
-            content.put("mediaId", msg.mediaId());
-            content.put("storageClassName", msg.storageClassName());
-            content.put("variantType", msg.variantType());
-            content.put("retryCount", msg.retryCount());
-            dlMsg.messageContent = content;
-
-            dlMsg.persist();
-            Log.info("死信消息已持久化到数据库, id=" + dlMsg.id);
+            persistDeadLetterMessage(msg);
+            VariantType variant = VariantType.valueOf(msg.variantType().toUpperCase());
+            storageService.updateVariantStatus(
+                    msg.mediaId(), msg.storageClassName(), variant, "failed", null, null, 0);
+            return message.ack();
         } catch (Exception e) {
             Log.error("持久化死信消息失败", e);
+            return message.nack(e);
         }
+    }
 
-        return message.ack();
+    private void persistDeadLetterMessage(StorageSyncMessage msg) {
+        com.biliwind.blog.model.DeadLetterMessage deadLetterMessage = new com.biliwind.blog.model.DeadLetterMessage();
+        deadLetterMessage.sourceQueue = "storage-sync-tasks";
+        deadLetterMessage.exchangeName = "storage-sync-dlx";
+        deadLetterMessage.routingKey = "storage-sync-dead";
+        deadLetterMessage.retryCount = msg.retryCount();
+        deadLetterMessage.errorReason = "存储同步失败，达到最大重试次数";
+
+        Map<String, Object> content = new HashMap<>();
+        content.put("mediaId", msg.mediaId());
+        content.put("storageClassName", msg.storageClassName());
+        content.put("variantType", msg.variantType());
+        content.put("retryCount", msg.retryCount());
+        deadLetterMessage.messageContent = content;
+        deadLetterMessage.deadLetteredAt = Instant.now();
+        deadLetterMessage.persist();
+        Log.info("死信消息已持久化到数据库, id=" + deadLetterMessage.id);
     }
 }
