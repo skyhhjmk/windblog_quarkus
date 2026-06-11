@@ -117,13 +117,8 @@ pipeline {
                         -Dnative \
                         -Dquarkus.application.version="$RELEASE_VERSION" \
                         -Dquarkus.native.container-build=true \
-                        -Dquarkus.container-image.build=false \
+                        -Dquarkus.container-image.tag="$RELEASE_VERSION" \
                         -Dquarkus.container-image.push=false
-
-                    docker build \
-                        -f src/main/docker/Dockerfile.native \
-                        -t "$IMAGE_REPOSITORY:$RELEASE_VERSION" \
-                        .
                 '''
             }
         }
