@@ -4,7 +4,6 @@ import com.biliwind.blog.model.EdgeNode;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,53 +12,58 @@ import java.util.List;
 
 /**
  * 证书自动轮换任务。
- * 检查即将过期的节点证书并生成新的序列号/到期时间（实际推送逻辑待补充）。
+ * 检查即将过期的节点证书，并通过已认证的持久通道完成续签。
  */
 @ApplicationScoped
 public class CertificateRotationScheduler {
     private static final Logger LOGGER = LoggerFactory.getLogger(CertificateRotationScheduler.class);
 
     @Inject
-    CertificateService certificateService;
+    CertificateRenewalService certificateRenewalService;
 
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
-    @Scheduled(every = "12h")
-    @Transactional
+    @Scheduled(every = "1h")
     public void rotateCertificates() {
         if (nodeRoleService.isEdgeNode()) {
             return;
         }
         LOGGER.info("正在执行边缘节点证书过期检查...");
 
-        // 查找即将过期（剩余不足 6 小时）且未被吊销的节点
-        OffsetDateTime threshold = OffsetDateTime.now().plusHours(6);
-        List<EdgeNode> nodesToRotate = EdgeNode.find("certificateRevoked = false AND certificateExpiry < ?1", threshold).list();
+        OffsetDateTime threshold = OffsetDateTime.now().plusHours(12);
+        List<String> nodeIdsToRenew = findNodeIdsToRenew(threshold);
 
-        if (nodesToRotate.isEmpty()) {
+        if (nodeIdsToRenew.isEmpty()) {
             LOGGER.info("没有需要轮换证书的节点");
             return;
         }
 
-        for (EdgeNode node : nodesToRotate) {
+        for (String nodeId : nodeIdsToRenew) {
             try {
-                LOGGER.info("节点 {} 的证书即将过期 ({})，正在轮换证书", node.nodeId, node.certificateExpiry);
-
-                CertificateService.GeneratedCertificate primary = certificateService.generateNodeCertificate(node.nodeId, 24);
-                CertificateService.GeneratedCertificate backup = certificateService.generateNodeCertificate(node.nodeId, 72);
-
-                node.certificateSerial = primary.serialNumber();
-                node.certificateExpiry = primary.expiry();
-                node.certificateBackupSerial = backup.serialNumber();
-                node.certificateBackupExpiry = backup.expiry();
-                node.persist();
-
-                LOGGER.info("节点 {} 证书轮换成功，新主证书序列号: {}，新备用证书序列号: {}",
-                        node.nodeId, node.certificateSerial, node.certificateBackupSerial);
-            } catch (Exception e) {
-                LOGGER.error("节点 {} 证书轮换失败: {}", node.nodeId, e.getMessage(), e);
+                LOGGER.info("节点 {} 的证书将在 12 小时内过期，正在续签", nodeId);
+                certificateRenewalService.renew(nodeId);
+            } catch (Exception exception) {
+                LOGGER.error("节点 {} 证书续签失败: {}", nodeId, exception.getMessage(), exception);
             }
         }
+    }
+
+    private List<String> findNodeIdsToRenew(OffsetDateTime threshold) {
+        return io.quarkus.narayana.jta.QuarkusTransaction.requiringNew()
+                .call(new java.util.concurrent.Callable<List<String>>() {
+                    @Override
+                    public List<String> call() {
+                        List<EdgeNode> nodes = EdgeNode.find(
+                                "certificateRevoked = false AND certificateExpiry IS NOT NULL AND certificateExpiry < ?1",
+                                threshold
+                        ).list();
+                        List<String> nodeIds = new java.util.ArrayList<>();
+                        for (EdgeNode node : nodes) {
+                            nodeIds.add(node.nodeId);
+                        }
+                        return nodeIds;
+                    }
+                });
     }
 }

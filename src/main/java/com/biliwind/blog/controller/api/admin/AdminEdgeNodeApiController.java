@@ -7,7 +7,7 @@ import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.model.EdgeSyncRecord;
 import com.biliwind.blog.service.edge.EdgeNodeRegistry;
 import io.quarkus.panache.common.Page;
-import com.biliwind.blog.service.security.CertificateService;
+import com.biliwind.blog.service.security.CertificateRenewalService;
 import com.biliwind.blog.service.security.DeploymentPackageService;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -39,7 +39,7 @@ public class AdminEdgeNodeApiController {
     com.biliwind.blog.service.edge.EdgeNodeAvailabilityService edgeNodeAvailabilityService;
 
     @Inject
-    CertificateService certificateService;
+    CertificateRenewalService certificateRenewalService;
 
     @Inject
     DeploymentPackageService deploymentPackageService;
@@ -286,23 +286,9 @@ public class AdminEdgeNodeApiController {
 
     @POST
     @Path("/{nodeId}/issue-certificate")
-    @Transactional
-    @Operation(summary = "签发节点证书", description = "为边缘节点生成一对新的 mTLS 证书（24h 主证书 + 72h 备用证书），并更新数据库记录")
+    @Operation(summary = "手动续签节点证书", description = "通过在线持久通道向边缘节点下发新证书，安装成功后更新数据库并重启节点")
     public EdgeNode issueCertificate(@PathParam("nodeId") String nodeId) throws Exception {
-        EdgeNode node = EdgeNode.findByNodeId(nodeId);
-        if (node == null) throw new NotFoundException("节点不存在");
-
-        CertificateService.GeneratedCertificate primary = certificateService.generateNodeCertificate(nodeId, 24);
-        CertificateService.GeneratedCertificate backup = certificateService.generateNodeCertificate(nodeId, 72);
-
-        node.certificateSerial = primary.serialNumber();
-        node.certificateExpiry = primary.expiry();
-        node.certificateBackupSerial = backup.serialNumber();
-        node.certificateBackupExpiry = backup.expiry();
-        node.certificateRevoked = false;
-        node.persist();
-
-        return node;
+        return certificateRenewalService.renew(nodeId);
     }
 
     @GET

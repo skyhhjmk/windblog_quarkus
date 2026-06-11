@@ -135,7 +135,29 @@ message EdgeChannelMessage {
     SyncDataRequest sync_data = 12;
     RoutedHttpRequest routed_http_request = 13;
     RoutedHttpResponse routed_http_response = 14;
+    CertificateRenewalMessage certificate_renewal = 15;
+    CertificateRenewalResult certificate_renewal_result = 16;
+    CertificateActivationMessage certificate_activation = 17;
   }
+}
+
+message CertificateRenewalMessage {
+  string renewal_id = 1;
+  string certificate_pem = 2;
+  string private_key_pem = 3;
+  string ca_certificate_pem = 4;
+  string serial_number = 5;
+  int64 expiry_epoch_seconds = 6;
+}
+
+message CertificateRenewalResult {
+  string renewal_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message CertificateActivationMessage {
+  string renewal_id = 1;
 }
 
 message EdgeHeartbeatMessage {

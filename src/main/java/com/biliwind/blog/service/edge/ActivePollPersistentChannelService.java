@@ -42,6 +42,9 @@ public class ActivePollPersistentChannelService {
     @Inject
     PrimaryRoutedHttpExecutor routedHttpExecutor;
 
+    @Inject
+    com.biliwind.blog.service.security.CertificateRenewalService certificateRenewalService;
+
     @Scheduled(every = "30s")
     public void ensureActivePollChannels() {
         if (!nodeRoleService.isPrimaryNode()) {
@@ -162,6 +165,11 @@ public class ActivePollPersistentChannelService {
 
         if (message.hasRoutedHttpRequest()) {
             handleRoutedHttpRequest(node, message);
+            return;
+        }
+
+        if (message.hasCertificateRenewalResult()) {
+            certificateRenewalService.completeRenewal(node.nodeId, message.getCertificateRenewalResult());
         }
     }
 

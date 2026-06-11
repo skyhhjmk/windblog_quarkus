@@ -7,6 +7,8 @@ import com.biliwind.blog.model.StorageClassEntity;
 import com.biliwind.blog.service.storage.StorageClass;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
+import com.biliwind.blog.service.security.CertificateRenewalService;
+import com.biliwind.blog.service.security.EdgeCertificateInstaller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
@@ -55,6 +57,12 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Inject
     EdgePersistentChannelClient edgePersistentChannelClient;
+
+    @Inject
+    CertificateRenewalService certificateRenewalService;
+
+    @Inject
+    EdgeCertificateInstaller edgeCertificateInstaller;
 
     private StorageService getStorageService() {
         return io.quarkus.arc.Arc.container().instance(StorageService.class).get();
@@ -146,7 +154,60 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
         if (message.hasSyncData()) {
             syncDataApplyService.apply(message.getSyncData());
+            return;
         }
+
+        if (message.hasCertificateRenewalResult()) {
+            certificateRenewalService.completeRenewal(nodeId, message.getCertificateRenewalResult());
+            return;
+        }
+
+        if (message.hasCertificateRenewal()) {
+            installRenewedCertificate(message.getCertificateRenewal(), emitterReference.get(), nodeId);
+            return;
+        }
+
+        if (message.hasCertificateActivation()) {
+            log.info(
+                    "新证书已在主节点生效，边缘节点即将重启并加载证书: {}",
+                    message.getCertificateActivation().getRenewalId()
+            );
+            io.quarkus.runtime.Quarkus.asyncExit();
+        }
+    }
+
+    private void installRenewedCertificate(
+            CertificateRenewalMessage renewalMessage,
+            MultiEmitter<? super EdgeChannelMessage> emitter,
+            String nodeId
+    ) {
+        if (emitter == null) {
+            return;
+        }
+
+        CertificateRenewalResult.Builder resultBuilder = CertificateRenewalResult.newBuilder()
+                .setRenewalId(renewalMessage.getRenewalId());
+        try {
+            edgeCertificateInstaller.install(
+                    renewalMessage.getCertificatePem(),
+                    renewalMessage.getPrivateKeyPem(),
+                    renewalMessage.getCaCertificatePem()
+            );
+            resultBuilder.setSuccess(true);
+            resultBuilder.setMessage("新证书文件已安装");
+        } catch (Exception exception) {
+            resultBuilder.setSuccess(false);
+            resultBuilder.setMessage(exception.getMessage());
+            log.error("安装边缘节点新证书失败: {}", renewalMessage.getRenewalId(), exception);
+        }
+
+        EdgeChannelMessage resultMessage = EdgeChannelMessage.newBuilder()
+                .setRequestId(renewalMessage.getRenewalId())
+                .setNodeId(nodeId)
+                .setTimestamp(System.currentTimeMillis())
+                .setCertificateRenewalResult(resultBuilder.build())
+                .build();
+        emitter.emit(resultMessage);
     }
 
     private void handleRoutedHttpRequest(EdgeChannelMessage message,
