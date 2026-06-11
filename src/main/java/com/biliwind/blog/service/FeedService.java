@@ -34,6 +34,9 @@ public class FeedService {
     }
 
     public String getBaseUrl() {
+        if (baseUrl.endsWith("/")) {
+            return baseUrl.substring(0, baseUrl.length() - 1);
+        }
         return baseUrl;
     }
 
@@ -62,7 +65,7 @@ public class FeedService {
                 title,
                 summary,
                 post.publishedAt != null ? post.publishedAt.format(RFC_822_FORMATTER) : "",
-                post.updatedAt != null ? post.updatedAt.format(ISO_8601_FORMATTER) : "",
+                formatLastModified(post.updatedAt, post.createdAt),
                 post.user != null ? post.user.username : "Admin"
         );
     }
@@ -84,8 +87,8 @@ public class FeedService {
         return com.biliwind.blog.model.Category.listAll().stream()
                 .map(c -> (com.biliwind.blog.model.Category) c)
                 .map(c -> new SitemapUrlView(
-                        baseUrl + "/category/" + c.slug,
-                        c.updatedAt != null ? c.updatedAt.format(ISO_8601_FORMATTER) : c.createdAt.format(ISO_8601_FORMATTER)
+                        getBaseUrl() + "/category/" + c.slug,
+                        formatLastModified(c.updatedAt, c.createdAt)
                 ))
                 .collect(Collectors.toList());
     }
@@ -94,10 +97,30 @@ public class FeedService {
         return com.biliwind.blog.model.Tag.listAll().stream()
                 .map(t -> (com.biliwind.blog.model.Tag) t)
                 .map(t -> new SitemapUrlView(
-                        baseUrl + "/tag/" + t.slug,
-                        t.updatedAt != null ? t.updatedAt.format(ISO_8601_FORMATTER) : t.createdAt.format(ISO_8601_FORMATTER)
+                        getBaseUrl() + "/tag/" + t.slug,
+                        formatLastModified(t.updatedAt, t.createdAt)
                 ))
                 .collect(Collectors.toList());
+    }
+
+    public List<SitemapUrlView> getPageSitemapUrls() {
+        String normalizedBaseUrl = getBaseUrl();
+        return List.of(
+                new SitemapUrlView(normalizedBaseUrl + "/", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/category", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tag", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/link", "")
+        );
+    }
+
+    private String formatLastModified(OffsetDateTime updatedAt, OffsetDateTime createdAt) {
+        if (updatedAt != null) {
+            return updatedAt.format(ISO_8601_FORMATTER);
+        }
+        if (createdAt != null) {
+            return createdAt.format(ISO_8601_FORMATTER);
+        }
+        return "";
     }
 
     public record FeedPostView(

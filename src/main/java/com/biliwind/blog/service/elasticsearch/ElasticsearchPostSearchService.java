@@ -1,6 +1,8 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
@@ -10,12 +12,12 @@ import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,9 +35,6 @@ public class ElasticsearchPostSearchService {
     private static final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     private final AtomicBoolean indexInitialized = new AtomicBoolean(false);
-
-    @ConfigProperty(name = "elasticsearch.hosts")
-    String elasticsearchHosts;
 
     private static final String POST_INDEX_TEMPLATE = "windblog-posts-template";
     private static final String POST_INDEX_PATTERN = "windblog-posts-*";
@@ -64,7 +63,7 @@ public class ElasticsearchPostSearchService {
     private void initializeIndex() {
         log.debug("[POST INDEX] ====== initializeIndex() CALLED ======");
         log.debug("[POST INDEX] Starting article index initialization...");
-        log.debug("[POST INDEX] elasticsearchHosts config: " + (elasticsearchHosts != null ? elasticsearchHosts : "NULL"));
+        log.debug("[POST INDEX] Elasticsearch address: " + connectionManager.getCurrentSettings().hosts());
         log.debug("[POST INDEX] connectionManager injected: " + (connectionManager != null ? "YES" : "NO"));
 
         int maxRetries = 3;
@@ -181,7 +180,7 @@ public class ElasticsearchPostSearchService {
                 """;
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
+                .uri(connectionManager.resolveUri("/_ilm/policy/" + ILM_POLICY_NAME))
                 .PUT(HttpRequest.BodyPublishers.ofString(policyJson))
                 .header("Content-Type", "application/json")
                 .build();
@@ -198,6 +197,30 @@ public class ElasticsearchPostSearchService {
     private void createPostIndexTemplate() throws Exception {
         log.info("Creating article index template: " + POST_INDEX_TEMPLATE);
 
+        ElasticsearchSettingsService.ElasticsearchSettings settings = connectionManager.getCurrentSettings();
+        String indexTokenizer = settings.analyzer();
+        String searchTokenizer = settings.analyzer();
+        if (!"standard".equals(settings.analyzer())) {
+            searchTokenizer = "ik_smart";
+        }
+
+        String indexAnalyzerFiltersJson = "[\"lowercase\"]";
+        String searchAnalyzerFiltersJson = "[\"lowercase\"]";
+        String synonymFilterJson = "";
+        if (!settings.synonyms().isEmpty()) {
+            searchAnalyzerFiltersJson = "[\"lowercase\", \"windblog_synonyms\"]";
+            synonymFilterJson = """
+                    ,
+                    "filter": {
+                      "windblog_synonyms": {
+                        "type": "synonym_graph",
+                        "lenient": true,
+                        "synonyms": %s
+                      }
+                    }
+                    """.formatted(objectMapper.writeValueAsString(settings.synonyms()));
+        }
+
         String templateJson = """
             {
               "index_patterns": ["windblog-posts-*"],
@@ -210,17 +233,17 @@ public class ElasticsearchPostSearchService {
                       "index.lifecycle.rollover_alias": "%s",
                   "analysis": {
                     "analyzer": {
-                          "ik_smart_analyzer": {
+                          "windblog_index_analyzer": {
                             "type": "custom",
-                            "tokenizer": "ik_smart",
-                            "filter": ["lowercase"]
+                            "tokenizer": "%s",
+                            "filter": %s
                           },
-                          "ik_max_word_analyzer": {
+                          "windblog_search_analyzer": {
                             "type": "custom",
-                            "tokenizer": "ik_max_word",
-                            "filter": ["lowercase"]
+                            "tokenizer": "%s",
+                            "filter": %s
                       }
-                    }
+                    }%s
                   }
                 },
                 "mappings": {
@@ -228,29 +251,29 @@ public class ElasticsearchPostSearchService {
                         "id": { "type": "long" },
                     "title": {
                       "type": "text",
-                          "analyzer": "ik_max_word_analyzer",
-                          "search_analyzer": "ik_smart_analyzer",
+                          "analyzer": "windblog_index_analyzer",
+                          "search_analyzer": "windblog_search_analyzer",
                           "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } }
                     },
                     "content": {
                       "type": "text",
-                          "analyzer": "ik_max_word_analyzer",
-                          "search_analyzer": "ik_smart_analyzer"
+                          "analyzer": "windblog_index_analyzer",
+                          "search_analyzer": "windblog_search_analyzer"
                     },
                     "contentHtml": {
                       "type": "text",
-                          "analyzer": "ik_max_word_analyzer",
-                          "search_analyzer": "ik_smart_analyzer"
+                          "analyzer": "windblog_index_analyzer",
+                          "search_analyzer": "windblog_search_analyzer"
                     },
                     "summary": {
                       "type": "text",
-                          "analyzer": "ik_max_word_analyzer",
-                          "search_analyzer": "ik_smart_analyzer"
+                          "analyzer": "windblog_index_analyzer",
+                          "search_analyzer": "windblog_search_analyzer"
                     },
                         "aiSummary": {
                           "type": "text",
-                              "analyzer": "ik_max_word_analyzer",
-                              "search_analyzer": "ik_smart_analyzer"
+                              "analyzer": "windblog_index_analyzer",
+                              "search_analyzer": "windblog_search_analyzer"
                         },
                         "slug": { "type": "keyword" },
                         "status": { "type": "keyword" },
@@ -267,14 +290,14 @@ public class ElasticsearchPostSearchService {
                         "allowComment": { "type": "boolean" },
                     "seoTitle": {
                       "type": "text",
-                          "analyzer": "ik_max_word_analyzer",
-                          "search_analyzer": "ik_smart_analyzer"
+                          "analyzer": "windblog_index_analyzer",
+                          "search_analyzer": "windblog_search_analyzer"
                     },
                         "seoKeywords": { "type": "keyword" },
                     "seoDescription": {
                       "type": "text",
-                          "analyzer": "ik_max_word_analyzer",
-                          "search_analyzer": "ik_smart_analyzer"
+                          "analyzer": "windblog_index_analyzer",
+                          "search_analyzer": "windblog_search_analyzer"
                     },
                         "publishedAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
                         "createdAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
@@ -282,8 +305,8 @@ public class ElasticsearchPostSearchService {
                                 "visibilityRegions": { "type": "keyword" },
                                 "suggest": {
                                   "type": "completion",
-                                  "analyzer": "ik_max_word_analyzer",
-                                  "search_analyzer": "ik_smart_analyzer"
+                                  "analyzer": "windblog_index_analyzer",
+                                  "search_analyzer": "windblog_search_analyzer"
                                 }
                   }
                 }
@@ -292,10 +315,18 @@ public class ElasticsearchPostSearchService {
                   "version": 2,
                   "_meta": { "description": "Template for windblog posts index with IK Chinese tokenizer" }
                 }
-                """.formatted(ILM_POLICY_NAME, POST_INDEX_ALIAS);
+                """.formatted(
+                ILM_POLICY_NAME,
+                POST_INDEX_ALIAS,
+                indexTokenizer,
+                indexAnalyzerFiltersJson,
+                searchTokenizer,
+                searchAnalyzerFiltersJson,
+                synonymFilterJson
+        );
 
         var request = HttpRequest.newBuilder()
-            .uri(URI.create(elasticsearchHosts + "/_index_template/" + POST_INDEX_TEMPLATE))
+            .uri(connectionManager.resolveUri("/_index_template/" + POST_INDEX_TEMPLATE))
             .PUT(HttpRequest.BodyPublishers.ofString(templateJson))
             .header("Content-Type", "application/json")
             .build();
@@ -322,7 +353,7 @@ public class ElasticsearchPostSearchService {
             """.formatted(POST_INDEX_ALIAS);
 
         var request = HttpRequest.newBuilder()
-            .uri(URI.create(elasticsearchHosts + "/windblog-posts-000001"))
+            .uri(connectionManager.resolveUri("/windblog-posts-000001"))
             .PUT(HttpRequest.BodyPublishers.ofString(indexBody))
             .header("Content-Type", "application/json")
             .build();
@@ -337,6 +368,69 @@ public class ElasticsearchPostSearchService {
             log.error("Initial article index creation failed: " + response.body());
             throw new RuntimeException("Initial article index creation failed: " + response.statusCode());
         }
+    }
+
+    public void applyIndexConfiguration() throws Exception {
+        createIlmPolicy();
+        createPostIndexTemplate();
+        createInitialPostIndex();
+        indexInitialized.set(true);
+    }
+
+    public void rebuildPostIndex() throws Exception {
+        HttpRequest aliasRequest = HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_alias/" + POST_INDEX_ALIAS))
+                .GET()
+                .build();
+        HttpResponse<String> aliasResponse = connectionManager.sendRequest(aliasRequest);
+        if (aliasResponse.statusCode() == 200) {
+            com.fasterxml.jackson.databind.JsonNode aliasRoot = objectMapper.readTree(aliasResponse.body());
+            java.util.Iterator<String> indexNames = aliasRoot.fieldNames();
+            while (indexNames.hasNext()) {
+                String indexName = indexNames.next();
+                HttpRequest deleteRequest = HttpRequest.newBuilder()
+                        .uri(connectionManager.resolveUri("/" + indexName))
+                        .DELETE()
+                        .build();
+                HttpResponse<String> deleteResponse = connectionManager.sendRequest(deleteRequest);
+                if (deleteResponse.statusCode() != 200 && deleteResponse.statusCode() != 404) {
+                    throw new IllegalStateException("删除旧索引失败: " + deleteResponse.body());
+                }
+            }
+        } else if (aliasResponse.statusCode() != 404) {
+            throw new IllegalStateException("读取索引别名失败: " + aliasResponse.body());
+        }
+
+        indexInitialized.set(false);
+        applyIndexConfiguration();
+    }
+
+    public List<String> analyzeText(String text) throws Exception {
+        com.fasterxml.jackson.databind.node.ObjectNode requestBody = objectMapper.createObjectNode();
+        requestBody.put("analyzer", "windblog_search_analyzer");
+        requestBody.put("text", text);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_analyze"))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
+                .header("Content-Type", "application/json")
+                .build();
+        HttpResponse<String> response = connectionManager.sendRequest(request);
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("分词预览失败: " + response.body());
+        }
+
+        List<String> tokens = new ArrayList<>();
+        com.fasterxml.jackson.databind.JsonNode tokenNodes = objectMapper.readTree(response.body()).path("tokens");
+        if (tokenNodes.isArray()) {
+            for (com.fasterxml.jackson.databind.JsonNode tokenNode : tokenNodes) {
+                String token = tokenNode.path("token").asText("");
+                if (!token.isBlank()) {
+                    tokens.add(token);
+                }
+            }
+        }
+        return tokens;
     }
 
     /**
@@ -363,7 +457,7 @@ public class ElasticsearchPostSearchService {
             return;
         }
 
-        String lang = "en";
+        String lang = LanguageConstant.DEFAULT_LANG;
         String defaultTitle = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String defaultSummary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
 
@@ -400,10 +494,13 @@ public class ElasticsearchPostSearchService {
 
         PostRevision publishedRevision = post.publishedRevision;
         if (publishedRevision != null) {
-            String content = publishedRevision.contentMarkdown != null ?
-                    LanguageHelper.resolveLocalizedValue(publishedRevision.contentMarkdown, lang) : "";
-            document.put("content", content);
-            document.put("contentHtml", content);
+            String content = "";
+            if (publishedRevision.contentMarkdown != null) {
+                content = LanguageHelper.resolveLocalizedValue(publishedRevision.contentMarkdown, lang);
+            }
+            String searchableContent = SearchContentHelper.toSearchableText(content, post.renderType);
+            document.put("content", searchableContent);
+            document.put("contentHtml", searchableContent);
             document.put("summary", defaultSummary != null ? defaultSummary : "");
 
             String localizedAiSummary = post.aiSummary != null ?
@@ -436,7 +533,7 @@ public class ElasticsearchPostSearchService {
             .writeValueAsString(document);
 
         var request = HttpRequest.newBuilder()
-            .uri(URI.create(elasticsearchHosts + "/" + POST_INDEX_ALIAS + "/_doc/" + post.id))
+            .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_doc/" + post.id))
             .PUT(HttpRequest.BodyPublishers.ofString(documentJson))
             .header("Content-Type", "application/json")
             .build();
@@ -462,7 +559,7 @@ public class ElasticsearchPostSearchService {
         log.infof("Deleting article index: %d", postId);
 
         var request = HttpRequest.newBuilder()
-            .uri(URI.create(elasticsearchHosts + "/" + POST_INDEX_ALIAS + "/_doc/" + postId))
+            .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_doc/" + postId))
             .DELETE()
             .build();
 
@@ -568,7 +665,7 @@ public class ElasticsearchPostSearchService {
         }
 
         var request = HttpRequest.newBuilder()
-            .uri(URI.create(elasticsearchHosts + "/" + POST_INDEX_ALIAS + "/_search"))
+            .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_search"))
             .POST(HttpRequest.BodyPublishers.ofString(searchBody.toString()))
             .header("Content-Type", "application/json")
             .build();
@@ -611,7 +708,7 @@ public class ElasticsearchPostSearchService {
                 """, escapeJson(query));
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/" + POST_INDEX_ALIAS + "/_search"))
+                .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_search"))
                 .POST(HttpRequest.BodyPublishers.ofString(suggestBody))
                 .header("Content-Type", "application/json")
                 .build();
@@ -654,12 +751,9 @@ public class ElasticsearchPostSearchService {
                 }
             }
 
-            String highlightTitle = highlight.path("title").isArray() && highlight.path("title").size() > 0
-                    ? highlight.path("title").get(0).asText() : source.path("title").asText("");
-
             SearchedPost post = new SearchedPost(
                 source.path("id").asLong(),
-                    highlightTitle,
+                    source.path("title").asText(""),
                 source.path("summary").asText(""),
                     source.path("aiSummary").asText(""),
                 source.path("slug").asText(""),
@@ -712,7 +806,7 @@ public class ElasticsearchPostSearchService {
 
         try {
             var healthRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(elasticsearchHosts + "/_cluster/health"))
+                    .uri(connectionManager.resolveUri("/_cluster/health"))
                     .GET()
                     .build();
             var healthResponse = connectionManager.sendRequest(healthRequest);
@@ -723,7 +817,7 @@ public class ElasticsearchPostSearchService {
 
         try {
             var ilmRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
+                    .uri(connectionManager.resolveUri("/_ilm/policy/" + ILM_POLICY_NAME))
                     .GET()
                     .build();
             var ilmResponse = connectionManager.sendRequest(ilmRequest);
@@ -734,7 +828,7 @@ public class ElasticsearchPostSearchService {
 
         try {
             var templateRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(elasticsearchHosts + "/_index_template/" + POST_INDEX_TEMPLATE))
+                    .uri(connectionManager.resolveUri("/_index_template/" + POST_INDEX_TEMPLATE))
                     .GET()
                     .build();
             var templateResponse = connectionManager.sendRequest(templateRequest);
@@ -756,7 +850,7 @@ public class ElasticsearchPostSearchService {
         }
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
+                .uri(connectionManager.resolveUri("/_ilm/policy/" + ILM_POLICY_NAME))
                 .GET()
                 .build();
 
@@ -773,7 +867,7 @@ public class ElasticsearchPostSearchService {
         }
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_index_template/" + POST_INDEX_TEMPLATE))
+                .uri(connectionManager.resolveUri("/_index_template/" + POST_INDEX_TEMPLATE))
                 .GET()
                 .build();
 

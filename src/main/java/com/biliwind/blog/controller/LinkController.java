@@ -138,8 +138,8 @@ public class LinkController {
                 .data("pageTitle", pageTitle)
                 .data("language", languageContext.getLang())
                 .data("seoTitle", linkEntity.seoTitle)
-                .data("seoKeywords", linkEntity.seoKeywords)
-                .data("seoDescription", linkEntity.seoDescription)
+                .data("pageKeywords", linkEntity.seoKeywords)
+                .data("pageDescription", linkEntity.seoDescription)
                 .data("link", linkEntity);
     }
 

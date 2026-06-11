@@ -5,6 +5,7 @@ import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.MarkdownHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
@@ -231,6 +232,8 @@ public class PostController {
         if (displayTitle == null) {
             displayTitle = slug;
         }
+        String seoTitle = resolveSeoTitle(postEntity, displayTitle);
+        String pageDescription = resolvePageDescription(postEntity, localizedAiSummary, localizedContent, resolvedLang);
 
         int aiSummaryStatusVal = 0;
         if (postEntity.aiSummaryStatus != null) {
@@ -267,6 +270,9 @@ public class PostController {
                 .data("postId", postEntity.id)
                 .data("postSlug", slug)
                 .data("postTitle", displayTitle)
+                .data("pageTitle", seoTitle)
+                .data("pageDescription", pageDescription)
+                .data("pageKeywords", postEntity.seoKeywords)
                 .data("aiSummary", localizedAiSummary)
                 .data("aiSummaryStatus", aiSummaryStatusVal)
                 .data("postBody", postBody.body())
@@ -286,8 +292,8 @@ public class PostController {
                 .data("relatedStoreItems", resolveRelatedStoreItems(postEntity))
                 .data("repostOriginalUrl", repostLicenseService.buildPostUrl(postEntity))
                 .data("canonicalUrl", buildCanonicalUrl(slug))
-                .data("ogData", buildOgData(postEntity, localizedTitle, localizedAiSummary, resolvedLang))
-                .data("jsonLd", buildJsonLd(postEntity, localizedTitle, localizedAiSummary, resolvedLang));
+                .data("ogData", buildOgData(postEntity, seoTitle, pageDescription, resolvedLang))
+                .data("jsonLd", buildJsonLd(postEntity, seoTitle, pageDescription, resolvedLang));
 
         CacheControl cacheControl = new CacheControl();
         cacheControl.setMaxAge(60); // 缓存 60 秒
@@ -304,6 +310,45 @@ public class PostController {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
         return baseUrl + "/post/" + slug;
+    }
+
+    private String resolveSeoTitle(Post post, String displayTitle) {
+        if (post.seoTitle != null && !post.seoTitle.isBlank()) {
+            return post.seoTitle.trim();
+        }
+        return displayTitle;
+    }
+
+    private String resolvePageDescription(Post post,
+                                          String localizedAiSummary,
+                                          String localizedContent,
+                                          String language) {
+        if (post.seoDescription != null && !post.seoDescription.isBlank()) {
+            return post.seoDescription.trim();
+        }
+
+        String localizedSummary = LanguageHelper.resolveLocalizedValue(post.summary, language);
+        if (localizedSummary != null && !localizedSummary.isBlank()) {
+            return limitDescription(localizedSummary);
+        }
+
+        if (localizedAiSummary != null && !localizedAiSummary.isBlank()) {
+            return limitDescription(localizedAiSummary);
+        }
+
+        String searchableContent = SearchContentHelper.toSearchableText(localizedContent, post.renderType);
+        return limitDescription(searchableContent);
+    }
+
+    private String limitDescription(String description) {
+        if (description == null) {
+            return "";
+        }
+        String normalizedDescription = description.replaceAll("\\s+", " ").trim();
+        if (normalizedDescription.length() <= 160) {
+            return normalizedDescription;
+        }
+        return normalizedDescription.substring(0, 160);
     }
 
     private java.util.Map<String, String> buildOgData(Post post, String title, String summary, String lang) {

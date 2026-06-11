@@ -70,6 +70,7 @@
 
         const bar = document.getElementById('pjax-progress');
         let progressTimer = null;
+        let activePjaxController = null;
 
         function showProgress() {
             if (!bar) return;
@@ -246,6 +247,7 @@
                     document.title = title;
                 }
             }
+            updatePjaxHeadMetadata(container, url);
 
             const navPathNode = document.getElementById('nav-path-text');
             const navHolder = container.querySelector('#pjax-nav-path');
@@ -258,9 +260,68 @@
 
             if (pushState) {
                 window.history.pushState({ pjax: true, url: url }, '', url);
+                window.scrollTo(0, 0);
             }
 
             document.dispatchEvent(new CustomEvent('page:ready', { detail: { url: url } }));
+        }
+
+        function updatePjaxHeadMetadata(container, url) {
+            const pageRoot = container.querySelector('#pjax-content-root');
+            if (!pageRoot) {
+                return;
+            }
+
+            const descriptionMeta = document.head.querySelector('meta[name="description"]');
+            if (descriptionMeta) {
+                const siteDescription = descriptionMeta.getAttribute('data-site-content') || '';
+                const pageDescription = pageRoot.getAttribute('data-page-description') || siteDescription;
+                descriptionMeta.setAttribute('content', pageDescription);
+            }
+
+            const keywordsMeta = document.head.querySelector('meta[name="keywords"]');
+            if (keywordsMeta) {
+                const siteKeywords = keywordsMeta.getAttribute('data-site-content') || '';
+                const pageKeywords = pageRoot.getAttribute('data-page-keywords') || siteKeywords;
+                keywordsMeta.setAttribute('content', pageKeywords);
+            }
+
+            const canonicalLink = document.head.querySelector('link[rel="canonical"]');
+            if (canonicalLink) {
+                const pageCanonical = pageRoot.getAttribute('data-page-canonical');
+                const targetUrl = new URL(url, window.location.href);
+                let canonicalUrl = pageCanonical;
+                if (!canonicalUrl) {
+                    const configuredBaseUrl = canonicalLink.getAttribute('data-site-base') || targetUrl.origin;
+                    const normalizedBaseUrl = configuredBaseUrl.replace(/\/+$/, '');
+                    canonicalUrl = normalizedBaseUrl + targetUrl.pathname;
+                }
+                canonicalLink.setAttribute('href', canonicalUrl);
+            }
+
+            const pageRobots = pageRoot.getAttribute('data-page-robots') || '';
+            let robotsMeta = document.head.querySelector('meta[name="robots"]');
+            if (pageRobots) {
+                if (!robotsMeta) {
+                    robotsMeta = document.createElement('meta');
+                    robotsMeta.setAttribute('name', 'robots');
+                    document.head.appendChild(robotsMeta);
+                }
+                robotsMeta.setAttribute('content', pageRobots);
+            } else if (robotsMeta) {
+                robotsMeta.remove();
+            }
+
+            document.head.querySelectorAll(
+                'meta[property^="og:"], meta[name^="twitter:"], script[type="application/ld+json"]'
+            ).forEach(function (metadataNode) {
+                metadataNode.remove();
+            });
+
+            const metadataTemplate = pageRoot.querySelector('#pjax-head-metadata');
+            if (metadataTemplate) {
+                document.head.appendChild(metadataTemplate.content.cloneNode(true));
+            }
         }
 
         function injectSidebar() {
@@ -450,6 +511,10 @@
             if (!preparedItems || preparedItems.length === 0) {
                 return Promise.resolve();
             }
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                cleanupArticleTransitionItems(preparedItems);
+                return Promise.resolve();
+            }
 
             const animations = [];
             preparedItems.forEach(function (preparedItem) {
@@ -515,9 +580,15 @@
             }
 
             document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
+            if (activePjaxController) {
+                activePjaxController.abort();
+            }
+            const requestController = new AbortController();
+            activePjaxController = requestController;
             try {
                 const response = await fetch(url, {
                     method: 'GET',
+                    signal: requestController.signal,
                     headers: {
                         'X-PJAX': 'true',
                         'X-PJAX-Container': '#pjax-container'
@@ -557,7 +628,14 @@
                 }
             } catch (error) {
                 document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url, error: error } }));
+                if (error && error.name === 'AbortError') {
+                    return;
+                }
                 window.location.href = url;
+            } finally {
+                if (activePjaxController === requestController) {
+                    activePjaxController = null;
+                }
             }
         }
 

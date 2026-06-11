@@ -3,15 +3,6 @@
         {pageTitle ?: '资源详情'}
     {/title}
 
-    {#head}
-        {#if seoDescription}
-        <meta name="description" content="{seoDescription}"/>
-        {/if}
-        {#if seoKeywords}
-        <meta name="keywords" content="{seoKeywords}"/>
-        {/if}
-    {/head}
-
     {#navPath}
         ~/windblog / links / {link.name}
     {/navPath}

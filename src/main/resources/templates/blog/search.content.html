@@ -1,5 +1,7 @@
-<div id="pjax-content-root" data-page-title="{pageTitle ?: '搜索'}">
-    <div id="pjax-nav-path" class="hidden">search</div>
+<div id="pjax-content-root"
+     data-page-title="{pageTitle ?: '搜索'}"
+     data-page-robots="noindex,follow">
+    <div id="pjax-nav-path" class="hidden">~/windblog / search</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-8">
                 {#include sidebar/recent_posts.html /}
@@ -126,7 +128,7 @@
 
                                 <!-- Summary -->
                                 <p class="mt-4 text-[15px] leading-relaxed text-body line-clamp-2 font-light">
-                                    {hit.summary.raw}
+                                    {hit.summary}
                                 </p>
 
                                 <!-- Footer -->

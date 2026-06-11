@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
@@ -89,7 +90,7 @@ public class ConfigInitializer {
         siteInfoValue.put("description", "基于 Quarkus 和 Flutter 构建的极简博客系统，支持 AI 摘要与多端同步。");
         siteInfoValue.put("author", "BiliWind");
 
-        list.add(new SettingDefinition("site_info", siteInfoValue, "object", "basic", siteInfoSchema, "网站基础信息设置"));
+        list.add(new SettingDefinition("site_info", siteInfoValue, "object", "基础设置", siteInfoSchema, "网站基础信息设置"));
 
         // Footer Settings
         ObjectNode footerSchema = mapper.createObjectNode();
@@ -106,7 +107,7 @@ public class ConfigInitializer {
         footerValue.put("public_security_record", "公网安备 XXXXXXXXXXXX号");
         footerValue.put("custom_html", "");
 
-        list.add(new SettingDefinition("site_footer", footerValue, "object", "basic", footerSchema, "网站页脚设置"));
+        list.add(new SettingDefinition("site_footer", footerValue, "object", "基础设置", footerSchema, "网站页脚设置"));
 
         // Appearance
         ObjectNode appearanceSchema = mapper.createObjectNode();
@@ -121,7 +122,7 @@ public class ConfigInitializer {
         appearanceValue.put("favicon_url", "/favicon.ico");
         appearanceValue.put("theme_color", "#1A1A1A");
 
-        list.add(new SettingDefinition("appearance", appearanceValue, "object", "ui", appearanceSchema, "外观样式设置"));
+        list.add(new SettingDefinition("appearance", appearanceValue, "object", "外观设置", appearanceSchema, "外观样式设置"));
 
         // Social Links
         ObjectNode socialSchema = mapper.createObjectNode();
@@ -136,7 +137,7 @@ public class ConfigInitializer {
         socialValue.put("twitter", "");
         socialValue.put("email", "admin@windblog.local");
 
-        list.add(new SettingDefinition("social_links", socialValue, "object", "ui", socialSchema, "社交链接设置"));
+        list.add(new SettingDefinition("social_links", socialValue, "object", "外观设置", socialSchema, "社交链接设置"));
 
         // Feature Toggle
         ObjectNode featureSchema = mapper.createObjectNode();
@@ -151,7 +152,7 @@ public class ConfigInitializer {
         featureValue.put("enable_registration", true);
         featureValue.put("enable_ai_summary", true);
 
-        list.add(new SettingDefinition("feature_toggles", featureValue, "object", "system", featureSchema, "功能开关"));
+        list.add(new SettingDefinition("feature_toggles", featureValue, "object", "功能设置", featureSchema, "功能开关"));
 
         // AI Comment Audit
         ObjectNode aiAuditSchema = mapper.createObjectNode();
@@ -164,7 +165,82 @@ public class ConfigInitializer {
         aiAuditValue.put("prompt", "你是一个评论审核专家。请审核以下评论内容，判断其是否包含不当内容（色情、暴力、政治敏感、广告垃圾等）。回答 JSON: {\"isSafe\": true/false, \"reason\": \"理由\", \"score\": 评分0-100}。待审核内容: {{content}}");
         aiAuditValue.put("allowAutoDecision", false);
 
-        list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "system", aiAuditSchema, "AI 评论审核设置"));
+        list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "功能设置", aiAuditSchema, "AI 评论审核设置"));
+
+        ObjectNode elasticsearchSchema = mapper.createObjectNode();
+        elasticsearchSchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode elasticsearchFields = elasticsearchSchema.putArray("fields");
+        elasticsearchFields.addObject()
+                .put("key", "enabled")
+                .put("label", "启用 Elasticsearch")
+                .put("widget", "switch")
+                .put("section", "基础设置");
+        elasticsearchFields.addObject()
+                .put("key", "hosts")
+                .put("label", "连接地址")
+                .put("widget", "input")
+                .put("required", true)
+                .put("section", "基础设置")
+                .put("hint", "例如：http://elasticsearch:9200");
+        elasticsearchFields.addObject()
+                .put("key", "username")
+                .put("label", "用户名")
+                .put("widget", "input")
+                .put("section", "基础设置");
+        elasticsearchFields.addObject()
+                .put("key", "password")
+                .put("label", "密码")
+                .put("widget", "password")
+                .put("section", "基础设置");
+        elasticsearchFields.addObject()
+                .put("key", "timeout_seconds")
+                .put("label", "连接超时（秒）")
+                .put("widget", "number")
+                .put("section", "基础设置");
+        com.fasterxml.jackson.databind.node.ObjectNode analyzerField = elasticsearchFields.addObject();
+        analyzerField.put("key", "analyzer");
+        analyzerField.put("label", "分词器");
+        analyzerField.put("widget", "select");
+        analyzerField.put("section", "基础设置");
+        com.fasterxml.jackson.databind.node.ArrayNode analyzerOptions = analyzerField.putArray("options");
+        analyzerOptions.addObject().put("label", "IK 最大词粒度").put("value", "ik_max_word");
+        analyzerOptions.addObject().put("label", "IK 智能分词").put("value", "ik_smart");
+        analyzerOptions.addObject().put("label", "标准分词器").put("value", "standard");
+        elasticsearchFields.addObject()
+                .put("key", "synonyms")
+                .put("label", "同义词规则")
+                .put("widget", "synonym_cards")
+                .put("section", "同义词");
+
+        ObjectNode elasticsearchValue = mapper.createObjectNode();
+        String elasticsearchHosts = ConfigProvider.getConfig()
+                .getOptionalValue("elasticsearch.hosts", String.class)
+                .orElse("http://127.0.0.1:9200");
+        String elasticsearchUsername = ConfigProvider.getConfig()
+                .getOptionalValue("elasticsearch.username", String.class)
+                .orElse("");
+        String elasticsearchPassword = ConfigProvider.getConfig()
+                .getOptionalValue("elasticsearch.password", String.class)
+                .orElse("");
+        int elasticsearchTimeoutSeconds = ConfigProvider.getConfig()
+                .getOptionalValue("elasticsearch.health-check.timeout-seconds", Integer.class)
+                .orElse(5);
+        elasticsearchValue.put("enabled", true);
+        elasticsearchValue.put("hosts", elasticsearchHosts);
+        elasticsearchValue.put("username", elasticsearchUsername);
+        elasticsearchValue.put("password", elasticsearchPassword);
+        elasticsearchValue.put("timeout_seconds", elasticsearchTimeoutSeconds);
+        elasticsearchValue.put("analyzer", "ik_max_word");
+        elasticsearchValue.putArray("synonyms");
+
+        list.add(new SettingDefinition(
+                "elasticsearch",
+                elasticsearchValue,
+                "object",
+                "Elasticsearch",
+                elasticsearchSchema,
+                "Elasticsearch 搜索、分词与同义词设置"
+        ));
 
         return list;
     }

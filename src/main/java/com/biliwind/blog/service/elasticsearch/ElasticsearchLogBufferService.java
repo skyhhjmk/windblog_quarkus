@@ -57,8 +57,6 @@ public class ElasticsearchLogBufferService {
     int maxQueueSize;
     @ConfigProperty(name = "elasticsearch.log.flush.interval-seconds", defaultValue = "10")
     int flushIntervalSeconds;
-    @ConfigProperty(name = "elasticsearch.hosts")
-    String elasticsearchHosts;
     private BlockingQueue<LogEntry> logQueue;
     private ExecutorService flushExecutor;
     private ScheduledExecutorService scheduledExecutor;
@@ -307,7 +305,7 @@ public class ElasticsearchLogBufferService {
             String documentJson = objectMapper.writeValueAsString(entry.toJson());
 
             var request = HttpRequest.newBuilder()
-                    .uri(URI.create(elasticsearchHosts + "/" + WRITE_ALIAS + "/_doc"))
+                    .uri(connectionManager.resolveUri("/" + WRITE_ALIAS + "/_doc"))
                     .POST(HttpRequest.BodyPublishers.ofString(documentJson))
                     .header("Content-Type", "application/json")
                     .build();
@@ -340,7 +338,7 @@ public class ElasticsearchLogBufferService {
         }
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/" + WRITE_ALIAS + "/_bulk"))
+                .uri(connectionManager.resolveUri("/" + WRITE_ALIAS + "/_bulk"))
                 .POST(HttpRequest.BodyPublishers.ofString(bulkBody.toString()))
                 .header("Content-Type", "application/x-ndjson")
                 .build();

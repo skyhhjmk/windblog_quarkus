@@ -2,6 +2,7 @@ package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
@@ -81,7 +82,9 @@ public class SearchController {
         String searchDate = normalizeDate(date);
         String lang = languageContext.getLang();
 
-        List<SearchHit> allHits;
+        List<SearchHit> searchHits;
+        long totalCount;
+        boolean searchResultAlreadyPaged = false;
         boolean usedElasticsearch = false;
         boolean esDegraded = false;
         boolean edgeNode = nodeRoleService.isEdgeNode();
@@ -90,28 +93,37 @@ public class SearchController {
 
         if (deepSearchRequested && !searchKeyword.isBlank() && canUseDeepSearch(searchType)) {
             ElasticsearchResult primaryResult = searchPrimaryWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
-            allHits = primaryResult.hits();
+            searchHits = primaryResult.hits();
+            totalCount = primaryResult.totalCount();
             usedElasticsearch = primaryResult.usedElasticsearch();
             esDegraded = primaryResult.degraded();
             deepSearchFailed = primaryResult.degraded();
+            searchResultAlreadyPaged = primaryResult.usedElasticsearch();
         } else if (!edgeNode && useElasticsearch && !searchKeyword.isBlank() && ("all".equals(searchType) || "post".equals(searchType))) {
             ElasticsearchResult esResult = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
-            allHits = esResult.hits();
+            searchHits = esResult.hits();
+            totalCount = esResult.totalCount();
             usedElasticsearch = esResult.usedElasticsearch();
             esDegraded = esResult.degraded();
+            searchResultAlreadyPaged = esResult.usedElasticsearch();
         } else {
-            allHits = buildHits(searchKeyword, searchType, searchSort, searchDate, lang);
+            searchHits = buildHits(searchKeyword, searchType, searchSort, searchDate, lang);
+            totalCount = searchHits.size();
         }
 
-        long totalCount = allHits.size();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
         if (currentPage > totalPages) {
             currentPage = totalPages;
         }
 
-        int fromIndex = Math.max(0, (currentPage - 1) * PAGE_SIZE);
-        int toIndex = Math.min(allHits.size(), fromIndex + PAGE_SIZE);
-        List<SearchHit> pageItems = allHits.subList(fromIndex, toIndex);
+        List<SearchHit> pageItems;
+        if (searchResultAlreadyPaged) {
+            pageItems = searchHits;
+        } else {
+            int fromIndex = Math.max(0, (currentPage - 1) * PAGE_SIZE);
+            int toIndex = Math.min(searchHits.size(), fromIndex + PAGE_SIZE);
+            pageItems = searchHits.subList(fromIndex, toIndex);
+        }
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? searchContent : search;
         return template
@@ -182,7 +194,12 @@ public class SearchController {
         String searchSort = normalizeSort(sort);
         String searchDate = normalizeDate(date);
         ElasticsearchResult result = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
-        return new DeepSearchResponse(result.hits(), result.usedElasticsearch(), result.degraded());
+        return new DeepSearchResponse(
+                result.hits(),
+                result.totalCount(),
+                result.usedElasticsearch(),
+                result.degraded()
+        );
     }
 
     private List<SearchHit> buildHits(String keyword, String type, String sort, String date, String lang) {
@@ -246,12 +263,14 @@ public class SearchController {
             RoutedHttpExchange.Response response = edgePersistentChannelClient.forwardWriteRequest(request);
             if (response.status() != 200) {
                 log.warnf("深度搜索回源失败，状态码: %d", response.status());
-                return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+                List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
+                return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
             }
             return parseDeepSearchResponse(response.body(), keyword, type, sort, date, lang);
         } catch (Exception exception) {
             log.error("深度搜索回源失败，使用边缘本地数据库搜索", exception);
-            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
+            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
         }
     }
 
@@ -262,7 +281,8 @@ public class SearchController {
                                                         String date,
                                                         String lang) throws Exception {
         if (responseBody == null || responseBody.length == 0) {
-            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
+            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
         }
 
         JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
@@ -276,7 +296,8 @@ public class SearchController {
 
         boolean usedElasticsearch = rootNode.path("usedElasticsearch").asBoolean(false);
         boolean degraded = rootNode.path("degraded").asBoolean(false);
-        return new ElasticsearchResult(hits, usedElasticsearch, degraded);
+        long totalCount = rootNode.path("totalCount").asLong(hits.size());
+        return new ElasticsearchResult(hits, totalCount, usedElasticsearch, degraded);
     }
 
     private SearchHit parseSearchHit(JsonNode hitNode) {
@@ -315,6 +336,7 @@ public class SearchController {
                 hitNode.path("actionLabel").asText("[Read More]"),
                 textOrNull(hitNode.path("categoryName")),
                 textOrNull(hitNode.path("categorySlug")),
+                hitNode.path("viewCount").asLong(0),
                 tags
         );
     }
@@ -350,17 +372,26 @@ public class SearchController {
         try {
             if (!postSearchService.isAvailable()) {
                 log.debug("Elasticsearch 不可用，使用数据库搜索");
-                return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+                List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
+                return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
             }
 
             log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s, page=%d", keyword, type, page);
 
-            var searchResult = postSearchService.searchPosts(keyword, page, PAGE_SIZE, "PUBLISHED", null, null, regionContext.getCurrentRegion().getCode());
+            ElasticsearchPostSearchService.SearchResult searchResult = postSearchService.searchPosts(
+                    keyword,
+                    page,
+                    PAGE_SIZE,
+                    "PUBLISHED",
+                    null,
+                    null,
+                    regionContext.getCurrentRegion().getCode()
+            );
 
             OffsetDateTime threshold = dateThreshold(date);
             List<SearchHit> hits = new ArrayList<>();
 
-            for (var post : searchResult.posts()) {
+            for (ElasticsearchPostSearchService.SearchedPost post : searchResult.posts()) {
                 if (threshold != null && post.publishedAt() != null) {
                     try {
                         OffsetDateTime postDate = OffsetDateTime.parse(post.publishedAt());
@@ -386,6 +417,7 @@ public class SearchController {
                         "[Read More]",
                         post.categoryName(),
                         post.categorySlug(),
+                        post.viewCount(),
                         List.of() // ES might not return tags in this DTO yet
                 );
                 hits.add(hit);
@@ -394,14 +426,16 @@ public class SearchController {
             hits.sort(hitComparator(sort));
 
             log.infof("Elasticsearch 搜索结果：%d 篇文章（共 %d 条）", hits.size(), searchResult.total());
-            return new ElasticsearchResult(hits, true, false);
+            return new ElasticsearchResult(hits, searchResult.total(), true, false);
 
         } catch (ElasticsearchPostSearchService.ElasticsearchUnavailableException e) {
             log.warnf("Elasticsearch 服务不可用，回退到数据库搜索: %s", e.getMessage());
-            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
+            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
         } catch (Exception e) {
             log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);
-            return new ElasticsearchResult(buildHits(keyword, type, sort, date, lang), false, true);
+            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
+            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
         }
     }
 
@@ -431,6 +465,10 @@ public class SearchController {
         }
 
         OffsetDateTime displayDate = effectiveDate(post);
+        long viewCount = 0;
+        if (post.viewCount != null) {
+            viewCount = post.viewCount;
+        }
         return new SearchHit(
                 "post",
                 "Post",
@@ -445,6 +483,7 @@ public class SearchController {
                 "[Read More]",
                 categoryName,
                 categorySlug,
+                viewCount,
                 tags
         );
     }
@@ -474,6 +513,7 @@ public class SearchController {
                 "[Browse Tag]",
                 null,
                 null,
+                0,
                 List.of()
         );
     }
@@ -503,6 +543,7 @@ public class SearchController {
                 "[Browse Category]",
                 null,
                 null,
+                0,
                 List.of()
         );
     }
@@ -521,7 +562,13 @@ public class SearchController {
 
         Comparator<SearchHit> byTitle = Comparator.comparing(hit -> hit.title.toLowerCase(Locale.ROOT));
 
-        if ("latest".equals(sort) || "hot".equals(sort)) {
+        if ("hot".equals(sort)) {
+            Comparator<SearchHit> byViewCount = Comparator
+                    .comparingLong((SearchHit hit) -> hit.viewCount)
+                    .reversed();
+            return byViewCount.thenComparing(byDateDesc).thenComparing(byTitle);
+        }
+        if ("latest".equals(sort)) {
             return byDateDesc.thenComparing(byTypeWeight).thenComparing(byTitle);
         }
         return byTypeWeight.thenComparing(byDateDesc).thenComparing(byTitle);
@@ -531,7 +578,15 @@ public class SearchController {
         String title = safe(LanguageHelper.resolveLocalizedValue(post.title, lang)).toLowerCase(Locale.ROOT);
         String summary = safe(LanguageHelper.resolveLocalizedValue(post.summary, lang)).toLowerCase(Locale.ROOT);
         String slug = safe(post.slug).toLowerCase(Locale.ROOT);
-        return title.contains(lowerKeyword) || summary.contains(lowerKeyword) || slug.contains(lowerKeyword);
+        String content = "";
+        if (post.publishedRevision != null && post.publishedRevision.contentMarkdown != null) {
+            String localizedContent = LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
+            content = SearchContentHelper.toSearchableText(localizedContent, post.renderType).toLowerCase(Locale.ROOT);
+        }
+        return title.contains(lowerKeyword)
+                || summary.contains(lowerKeyword)
+                || slug.contains(lowerKeyword)
+                || content.contains(lowerKeyword);
     }
 
     private boolean matchesTag(Tag tag, String lowerKeyword, String lang) {
@@ -699,6 +754,7 @@ public class SearchController {
             String actionLabel,
             String categoryName,
             String categorySlug,
+            long viewCount,
             List<IndexController.TagItem> tags
     ) {
     }
@@ -712,6 +768,7 @@ public class SearchController {
      */
     private record ElasticsearchResult(
             List<SearchHit> hits,
+            long totalCount,
             boolean usedElasticsearch,
             boolean degraded
     ) {
@@ -719,6 +776,7 @@ public class SearchController {
 
     public record DeepSearchResponse(
             List<SearchHit> hits,
+            long totalCount,
             boolean usedElasticsearch,
             boolean degraded
     ) {

@@ -3,7 +3,9 @@
    {#for item in items}
    <url>
       <loc>{item.loc}</loc>
+      {#if item.lastmod}
       <lastmod>{item.lastmod}</lastmod>
+      {/if}
       <changefreq>weekly</changefreq>
       <priority>0.6</priority>
    </url>

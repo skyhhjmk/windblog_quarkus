@@ -5,6 +5,7 @@ import com.biliwind.blog.service.elasticsearch.ElasticsearchConnectionManager;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchIndexService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchLogBufferService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
+import com.biliwind.blog.service.elasticsearch.ElasticsearchSettingsService;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -56,6 +57,8 @@ public class AdminElasticsearchController {
         result.put("connection", Map.of(
                 "initialized", connectionStatus.initialized(),
                 "available", connectionStatus.available(),
+                "enabled", connectionStatus.enabled(),
+                "hosts", connectionStatus.hosts(),
                 "status", connectionStatus.status(),
                 "lastError", connectionStatus.lastError() != null ? connectionStatus.lastError() : ""
         ));
@@ -105,6 +108,8 @@ public class AdminElasticsearchController {
         result.put("elasticsearch", Map.of(
                 "initialized", connectionStatus.initialized(),
                 "available", connectionStatus.available(),
+                "enabled", connectionStatus.enabled(),
+                "hosts", connectionStatus.hosts(),
                 "status", connectionStatus.status(),
                 "lastError", connectionStatus.lastError() != null ? connectionStatus.lastError() : ""
         ));
@@ -365,6 +370,11 @@ public class AdminElasticsearchController {
         }
 
         try {
+            if (!connectionManager.isAvailable()) {
+                return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                        .entity(Map.of("success", false, "message", "Elasticsearch 当前不可用"))
+                        .build();
+            }
             List<Post> posts = Post.list(
                     "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
                     com.biliwind.blog.model.PostStatus.PUBLISHED);
@@ -381,6 +391,121 @@ public class AdminElasticsearchController {
             )).build();
         } catch (Exception e) {
             return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+        }
+    }
+
+    @POST
+    @Path("/test-connection")
+    @Operation(summary = "测试 Elasticsearch 连接")
+    public Response testConnection() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
+        boolean connected = connectionManager.testConnection();
+        ElasticsearchSettingsService.ElasticsearchSettings settings = connectionManager.getCurrentSettings();
+        Response.Status responseStatus = Response.Status.SERVICE_UNAVAILABLE;
+        String message = "连接失败，请检查地址、凭据和服务状态";
+        if (connected) {
+            responseStatus = Response.Status.OK;
+            message = "连接成功";
+        }
+        return Response.status(responseStatus)
+                .entity(Map.of(
+                        "success", connected,
+                        "enabled", settings.enabled(),
+                        "hosts", settings.hosts(),
+                        "message", message
+                ))
+                .build();
+    }
+
+    @POST
+    @Path("/apply-index-configuration")
+    @Operation(summary = "应用分词器和同义词配置")
+    public Response applyIndexConfiguration() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+        if (!connectionManager.isAvailable()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(Map.of("success", false, "message", "Elasticsearch 当前不可用"))
+                    .build();
+        }
+        try {
+            postSearchService.applyIndexConfiguration();
+            return Response.ok(Map.of(
+                    "success", true,
+                    "message", "索引模板已更新；已有索引需要重建后才能使用新的分词配置"
+            )).build();
+        } catch (Exception exception) {
+            return Response.serverError().entity(Map.of(
+                    "success", false,
+                    "message", exception.getMessage()
+            )).build();
+        }
+    }
+
+    @POST
+    @Path("/rebuild")
+    @Operation(summary = "重建文章索引")
+    public Response rebuild() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+        if (!connectionManager.isAvailable()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(Map.of("success", false, "message", "Elasticsearch 当前不可用"))
+                    .build();
+        }
+        try {
+            postSearchService.rebuildPostIndex();
+            return reindexAll();
+        } catch (Exception exception) {
+            return Response.serverError().entity(Map.of(
+                    "success", false,
+                    "message", exception.getMessage()
+            )).build();
+        }
+    }
+
+    @POST
+    @Path("/analyze")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(summary = "预览分词结果")
+    public Response analyze(Map<String, Object> body) {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+        Object textValue = body.get("text");
+        String text = "";
+        if (textValue != null) {
+            text = textValue.toString().trim();
+        }
+        if (text.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "预览文本不能为空"))
+                    .build();
+        }
+        try {
+            List<String> tokens = postSearchService.analyzeText(text);
+            return Response.ok(Map.of(
+                    "success", true,
+                    "tokens", tokens
+            )).build();
+        } catch (Exception exception) {
+            return Response.serverError().entity(Map.of(
+                    "success", false,
+                    "message", exception.getMessage()
+            )).build();
         }
     }
 

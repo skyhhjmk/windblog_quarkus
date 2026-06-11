@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.annotation.PreDestroy;
@@ -15,7 +16,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,22 +40,17 @@ public class ElasticsearchConnectionManager {
     HttpClient httpClient;
     @Inject
     NodeRoleService nodeRoleService;
-    @ConfigProperty(name = "elasticsearch.hosts")
-    String elasticsearchHosts;
-    @ConfigProperty(name = "elasticsearch.username")
-    Optional<String> username;
-    @ConfigProperty(name = "elasticsearch.password")
-    Optional<String> password;
+    @Inject
+    ElasticsearchSettingsService settingsService;
     @ConfigProperty(name = "elasticsearch.health-check.interval-seconds", defaultValue = "30")
     int healthCheckIntervalSeconds;
     @ConfigProperty(name = "elasticsearch.health-check.failure-threshold", defaultValue = "3")
     int healthCheckFailureThreshold;
     @ConfigProperty(name = "elasticsearch.health-check.recovery-threshold", defaultValue = "2")
     int healthCheckRecoveryThreshold;
-    @ConfigProperty(name = "elasticsearch.health-check.timeout-seconds", defaultValue = "5")
-    int healthCheckTimeoutSeconds;
     @ConfigProperty(name = "elasticsearch.init.max-wait-seconds", defaultValue = "300")
     int maxWaitSeconds;
+    private volatile ElasticsearchSettingsService.ElasticsearchSettings currentSettings;
     private ScheduledExecutorService healthCheckExecutor;
 
     void onStart(@Observes StartupEvent event) {
@@ -68,17 +63,33 @@ public class ElasticsearchConnectionManager {
             return;
         }
 
+        currentSettings = settingsService.getSettings();
+        startHealthCheckExecutor();
+        if (!currentSettings.enabled()) {
+            initialized.set(true);
+            available.set(false);
+            healthStatus.set(HealthStatus.DISABLED);
+            lastError.set("系统设置已关闭 Elasticsearch");
+            log.info("系统设置已关闭 Elasticsearch，跳过连接初始化");
+            return;
+        }
+
         log.debug("ElasticsearchConnectionManager startup initiated, starting async initialization...");
         healthStatus.set(HealthStatus.INITIALIZING);
 
         CompletableFuture.runAsync(this::asyncInitialize);
 
-        healthCheckExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "es-health-check");
-            t.setDaemon(true);
-            return t;
-        });
+    }
 
+    private synchronized void startHealthCheckExecutor() {
+        if (healthCheckExecutor != null) {
+            return;
+        }
+        healthCheckExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread healthCheckThread = new Thread(runnable, "es-health-check");
+            healthCheckThread.setDaemon(true);
+            return healthCheckThread;
+        });
         healthCheckExecutor.scheduleWithFixedDelay(
                 this::performHealthCheck,
                 healthCheckIntervalSeconds,
@@ -128,7 +139,12 @@ public class ElasticsearchConnectionManager {
      * Async initialize ElasticSearch connection
      */
     private void asyncInitialize() {
-        log.debugf("Starting async connection to ElasticSearch: %s", elasticsearchHosts);
+        ElasticsearchSettingsService.ElasticsearchSettings settings = getCurrentSettings();
+        if (!settings.enabled()) {
+            markDisabled();
+            return;
+        }
+        log.debugf("Starting async connection to ElasticSearch: %s", settings.hosts());
         long startTime = System.currentTimeMillis();
         long maxWaitMs = maxWaitSeconds * 1000L;
 
@@ -179,6 +195,10 @@ public class ElasticsearchConnectionManager {
      * Perform health check
      */
     private void performHealthCheck() {
+        if (!getCurrentSettings().enabled()) {
+            markDisabled();
+            return;
+        }
         try {
             recordHealthCheckResult(checkElasticsearchConnection(), null);
         } catch (Exception e) {
@@ -258,14 +278,18 @@ public class ElasticsearchConnectionManager {
      * Check ElasticSearch connection
      */
     private boolean checkElasticsearchConnection() {
+        ElasticsearchSettingsService.ElasticsearchSettings settings = getCurrentSettings();
+        if (!settings.enabled()) {
+            return false;
+        }
         try {
-            var request = HttpRequest.newBuilder()
-                    .uri(URI.create(elasticsearchHosts + "/_cluster/health"))
-                    .timeout(java.time.Duration.ofSeconds(Math.max(1, healthCheckTimeoutSeconds)))
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(resolveUri("/_cluster/health"))
+                    .timeout(java.time.Duration.ofSeconds(settings.timeoutSeconds()))
                     .GET()
                     .build();
 
-            var response = sendRequest(request);
+            HttpResponse<String> response = sendRequest(request);
             return response.statusCode() == 200;
         } catch (Exception e) {
             return false;
@@ -276,7 +300,7 @@ public class ElasticsearchConnectionManager {
      * Send HTTP request to ElasticSearch
      */
     public HttpResponse<String> sendRequest(HttpRequest request) throws Exception {
-        var builder = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(request.uri())
                 .timeout(request.timeout().orElse(java.time.Duration.ofSeconds(30)));
 
@@ -286,14 +310,9 @@ public class ElasticsearchConnectionManager {
             }
         });
 
-        String configuredUsername = "";
-        if (username != null && username.isPresent()) {
-            configuredUsername = username.get();
-        }
-        String configuredPassword = "";
-        if (password != null && password.isPresent()) {
-            configuredPassword = password.get();
-        }
+        ElasticsearchSettingsService.ElasticsearchSettings settings = getCurrentSettings();
+        String configuredUsername = settings.username();
+        String configuredPassword = settings.password();
 
         if (configuredUsername != null && !configuredUsername.isEmpty() && configuredPassword != null) {
             String auth = configuredUsername + ":" + configuredPassword;
@@ -326,7 +345,7 @@ public class ElasticsearchConnectionManager {
     }
 
     public boolean isAvailable() {
-        return available.get();
+        return getCurrentSettings().enabled() && available.get();
     }
 
     public HealthStatus getHealthStatus() {
@@ -344,12 +363,63 @@ public class ElasticsearchConnectionManager {
     }
 
     public ConnectionStatus getStatus() {
+        ElasticsearchSettingsService.ElasticsearchSettings settings = getCurrentSettings();
         return new ConnectionStatus(
                 initialized.get(),
-                available.get(),
+                settings.enabled() && available.get(),
                 healthStatus.get(),
-                lastError.get()
+                lastError.get(),
+                settings.enabled(),
+                settings.hosts()
         );
+    }
+
+    public URI resolveUri(String path) {
+        String normalizedPath = path;
+        if (!normalizedPath.startsWith("/")) {
+            normalizedPath = "/" + normalizedPath;
+        }
+        return URI.create(getCurrentSettings().hosts() + normalizedPath);
+    }
+
+    public boolean testConnection() {
+        return checkElasticsearchConnection();
+    }
+
+    public ElasticsearchSettingsService.ElasticsearchSettings getCurrentSettings() {
+        ElasticsearchSettingsService.ElasticsearchSettings settings = currentSettings;
+        if (settings == null) {
+            settings = settingsService.getSettings();
+            currentSettings = settings;
+        }
+        return settings;
+    }
+
+    public void onConfigChanged(@Observes ConfigChangedEvent event) {
+        if (!ElasticsearchSettingsService.SETTING_KEY.equals(event.key)) {
+            return;
+        }
+
+        currentSettings = settingsService.parse(event.newValue);
+        startHealthCheckExecutor();
+        if (!currentSettings.enabled()) {
+            markDisabled();
+            return;
+        }
+
+        initialized.set(false);
+        available.set(false);
+        healthStatus.set(HealthStatus.INITIALIZING);
+        lastError.set(null);
+        CompletableFuture.runAsync(this::asyncInitialize);
+    }
+
+    private void markDisabled() {
+        initialized.set(true);
+        available.set(false);
+        healthStatus.set(HealthStatus.DISABLED);
+        lastError.set("系统设置已关闭 Elasticsearch");
+        resetHealthCheckCounters();
     }
 
     public enum HealthStatus {
@@ -365,7 +435,9 @@ public class ElasticsearchConnectionManager {
             boolean initialized,
             boolean available,
             HealthStatus status,
-            String lastError
+            String lastError,
+            boolean enabled,
+            String hosts
     ) {
     }
 }

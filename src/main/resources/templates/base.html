@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{language ?: 'zh-CN'}">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
@@ -28,16 +28,20 @@
             password_mismatch: "两次输入的密码不一致"
         };
     </script>
-    <title>{#insert title}{page_title ?: config:siteTitle}{/insert}</title>
+    <title>{#insert title}{pageTitle ?: config:siteTitle}{/insert}</title>
     {#insert head/}
-    <meta name="description" content="{config:siteDescription}"/>
-    <meta name="keywords" content="{config:siteKeywords}"/>
+    <meta name="description"
+          content="{pageDescription ?: config:siteDescription}"
+          data-site-content="{config:siteDescription}"/>
+    <meta name="keywords"
+          content="{pageKeywords ?: config:siteKeywords}"
+          data-site-content="{config:siteKeywords}"/>
     <link rel="icon" href="{config:faviconUrl}"/>
 
     {#if canonicalUrl.or(null)}
-        <link rel="canonical" href="{canonicalUrl}"/>
+        <link rel="canonical" href="{canonicalUrl}" data-site-base="{config:baseUrl}"/>
     {#else}
-        <link rel="canonical" href="{config:baseUrl}{currentPath ?: ''}"/>
+        <link rel="canonical" href="{defaultCanonicalUrl}" data-site-base="{config:baseUrl}"/>
     {/if}
 
     {#if ogData.or(null)}
@@ -203,6 +207,9 @@
 
 <!-- Main Content -->
 <main class="flex-grow max-w-1400 mx-auto w-full px-6 py-16">
+    <nav aria-label="面包屑" class="mb-10 text-xs text-meta font-mono">
+        <span id="nav-path-text">{#insert navPath}~/windblog{/insert}</span>
+    </nav>
     <div class="flex flex-col md:flex-row gap-20">
         <!-- Primary Column -->
         <div id="pjax-container" class="flex-1 min-w-0">

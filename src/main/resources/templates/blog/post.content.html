@@ -1,6 +1,24 @@
-<div id="pjax-content-root" data-page-title="{postTitle ?: '文章信息'}">
+<div id="pjax-content-root"
+     data-page-title="{pageTitle ?: postTitle ?: '文章信息'}"
+     data-page-description="{pageDescription ?: ''}"
+     data-page-keywords="{pageKeywords ?: ''}"
+     data-page-canonical="{canonicalUrl ?: ''}">
+    <template id="pjax-head-metadata">
+        {#if ogData.or(null)}
+            {#for entry in ogData.entrySet}
+                {#if entry.key.startsWith('og:')}
+                    <meta property="{entry.key}" content="{entry.value}" data-pjax-managed="true"/>
+                {#else}
+                    <meta name="{entry.key}" content="{entry.value}" data-pjax-managed="true"/>
+                {/if}
+            {/for}
+        {/if}
+        {#if jsonLd.or(null)}
+            <script type="application/ld+json" data-pjax-managed="true">{jsonLd.raw}</script>
+        {/if}
+    </template>
     <div id="pjax-nav-path" class="hidden">
-        post / {postSlug ?: 'unknown'}
+        ~/windblog / post / {postSlug ?: 'unknown'}
     </div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-8">

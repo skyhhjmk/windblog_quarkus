@@ -6,7 +6,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.io.BufferedReader;
@@ -31,9 +30,6 @@ public class ElasticsearchIndexService {
     ElasticsearchConnectionManager connectionManager;
     @Inject
     NodeRoleService nodeRoleService;
-
-    @ConfigProperty(name = "elasticsearch.hosts")
-    String elasticsearchHosts;
 
     private static final String ILM_POLICY_NAME = "windblog-logs-policy";
     private static final String INDEX_TEMPLATE_NAME = "windblog-logs-template";
@@ -75,7 +71,7 @@ public class ElasticsearchIndexService {
     private void initializeIndex() {
         log.debug("[LOG INDEX] ====== initializeIndex() CALLED ======");
         log.debug("[LOG INDEX] Starting log index initialization...");
-        log.debug("[LOG INDEX] elasticsearchHosts config: " + (elasticsearchHosts != null ? elasticsearchHosts : "NULL"));
+        log.debug("[LOG INDEX] Elasticsearch address: " + connectionManager.getCurrentSettings().hosts());
         log.debug("[LOG INDEX] connectionManager injected: " + (connectionManager != null ? "YES" : "NO"));
 
         int maxRetries = 3;
@@ -135,7 +131,7 @@ public class ElasticsearchIndexService {
                 log.info("Checking legacy template: " + templateName);
 
                 var checkRequest = HttpRequest.newBuilder()
-                        .uri(URI.create(elasticsearchHosts + "/_index_template/" + templateName))
+                        .uri(connectionManager.resolveUri("/_index_template/" + templateName))
                         .GET()
                         .build();
 
@@ -145,7 +141,7 @@ public class ElasticsearchIndexService {
                     log.info("Found legacy template " + templateName + ", deleting it...");
 
                     var deleteRequest = HttpRequest.newBuilder()
-                            .uri(URI.create(elasticsearchHosts + "/_index_template/" + templateName))
+                            .uri(connectionManager.resolveUri("/_index_template/" + templateName))
                             .DELETE()
                             .build();
 
@@ -194,7 +190,7 @@ public class ElasticsearchIndexService {
         String policyJson = readResourceFile("elasticsearch/ilm-policy.json");
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
+                .uri(connectionManager.resolveUri("/_ilm/policy/" + ILM_POLICY_NAME))
                 .PUT(HttpRequest.BodyPublishers.ofString(policyJson))
                 .header("Content-Type", "application/json")
                 .build();
@@ -218,7 +214,7 @@ public class ElasticsearchIndexService {
         String templateJson = readResourceFile("elasticsearch/index-template.json");
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_index_template/" + INDEX_TEMPLATE_NAME))
+                .uri(connectionManager.resolveUri("/_index_template/" + INDEX_TEMPLATE_NAME))
                 .PUT(HttpRequest.BodyPublishers.ofString(templateJson))
                 .header("Content-Type", "application/json")
                 .build();
@@ -250,7 +246,7 @@ public class ElasticsearchIndexService {
                 """.formatted(WRITE_ALIAS);
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/windblog-logs-000001"))
+                .uri(connectionManager.resolveUri("/windblog-logs-000001"))
                 .PUT(HttpRequest.BodyPublishers.ofString(indexBody))
                 .header("Content-Type", "application/json")
                 .build();
@@ -319,7 +315,7 @@ public class ElasticsearchIndexService {
         }
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
+                .uri(connectionManager.resolveUri("/_ilm/policy/" + ILM_POLICY_NAME))
                 .GET()
                 .build();
 
@@ -336,7 +332,7 @@ public class ElasticsearchIndexService {
         }
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_index_template/" + INDEX_TEMPLATE_NAME))
+                .uri(connectionManager.resolveUri("/_index_template/" + INDEX_TEMPLATE_NAME))
                 .GET()
                 .build();
 
@@ -353,7 +349,7 @@ public class ElasticsearchIndexService {
         }
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_ilm/policy/" + ILM_POLICY_NAME))
+                .uri(connectionManager.resolveUri("/_ilm/policy/" + ILM_POLICY_NAME))
                 .GET()
                 .build();
 
@@ -370,7 +366,7 @@ public class ElasticsearchIndexService {
         }
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(elasticsearchHosts + "/_index_template/" + INDEX_TEMPLATE_NAME))
+                .uri(connectionManager.resolveUri("/_index_template/" + INDEX_TEMPLATE_NAME))
                 .GET()
                 .build();
 

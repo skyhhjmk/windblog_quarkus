@@ -4,6 +4,7 @@ import io.quarkus.arc.Arc;
 import io.quarkus.qute.TemplateGlobal;
 import io.vertx.core.http.HttpServerRequest;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.ConfigProvider;
 
 /**
  * Qute 模板全局变量提供者
@@ -40,5 +41,30 @@ public class QuteGlobalProvider {
     @TemplateGlobal
     public static com.biliwind.blog.common.helper.MarkdownHelper MarkdownHelper() {
         return new com.biliwind.blog.common.helper.MarkdownHelper();
+    }
+
+    @TemplateGlobal
+    public static String defaultCanonicalUrl() {
+        String baseUrl = ConfigProvider.getConfig()
+                .getOptionalValue("blog.url", String.class)
+                .orElse("http://localhost:8080");
+        while (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+
+        String requestPath = "/";
+        try {
+            HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
+            if (request != null && request.path() != null && !request.path().isBlank()) {
+                requestPath = request.path();
+            }
+        } catch (Exception exception) {
+            requestPath = "/";
+        }
+
+        if (!requestPath.startsWith("/")) {
+            requestPath = "/" + requestPath;
+        }
+        return baseUrl + requestPath;
     }
 }
