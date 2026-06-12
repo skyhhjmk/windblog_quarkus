@@ -1,15 +1,15 @@
 package com.biliwind.blog.service.security;
 
-import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.common.helper.RsaHelper;
+import com.biliwind.blog.model.EdgeNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
@@ -58,6 +58,13 @@ public class DeploymentPackageService {
     @ConfigProperty(name = "windblog.primary.grpc.advertised-port", defaultValue = "9000")
     int primaryGrpcAdvertisedPort;
 
+    @Inject
+    @ConfigProperty(
+            name = "windblog.edge.deployment.image-repository",
+            defaultValue = "ghcr.io/hhjmk/windblog_quarkus"
+    )
+    String edgeImageRepository;
+
     /**
      * 为边缘节点生成完整的部署 ZIP 包。
      * ZIP 解压后对应目录结构：
@@ -77,7 +84,20 @@ public class DeploymentPackageService {
      * </pre>
      */
     public byte[] buildDeploymentZip(EdgeNode node) throws Exception {
+        return buildDeploymentZip(node, null, EdgeImageVariant.NATIVE_MICRO);
+    }
+
+    public byte[] buildDeploymentZip(
+            EdgeNode node,
+            String requestedImageReference,
+            EdgeImageVariant imageVariant
+    ) throws Exception {
         ensureFixedDeploymentPorts(node);
+        EdgeImageVariant effectiveImageVariant = imageVariant;
+        if (effectiveImageVariant == null) {
+            effectiveImageVariant = EdgeImageVariant.NATIVE_MICRO;
+        }
+        String imageReference = resolveImageReference(requestedImageReference, effectiveImageVariant);
 
         CertificateService.GeneratedCertificate primary = certificateService.generateNodeCertificate(node.nodeId, 24);
         CertificateService.GeneratedCertificate backup = certificateService.generateNodeCertificate(node.nodeId, 72);
@@ -100,13 +120,13 @@ public class DeploymentPackageService {
         addTextEntry(zipOutputStream, baseDir + "/certs/ca/ca.crt", primary.caCertificatePem());
         addBinaryEntry(zipOutputStream, baseDir + "/certs/ca/truststore.p12", buildTrustStoreBytes(primary.caCertificatePem()));
 
-        String envContent = buildEnvContent(node);
+        String envContent = buildEnvContent(node, imageReference, effectiveImageVariant);
         addTextEntry(zipOutputStream, baseDir + "/.env", envContent);
 
         String dockerComposeContent = buildDockerCompose(node);
         addTextEntry(zipOutputStream, baseDir + "/docker-compose.yml", dockerComposeContent);
 
-        String readmeContent = buildReadme(node);
+        String readmeContent = buildReadme(node, imageReference, effectiveImageVariant);
         addTextEntry(zipOutputStream, baseDir + "/README.txt", readmeContent);
 
         zipOutputStream.close();
@@ -116,7 +136,11 @@ public class DeploymentPackageService {
         return zipBytes;
     }
 
-    private String buildEnvContent(EdgeNode node) {
+    private String buildEnvContent(
+            EdgeNode node,
+            String imageReference,
+            EdgeImageVariant imageVariant
+    ) {
         StringBuilder sb = new StringBuilder();
         sb.append("EDGE_NODE_ID=").append(node.nodeId).append("\n");
         sb.append("EDGE_NODE_REGION=").append(node.region.getCode()).append("\n");
@@ -152,7 +176,8 @@ public class DeploymentPackageService {
         sb.append("EDGE_REDIS_URL=redis://edge-redis:6379\n");
 
         sb.append("EDGE_APP_HTTP_PORT=").append(httpPort).append("\n");
-        sb.append("WINDBLOG_EDGE_IMAGE=biliwind/windblog:latest\n");
+        sb.append("WINDBLOG_EDGE_IMAGE=").append(imageReference).append("\n");
+        sb.append("WINDBLOG_EDGE_IMAGE_VARIANT=").append(imageVariant.getRequestValue()).append("\n");
 
         sb.append("USER_JWT_SECRET=").append(this.userJwtSecret).append("\n");
         sb.append("USER_JWT_ISSUER=").append(this.userJwtIssuer).append("\n");
@@ -284,7 +309,11 @@ public class DeploymentPackageService {
         return sb.toString();
     }
 
-    private String buildReadme(EdgeNode node) {
+    private String buildReadme(
+            EdgeNode node,
+            String imageReference,
+            EdgeImageVariant imageVariant
+    ) {
         StringBuilder sb = new StringBuilder();
         sb.append("========================================\n");
         sb.append("WindBlog 边缘节点部署包\n");
@@ -295,6 +324,8 @@ public class DeploymentPackageService {
         sb.append("连接模式: ").append(node.connectionType.name()).append("\n");
         sb.append("区域: ").append(node.region.getCode()).append("\n");
         sb.append("gRPC 端口: ").append(node.edgeGrpcPort != null ? node.edgeGrpcPort : 9001).append("\n");
+        sb.append("应用镜像: ").append(imageReference).append("\n");
+        sb.append("镜像变体: ").append(imageVariant.getRequestValue()).append("\n");
         sb.append("\n");
         sb.append("主节点签发证书有效期: 24 小时\n");
         sb.append("备用证书有效期: 72 小时\n");
@@ -328,6 +359,49 @@ public class DeploymentPackageService {
         sb.append("\n");
         sb.append("========================================\n");
         return sb.toString();
+    }
+
+    private String resolveImageReference(
+            String requestedImageReference,
+            EdgeImageVariant imageVariant
+    ) {
+        if (requestedImageReference != null && !requestedImageReference.isBlank()) {
+            String imageReference = requestedImageReference.trim();
+            validateImageReference(imageReference);
+            return imageReference;
+        }
+
+        String imageRepository = edgeImageRepository;
+        if (imageRepository == null || imageRepository.isBlank()) {
+            imageRepository = "ghcr.io/hhjmk/windblog_quarkus";
+        }
+
+        imageRepository = removeTrailingTag(imageRepository.trim());
+        return imageRepository + ":" + imageVariant.getDefaultTag();
+    }
+
+    private void validateImageReference(String imageReference) {
+        if (imageReference.contains("\n") || imageReference.contains("\r")) {
+            throw new jakarta.ws.rs.BadRequestException("镜像完全限定名称不能包含换行");
+        }
+        if (imageReference.contains(" ")) {
+            throw new jakarta.ws.rs.BadRequestException("镜像完全限定名称不能包含空格");
+        }
+        if (!imageReference.contains("/")) {
+            throw new jakarta.ws.rs.BadRequestException("镜像完全限定名称必须包含仓库或命名空间");
+        }
+        if (!imageReference.contains(":") && !imageReference.contains("@")) {
+            throw new jakarta.ws.rs.BadRequestException("镜像完全限定名称必须包含 tag 或 digest");
+        }
+    }
+
+    private String removeTrailingTag(String imageRepository) {
+        int lastSlashIndex = imageRepository.lastIndexOf('/');
+        int lastColonIndex = imageRepository.lastIndexOf(':');
+        if (lastColonIndex > lastSlashIndex) {
+            return imageRepository.substring(0, lastColonIndex);
+        }
+        return imageRepository;
     }
 
     private void addTextEntry(ZipOutputStream zipOutputStream, String entryPath, String content) throws IOException {

@@ -6,9 +6,10 @@ import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.model.EdgeSyncRecord;
 import com.biliwind.blog.service.edge.EdgeNodeRegistry;
-import io.quarkus.panache.common.Page;
 import com.biliwind.blog.service.security.CertificateRenewalService;
 import com.biliwind.blog.service.security.DeploymentPackageService;
+import com.biliwind.blog.service.security.EdgeImageVariant;
+import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -296,13 +297,22 @@ public class AdminEdgeNodeApiController {
     @Transactional
     @Produces("application/zip")
     @Operation(summary = "下载部署 ZIP 包", description = "生成并下载包含证书、.env、docker-compose.yml 的完整部署 ZIP 包，解压后即可使用 docker compose up -d 启动")
-    public Response downloadDeploymentZip(@PathParam("nodeId") String nodeId) throws Exception {
+    public Response downloadDeploymentZip(
+            @PathParam("nodeId") String nodeId,
+            @QueryParam("image") String imageReference,
+            @QueryParam("variant") @DefaultValue("native-micro") String variant
+    ) throws Exception {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) {
             throw new NotFoundException("节点不存在");
         }
 
-        byte[] zipBytes = deploymentPackageService.buildDeploymentZip(node);
+        EdgeImageVariant imageVariant = EdgeImageVariant.fromRequestValue(variant);
+        byte[] zipBytes = deploymentPackageService.buildDeploymentZip(
+                node,
+                imageReference,
+                imageVariant
+        );
         node.persist();
 
         String fileName = "windblog-edge-" + nodeId + ".zip";

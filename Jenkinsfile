@@ -12,8 +12,8 @@ pipeline {
     }
 
     environment {
-        IMAGE_REPOSITORY = 'docker.io/biliwind/windblog'
-        DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials'
+        IMAGE_REPOSITORY = ''
+        RELEASE_IMAGE = 'false'
         RELEASE_VERSION = ''
         PUBLISH_IMAGE = 'false'
         UPDATE_LATEST_IMAGE = 'false'
@@ -60,19 +60,61 @@ pipeline {
                         }
 
                         env.RELEASE_VERSION = currentTagName.substring(1)
-                        env.PUBLISH_IMAGE = 'true'
+                        env.RELEASE_IMAGE = 'true'
                         env.UPDATE_LATEST_IMAGE = 'true'
                     } else if (currentBranchName == 'master' || currentBranchName == 'main') {
                         env.RELEASE_VERSION = "0.1.${env.BUILD_NUMBER}"
-                        env.PUBLISH_IMAGE = 'true'
+                        env.RELEASE_IMAGE = 'true'
                         env.UPDATE_LATEST_IMAGE = 'true'
                     } else {
                         env.RELEASE_VERSION = "0.1.${env.BUILD_NUMBER}-${shortCommitHash}"
                     }
 
+                    String containerRegistry = env.CONTAINER_REGISTRY
+                    String containerImageGroup = env.CONTAINER_IMAGE_GROUP
+                    String containerImageName = env.CONTAINER_IMAGE_NAME
+                    String registryCredentialsId = env.REGISTRY_CREDENTIALS_ID
+
+                    if (containerRegistry == null) {
+                        containerRegistry = ''
+                    }
+                    if (containerImageGroup == null || containerImageGroup.trim().isEmpty()) {
+                        containerImageGroup = 'hhjmk'
+                    }
+                    if (containerImageName == null || containerImageName.trim().isEmpty()) {
+                        containerImageName = 'windblog_quarkus'
+                    }
+                    if (registryCredentialsId == null) {
+                        registryCredentialsId = ''
+                    }
+
+                    containerRegistry = containerRegistry.trim()
+                    containerImageGroup = containerImageGroup.trim()
+                    containerImageName = containerImageName.trim()
+                    registryCredentialsId = registryCredentialsId.trim()
+
+                    env.CONTAINER_REGISTRY = containerRegistry
+                    env.CONTAINER_IMAGE_GROUP = containerImageGroup
+                    env.CONTAINER_IMAGE_NAME = containerImageName
+                    env.REGISTRY_CREDENTIALS_ID = registryCredentialsId
+                    env.IMAGE_REPOSITORY = "${containerImageGroup}/${containerImageName}"
+
+                    if (!containerRegistry.isEmpty()) {
+                        env.IMAGE_REPOSITORY = "${containerRegistry}/${env.IMAGE_REPOSITORY}"
+                    }
+
+                    boolean hasContainerRegistry = !containerRegistry.isEmpty()
+                    boolean hasRegistryCredentials = !registryCredentialsId.isEmpty()
+                    boolean isReleaseImage = env.RELEASE_IMAGE == 'true'
+
+                    if (isReleaseImage && hasContainerRegistry && hasRegistryCredentials) {
+                        env.PUBLISH_IMAGE = 'true'
+                    }
+
                     currentBuild.displayName = "#${env.BUILD_NUMBER} ${env.RELEASE_VERSION}"
                     echo "分支：${currentBranchName}"
                     echo "版本：${env.RELEASE_VERSION}"
+                    echo "镜像：${env.IMAGE_REPOSITORY}"
                     echo "是否推送镜像：${env.PUBLISH_IMAGE}"
                 }
             }
@@ -99,10 +141,10 @@ pipeline {
             }
         }
 
-        stage('构建 Native 镜像') {
+        stage('构建镜像变体') {
             when {
                 expression {
-                    return env.PUBLISH_IMAGE == 'true'
+                    return env.RELEASE_IMAGE == 'true'
                 }
             }
             steps {
@@ -114,16 +156,45 @@ pipeline {
 
                     ./mvnw -B -ntp package \
                         -DskipTests \
+                        -Dquarkus.application.version="$RELEASE_VERSION" \
+                        -Dquarkus.container-image.build=false \
+                        -Dquarkus.container-image.push=false
+
+                    docker build \
+                        -f src/main/docker/Dockerfile.jvm \
+                        -t "$IMAGE_REPOSITORY:$RELEASE_VERSION-jvm" \
+                        .
+
+                    ./mvnw -B -ntp package \
+                        -DskipTests \
                         -Dnative \
                         -Dquarkus.application.version="$RELEASE_VERSION" \
                         -Dquarkus.native.container-build=true \
-                        -Dquarkus.container-image.tag="$RELEASE_VERSION" \
+                        -Dquarkus.container-image.build=false \
                         -Dquarkus.container-image.push=false
+
+                    docker build \
+                        -f src/main/docker/Dockerfile.native-micro \
+                        -t "$IMAGE_REPOSITORY:$RELEASE_VERSION" \
+                        -t "$IMAGE_REPOSITORY:$RELEASE_VERSION-native-micro" \
+                        .
+
+                    docker build \
+                        -f src/main/docker/Dockerfile.native \
+                        -t "$IMAGE_REPOSITORY:$RELEASE_VERSION-native" \
+                        .
+
+                    if [ "$UPDATE_LATEST_IMAGE" = "true" ]; then
+                        docker tag "$IMAGE_REPOSITORY:$RELEASE_VERSION" "$IMAGE_REPOSITORY:latest"
+                        docker tag "$IMAGE_REPOSITORY:$RELEASE_VERSION-native-micro" "$IMAGE_REPOSITORY:latest-native-micro"
+                        docker tag "$IMAGE_REPOSITORY:$RELEASE_VERSION-native" "$IMAGE_REPOSITORY:latest-native"
+                        docker tag "$IMAGE_REPOSITORY:$RELEASE_VERSION-jvm" "$IMAGE_REPOSITORY:latest-jvm"
+                    fi
                 '''
             }
         }
 
-        stage('推送 Native 镜像') {
+        stage('推送镜像变体') {
             when {
                 expression {
                     return env.PUBLISH_IMAGE == 'true'
@@ -132,22 +203,27 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: env.DOCKERHUB_CREDENTIALS_ID,
-                        usernameVariable: 'DOCKERHUB_USERNAME',
-                        passwordVariable: 'DOCKERHUB_TOKEN'
+                        credentialsId: env.REGISTRY_CREDENTIALS_ID,
+                        usernameVariable: 'REGISTRY_USERNAME',
+                        passwordVariable: 'REGISTRY_PASSWORD'
                     )
                 ]) {
                     sh '''
-                        printf '%s' "$DOCKERHUB_TOKEN" \
-                            | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+                        printf '%s' "$REGISTRY_PASSWORD" \
+                            | docker login "$CONTAINER_REGISTRY" \
+                                --username "$REGISTRY_USERNAME" \
+                                --password-stdin
 
                         docker push "$IMAGE_REPOSITORY:$RELEASE_VERSION"
+                        docker push "$IMAGE_REPOSITORY:$RELEASE_VERSION-native-micro"
+                        docker push "$IMAGE_REPOSITORY:$RELEASE_VERSION-native"
+                        docker push "$IMAGE_REPOSITORY:$RELEASE_VERSION-jvm"
 
                         if [ "$UPDATE_LATEST_IMAGE" = "true" ]; then
-                            docker tag \
-                                "$IMAGE_REPOSITORY:$RELEASE_VERSION" \
-                                "$IMAGE_REPOSITORY:latest"
                             docker push "$IMAGE_REPOSITORY:latest"
+                            docker push "$IMAGE_REPOSITORY:latest-native-micro"
+                            docker push "$IMAGE_REPOSITORY:latest-native"
+                            docker push "$IMAGE_REPOSITORY:latest-jvm"
                         fi
                     '''
                 }
@@ -157,7 +233,11 @@ pipeline {
 
     post {
         always {
-            sh 'docker logout docker.io || true'
+            sh '''
+                if [ -n "$CONTAINER_REGISTRY" ]; then
+                    docker logout "$CONTAINER_REGISTRY" || true
+                fi
+            '''
         }
         success {
             echo "流水线完成，版本：${env.RELEASE_VERSION}"

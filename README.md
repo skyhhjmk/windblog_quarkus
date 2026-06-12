@@ -51,6 +51,38 @@ Or, if you don't have GraalVM installed, you can run the native executable build
 
 You can then execute your native executable with: `./target/windblog_quarkus-1.0-SNAPSHOT-runner`
 
+## Native container image publishing
+
+The GitHub Actions native image workflow builds `hhjmk/windblog_quarkus` by
+default. Configure these GitHub repository variables to change the destination:
+
+- `CONTAINER_REGISTRY`: registry host, for example `ghcr.io`
+- `CONTAINER_IMAGE_GROUP`: image owner or organization, defaults to `hhjmk`
+- `CONTAINER_IMAGE_NAME`: image repository name, defaults to `windblog_quarkus`
+
+Configure `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` as GitHub repository
+secrets. Images are pushed only for `main` or `master` builds and `v1.2.3`
+tags when the registry host and both credentials are present. Other builds,
+or builds without complete registry configuration, only build the image.
+
+Jenkins uses the same `CONTAINER_REGISTRY`, `CONTAINER_IMAGE_GROUP`, and
+`CONTAINER_IMAGE_NAME` environment variables. Set `REGISTRY_CREDENTIALS_ID`
+to the Jenkins username/password credential used for registry login. Jenkins
+also skips the push when the registry or credential ID is absent.
+
+Each release builds these Dockerfile variants:
+
+- `Dockerfile.native-micro`: the default edge image, published as `<version>`,
+  `<version>-native-micro`, `latest`, and `latest-native-micro`
+- `Dockerfile.native`: published as `<version>-native` and `latest-native`
+- `Dockerfile.jvm`: published as `<version>-jvm` and `latest-jvm`
+
+The edge deployment package defaults to
+`ghcr.io/hhjmk/windblog_quarkus:latest`. Override the default repository with
+`EDGE_IMAGE_REPOSITORY`, or pass `image` and `variant` to
+`GET /api/admin/edge-nodes/{nodeId}/deployment-zip`. The `image` parameter is
+the complete image reference written to `.env`, including its tag or digest.
+
 If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
 
 ## Related Guides

@@ -91,6 +91,8 @@ public class DeploymentPackageServiceTest {
         assertTrue(envContent.contains("EDGE_REDIS_URL=redis://edge-redis:6379"));
         assertTrue(envContent.contains("EDGE_APP_HTTP_PORT="));
         assertTrue(envContent.contains("EDGE_APP_GRPC_PORT=9005"));
+        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=ghcr.io/hhjmk/windblog_quarkus:latest"));
+        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE_VARIANT=native-micro"));
         assertTrue(envContent.contains("USER_JWT_SECRET="));
         assertTrue(envContent.contains("USER_JWT_ISSUER="));
         assertTrue(envContent.contains("BLOG_URL="));
@@ -135,6 +137,48 @@ public class DeploymentPackageServiceTest {
         assertTrue(dockerComposeContent.contains("volumes:"));
         assertTrue(dockerComposeContent.contains("edge-db-data-test-node-123:"));
         assertTrue(dockerComposeContent.contains("edge-redis-data-test-node-123:"));
+    }
+
+    @Test
+    public void shouldUseRequestedFullyQualifiedImageReference() throws Exception {
+        EdgeNode node = new EdgeNode();
+        node.nodeId = "custom-image-node";
+        node.name = "自定义镜像节点";
+        node.edgeGrpcPort = 9005;
+        node.region = BlogRegion.CN;
+        node.connectionType = EdgeConnectionType.HEARTBEAT;
+
+        byte[] zipBytes = deploymentPackageService.buildDeploymentZip(
+                node,
+                "registry.example.com/team/windblog:v2-jvm",
+                EdgeImageVariant.JVM
+        );
+        String envContent = readZipTextEntry(zipBytes, ".env");
+
+        assertNotNull(envContent);
+        assertTrue(envContent.contains(
+                "WINDBLOG_EDGE_IMAGE=registry.example.com/team/windblog:v2-jvm"
+        ));
+        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE_VARIANT=jvm"));
+    }
+
+    @Test
+    public void shouldRejectImageReferenceWithoutTagOrDigest() {
+        EdgeNode node = new EdgeNode();
+        node.nodeId = "invalid-image-node";
+        node.name = "无效镜像节点";
+        node.edgeGrpcPort = 9005;
+        node.region = BlogRegion.CN;
+        node.connectionType = EdgeConnectionType.HEARTBEAT;
+
+        assertThrows(
+                jakarta.ws.rs.BadRequestException.class,
+                () -> deploymentPackageService.buildDeploymentZip(
+                        node,
+                        "registry.example.com/team/windblog",
+                        EdgeImageVariant.NATIVE
+                )
+        );
     }
 
     @Test
@@ -205,5 +249,23 @@ public class DeploymentPackageServiceTest {
             len = zis.read(buffer);
         }
         return baos.toString("UTF-8");
+    }
+
+    private String readZipTextEntry(byte[] zipBytes, String entrySuffix) throws Exception {
+        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(zipBytes);
+        ZipInputStream zipInputStream = new ZipInputStream(byteArrayInputStream);
+        ZipEntry zipEntry = zipInputStream.getNextEntry();
+
+        while (zipEntry != null) {
+            if (zipEntry.getName().endsWith(entrySuffix)) {
+                String entryContent = readEntryContent(zipInputStream);
+                zipInputStream.close();
+                return entryContent;
+            }
+            zipEntry = zipInputStream.getNextEntry();
+        }
+
+        zipInputStream.close();
+        return null;
     }
 }
