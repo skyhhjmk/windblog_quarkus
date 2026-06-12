@@ -77,6 +77,11 @@ Each release builds these Dockerfile variants:
 - `Dockerfile.native`: published as `<version>-native` and `latest-native`
 - `Dockerfile.jvm`: published as `<version>-jvm` and `latest-jvm`
 
+Native edge variants are compiled with `-Dquarkus.profile=edge`. Native images
+must use the same profile at build time and runtime because messaging channel
+topology is fixed during native compilation. Setting only
+`QUARKUS_PROFILE=edge` when starting an image built with `prod` is not enough.
+
 The edge deployment package defaults to
 `ghcr.io/hhjmk/windblog_quarkus:latest`. Override the default repository with
 `EDGE_IMAGE_REPOSITORY`, or pass `image` and `variant` to

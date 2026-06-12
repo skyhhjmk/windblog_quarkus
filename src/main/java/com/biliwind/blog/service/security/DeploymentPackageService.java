@@ -2,6 +2,7 @@ package com.biliwind.blog.service.security;
 
 import com.biliwind.blog.common.helper.RsaHelper;
 import com.biliwind.blog.model.EdgeNode;
+import io.quarkus.runtime.LaunchMode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -23,6 +24,9 @@ import java.util.zip.ZipOutputStream;
 public class DeploymentPackageService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DeploymentPackageService.class);
+    private static final String DEFAULT_ADMIN_JWT_SECRET = "windblog-admin-dev-secret-change-me";
+    private static final String DEFAULT_USER_JWT_SECRET = "windblog-user-dev-secret-change-me";
+    private static final String DEFAULT_ADMIN_INIT_PASSWORD = "admin";
 
     @Inject
     CertificateService certificateService;
@@ -45,6 +49,10 @@ public class DeploymentPackageService {
     @Inject
     @ConfigProperty(name = "admin.jwt.issuer", defaultValue = "windblog-admin")
     String adminJwtIssuer;
+
+    @Inject
+    @ConfigProperty(name = "admin.init.password", defaultValue = DEFAULT_ADMIN_INIT_PASSWORD)
+    String adminInitPassword;
 
     @Inject
     @ConfigProperty(name = "blog.url", defaultValue = "http://localhost:8080")
@@ -183,10 +191,34 @@ public class DeploymentPackageService {
         sb.append("USER_JWT_ISSUER=").append(this.userJwtIssuer).append("\n");
         sb.append("ADMIN_JWT_SECRET=").append(this.adminJwtSecret).append("\n");
         sb.append("ADMIN_JWT_ISSUER=").append(this.adminJwtIssuer).append("\n");
+        sb.append("ADMIN_INIT_PASSWORD=").append(this.adminInitPassword).append("\n");
+        appendDevelopmentSecurityCompatibility(sb);
         sb.append("BLOG_URL=").append(this.blogUrl).append("\n");
         appendClusterPublicKey(sb);
 
         return sb.toString();
+    }
+
+    private void appendDevelopmentSecurityCompatibility(StringBuilder envContentBuilder) {
+        if (LaunchMode.current() == LaunchMode.NORMAL) {
+            return;
+        }
+        if (!usesDefaultSecurityConfiguration()) {
+            return;
+        }
+
+        envContentBuilder.append("SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=false\n");
+        LOGGER.warn("主节点正在使用开发默认安全配置，边缘部署包仅为本地联调关闭默认值启动拦截");
+    }
+
+    private boolean usesDefaultSecurityConfiguration() {
+        if (DEFAULT_ADMIN_JWT_SECRET.equals(this.adminJwtSecret)) {
+            return true;
+        }
+        if (DEFAULT_USER_JWT_SECRET.equals(this.userJwtSecret)) {
+            return true;
+        }
+        return DEFAULT_ADMIN_INIT_PASSWORD.equals(this.adminInitPassword);
     }
 
     private void appendClusterPublicKey(StringBuilder sb) {
@@ -290,6 +322,8 @@ public class DeploymentPackageService {
         sb.append("      - USER_JWT_ISSUER=${USER_JWT_ISSUER}\n");
         sb.append("      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}\n");
         sb.append("      - ADMIN_JWT_ISSUER=${ADMIN_JWT_ISSUER}\n");
+        sb.append("      - ADMIN_INIT_PASSWORD=${ADMIN_INIT_PASSWORD}\n");
+        sb.append("      - SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=${SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD:-true}\n");
         sb.append("      - BLOG_URL=${BLOG_URL}\n");
         sb.append("    depends_on:\n");
         sb.append("      edge-db:\n");

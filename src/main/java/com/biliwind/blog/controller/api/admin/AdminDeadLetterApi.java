@@ -4,6 +4,7 @@ import com.biliwind.blog.model.DeadLetterMessage;
 import com.biliwind.blog.service.ai.AiSummaryTask;
 import com.biliwind.blog.service.ai.AiTaskProducer;
 import io.quarkus.panache.common.Sort;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -36,7 +37,8 @@ public class AdminDeadLetterApi {
 
     @Inject
     @org.eclipse.microprofile.reactive.messaging.Channel("storage-sync-tasks")
-    org.eclipse.microprofile.reactive.messaging.Emitter<com.biliwind.blog.service.storage.dto.StorageSyncMessage> storageSyncEmitter;
+    Instance<org.eclipse.microprofile.reactive.messaging.Emitter<com.biliwind.blog.service.storage.dto.StorageSyncMessage>>
+            storageSyncEmitter;
 
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
@@ -152,7 +154,7 @@ public class AdminDeadLetterApi {
                 com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                         new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
                                 mediaId, storageClassName, variantType, 0);
-                storageSyncEmitter.send(syncMsg);
+                storageSyncEmitter.get().send(syncMsg);
 
                 message.markAsProcessed("手动重试存储同步 - 已重新发送");
                 log.info("已重试存储同步死信消息，id={}, mediaId={}", id, mediaId);
@@ -219,7 +221,7 @@ public class AdminDeadLetterApi {
                     com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                             new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
                                     mediaId, storageClassName, variantType, 0);
-                    storageSyncEmitter.send(syncMsg);
+                    storageSyncEmitter.get().send(syncMsg);
 
                     message.markAsProcessed("批量重试同步 - 已重新发送");
                     successCount++;

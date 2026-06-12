@@ -147,6 +147,7 @@ jobs:
           ./mvnw -B package \
             -DskipTests \
             -Dnative \
+            -Dquarkus.profile=edge \
             -Dquarkus.application.version=${{ steps.release.outputs.version }} \
             -Dquarkus.native.container-build=true \
             -Dquarkus.container-image.build=false \

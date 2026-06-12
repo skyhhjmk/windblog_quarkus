@@ -2,6 +2,7 @@ package com.biliwind.blog.service.storage;
 
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.*;
 import org.slf4j.Logger;
@@ -25,7 +26,7 @@ public class StorageSyncConsumer {
 
     @Inject
     @Channel("storage-sync-tasks")
-    Emitter<StorageSyncMessage> syncEmitter;
+    Instance<Emitter<StorageSyncMessage>> syncEmitter;
 
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
@@ -97,7 +98,7 @@ public class StorageSyncConsumer {
             @Override
             public void run() {
                 try {
-                    syncEmitter.send(retryMessage);
+                    syncEmitter.get().send(retryMessage);
                     message.ack().whenComplete((ignoredResult, ackError) -> {
                         if (ackError != null) {
                             retryFuture.completeExceptionally(ackError);

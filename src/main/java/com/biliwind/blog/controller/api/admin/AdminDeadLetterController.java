@@ -3,6 +3,7 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.model.DeadLetterMessage;
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -25,7 +26,7 @@ public class AdminDeadLetterController {
 
     @Inject
     @Channel("storage-sync-tasks")
-    Emitter<StorageSyncMessage> syncEmitter;
+    Instance<Emitter<StorageSyncMessage>> syncEmitter;
 
     @GET
     public Response listMessages(
@@ -71,7 +72,7 @@ public class AdminDeadLetterController {
                 variant,
                 0);
 
-        syncEmitter.send(syncMessage);
+        syncEmitter.get().send(syncMessage);
 
         message.isProcessed = true;
         message.processNote = "手动重试";

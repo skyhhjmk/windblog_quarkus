@@ -36,10 +36,16 @@ public class EdgeDataSyncService {
     GrpcChannelFactory channelFactory;
     @Inject
     PrimaryEdgeChannelRegistry primaryEdgeChannelRegistry;
+    @Inject
+    NodeRoleService nodeRoleService;
 
     void onStart(@Observes StartupEvent ev) {
+        if (nodeRoleService.isEdgeNode()) {
+            log.info("当前节点是边缘节点，跳过主节点数据广播初始化");
+            return;
+        }
+
         log.info("EdgeDataSyncService started");
-        // 启动时尝试同步一次公钥到所有节点
         syncClusterKeyToAll();
     }
 
@@ -61,6 +67,10 @@ public class EdgeDataSyncService {
      * 监听文章同步事件
      */
     public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
+
         log.info("Detected post change, syncing to edge nodes: {}", event.getPostId());
         syncPost(event.getPostId());
     }
@@ -69,6 +79,10 @@ public class EdgeDataSyncService {
      * 监听通用同步事件（如标签）
      */
     public void onDataChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) DataSyncEvent event) {
+        if (nodeRoleService.isEdgeNode()) {
+            return;
+        }
+
         log.info("Detected {} change, action: {}, id: {}", event.getEntityType(), event.getAction(), event.getEntityId());
 
         if ("TAG".equals(event.getEntityType())) {

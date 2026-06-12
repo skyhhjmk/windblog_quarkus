@@ -168,6 +168,7 @@ pipeline {
                     ./mvnw -B -ntp package \
                         -DskipTests \
                         -Dnative \
+                        -Dquarkus.profile=edge \
                         -Dquarkus.application.version="$RELEASE_VERSION" \
                         -Dquarkus.native.container-build=true \
                         -Dquarkus.container-image.build=false \

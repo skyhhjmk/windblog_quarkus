@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.reactive.messaging.Channel;
@@ -26,7 +27,7 @@ public class TempDataService {
 
     @Inject
     @Channel("es-sync-tasks")
-    Emitter<EsSyncTask> esSyncEmitter;
+    Instance<Emitter<EsSyncTask>> esSyncEmitter;
 
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
@@ -75,7 +76,7 @@ public class TempDataService {
 
                 if (ES_SYNC_TASK_TYPE.equals(type)) {
                     EsSyncTask syncTask = parseEsSyncTask(task.payload);
-                    esSyncEmitter.send(syncTask);
+                    esSyncEmitter.get().send(syncTask);
                     log.infof("任务重试成功，已发送到 RabbitMQ: id=%d, target=%s", task.id, task.target);
                 }
 

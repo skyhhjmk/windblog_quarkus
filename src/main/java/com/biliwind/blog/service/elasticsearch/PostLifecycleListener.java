@@ -11,6 +11,7 @@ import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import org.eclipse.microprofile.reactive.messaging.Channel;
@@ -35,7 +36,7 @@ public class PostLifecycleListener {
 
     @Inject
     @Channel("es-sync-tasks")
-    Emitter<EsSyncTask> esSyncEmitter;
+    Instance<Emitter<EsSyncTask>> esSyncEmitter;
 
     @Inject
     TempDataService tempDataService;
@@ -147,7 +148,7 @@ public class PostLifecycleListener {
 
     private void sendToQueue(Long postId, String actionType) {
         try {
-            esSyncEmitter.send(new EsSyncTask(postId, actionType));
+            esSyncEmitter.get().send(new EsSyncTask(postId, actionType));
             log.infof("同步任务已发送至 RabbitMQ: postId=%d, action=%s", postId, actionType);
         } catch (Exception e) {
             log.errorf("发送同步任务到 RabbitMQ 失败，保存到 temp_data 表: %d, 错误: %s", postId, e.getMessage());

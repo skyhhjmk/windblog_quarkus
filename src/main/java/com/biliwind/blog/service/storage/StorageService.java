@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.arc.Unremovable;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -35,7 +36,7 @@ public class StorageService {
     EntityManager entityManager;
     @Inject
     @Channel("storage-sync-tasks")
-    Emitter<StorageSyncMessage> syncEmitter;
+    Instance<Emitter<StorageSyncMessage>> syncEmitter;
     private StorageClass primaryProvider;
 
     @PostConstruct
@@ -291,7 +292,7 @@ public class StorageService {
         for (VariantType variant : variants) {
             StorageSyncMessage message = new StorageSyncMessage(
                     media.id, storageClassName, variant.name(), 0);
-            syncEmitter.send(message);
+            syncEmitter.get().send(message);
         }
     }
 

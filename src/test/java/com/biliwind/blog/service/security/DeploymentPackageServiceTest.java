@@ -91,10 +91,14 @@ public class DeploymentPackageServiceTest {
         assertTrue(envContent.contains("EDGE_REDIS_URL=redis://edge-redis:6379"));
         assertTrue(envContent.contains("EDGE_APP_HTTP_PORT="));
         assertTrue(envContent.contains("EDGE_APP_GRPC_PORT=9005"));
-        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=ghcr.io/hhjmk/windblog_quarkus:latest"));
+        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=hhjmk/windblog_quarkus:latest"));
         assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE_VARIANT=native-micro"));
         assertTrue(envContent.contains("USER_JWT_SECRET="));
         assertTrue(envContent.contains("USER_JWT_ISSUER="));
+        assertTrue(envContent.contains("ADMIN_JWT_SECRET="));
+        assertTrue(envContent.contains("ADMIN_JWT_ISSUER="));
+        assertTrue(envContent.contains("ADMIN_INIT_PASSWORD="));
+        assertTrue(envContent.contains("SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=false"));
         assertTrue(envContent.contains("BLOG_URL="));
         assertTrue(envContent.contains("GRPC_CLIENT_CA_CERTIFICATE=certs/ca/ca.crt"));
         assertTrue(envContent.contains("GRPC_CLIENT_CERTIFICATE=certs/ca/server.crt"));
@@ -129,6 +133,10 @@ public class DeploymentPackageServiceTest {
         assertTrue(dockerComposeContent.contains("\"${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\""));
         assertTrue(dockerComposeContent.contains("QUARKUS_DATASOURCE_JDBC_URL=${EDGE_DATASOURCE_URL}"));
         assertTrue(dockerComposeContent.contains("QUARKUS_PROFILE=${QUARKUS_PROFILE}"));
+        assertTrue(dockerComposeContent.contains("ADMIN_INIT_PASSWORD=${ADMIN_INIT_PASSWORD}"));
+        assertTrue(dockerComposeContent.contains(
+                "SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=${SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD:-true}"
+        ));
         assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/ca/server.crt}"));
         assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca/ca.crt}"));
         assertTrue(dockerComposeContent.contains("depends_on:"));

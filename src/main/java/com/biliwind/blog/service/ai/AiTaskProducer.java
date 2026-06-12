@@ -2,6 +2,7 @@ package com.biliwind.blog.service.ai;
 
 import io.smallrye.reactive.messaging.rabbitmq.OutgoingRabbitMQMetadata;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
@@ -19,11 +20,11 @@ public class AiTaskProducer {
 
     @Inject
     @Channel("ai-summary-tasks")
-    Emitter<AiSummaryTask> taskEmitter;
+    Instance<Emitter<AiSummaryTask>> taskEmitter;
 
     @Inject
     @Channel("ai-audit-tasks")
-    Emitter<AiAuditTask> auditEmitter;
+    Instance<Emitter<AiAuditTask>> auditEmitter;
 
     public void sendSummaryTask(AiSummaryTask task) {
         int rabbitPriority = convertToRabbitPriority(task.priority());
@@ -36,7 +37,7 @@ public class AiTaskProducer {
                 task.postId(), task.priority(), task.retryCount());
 
         Message<AiSummaryTask> msg = Message.of(task, Metadata.of(metadata));
-        taskEmitter.send(msg);
+        taskEmitter.get().send(msg);
     }
 
     public void sendSummaryTask(Long postId, Map<String, String> content, int priority, int retryCount, Long performedBy) {
@@ -50,7 +51,7 @@ public class AiTaskProducer {
 
     public void sendAuditTask(AiAuditTask task) {
         log.info("发送 AI 审核任务到队列，commentId={}, retryCount={}", task.commentId(), task.retryCount());
-        auditEmitter.send(task);
+        auditEmitter.get().send(task);
     }
 
     public boolean resendFailedTask(AiSummaryTask originalTask) {
