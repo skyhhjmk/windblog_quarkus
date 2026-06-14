@@ -104,6 +104,10 @@ public class PrimaryEdgeChannelRegistry {
         return channelEntries.containsKey(nodeId);
     }
 
+    public List<String> listOnlineNodeIds() {
+        return new ArrayList<>(channelEntries.keySet());
+    }
+
     public OffsetDateTime getConnectedAt(String nodeId) {
         ChannelEntry entry = channelEntries.get(nodeId);
         if (entry == null) {

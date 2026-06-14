@@ -64,6 +64,30 @@ public class Link extends PanacheEntityBase {
     @Column(nullable = false)
     public short status;
 
+    /**
+     * 申请状态：1=已通过，2=待审核，3=已拒绝
+     */
+    @Column(name = "application_status", nullable = false)
+    public short applicationStatus;
+
+    /**
+     * 多节点聚合可用状态：UNKNOWN、ONLINE、OFFLINE
+     */
+    @Column(name = "availability_status", nullable = false, length = 16)
+    public String availabilityStatus;
+
+    /**
+     * 最近一次成功访问结果中的反链状态：UNKNOWN、FOUND、MISSING
+     */
+    @Column(name = "backlink_status", nullable = false, length = 16)
+    public String backlinkStatus;
+
+    /**
+     * 最近一次多节点监控完成时间
+     */
+    @Column(name = "last_checked_at")
+    public OffsetDateTime lastCheckedAt;
+
     /** 打开方式，如 _blank、_self */
     @Column(nullable = false, columnDefinition = "text")
     public String target;

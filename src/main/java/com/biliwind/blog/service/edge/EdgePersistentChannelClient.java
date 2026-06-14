@@ -3,9 +3,9 @@ package com.biliwind.blog.service.edge;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.google.protobuf.ByteString;
+import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
-import io.quarkus.runtime.Quarkus;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.MultiEmitter;
@@ -40,6 +40,8 @@ public class EdgePersistentChannelClient {
     EdgeSyncDataApplyService syncDataApplyService;
     @Inject
     com.biliwind.blog.service.security.EdgeCertificateInstaller edgeCertificateInstaller;
+    @Inject
+    com.biliwind.blog.service.link.LinkProbeService linkProbeService;
     @ConfigProperty(name = "windblog.primary.grpc.host", defaultValue = "127.0.0.1")
     String primaryGrpcHost;
     @ConfigProperty(name = "windblog.primary.grpc.port", defaultValue = "9000")
@@ -252,7 +254,33 @@ public class EdgePersistentChannelClient {
                     message.getCertificateActivation().getRenewalId()
             );
             Quarkus.asyncExit();
+            return;
         }
+
+        if (message.hasLinkProbeRequest()) {
+            handleLinkProbeRequest(message);
+        }
+    }
+
+    private void handleLinkProbeRequest(EdgeChannelMessage message) {
+        LinkProbeRequest request = message.getLinkProbeRequest();
+        com.biliwind.blog.service.link.LinkProbeResult probeResult =
+                linkProbeService.probe(request.getUrl(), request.getSiteUrl());
+
+        LinkProbeResponse response = LinkProbeResponse.newBuilder()
+                .setReachable(probeResult.reachable())
+                .setStatusCode(probeResult.statusCode())
+                .setLoadTimeMs(probeResult.loadTimeMs())
+                .setBacklinkFound(probeResult.backlinkFound())
+                .setErrorMessage(nullToEmpty(probeResult.errorMessage()))
+                .build();
+        EdgeChannelMessage responseMessage = EdgeChannelMessage.newBuilder()
+                .setRequestId(message.getRequestId())
+                .setNodeId(nodeRoleService.getNodeId())
+                .setTimestamp(nowMillis())
+                .setLinkProbeResponse(response)
+                .build();
+        sendMessage(responseMessage);
     }
 
     private void installRenewedCertificate(CertificateRenewalMessage renewalMessage) {

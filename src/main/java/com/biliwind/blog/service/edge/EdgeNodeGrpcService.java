@@ -4,11 +4,11 @@ import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageClassEntity;
+import com.biliwind.blog.service.security.CertificateRenewalService;
+import com.biliwind.blog.service.security.EdgeCertificateInstaller;
 import com.biliwind.blog.service.storage.StorageClass;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
-import com.biliwind.blog.service.security.CertificateRenewalService;
-import com.biliwind.blog.service.security.EdgeCertificateInstaller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
@@ -63,6 +63,9 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Inject
     EdgeCertificateInstaller edgeCertificateInstaller;
+
+    @Inject
+    com.biliwind.blog.service.link.DistributedLinkProbeService distributedLinkProbeService;
 
     private StorageService getStorageService() {
         return io.quarkus.arc.Arc.container().instance(StorageService.class).get();
@@ -173,6 +176,11 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                     message.getCertificateActivation().getRenewalId()
             );
             io.quarkus.runtime.Quarkus.asyncExit();
+            return;
+        }
+
+        if (message.hasLinkProbeResponse()) {
+            distributedLinkProbeService.complete(message.getRequestId(), message.getLinkProbeResponse());
         }
     }
 

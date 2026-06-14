@@ -30,6 +30,24 @@ public class LinkMonitorLog extends PanacheEntityBase {
     @Column(name = "check_time", nullable = false)
     public OffsetDateTime checkTime;
 
+    /**
+     * 同一轮多节点检测批次ID
+     */
+    @Column(name = "check_batch_id", length = 64)
+    public String checkBatchId;
+
+    /**
+     * 执行检测的节点ID
+     */
+    @Column(name = "node_id", nullable = false, length = 128)
+    public String nodeId;
+
+    /**
+     * 执行检测的节点名称
+     */
+    @Column(name = "node_name")
+    public String nodeName;
+
     /** 访问是否成功 */
     @Column
     public Boolean ok;
@@ -45,6 +63,12 @@ public class LinkMonitorLog extends PanacheEntityBase {
     /** HTTP 状态码 */
     @Column(name = "status_code")
     public Integer statusCode;
+
+    /**
+     * 检测失败原因
+     */
+    @Column(name = "error_message")
+    public String errorMessage;
 
     /** 原始检测数据(JSONB) */
     @JdbcTypeCode(SqlTypes.JSON)

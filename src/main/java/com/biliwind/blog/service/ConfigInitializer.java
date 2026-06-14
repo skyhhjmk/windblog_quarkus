@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.model.SystemSetting;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -15,8 +16,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-
-import com.biliwind.blog.model.SystemSetting;
 
 @ApplicationScoped
 public class ConfigInitializer {
@@ -82,6 +81,12 @@ public class ConfigInitializer {
         siteInfoFields.addObject().put("key", "keywords").put("label", "SEO关键词").put("widget", "tag_input");
         siteInfoFields.addObject().put("key", "description").put("label", "SEO描述").put("widget", "textarea");
         siteInfoFields.addObject().put("key", "author").put("label", "站点作者").put("widget", "input");
+        siteInfoFields.addObject()
+                .put("key", "site_url")
+                .put("label", "本站链接")
+                .put("widget", "input")
+                .put("required", true)
+                .put("hint", "用于友链反向链接检测，例如：https://example.com");
 
         ObjectNode siteInfoValue = mapper.createObjectNode();
         siteInfoValue.put("title", "WindBlog");
@@ -89,6 +94,7 @@ public class ConfigInitializer {
         siteInfoValue.putArray("keywords").add("blog").add("tech").add("quarkus");
         siteInfoValue.put("description", "基于 Quarkus 和 Flutter 构建的极简博客系统，支持 AI 摘要与多端同步。");
         siteInfoValue.put("author", "BiliWind");
+        siteInfoValue.put("site_url", "http://localhost:8080");
 
         list.add(new SettingDefinition("site_info", siteInfoValue, "object", "基础设置", siteInfoSchema, "网站基础信息设置"));
 

@@ -101,6 +101,51 @@ public class AdminLinkController {
     }
 
     @POST
+    @Path("/{id}/review")
+    @Transactional
+    @Operation(summary = "审核公开友链申请")
+    public AdminLinkItem review(
+            @PathParam("id") Long id,
+            LinkApplicationReviewRequest request
+    ) {
+        Link link = Link.findById(id);
+        if (link == null) {
+            throw new NotFoundException("友链申请不存在");
+        }
+        if (request == null) {
+            throw new BadRequestException("审核内容不能为空");
+        }
+
+        if (request.approved()) {
+            link.applicationStatus = 1;
+            link.status = 1;
+        } else {
+            link.applicationStatus = 3;
+            link.status = 2;
+        }
+        if (request.note() != null && !request.note().isBlank()) {
+            link.note = request.note().trim();
+        }
+        link.updatedAt = OffsetDateTime.now();
+        String auditAction = "application_rejected";
+        if (request.approved()) {
+            auditAction = "application_approved";
+        }
+        auditService.log(
+                "link",
+                String.valueOf(link.id),
+                auditAction,
+                null,
+                java.util.Map.of("applicationStatus", link.applicationStatus)
+        );
+        if (request.approved()) {
+            linkMonitorService.checkLink(link, false);
+        }
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", link.id, "UPSERT"));
+        return toItem(link);
+    }
+
+    @POST
     @Path("/{id}/audit")
     @Transactional
     @Operation(summary = "手动触发 AI 审核")
@@ -285,6 +330,9 @@ public class AdminLinkController {
         l.icon = req.icon();
         l.sortOrder = req.sortOrder() == null ? 0 : req.sortOrder();
         l.status = req.status() == null ? (short) 1 : req.status();
+        l.applicationStatus = 1;
+        l.availabilityStatus = "UNKNOWN";
+        l.backlinkStatus = "UNKNOWN";
         l.target = req.target() == null ? "_blank" : req.target();
         l.redirectType = req.redirectType() == null ? (short) 1 : req.redirectType();
         l.showUrl = req.showUrl() == null || req.showUrl();
@@ -384,9 +432,28 @@ public class AdminLinkController {
                 l.seoTitle,
                 l.seoKeywords,
                 l.seoDescription,
+                l.applicationStatus,
+                l.availabilityStatus,
+                l.backlinkStatus,
+                l.lastCheckedAt,
+                readSetting(l, "placementType"),
+                readSetting(l, "placementUrl"),
+                readSetting(l, "placementPageName"),
+                readSetting(l, "placementDescription"),
                 articleExternalLinkService.countReferencedPosts(l.id),
                 articleExternalLinkService.countReferences(l.id),
                 l.createdAt);
+    }
+
+    private String readSetting(Link link, String key) {
+        if (link.settings == null) {
+            return null;
+        }
+        Object value = link.settings.get(key);
+        if (value == null) {
+            return null;
+        }
+        return value.toString();
     }
 
     private AdminLinkReferenceItem toReferenceItem(LinkArticleReference reference) {
@@ -430,7 +497,11 @@ public class AdminLinkController {
                 log.ok,
                 log.loadTimeMs,
                 log.backlinkFound,
-                log.statusCode);
+                log.statusCode,
+                log.checkBatchId,
+                log.nodeId,
+                log.nodeName,
+                log.errorMessage);
     }
 
     private AdminLinkAuditItem toAuditItem(LinkAudit audit) {

@@ -22,6 +22,14 @@ public class AdminLinkDtos {
                         String seoTitle,
                         String seoKeywords,
                         String seoDescription,
+                        short applicationStatus,
+                        String availabilityStatus,
+                        String backlinkStatus,
+                        OffsetDateTime lastCheckedAt,
+                        String placementType,
+                        String placementUrl,
+                        String placementPageName,
+                        String placementDescription,
                         long referencedPostCount,
                         long referenceCount,
                         OffsetDateTime createdAt) {
@@ -84,7 +92,16 @@ public class AdminLinkDtos {
                         Boolean ok,
                         Integer loadTimeMs,
                         Boolean backlinkFound,
-                        Integer statusCode) {
+                        Integer statusCode,
+                        String checkBatchId,
+                        String nodeId,
+                        String nodeName,
+                        String errorMessage) {
+        }
+
+    public record LinkApplicationReviewRequest(
+            boolean approved,
+            String note) {
         }
 
         public record AdminLinkAuditItem(

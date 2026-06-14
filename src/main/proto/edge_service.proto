@@ -138,7 +138,22 @@ message EdgeChannelMessage {
     CertificateRenewalMessage certificate_renewal = 15;
     CertificateRenewalResult certificate_renewal_result = 16;
     CertificateActivationMessage certificate_activation = 17;
+    LinkProbeRequest link_probe_request = 18;
+    LinkProbeResponse link_probe_response = 19;
   }
+}
+
+message LinkProbeRequest {
+  string url = 1;
+  string site_url = 2;
+}
+
+message LinkProbeResponse {
+  bool reachable = 1;
+  int32 status_code = 2;
+  int32 load_time_ms = 3;
+  bool backlink_found = 4;
+  string error_message = 5;
 }
 
 message CertificateRenewalMessage {

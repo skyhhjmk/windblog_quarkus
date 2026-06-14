@@ -1,0 +1,98 @@
+<div id="pjax-content-root" data-page-title="{pageTitle ?: '申请友情链接'}">
+    <div id="pjax-nav-path" class="hidden">links / apply</div>
+    <div id="pjax-sidebar-html" class="hidden">
+        <div class="space-y-8">
+                {#include sidebar/stats.html /}
+                {#include sidebar/recent_posts.html /}
+                {#include sidebar/tags.html /}
+        </div>
+    </div>
+
+    <section class="space-y-8">
+        <header class="space-y-3">
+            <a href="/link" class="text-sm text-accent hover:underline" data-pjax>返回友情链接</a>
+            <h1 class="text-4xl font-bold text-main">申请友情链接</h1>
+            <p class="text-body">
+                提交前浏览器会从你的当前网络测试站点连通性，服务端还会再次检查公网可访问性和本站反链。</p>
+        </header>
+
+        <section class="card card-static p-6 md:p-8">
+            <form id="linkApplicationForm" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <label class="space-y-2">
+                    <span class="text-sm text-body">站点名称 *</span>
+                    <input name="name" required maxlength="120" class="link-application-input"/>
+                </label>
+                <label class="space-y-2">
+                    <span class="text-sm text-body">站点链接 *</span>
+                    <div class="flex gap-2">
+                        <input id="linkApplicationUrl" name="url" required type="url" placeholder="https://example.com"
+                               class="link-application-input flex-1"/>
+                        <button id="linkConnectivityTestButton" type="button" class="btn-minimal shrink-0">测试连通性
+                        </button>
+                    </div>
+                    <span id="linkConnectivityStatus" class="block text-xs text-gray-500">尚未测试</span>
+                </label>
+                <label class="space-y-2">
+                    <span class="text-sm text-body">联系邮箱 *</span>
+                    <input name="email" required type="email" autocomplete="email" class="link-application-input"/>
+                </label>
+                <label class="space-y-2">
+                    <span class="text-sm text-body">图标链接</span>
+                    <input name="icon" type="url" class="link-application-input"/>
+                </label>
+                <label class="space-y-2 md:col-span-2">
+                    <span class="text-sm text-body">站点描述</span>
+                    <textarea name="description" maxlength="500" rows="3" class="link-application-input"></textarea>
+                </label>
+                <label class="space-y-2 md:col-span-2">
+                    <span class="text-sm text-body">其他联系方式</span>
+                    <input name="contact" maxlength="200" class="link-application-input"/>
+                </label>
+
+                <fieldset class="md:col-span-2 space-y-4 border border-border rounded-lg p-5">
+                    <legend class="px-2 text-sm font-bold text-main">对方站点中本站友链的放置位置 *</legend>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <label class="link-placement-option">
+                            <input type="radio" name="placementType" value="HOME_PAGE" required/>
+                            <span>首页</span>
+                        </label>
+                        <label class="link-placement-option">
+                            <input type="radio" name="placementType" value="LINK_PAGE" required/>
+                            <span>专用友链页</span>
+                        </label>
+                        <label class="link-placement-option">
+                            <input type="radio" name="placementType" value="OTHER_PAGE" required/>
+                            <span>其他页面</span>
+                        </label>
+                    </div>
+
+                    <div id="linkPlacementCommonFields" class="hidden space-y-4">
+                        <label class="space-y-2 block">
+                            <span id="linkPlacementUrlLabel" class="text-sm text-body">友链放置页面 *</span>
+                            <input id="linkPlacementUrl" name="placementUrl" type="url" class="link-application-input"/>
+                        </label>
+                        <label id="linkPlacementPageNameField" class="hidden space-y-2">
+                            <span class="text-sm text-body">页面名称 *</span>
+                            <input id="linkPlacementPageName" name="placementPageName" maxlength="120"
+                                   class="link-application-input"/>
+                        </label>
+                        <label class="space-y-2 block">
+                            <span id="linkPlacementDescriptionLabel" class="text-sm text-body">具体位置说明</span>
+                            <textarea id="linkPlacementDescription" name="placementDescription" maxlength="500" rows="2"
+                                      class="link-application-input"
+                                      placeholder="例如：首页底部的友情链接区域"></textarea>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <div class="md:col-span-2 flex flex-wrap items-center gap-4">
+                    <button id="linkApplicationSubmit" type="submit"
+                            class="btn-minimal px-6 py-2 bg-accent text-white font-bold border-none rounded-md">
+                        提交申请
+                    </button>
+                    <span class="text-xs text-gray-500">每个来源地址每小时最多提交 3 次。</span>
+                </div>
+            </form>
+        </section>
+    </section>
+</div>

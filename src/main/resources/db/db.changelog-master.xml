@@ -82,4 +82,6 @@
     <include file="db/migration/078-create-edge-sync-records.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/079-add-audit-log-request-context.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/080-hardening-storage-edge-risk-surfaces.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/081-add-link-application-and-distributed-monitoring.sql"
+             relativeToChangelogFile="false"/>
 </databaseChangeLog>

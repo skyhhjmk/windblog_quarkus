@@ -1,0 +1,21 @@
+{#include "base.html"}
+    {#title}
+        {pageTitle ?: '申请友情链接'}
+    {/title}
+
+    {#navPath}
+        ~/windblog / links / apply
+    {/navPath}
+
+    {#content}
+        {#include "blog/link-apply.content.html" /}
+    {/content}
+
+    {#sidebar}
+    <div class="space-y-8">
+        {#include sidebar/stats.html /}
+        {#include sidebar/recent_posts.html /}
+        {#include sidebar/tags.html /}
+    </div>
+    {/sidebar}
+{/include}

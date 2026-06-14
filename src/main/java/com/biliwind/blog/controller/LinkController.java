@@ -26,9 +26,17 @@ public class LinkController {
         @Location("blog/link.html")
         Template link;
 
-        @Inject
-        @Location("blog/link.content.html")
-        Template linkContent;
+    @Inject
+    @Location("blog/link.content.html")
+    Template linkContent;
+
+    @Inject
+    @Location("blog/link-apply.html")
+    Template linkApply;
+
+    @Inject
+    @Location("blog/link-apply.content.html")
+    Template linkApplyContent;
 
     @Inject
     @Location("blog/link-detail.html")
@@ -59,8 +67,24 @@ public class LinkController {
                 return render(httpHeaders, type);
         }
 
+    @GET
+    @Path("/apply")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance application(@Context HttpHeaders httpHeaders) {
+        Template template = linkApply;
+        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
+            template = linkApplyContent;
+        }
+        return template
+                .data("pageTitle", "申请友情链接")
+                .data("language", languageContext.getLang());
+    }
+
         private TemplateInstance render(HttpHeaders httpHeaders, String type) {
-                Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? linkContent : link;
+            Template template = link;
+            if (PjaxHelper.isPjaxRequest(httpHeaders)) {
+                template = linkContent;
+            }
                 
                 List<Link> links;
             if (type == null || type.isBlank() || type.equalsIgnoreCase("All")) {
@@ -127,7 +151,10 @@ public class LinkController {
             throw new WebApplicationException(404);
         }
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? linkDetailContent : linkDetail;
+        Template template = linkDetail;
+        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
+            template = linkDetailContent;
+        }
 
         String pageTitle = linkEntity.seoTitle;
         if (pageTitle == null || pageTitle.isBlank()) {
@@ -152,6 +179,7 @@ public class LinkController {
         if (linkEntity == null) {
             throw new WebApplicationException(404);
         }
+
         if (linkEntity.status != 1) {
             throw new WebApplicationException(404);
         }
@@ -173,4 +201,5 @@ public class LinkController {
                 .data("targetUrl", linkEntity.url)
                 .data("linkName", linkEntity.name);
     }
+
 }
