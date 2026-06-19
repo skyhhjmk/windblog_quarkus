@@ -208,4 +208,45 @@ class PostAccessServiceTest {
         post.publishedRevision = revision;
         return post;
     }
+
+    @Test
+    @Transactional
+    void shouldReturnFreeBlocksWithoutPurchase() {
+        User user = createTestUser();
+        OffsetDateTime now = OffsetDateTime.now();
+        Post post = new Post();
+        post.slug = "free-block-post-" + UUID.randomUUID();
+        post.title = Map.of("zh-cn", "免费文章");
+        post.status = PostStatus.PUBLISHED;
+        post.visibility = 0;
+        post.renderType = PostRenderType.MARKDOWN;
+        post.user = user;
+        post.createdAt = now;
+        post.updatedAt = now;
+        post.persist();
+
+        PostRevision revision = new PostRevision();
+        revision.post = post;
+        revision.title = post.title;
+        revision.contentMarkdown = Map.of("zh-cn", "[hide-text id=free-block price=0]free content[/hide-text] [hide-text id=paid-block price=10]paid content[/hide-text]");
+        revision.editorType = 6;
+        revision.revisionNumber = 1;
+        revision.createdBy = user;
+        revision.createdAt = now;
+        revision.persist();
+
+        post.currentRevision = revision;
+        post.publishedRevision = revision;
+
+        User reader = createTestUser();
+        
+        java.util.Map<String, String> unlocked = postAccessService.getUnlockedBlocks(
+                "[hide-text id=free-block price=0]free content[/hide-text] [hide-text id=paid-block price=10]paid content[/hide-text]",
+                -1L, false, post.id, 10L, reader.id
+        );
+
+        assertTrue(unlocked.containsKey("free-block"));
+        assertEquals("free content", unlocked.get("free-block"));
+        assertFalse(unlocked.containsKey("paid-block"));
+    }
 }

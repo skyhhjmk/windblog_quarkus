@@ -28,7 +28,8 @@ public class AdminImportDtos {
             String password,
             List<String> types, // categories, tags, posts, links, comments, media
             String assetPrefix, // 附件相对地址补全前缀
-            boolean clearExisting // 是否在导入前清空现有数据（慎用）
+            boolean clearExisting, // 是否在导入前清空现有数据（慎用）
+            boolean allowLocalNetwork // 是否允许在导入时访问私有内网或本地环回地址
     ) {
     }
 

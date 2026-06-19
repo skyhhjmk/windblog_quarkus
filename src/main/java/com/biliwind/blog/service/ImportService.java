@@ -49,7 +49,7 @@ public class ImportService {
      */
     public ImportResult doImport(ImportRequest req, Long operatorId) {
         emit("info", "准备开始导入数据...", null);
-        ImportContext ctx = new ImportContext();
+        ImportContext ctx = new ImportContext(req.allowLocalNetwork());
         try (Connection conn = DriverManager.getConnection(req.url(), req.username(), req.password())) {
             int categories = 0, tags = 0, posts = 0, links = 0, comments = 0;
 
@@ -275,7 +275,7 @@ public class ImportService {
 
             emit("info", "同步媒体资源: " + fullUrl, null);
             try {
-                Media m = mediaService.importFromUrl(operator, fullUrl);
+                Media m = mediaService.importFromUrl(operator, fullUrl, ctx.allowLocalNetwork());
                 // 将所有关联的引用路径都指向新 URL
                 for (String path : refPaths) {
                     ctx.urlMap().put(path, m.url);
@@ -463,7 +463,7 @@ public class ImportService {
         for (DownloadTask task : currentQueue) {
             emit("info", "重试下载: " + task.sourceUrl, null);
             try {
-                Media m = mediaService.importFromUrl(operator, task.sourceUrl);
+                Media m = mediaService.importFromUrl(operator, task.sourceUrl, ctx.allowLocalNetwork());
                 ctx.urlMap().put(task.sourceUrl, m.url);
             } catch (Exception e) {
                 emit("error", "重试仍然失败: " + task.sourceUrl, e.getMessage());
@@ -936,7 +936,7 @@ public class ImportService {
             }
 
             try {
-                Media m = mediaService.importFromUrl(operator, fullUrl);
+                Media m = mediaService.importFromUrl(operator, fullUrl, ctx.allowLocalNetwork());
                 ctx.urlMap().put(url, m.url);
                 ctx.urlMap().put(fullUrl, m.url);
                 return m.url;
@@ -962,10 +962,15 @@ public class ImportService {
             Map<Long, Long> categoryMap,
             Map<Long, Long> tagMap,
             Map<Long, Long> userMap,
-            Map<Long, Long> postMap
+            Map<Long, Long> postMap,
+            boolean allowLocalNetwork
     ) {
         public ImportContext() {
-            this(new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
+            this(new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), false);
+        }
+
+        public ImportContext(boolean allowLocalNetwork) {
+            this(new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), allowLocalNetwork);
         }
     }
 }

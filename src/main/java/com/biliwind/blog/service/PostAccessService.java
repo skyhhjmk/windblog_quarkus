@@ -389,7 +389,16 @@ public class PostAccessService {
             String content = textMatcher.group(2);
             String idAttr = extractAttribute(attrStr, "id");
             String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
-            if (fullUnlocked || hasPurchasedBlock(userId, postId, blockId)) {
+            String priceStr = extractAttribute(attrStr, "price");
+            long requiredPrice = 0;
+            if (priceStr != null && !priceStr.isEmpty()) {
+                try {
+                    requiredPrice = Long.parseLong(priceStr);
+                } catch (Exception exception) {
+                    // 忽略解析错误，默认为 0
+                }
+            }
+            if (fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId)) {
                 unlockedBlocks.put(blockId, content);
             }
         }
@@ -405,7 +414,16 @@ public class PostAccessService {
             String content = attachMatcher.group(2);
             String idAttr = extractAttribute(attrStr, "id");
             String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
-            if (fullUnlocked || hasPurchasedBlock(userId, postId, blockId)) {
+            String priceStr = extractAttribute(attrStr, "price");
+            long requiredPrice = 0;
+            if (priceStr != null && !priceStr.isEmpty()) {
+                try {
+                    requiredPrice = Long.parseLong(priceStr);
+                } catch (Exception exception) {
+                    // 忽略解析错误，默认为 0
+                }
+            }
+            if (fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId)) {
                 unlockedBlocks.put(blockId, content);
             }
         }

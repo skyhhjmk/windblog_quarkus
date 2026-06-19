@@ -44,7 +44,7 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
 
         // 1. 对于非安全方法（POST, PUT, DELETE 等），执行验证
         if (!SAFE_METHODS.contains(method)) {
-            String path = requestContext.getUriInfo().getPath();
+            String path = normalizePath(requestContext.getUriInfo().getPath());
             // 排除不需要 CSRF 防护的路径（如 Admin API，通常使用 Bearer Token 已经天然防御 CSRF）
             // 但如果 Admin API 也使用 Cookie 认证，则也需要校验
             // 这里我们主要针对前台 API
@@ -79,5 +79,15 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
                     .build();
             responseContext.getHeaders().add("Set-Cookie", cookie);
         }
+    }
+
+    private String normalizePath(String path) {
+        if (path == null || path.isBlank()) {
+            return "/";
+        }
+        if (path.startsWith("/")) {
+            return path;
+        }
+        return "/" + path;
     }
 }

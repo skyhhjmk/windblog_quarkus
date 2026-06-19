@@ -62,4 +62,48 @@ public class MediaSecurityHelper {
         }
         return sb.toString();
     }
+
+    /**
+     * 检查 URL 是否指向私有 IP 或本地环回地址（防止 SSRF 漏洞）
+     *
+     * @param urlString 目标 URL
+     * @return 如果是私有或本地环回地址返回 true，否则返回 false
+     */
+    public static boolean isPrivateOrLoopbackAddress(String urlString) {
+        if (urlString == null || urlString.isBlank()) {
+            return true;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(urlString);
+            String host = uri.getHost();
+            if (host == null || host.isBlank()) {
+                return true;
+            }
+            if ("localhost".equalsIgnoreCase(host.trim())) {
+                return true;
+            }
+            java.net.InetAddress[] addresses = java.net.InetAddress.getAllByName(host);
+            for (java.net.InetAddress address : addresses) {
+                if (address.isLoopbackAddress()) {
+                    return true;
+                }
+                if (address.isSiteLocalAddress()) {
+                    return true;
+                }
+                if (address.isLinkLocalAddress()) {
+                    return true;
+                }
+                byte[] addressBytes = address.getAddress();
+                if (addressBytes.length == 4) {
+                    int firstOctet = addressBytes[0] & 0xFF;
+                    if (firstOctet == 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } catch (Exception exception) {
+            return true;
+        }
+    }
 }

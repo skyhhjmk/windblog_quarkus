@@ -183,14 +183,17 @@ public class ElasticsearchLogBufferService {
     /**
      * 将日志写入本地文件
      */
-    private void writeLogToFile(LogEntry entry) {
+    private synchronized void writeLogToFile(LogEntry entry) {
         if (bufferFilePath == null) return;
 
         try {
             String jsonLine = objectMapper.writeValueAsString(entry.toJson()) + "\n";
 
-            long fileSize = Files.exists(bufferFilePath) ? Files.size(bufferFilePath) : 0;
-            long maxSize = maxFileSizeMb * 1024L * 1024L;
+            long fileSize = 0;
+            if (Files.exists(bufferFilePath)) {
+                fileSize = Files.size(bufferFilePath);
+            }
+            long maxSize = (long) maxFileSizeMb * 1024L * 1024L;
 
             if (fileSize > maxSize) {
                 rotateBufferFile();
@@ -229,31 +232,64 @@ public class ElasticsearchLogBufferService {
     private void loadExistingBufferedLogs() {
         if (bufferFilePath == null || !Files.exists(bufferFilePath)) return;
 
+        List<String> unreadLines = new ArrayList<>();
+        int count = 0;
+
         try (BufferedReader reader = Files.newBufferedReader(bufferFilePath, StandardCharsets.UTF_8)) {
             String line;
-            int count = 0;
+            boolean queueFull = false;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;
 
+                if (queueFull) {
+                    unreadLines.add(line);
+                    continue;
+                }
+
                 try {
                     LogEntry entry = LogEntry.fromJson(objectMapper.readTree(line));
-                    if (logQueue != null && logQueue.offer(entry)) {
-                        count++;
+                    boolean success = false;
+                    if (logQueue != null) {
+                        success = logQueue.offer(entry);
+                    }
+                    if (success) {
+                        count = count + 1;
                     } else {
-                        droppedLogs.incrementAndGet();
+                        queueFull = true;
+                        unreadLines.add(line);
                     }
                 } catch (Exception e) {
                     log.debugf("解析缓冲日志行失败: %s", line);
                 }
             }
+        } catch (IOException e) {
+            log.error("加载缓冲日志失败", e);
+        }
 
-            Files.deleteIfExists(bufferFilePath);
+        try {
+            if (unreadLines.isEmpty()) {
+                Files.deleteIfExists(bufferFilePath);
+            } else {
+                StringBuilder sb = new StringBuilder();
+                for (String unreadLine : unreadLines) {
+                    sb.append(unreadLine).append("\n");
+                }
+                Files.writeString(
+                        bufferFilePath,
+                        sb.toString(),
+                        StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING
+                );
+                log.warnf("加载缓冲日志时队列已满，%d 条日志保留在文件中未加载", unreadLines.size());
+            }
+
             if (count > 0) {
                 bufferedLogs.addAndGet(count);
                 log.infof("已加载 %d 条缓冲日志", count);
             }
         } catch (IOException e) {
-            log.error("加载缓冲日志失败", e);
+            log.error("回写未消费的缓冲日志文件失败", e);
         }
     }
 

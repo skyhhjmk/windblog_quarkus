@@ -41,6 +41,11 @@ public class AdminDeadLetterApi {
             storageSyncEmitter;
 
     @Inject
+    @org.eclipse.microprofile.reactive.messaging.Channel("es-sync-tasks")
+    Instance<org.eclipse.microprofile.reactive.messaging.Emitter<com.biliwind.blog.service.elasticsearch.EsSyncTask>>
+            esSyncEmitter;
+
+    @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     /**
@@ -120,7 +125,6 @@ public class AdminDeadLetterApi {
         }
         
         try {
-            // 从消息内容中重建任务
             Map<String, Object> content = message.messageContent;
             if (content == null) {
                 return Response.status(Response.Status.BAD_REQUEST)
@@ -128,8 +132,8 @@ public class AdminDeadLetterApi {
                         .build();
             }
 
-            if (content.containsKey("postId")) {
-                // 处理 AI 摘要任务
+            String queue = message.sourceQueue;
+            if ("ai-summary-tasks".equals(queue)) {
                 Long postId = ((Number) content.get("postId")).longValue();
                 Integer priority = content.containsKey("priority") ?
                         ((Number) content.get("priority")).intValue() : 1;
@@ -142,8 +146,7 @@ public class AdminDeadLetterApi {
 
                 message.markAsProcessed("手动重试 AI 摘要 - 已重新发送");
                 log.info("已重试 AI 死信消息，id={}, postId={}", id, postId);
-            } else if (content.containsKey("mediaId")) {
-                // 处理存储同步任务
+            } else if ("storage-sync-tasks".equals(queue)) {
                 Long mediaId = ((Number) content.get("mediaId")).longValue();
                 String storageClassName = (String) content.get("storageClassName");
                 if (storageClassName == null) {
@@ -158,10 +161,58 @@ public class AdminDeadLetterApi {
 
                 message.markAsProcessed("手动重试存储同步 - 已重新发送");
                 log.info("已重试存储同步死信消息，id={}, mediaId={}", id, mediaId);
+            } else if ("es-sync-tasks".equals(queue)) {
+                Long postId = ((Number) content.get("postId")).longValue();
+                String actionType = (String) content.get("actionType");
+
+                com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
+                        new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
+                esSyncEmitter.get().send(esTask);
+
+                message.markAsProcessed("手动重试 ES 同步 - 已重新发送");
+                log.info("已重试 ES 同步死信消息，id={}, postId={}", id, postId);
             } else {
-                return Response.status(Response.Status.BAD_REQUEST)
-                        .entity(Map.of("success", false, "message", "未知消息类型"))
-                        .build();
+                // 后备后向兼容分支 (处理没有填充 sourceQueue 的老死信)
+                if (content.containsKey("mediaId")) {
+                    Long mediaId = ((Number) content.get("mediaId")).longValue();
+                    String storageClassName = (String) content.get("storageClassName");
+                    if (storageClassName == null) {
+                        storageClassName = (String) content.get("providerName");
+                    }
+                    String variantType = (String) content.get("variantType");
+
+                    com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
+                            new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
+                                    mediaId, storageClassName, variantType, 0);
+                    storageSyncEmitter.get().send(syncMsg);
+
+                    message.markAsProcessed("手动重试存储同步(兼容) - 已重新发送");
+                } else if (content.containsKey("postId") && content.containsKey("content")) {
+                    Long postId = ((Number) content.get("postId")).longValue();
+                    Integer priority = content.containsKey("priority") ?
+                            ((Number) content.get("priority")).intValue() : 1;
+                    @SuppressWarnings("unchecked")
+                    Map<String, String> postContent = (Map<String, String>) content.get("content");
+
+                    Long userId = adminRequestContext.getUserId();
+                    AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
+                    aiTaskProducer.sendSummaryTask(task);
+
+                    message.markAsProcessed("手动重试 AI 摘要(兼容) - 已重新发送");
+                } else if (content.containsKey("postId") && content.containsKey("actionType")) {
+                    Long postId = ((Number) content.get("postId")).longValue();
+                    String actionType = (String) content.get("actionType");
+
+                    com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
+                            new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
+                    esSyncEmitter.get().send(esTask);
+
+                    message.markAsProcessed("手动重试 ES 同步(兼容) - 已重新发送");
+                } else {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("success", false, "message", "无法识别的死信消息队列类型"))
+                            .build();
+                }
             }
             
             return Response.ok(Map.of(
@@ -195,9 +246,12 @@ public class AdminDeadLetterApi {
         for (DeadLetterMessage message : unprocessed) {
             try {
                 Map<String, Object> content = message.messageContent;
-                if (content == null) continue;
+                if (content == null) {
+                    continue;
+                }
 
-                if (content.containsKey("postId")) {
+                String queue = message.sourceQueue;
+                if ("ai-summary-tasks".equals(queue)) {
                     Long postId = ((Number) content.get("postId")).longValue();
                     Integer priority = content.containsKey("priority") ? 
                             ((Number) content.get("priority")).intValue() : 1;
@@ -209,8 +263,8 @@ public class AdminDeadLetterApi {
                     aiTaskProducer.sendSummaryTask(task);
 
                     message.markAsProcessed("批量重试 AI - 已重新发送");
-                    successCount++;
-                } else if (content.containsKey("mediaId")) {
+                    successCount = successCount + 1;
+                } else if ("storage-sync-tasks".equals(queue)) {
                     Long mediaId = ((Number) content.get("mediaId")).longValue();
                     String storageClassName = (String) content.get("storageClassName");
                     if (storageClassName == null) {
@@ -224,14 +278,65 @@ public class AdminDeadLetterApi {
                     storageSyncEmitter.get().send(syncMsg);
 
                     message.markAsProcessed("批量重试同步 - 已重新发送");
-                    successCount++;
+                    successCount = successCount + 1;
+                } else if ("es-sync-tasks".equals(queue)) {
+                    Long postId = ((Number) content.get("postId")).longValue();
+                    String actionType = (String) content.get("actionType");
+
+                    com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
+                            new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
+                    esSyncEmitter.get().send(esTask);
+
+                    message.markAsProcessed("批量重试 ES 同步 - 已重新发送");
+                    successCount = successCount + 1;
                 } else {
-                    message.markAsProcessed("批量重试跳过 - 未知消息类型");
-                    failCount++;
+                    // 后备后向兼容分支
+                    if (content.containsKey("mediaId")) {
+                        Long mediaId = ((Number) content.get("mediaId")).longValue();
+                        String storageClassName = (String) content.get("storageClassName");
+                        if (storageClassName == null) {
+                            storageClassName = (String) content.get("providerName");
+                        }
+                        String variantType = (String) content.get("variantType");
+
+                        com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
+                                new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
+                                        mediaId, storageClassName, variantType, 0);
+                        storageSyncEmitter.get().send(syncMsg);
+
+                        message.markAsProcessed("批量重试同步(兼容) - 已重新发送");
+                        successCount = successCount + 1;
+                    } else if (content.containsKey("postId") && content.containsKey("content")) {
+                        Long postId = ((Number) content.get("postId")).longValue();
+                        Integer priority = content.containsKey("priority") ?
+                                ((Number) content.get("priority")).intValue() : 1;
+                        @SuppressWarnings("unchecked")
+                        Map<String, String> postContent = (Map<String, String>) content.get("content");
+
+                        Long userId = adminRequestContext.getUserId();
+                        AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
+                        aiTaskProducer.sendSummaryTask(task);
+
+                        message.markAsProcessed("批量重试 AI(兼容) - 已重新发送");
+                        successCount = successCount + 1;
+                    } else if (content.containsKey("postId") && content.containsKey("actionType")) {
+                        Long postId = ((Number) content.get("postId")).longValue();
+                        String actionType = (String) content.get("actionType");
+
+                        com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
+                                new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
+                        esSyncEmitter.get().send(esTask);
+
+                        message.markAsProcessed("批量重试 ES(兼容) - 已重新发送");
+                        successCount = successCount + 1;
+                    } else {
+                        message.markAsProcessed("批量重试跳过 - 未知消息类型");
+                        failCount = failCount + 1;
+                    }
                 }
             } catch (Exception e) {
                 log.error("批量重试失败，id={}", message.id, e);
-                failCount++;
+                failCount = failCount + 1;
             }
         }
         

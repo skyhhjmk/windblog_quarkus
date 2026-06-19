@@ -579,12 +579,20 @@ public class MediaManagementService {
      */
     @Transactional
     public Media importFromUrl(User operator, String fileUrl) throws IOException {
+        return importFromUrl(operator, fileUrl, false);
+    }
+
+    @Transactional
+    public Media importFromUrl(User operator, String fileUrl, boolean allowLocalNetwork) throws IOException {
         String currentUrl = fileUrl;
         HttpURLConnection conn = null;
         int redirectCount = 0;
 
         // 手动处理重定向，主要为了支持跨协议（HTTP -> HTTPS）
         while (redirectCount < 5) {
+            if (!allowLocalNetwork && com.biliwind.blog.common.helper.MediaSecurityHelper.isPrivateOrLoopbackAddress(currentUrl)) {
+                throw new IOException("已拦截非法请求，禁止访问私有内网或环回地址: " + currentUrl);
+            }
             URL url = URI.create(currentUrl).toURL();
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");

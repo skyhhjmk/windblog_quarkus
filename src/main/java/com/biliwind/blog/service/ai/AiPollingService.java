@@ -68,13 +68,41 @@ public class AiPollingService {
     public CompletionStage<AiResult> summarize(AiProviderConfig groupConfig, Map<String, String> content) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
-        return tryNodesForSummarize(nodes, alg, groupConfig.id, 0, content);
+        if (nodes.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中配置的节点列表为空"));
+        }
+
+        NodeInfo selected = pickNext(nodes, alg, groupConfig.id);
+        int startIdx = 0;
+        for (int i = 0; i < nodes.size(); i++) {
+            if (nodes.get(i).id().equals(selected.id())) {
+                startIdx = i;
+                break;
+            }
+        }
+
+        return tryNodesForSummarize(nodes, startIdx, 0, content);
     }
 
     public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String prompt, String content) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
-        return tryNodesForModerate(nodes, alg, groupConfig.id, 0, prompt, content);
+        if (nodes.isEmpty()) {
+            AiResult defaultResult = new AiResult();
+            defaultResult.isSafe = true;
+            return CompletableFuture.completedFuture(defaultResult);
+        }
+
+        NodeInfo selected = pickNext(nodes, alg, groupConfig.id);
+        int startIdx = 0;
+        for (int i = 0; i < nodes.size(); i++) {
+            if (nodes.get(i).id().equals(selected.id())) {
+                startIdx = i;
+                break;
+            }
+        }
+
+        return tryNodesForModerate(nodes, startIdx, 0, prompt, content);
     }
 
     public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig groupConfig, com.biliwind.blog.controller.api.admin.dto.AiTestRequest req) {
@@ -119,45 +147,47 @@ public class AiPollingService {
         }
     }
 
-    private CompletionStage<AiResult> tryNodesForSummarize(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, Map<String, String> content) {
+    private CompletionStage<AiResult> tryNodesForSummarize(List<NodeInfo> nodes, int startIdx, int retryCount, Map<String, String> content) {
         if (nodes.isEmpty() || retryCount >= nodes.size()) {
             return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点调用失败或无节点"));
         }
 
-        NodeInfo selected = pickNext(nodes, alg, groupId);
+        int currentIdx = (startIdx + retryCount) % nodes.size();
+        NodeInfo selected = nodes.get(currentIdx);
         AiProviderConfig cfg = configService.getById(selected.id()).orElse(null);
         if (cfg == null || !cfg.enabled || cfg.type != AiConfigType.PROVIDER) {
-            return tryNodesForSummarize(nodes, alg, groupId, retryCount + 1, content);
+            return tryNodesForSummarize(nodes, startIdx, retryCount + 1, content);
         }
 
         return aiManager.executeSummarize(cfg, content)
                 .handle((res, ex) -> {
                     if (ex != null) {
-                        log.warn("轮询节点 {} 失败: {}", cfg.name, ex.getMessage());
-                        return tryNodesForSummarize(nodes, alg, groupId, retryCount + 1, content);
+                        log.warn("轮询节点 " + cfg.name + " 失败: " + ex.getMessage());
+                        return tryNodesForSummarize(nodes, startIdx, retryCount + 1, content);
                     }
                     return CompletableFuture.completedStage(res);
                 }).thenCompose(s -> s);
     }
 
-    private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, AiPollingAlgorithm alg, Long groupId, int retryCount, String prompt, String content) {
+    private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, int startIdx, int retryCount, String prompt, String content) {
         if (nodes.isEmpty() || retryCount >= nodes.size()) {
             AiResult defaultResult = new AiResult();
             defaultResult.isSafe = true;
             return CompletableFuture.completedFuture(defaultResult); // 默认放行
         }
 
-        NodeInfo selected = pickNext(nodes, alg, groupId);
+        int currentIdx = (startIdx + retryCount) % nodes.size();
+        NodeInfo selected = nodes.get(currentIdx);
         AiProviderConfig cfg = configService.getById(selected.id()).orElse(null);
         if (cfg == null || !cfg.enabled || cfg.type != AiConfigType.PROVIDER) {
-            return tryNodesForModerate(nodes, alg, groupId, retryCount + 1, prompt, content);
+            return tryNodesForModerate(nodes, startIdx, retryCount + 1, prompt, content);
         }
 
         return aiManager.executeModerate(cfg, prompt, content)
                 .handle((res, ex) -> {
                     if (ex != null) {
-                        log.warn("轮询节点 {} 审核失败: {}", cfg.name, ex.getMessage());
-                        return tryNodesForModerate(nodes, alg, groupId, retryCount + 1, prompt, content);
+                        log.warn("轮询节点 " + cfg.name + " 审核失败: " + ex.getMessage());
+                        return tryNodesForModerate(nodes, startIdx, retryCount + 1, prompt, content);
                     }
                     return CompletableFuture.completedStage(res);
                 }).thenCompose(s -> s);

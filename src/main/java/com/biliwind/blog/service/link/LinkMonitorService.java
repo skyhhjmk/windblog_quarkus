@@ -38,7 +38,6 @@ public class LinkMonitorService {
     Event<DataSyncEvent> dataSyncEvent;
 
     @Scheduled(every = "6h", identity = "link-monitor")
-    @Transactional
     public void scheduleCheck() {
         if (nodeRoleService.isEdgeNode()) {
             return;
@@ -50,7 +49,6 @@ public class LinkMonitorService {
         }
     }
 
-    @Transactional
     public void checkAllLinks() {
         List<Link> links = Link.list(
                 "type = ?1 and applicationStatus = ?2",
@@ -62,7 +60,6 @@ public class LinkMonitorService {
         }
     }
 
-    @Transactional
     public void checkLink(Link link, boolean readOnly) {
         String siteUrl = configManager.getString("site_info", "site_url", "");
         String checkBatchId = UUID.randomUUID().toString();
@@ -73,13 +70,30 @@ public class LinkMonitorService {
         nodeResults.add(new NodeLinkProbeResult("main", "主节点", primaryResult));
         nodeResults.addAll(distributedLinkProbeService.probeOnlineEdgeNodes(link.url, siteUrl));
 
+        persistLogAndState(link, checkBatchId, checkedAt, nodeResults, readOnly);
+    }
+
+    @Transactional
+    public void persistLogAndState(
+            Link link,
+            String checkBatchId,
+            OffsetDateTime checkedAt,
+            List<NodeLinkProbeResult> nodeResults,
+            boolean readOnly
+    ) {
+        Link dbLink = Link.findById(link.id);
+        if (dbLink == null) {
+            return;
+        }
+
         for (NodeLinkProbeResult nodeResult : nodeResults) {
-            saveMonitorLog(link, checkBatchId, checkedAt, nodeResult);
+            saveMonitorLog(dbLink, checkBatchId, checkedAt, nodeResult);
         }
 
         if (!readOnly) {
-            updateLinkMonitoringState(link, checkedAt, nodeResults);
-            dataSyncEvent.fire(new DataSyncEvent("LINK", link.id, "UPSERT"));
+            updateLinkMonitoringState(dbLink, checkedAt, nodeResults);
+            dbLink.persist();
+            dataSyncEvent.fire(new DataSyncEvent("LINK", dbLink.id, "UPSERT"));
         }
     }
 

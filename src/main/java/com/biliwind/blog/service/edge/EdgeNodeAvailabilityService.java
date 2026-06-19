@@ -58,6 +58,34 @@ public class EdgeNodeAvailabilityService {
         );
     }
 
+    public AvailabilityRates calculateRates(String nodeId, List<EdgeNodeAvailabilitySample> samples) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        return new AvailabilityRates(
+                calculateRateFromMemory(samples, now.minusHours(1)),
+                calculateRateFromMemory(samples, now.minusHours(24)),
+                calculateRateFromMemory(samples, now.minusDays(7)),
+                calculateRateFromMemory(samples, now.minusDays(30))
+        );
+    }
+
+    private AvailabilityRate calculateRateFromMemory(List<EdgeNodeAvailabilitySample> samples, OffsetDateTime since) {
+        long totalSamples = 0;
+        long onlineSamples = 0;
+        for (EdgeNodeAvailabilitySample sample : samples) {
+            if (sample.sampledAt.isAfter(since) || sample.sampledAt.isEqual(since)) {
+                totalSamples = totalSamples + 1;
+                if (sample.online) {
+                    onlineSamples = onlineSamples + 1;
+                }
+            }
+        }
+        if (totalSamples == 0) {
+            return new AvailabilityRate(null, 0L, 0L);
+        }
+        double onlineRate = (double) onlineSamples * 100.0D / (double) totalSamples;
+        return new AvailabilityRate(Double.valueOf(onlineRate), totalSamples, onlineSamples);
+    }
+
     public AvailabilityHistory getHistory(String nodeId, int days) {
         int safeDays = days;
         if (safeDays <= 0) {
@@ -78,7 +106,7 @@ public class EdgeNodeAvailabilityService {
         List<AvailabilitySamplePoint> points = buildSamplePoints(samples);
         List<AvailabilityOnlinePeriod> onlinePeriods = buildOnlinePeriods(samples, now);
         List<AvailabilityCalendarDay> calendarDays = buildCalendarDays(samples, since, now);
-        AvailabilityRates rates = calculateRates(nodeId);
+        AvailabilityRates rates = calculateRates(nodeId, samples);
 
         return new AvailabilityHistory(nodeId, since, now, rates, points, onlinePeriods, calendarDays);
     }
