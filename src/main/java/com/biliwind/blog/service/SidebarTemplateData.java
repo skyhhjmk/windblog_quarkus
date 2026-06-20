@@ -24,6 +24,10 @@ public class SidebarTemplateData {
         return jakarta.enterprise.inject.spi.CDI.current().select(LanguageContext.class).get();
     }
 
+    private static com.biliwind.blog.context.RegionContext getRegionContext() {
+        return jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.context.RegionContext.class).get();
+    }
+
     private static CacheService getCacheService() {
         return jakarta.enterprise.inject.spi.CDI.current().select(CacheService.class).get();
     }
@@ -31,7 +35,8 @@ public class SidebarTemplateData {
     @TemplateExtension(namespace = "sidebar")
     public static List<PostView> recentPosts(int limit) {
         String lang = getLanguageContext().getLang();
-        String cacheKey = CacheService.Keys.recentPosts(lang, limit);
+        String region = getRegionContext().getCurrentRegion().getCode();
+        String cacheKey = CacheService.Keys.recentPosts(lang, region, limit);
         Object localValue = getLocalValue(cacheKey);
         if (localValue instanceof List) {
             return (List<PostView>) localValue;
@@ -45,9 +50,10 @@ public class SidebarTemplateData {
             return cachedPosts;
         }
 
-        List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
+        List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
                         Sort.descending("publishedAt").and("createdAt").descending(),
-                        com.biliwind.blog.model.PostStatus.PUBLISHED)
+                        com.biliwind.blog.model.PostStatus.PUBLISHED,
+                        "%\"" + region + "\"%")
                 .page(0, limit)
                 .list();
 

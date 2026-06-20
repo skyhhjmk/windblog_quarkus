@@ -29,6 +29,7 @@
         initBuyButtons();
         initRepostLicenseButton();
         checkAuthorization();
+        initBlockManager();
     }
 
     // Initialize purchase button event listeners (using delegation)
@@ -329,6 +330,414 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // --- Block Manager & Preference Controls ---
+    const expandedBlockIds = new Set();
+    let blockPrefs = {
+        mode: 'hidden', // 'hidden', 'card', 'line'
+        enabledLevels: {},
+        enabledGroups: {}
+    };
+
+    function initBlockManager() {
+        const container = document.getElementById('post-content-section');
+        if (container) {
+            Array.from(container.children).forEach((child, index) => {
+                if (!child.classList.contains('custom-block') && 
+                    !child.classList.contains('block-placeholder-card') && 
+                    !child.classList.contains('block-placeholder-line') &&
+                    child.tagName !== 'SCRIPT' && 
+                    child.tagName !== 'STYLE') {
+                    
+                    child.classList.add('custom-block', 'block-isolated');
+                    child.dataset.name = 'basic';
+                    child.dataset.blockId = 'isolated-' + index;
+                } else if (child.classList.contains('custom-block')) {
+                    if (!child.dataset.name || child.dataset.name.trim() === '') {
+                        child.dataset.name = 'basic';
+                    }
+                }
+            });
+        }
+
+        const blocks = document.querySelectorAll('.custom-block');
+        const widget = document.getElementById('block-manager-widget');
+        if (!widget) return;
+
+        if (blocks.length === 0) {
+            widget.classList.add('hidden');
+            return;
+        }
+        widget.classList.remove('hidden');
+
+        loadBlockPrefs(blocks);
+        renderBlockControls(blocks);
+        applyBlockVisibility(blocks);
+    }
+
+    function loadBlockPrefs(blocks) {
+        const local = localStorage.getItem('windblog_block_prefs');
+        if (local) {
+            try {
+                blockPrefs = JSON.parse(local);
+            } catch (e) {
+                console.error('解析偏好失败:', e);
+            }
+        }
+
+        const levelsInPage = new Set();
+        const groupsInPage = new Set();
+        blocks.forEach(b => {
+            if (b.dataset.name) levelsInPage.add(b.dataset.name);
+            if (b.dataset.group) groupsInPage.add(b.dataset.group);
+        });
+
+        levelsInPage.forEach(lvl => {
+            if (blockPrefs.enabledLevels[lvl] === undefined) {
+                blockPrefs.enabledLevels[lvl] = true;
+            }
+        });
+        groupsInPage.forEach(grp => {
+            if (blockPrefs.enabledGroups[grp] === undefined) {
+                blockPrefs.enabledGroups[grp] = true;
+            }
+        });
+
+        if (!blockPrefs.mode) {
+            blockPrefs.mode = 'hidden';
+        }
+    }
+
+    function saveBlockPrefs() {
+        localStorage.setItem('windblog_block_prefs', JSON.stringify(blockPrefs));
+    }
+
+    function handleLevelToggleChange(lvl, isChecked) {
+        blockPrefs.enabledLevels[lvl] = isChecked;
+        if (isChecked) {
+            if (lvl === 'detailed') {
+                if (blockPrefs.enabledLevels['basic'] !== undefined) blockPrefs.enabledLevels['basic'] = true;
+                if (blockPrefs.enabledLevels['quick'] !== undefined) blockPrefs.enabledLevels['quick'] = true;
+            }
+            if (lvl === 'basic') {
+                if (blockPrefs.enabledLevels['quick'] !== undefined) blockPrefs.enabledLevels['quick'] = true;
+            }
+        }
+        saveBlockPrefs();
+        updateCheckboxStates();
+        
+        const blocks = document.querySelectorAll('.custom-block');
+        applyBlockVisibility(blocks);
+    }
+
+    function renderBlockControls(blocks) {
+        const modeButtons = {
+            'hidden': document.getElementById('pref-mode-hidden'),
+            'card': document.getElementById('pref-mode-card'),
+            'line': document.getElementById('pref-mode-line')
+        };
+        
+        Object.keys(modeButtons).forEach(m => {
+            const btn = modeButtons[m];
+            if (btn) {
+                // Remove existing listeners by cloning and replacing
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+                modeButtons[m] = newBtn;
+
+                newBtn.addEventListener('click', () => {
+                    Object.values(modeButtons).forEach(b => { if (b) b.classList.remove('active'); });
+                    newBtn.classList.add('active');
+                    blockPrefs.mode = m;
+                    saveBlockPrefs();
+                    applyBlockVisibility(blocks);
+                });
+            }
+        });
+        
+        Object.keys(modeButtons).forEach(m => {
+            const btn = modeButtons[m];
+            if (btn) {
+                if (m === blockPrefs.mode) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            }
+        });
+
+        const levelContainer = document.getElementById('level-toggles-container');
+        if (levelContainer) {
+            levelContainer.innerHTML = '';
+            const sortedLevels = Object.keys(blockPrefs.enabledLevels).sort((a, b) => {
+                const order = { 'quick': 1, 'basic': 2, 'detailed': 3 };
+                return (order[a] || 99) - (order[b] || 99);
+            });
+            
+            sortedLevels.forEach(lvl => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'block-checkbox-wrapper';
+                
+                const labelText = getLevelDisplayName(lvl);
+                const uniqueId = 'chk-level-' + lvl;
+                
+                wrapper.innerHTML = `
+                    <label class="block-checkbox-label" for="${uniqueId}">${labelText}</label>
+                    <input type="checkbox" id="${uniqueId}" class="level-toggle-checkbox" data-level="${lvl}" style="accent-color: var(--color-accent, #06b6d4);" />
+                `;
+                levelContainer.appendChild(wrapper);
+                
+                const chk = wrapper.querySelector('input');
+                chk.checked = blockPrefs.enabledLevels[lvl];
+                chk.addEventListener('change', (e) => {
+                    handleLevelToggleChange(lvl, e.target.checked);
+                });
+            });
+        }
+
+        const groupContainer = document.getElementById('group-toggles-container');
+        const groupSection = document.getElementById('group-toggles-section');
+        const groupKeys = Object.keys(blockPrefs.enabledGroups);
+        
+        if (groupContainer && groupSection) {
+            if (groupKeys.length > 0) {
+                groupSection.classList.remove('hidden');
+                groupContainer.innerHTML = '';
+                groupKeys.forEach(grp => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'block-checkbox-wrapper';
+                    const uniqueId = 'chk-group-' + grp;
+                    wrapper.innerHTML = `
+                        <label class="block-checkbox-label" for="${uniqueId}">组: ${grp}</label>
+                        <input type="checkbox" id="${uniqueId}" class="group-toggle-checkbox" data-group="${grp}" style="accent-color: var(--color-accent, #06b6d4);" />
+                    `;
+                    groupContainer.appendChild(wrapper);
+                    
+                    const chk = wrapper.querySelector('input');
+                    chk.checked = blockPrefs.enabledGroups[grp];
+                    chk.addEventListener('change', (e) => {
+                        blockPrefs.enabledGroups[grp] = e.target.checked;
+                        saveBlockPrefs();
+                        applyBlockVisibility(blocks);
+                    });
+                });
+            } else {
+                groupSection.classList.add('hidden');
+            }
+        }
+
+        const btnAllLevels = document.getElementById('btn-select-all-levels');
+        if (btnAllLevels) {
+            btnAllLevels.onclick = () => {
+                const checked = Object.values(blockPrefs.enabledLevels).some(v => !v);
+                Object.keys(blockPrefs.enabledLevels).forEach(k => blockPrefs.enabledLevels[k] = checked);
+                saveBlockPrefs();
+                updateCheckboxStates();
+                applyBlockVisibility(blocks);
+            };
+        }
+        const btnAllGroups = document.getElementById('btn-select-all-groups');
+        if (btnAllGroups) {
+            btnAllGroups.onclick = () => {
+                const checked = Object.values(blockPrefs.enabledGroups).some(v => !v);
+                Object.keys(blockPrefs.enabledGroups).forEach(k => blockPrefs.enabledGroups[k] = checked);
+                saveBlockPrefs();
+                updateCheckboxStates();
+                applyBlockVisibility(blocks);
+            };
+        }
+
+        renderBlockOutline(blocks);
+    }
+
+    function getLevelDisplayName(lvl) {
+        const names = {
+            'quick': '快速实现 (Quick)',
+            'basic': '基本模式 (Basic)',
+            'detailed': '详细思路 (Detailed)'
+        };
+        return names[lvl] || (lvl.charAt(0).toUpperCase() + lvl.slice(1));
+    }
+
+    function updateCheckboxStates() {
+        document.querySelectorAll('.level-toggle-checkbox').forEach(chk => {
+            const lvl = chk.dataset.level;
+            if (lvl && blockPrefs.enabledLevels[lvl] !== undefined) {
+                chk.checked = blockPrefs.enabledLevels[lvl];
+            }
+        });
+        document.querySelectorAll('.group-toggle-checkbox').forEach(chk => {
+            const grp = chk.dataset.group;
+            if (grp && blockPrefs.enabledGroups[grp] !== undefined) {
+                chk.checked = blockPrefs.enabledGroups[grp];
+            }
+        });
+    }
+
+    function renderBlockOutline(blocks) {
+        const container = document.getElementById('block-outline-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        if (blocks.length === 0) {
+            container.innerHTML = '<p class="text-xs text-gray-500 italic">无可用区块</p>';
+            return;
+        }
+
+        blocks.forEach((b, index) => {
+            const blockId = b.dataset.blockId || ('block-index-' + index);
+            b.id = blockId;
+
+            const lvl = b.dataset.name || '';
+            const grp = b.dataset.group || '';
+            
+            let title = b.dataset.title;
+            if (!title) {
+                const h = b.querySelector('h1, h2, h3, h4, h5, h6');
+                if (h) {
+                    title = h.textContent.trim();
+                } else {
+                    const text = b.textContent.replace(/\s+/g, ' ').trim();
+                    title = text.length > 25 ? text.substring(0, 25) + '...' : text;
+                }
+            }
+            if (!title || title.trim() === '...') {
+                title = '内容区块 #' + (index + 1);
+            }
+
+            const item = document.createElement('a');
+            item.href = '#' + blockId;
+            item.className = 'block-outline-item';
+            
+            const badgeLvl = getLevelBadgeHtml(lvl);
+            const badgeGrp = grp ? `<span class="bg-input-bg border border-border/60 text-gray-400 px-1.5 py-0.5 rounded-[4px] font-mono text-[9px] scale-90 origin-left">${grp}</span>` : '';
+            
+            item.innerHTML = `
+                <div class="flex flex-col gap-1 w-full min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        ${badgeLvl}
+                        ${badgeGrp}
+                    </div>
+                    <div class="truncate font-bold text-[11px] mt-0.5 text-main" title="${title}">${title}</div>
+                </div>
+            `;
+            
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (b.classList.contains('block-hidden') || b.style.display === 'none') {
+                    expandedBlockIds.add(blockId);
+                    applyBlockVisibility(document.querySelectorAll('.custom-block'));
+                }
+                
+                const targetEl = document.getElementById(blockId);
+                if (targetEl) {
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    targetEl.classList.add('ring-2', 'ring-accent', 'ring-offset-2', 'ring-offset-card', 'transition-shadow', 'duration-500');
+                    setTimeout(() => {
+                        targetEl.classList.remove('ring-2', 'ring-accent', 'ring-offset-2', 'ring-offset-card');
+                    }, 2000);
+                }
+            });
+            
+            container.appendChild(item);
+        });
+    }
+
+    function getLevelBadgeHtml(lvl) {
+        const colors = {
+            'quick': 'bg-green-500/10 text-green-400 border-green-500/20',
+            'basic': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+            'detailed': 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+        };
+        const defaultColor = 'bg-accent/10 text-accent border-accent/20';
+        const cls = colors[lvl] || defaultColor;
+        const name = lvl === 'quick' ? '快速' : lvl === 'basic' ? '基本' : lvl === 'detailed' ? '详细' : lvl;
+        return `<span class="px-1.5 py-0.5 rounded-[4px] border ${cls} text-[9px] font-black tracking-wide">${name}</span>`;
+    }
+
+    function applyBlockVisibility(blocks) {
+        document.querySelectorAll('.block-placeholder-card, .block-placeholder-line').forEach(el => el.remove());
+        
+        blocks.forEach((b, index) => {
+            const blockId = b.id || b.dataset.blockId || ('block-index-' + index);
+            const lvl = b.dataset.name;
+            const grp = b.dataset.group;
+            
+            const levelDisabled = blockPrefs.enabledLevels[lvl] === false;
+            const groupDisabled = grp && blockPrefs.enabledGroups[grp] === false;
+            
+            const shouldHide = levelDisabled || groupDisabled;
+            const isTemporarilyExpanded = expandedBlockIds.has(blockId);
+            
+            if (shouldHide && !isTemporarilyExpanded) {
+                b.style.display = 'none';
+                b.classList.add('block-hidden');
+                
+                if (blockPrefs.mode === 'card') {
+                    createPlaceholderCard(b, blockId, lvl, grp);
+                } else if (blockPrefs.mode === 'line') {
+                    createPlaceholderLine(b, blockId, lvl, grp);
+                }
+            } else {
+                b.style.display = 'block';
+                b.classList.remove('block-hidden');
+            }
+        });
+    }
+
+    function createPlaceholderCard(blockEl, blockId, lvl, grp) {
+        const card = document.createElement('div');
+        card.className = 'block-placeholder-card';
+        
+        const lvlName = lvl === 'quick' ? '快速实现' : lvl === 'basic' ? '基本模式' : lvl === 'detailed' ? '详细思路' : lvl;
+        const grpSuffix = grp ? `（分组: ${grp}）` : '';
+        
+        card.innerHTML = `
+            <div class="card-info">
+                <div class="card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                        <line x1="9" y1="20" x2="15" y2="20"></line>
+                        <line x1="12" y1="4" x2="12" y2="20"></line>
+                    </svg>
+                </div>
+                <div>
+                    <div class="card-title">已折叠 [${lvlName}]${grpSuffix} 内容</div>
+                    <div class="card-desc">您在侧边栏关闭了此内容的自动显示</div>
+                </div>
+            </div>
+            <button type="button" class="btn-expand">点击展开</button>
+        `;
+        
+        card.addEventListener('click', () => {
+            expandedBlockIds.add(blockId);
+            applyBlockVisibility(document.querySelectorAll('.custom-block'));
+        });
+        
+        blockEl.parentNode.insertBefore(card, blockEl);
+    }
+
+    function createPlaceholderLine(blockEl, blockId, lvl, grp) {
+        const line = document.createElement('span');
+        line.className = 'block-placeholder-line';
+        
+        const lvlName = lvl === 'quick' ? '快速实现' : lvl === 'basic' ? '基本模式' : lvl === 'detailed' ? '详细思路' : lvl;
+        
+        line.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <polyline points="6 9 12 15 18 9"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            点击展开折叠的 [${lvlName}] 详细文本
+        `;
+        
+        line.addEventListener('click', () => {
+            expandedBlockIds.add(blockId);
+            applyBlockVisibility(document.querySelectorAll('.custom-block'));
+        });
+        
+        blockEl.parentNode.insertBefore(line, blockEl);
     }
 
 })();

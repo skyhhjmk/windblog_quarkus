@@ -137,8 +137,8 @@ public class CacheService {
             return INDEX_PAGE_PREFIX + page + ":lang:" + lang;
         }
 
-        public static String recentPosts(String lang, int limit) {
-            return SIDEBAR_RECENT_POSTS + lang + ":" + limit;
+        public static String recentPosts(String lang, String region, int limit) {
+            return SIDEBAR_RECENT_POSTS + lang + ":" + region + ":" + limit;
         }
 
         public static String categories(String lang) {

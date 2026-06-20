@@ -10,6 +10,9 @@ public class MdNodes {
     public static class CustomContainerBlock extends Block {
         private final String name;
         private boolean isClosed = false;
+        private String group;
+        private java.util.Set<String> excludeRegions = new java.util.HashSet<>();
+        private String title;
 
         public CustomContainerBlock(BasedSequence chars, String name) {
             super(chars);
@@ -27,6 +30,38 @@ public class MdNodes {
         public void setClosed(boolean closed) {
             this.isClosed = closed;
         }
+
+        public String getGroup() {
+            return group;
+        }
+
+        public void setGroup(String group) {
+            this.group = group;
+        }
+
+        public java.util.Set<String> getExcludeRegions() {
+            return excludeRegions;
+        }
+
+        public void setExcludeRegions(java.util.Set<String> excludeRegions) {
+            this.excludeRegions = excludeRegions;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public boolean isExcluded(com.biliwind.blog.model.BlogRegion region) {
+            if (region == null || excludeRegions == null) {
+                return false;
+            }
+            return excludeRegions.contains(region.getCode().toLowerCase());
+        }
+
         @Override
         public @NotNull BasedSequence[] getSegments() { return BasedSequence.EMPTY_SEGMENTS; }
     }

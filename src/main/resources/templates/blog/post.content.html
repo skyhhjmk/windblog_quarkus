@@ -58,6 +58,9 @@
             <!-- 2. 文章目录 (TOC) -->
                 {#include sidebar/toc.html /}
 
+            <!-- 2.5 区块大纲与偏好控制 -->
+                {#include sidebar/block_manager.html /}
+
             <!-- 3. 附件信息 (如果有) -->
             {#if attachments && ! attachments.isEmpty}
                 <section

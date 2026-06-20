@@ -12,14 +12,48 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class CustomContainerBlockParser extends AbstractBlockParser {
-    private static final Pattern START_PATTERN = Pattern.compile("^\\s*:::\\s+([a-zA-Z0-9_-]+)\\s*$");
+    private static final Pattern START_PATTERN = Pattern.compile("^\\s*:::\\s+([a-zA-Z0-9_-]+)(?:\\s+\\{([^}]+)\\})?\\s*$");
 
     private final MdNodes.CustomContainerBlock block;
     private final String name;
 
     public CustomContainerBlockParser(BasedSequence chars, String name) {
+        this(chars, name, java.util.Collections.emptyMap());
+    }
+
+    public CustomContainerBlockParser(BasedSequence chars, String name, java.util.Map<String, String> attrs) {
         this.name = name.trim();
         this.block = new MdNodes.CustomContainerBlock(chars, this.name);
+        if (attrs != null) {
+            this.block.setGroup(attrs.get("group"));
+            this.block.setTitle(attrs.get("title"));
+            String excludeStr = attrs.get("exclude");
+            if (excludeStr != null && !excludeStr.isBlank()) {
+                java.util.Set<String> regions = new java.util.HashSet<>();
+                String[] parts = excludeStr.split(",");
+                for (String part : parts) {
+                    regions.add(part.trim().toLowerCase());
+                }
+                this.block.setExcludeRegions(regions);
+            }
+        }
+    }
+
+    private static java.util.Map<String, String> parseAttributes(String attrStr) {
+        java.util.Map<String, String> attrs = new java.util.HashMap<>();
+        if (attrStr == null || attrStr.isBlank()) {
+            return attrs;
+        }
+        Pattern p = Pattern.compile("([a-zA-Z0-9_-]+)\\s*=\\s*(?:\"([^\"]*)\"|([^,\\s}]+))");
+        Matcher m = p.matcher(attrStr);
+        while (m.find()) {
+            String key = m.group(1).toLowerCase();
+            String val = m.group(2) != null ? m.group(2) : m.group(3);
+            if (val != null) {
+                attrs.put(key, val.trim());
+            }
+        }
+        return attrs;
     }
 
     @Override
@@ -77,10 +111,12 @@ public class CustomContainerBlockParser extends AbstractBlockParser {
                 @Override
                 public BlockStart tryStart(@NotNull ParserState state, @NotNull MatchedBlockParser matchedBlockParser) {
                     BasedSequence line = state.getLine();
-                    Matcher matcher = START_PATTERN.matcher(line);
+                    Matcher matcher = START_PATTERN.matcher(line.toString().trim());
                     if (matcher.matches()) {
                         String name = matcher.group(1).trim();
-                        return BlockStart.of(new CustomContainerBlockParser(line, name)).atIndex(state.getLineEndIndex());
+                        String attrStr = matcher.group(2);
+                        java.util.Map<String, String> attrs = parseAttributes(attrStr);
+                        return BlockStart.of(new CustomContainerBlockParser(line, name, attrs)).atIndex(state.getLineEndIndex());
                     }
                     return BlockStart.none();
                 }

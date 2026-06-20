@@ -24,7 +24,7 @@ public final class MarkdownHelper {
             .addAttributes("code", "class")
             .addAttributes("pre", "class")
             .addAttributes("span", "class", "style")
-            .addAttributes("div", "class", "id", "style")
+            .addAttributes("div", "class", "id", "style", "data-name", "data-group", "data-title", "data-block-id")
             .addAttributes("a", "href", "target", "rel", "class", "title",
                     "data-article-link-preview", "data-link-name", "data-link-url",
                     "data-link-description", "data-link-icon")

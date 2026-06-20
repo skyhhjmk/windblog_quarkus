@@ -160,4 +160,17 @@ class MarkdownHelperTest {
 
         assertTrue(html.contains("<hr"));
     }
+
+    @Test
+    void shouldConvertCustomContainerWithAttributesToHtml() {
+        String markdown = "::: detailed {group=踩坑, title=\"深度分析\"}\n踩坑记录在这里\n::: /detailed";
+        String html = MarkdownHelper.toHtml(markdown);
+
+        assertTrue(html.contains("class=\"custom-block block-detailed\""));
+        assertTrue(html.contains("data-name=\"detailed\""));
+        assertTrue(html.contains("data-group=\"踩坑\""));
+        assertTrue(html.contains("data-title=\"深度分析\""));
+        assertTrue(html.contains("data-block-id=\"block-"));
+        assertTrue(html.contains("踩坑记录在这里"));
+    }
 }

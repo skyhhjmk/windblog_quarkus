@@ -1,0 +1,211 @@
+<div id="block-manager-widget"
+     class="sidebar-widget bg-card/40 backdrop-blur-md border border-border rounded-xl p-6 transition-all duration-300 hover:border-accent/30 hidden">
+    
+    <!-- 标题栏 -->
+    <div class="flex items-center justify-between mb-6 pb-4 border-b border-border/40">
+        <div class="flex items-center gap-3">
+            <div class="w-1.5 h-6 bg-accent rounded-full shadow-[0_0_12px_rgba(6,182,212,0.5)]"></div>
+            <h3 class="text-sm font-bold tracking-wider text-main uppercase">阅读偏好</h3>
+        </div>
+        <span class="text-[10px] font-mono text-gray-500 bg-accent/5 px-2 py-0.5 rounded border border-accent/10">BETA</span>
+    </div>
+
+    <!-- 1. 隐藏展示模式选择 (Segmented Control) -->
+    <div class="space-y-3 mb-6">
+        <label class="text-xs font-bold text-gray-400 block uppercase tracking-wider">隐藏内容呈现方式</label>
+        <div class="grid grid-cols-3 gap-1 bg-input-bg/60 border border-border/60 p-1 rounded-xl">
+            <button type="button" id="pref-mode-hidden" class="pref-mode-btn active" data-mode="hidden">
+                <span class="text-xs font-bold">完全隐藏</span>
+            </button>
+            <button type="button" id="pref-mode-card" class="pref-mode-btn" data-mode="card">
+                <span class="text-xs font-bold">占位卡片</span>
+            </button>
+            <button type="button" id="pref-mode-line" class="pref-mode-btn" data-mode="line">
+                <span class="text-xs font-bold">占位虚线</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. 信息级别开关 -->
+    <div class="space-y-4 mb-6 pt-4 border-t border-border/20">
+        <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">信息级别过滤</label>
+            <button type="button" id="btn-select-all-levels" class="text-[10px] text-accent hover:underline font-bold">全选</button>
+        </div>
+        <div id="level-toggles-container" class="space-y-2.5">
+            <!-- JS dynamically inserts level check-boxes -->
+            <p class="text-xs text-gray-500 italic">未检测到定制区块...</p>
+        </div>
+    </div>
+
+    <!-- 3. 分组虚拟层开关 -->
+    <div id="group-toggles-section" class="space-y-4 mb-6 pt-4 border-t border-border/20 hidden">
+        <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">内容分组过滤</label>
+            <button type="button" id="btn-select-all-groups" class="text-[10px] text-accent hover:underline font-bold">全选</button>
+        </div>
+        <div id="group-toggles-container" class="space-y-2.5">
+            <!-- JS dynamically inserts group check-boxes -->
+        </div>
+    </div>
+
+    <!-- 4. 内容区块大纲 -->
+    <div class="space-y-4 pt-4 border-t border-border/20">
+        <label class="text-xs font-bold text-gray-400 block uppercase tracking-wider">区块导航大纲</label>
+        <div id="block-outline-container" class="space-y-2 max-h-[30vh] overflow-y-auto pr-1 custom-scrollbar text-xs">
+            <!-- JS dynamically inserts outline anchors -->
+            <p class="text-xs text-gray-500 italic">无可用区块</p>
+        </div>
+    </div>
+</div>
+
+<style>
+    .pref-mode-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 4px;
+        border-radius: 8px;
+        color: var(--text-muted, #9ca3af);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .pref-mode-btn:hover {
+        color: var(--text-main, #ffffff);
+        background: rgba(255, 255, 255, 0.03);
+    }
+    .pref-mode-btn.active {
+        color: var(--color-accent, #06b6d4);
+        background: var(--card-bg, rgba(255, 255, 255, 0.08));
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* 侧边栏开关复选框样式 */
+    .block-checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+    .block-checkbox-wrapper:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(6, 182, 212, 0.2);
+    }
+    .block-checkbox-label {
+        font-size: 13px;
+        color: var(--text-main, #ffffff);
+        font-weight: 500;
+        cursor: pointer;
+    }
+    
+    /* 区块大纲项 */
+    .block-outline-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.01);
+        border: 1px solid rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        color: var(--text-body, #d1d5db);
+        transition: all 0.2s;
+        text-decoration: none;
+    }
+    .block-outline-item:hover {
+        background: rgba(6, 182, 212, 0.05);
+        border-color: rgba(6, 182, 212, 0.3);
+        color: var(--color-accent, #06b6d4);
+        transform: translateX(4px);
+    }
+    
+    /* 占位卡片样式 */
+    .block-placeholder-card {
+        margin: 1.5rem 0;
+        padding: 1.25rem;
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    .block-placeholder-card:hover {
+        border-color: rgba(6, 182, 212, 0.3);
+        box-shadow: 0 4px 12px rgba(6, 182, 212, 0.1);
+    }
+    .block-placeholder-card .card-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .block-placeholder-card .card-icon {
+        color: var(--color-accent, #06b6d4);
+        background: rgba(6, 182, 212, 0.1);
+        border-radius: 8px;
+        width: 2.25rem;
+        height: 2.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .block-placeholder-card .card-title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--text-main, #ffffff);
+    }
+    .block-placeholder-card .card-desc {
+        font-size: 0.75rem;
+        color: var(--text-muted, #9ca3af);
+        margin-top: 2px;
+    }
+    .block-placeholder-card .btn-expand {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--color-accent, #06b6d4);
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .block-placeholder-card:hover .btn-expand {
+        background: rgba(6, 182, 212, 0.1);
+    }
+    
+    /* 占位虚线样式 */
+    .block-placeholder-line {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin: 12px 0;
+        padding: 6px 14px;
+        border-bottom: 2px dashed rgba(6, 182, 212, 0.4);
+        color: rgba(6, 182, 212, 0.8);
+        font-size: 0.75rem;
+        font-weight: 700;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.3s;
+        position: relative;
+    }
+    .block-placeholder-line:hover {
+        color: var(--color-accent, #06b6d4);
+        border-bottom-color: var(--color-accent, #06b6d4);
+        background: rgba(6, 182, 212, 0.05);
+        border-radius: 4px;
+        box-shadow: 0 0 8px rgba(6, 182, 212, 0.3);
+    }
+</style>

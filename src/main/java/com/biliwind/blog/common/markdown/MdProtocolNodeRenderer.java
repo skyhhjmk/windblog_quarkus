@@ -35,12 +35,48 @@ public class MdProtocolNodeRenderer implements NodeRenderer {
             html.tag("/div");
             return;
         }
-        html.attr("class", "custom-block block-" + node.getName())
-                .attr("data-name", node.getName())
-                .withAttr()
-                .tag("div");
+
+        com.biliwind.blog.model.BlogRegion currentRegion = getCurrentRegion();
+        if (node.isExcluded(currentRegion)) {
+            return;
+        }
+
+        String blockId = "block-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+
+        String name = node.getName();
+        if (name == null || name.trim().isEmpty()) {
+            name = "basic";
+        }
+
+        html.attr("class", "custom-block block-" + name)
+                .attr("data-name", name)
+                .attr("data-block-id", blockId);
+
+        if (node.getGroup() != null && !node.getGroup().isBlank()) {
+            html.attr("data-group", node.getGroup());
+        }
+        if (node.getTitle() != null && !node.getTitle().isBlank()) {
+            html.attr("data-title", node.getTitle());
+        }
+
+        html.withAttr().tag("div");
         context.renderChildren(node);
         html.tag("/div");
+    }
+
+    private com.biliwind.blog.model.BlogRegion getCurrentRegion() {
+        try {
+            var container = io.quarkus.arc.Arc.container();
+            if (container != null) {
+                var instance = container.instance(com.biliwind.blog.context.RegionContext.class);
+                if (instance != null && instance.isAvailable()) {
+                    return instance.get().getCurrentRegion();
+                }
+            }
+        } catch (Exception e) {
+            // fallback
+        }
+        return com.biliwind.blog.model.BlogRegion.GLOBAL;
     }
 
     private void renderBlockQuote(com.vladsch.flexmark.ast.BlockQuote node, NodeRendererContext context, HtmlWriter html) {

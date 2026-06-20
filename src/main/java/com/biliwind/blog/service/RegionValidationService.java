@@ -17,7 +17,7 @@ public class RegionValidationService {
      */
     public List<String> validateAndFilterRegions(List<String> regions) {
         if (regions == null || regions.isEmpty()) {
-            return regions;
+            return null;
         }
         List<String> result = new ArrayList<>();
         for (String region : regions) {
@@ -28,6 +28,9 @@ public class RegionValidationService {
             if (blogRegion != BlogRegion.GLOBAL || "global".equalsIgnoreCase(region.trim())) {
                 result.add(blogRegion.getCode());
             }
+        }
+        if (result.isEmpty()) {
+            return null;
         }
         return result;
     }
