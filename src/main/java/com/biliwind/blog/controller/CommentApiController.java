@@ -2,6 +2,7 @@ package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.helper.CommentMarkdownHelper;
 import com.biliwind.blog.model.Comment;
+import com.biliwind.blog.model.CommentQuote;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ConfigManager;
@@ -155,6 +156,26 @@ public class CommentApiController {
             }
             comment.persist();
 
+            if (request.quoteType() != null && !request.quoteType().isBlank()) {
+                CommentQuote quote = new CommentQuote();
+                quote.comment = comment;
+                quote.post = post;
+                quote.quoteType = request.quoteType().trim().toUpperCase();
+                quote.quoteText = request.quoteText() != null ? request.quoteText() : "";
+
+                if (request.anchorDataJson() != null && !request.anchorDataJson().isBlank()) {
+                    try {
+                        quote.anchorData = objectMapper.readTree(request.anchorDataJson());
+                    } catch (Exception e) {
+                        quote.anchorData = new HashMap<String, Object>();
+                    }
+                } else {
+                    quote.anchorData = new HashMap<String, Object>();
+                }
+                quote.status = 0;
+                quote.persist();
+            }
+
             result.id = comment.id;
             result.content = comment.content;
             result.isReviewing = comment.isReviewing;
@@ -255,10 +276,44 @@ public class CommentApiController {
         return user;
     }
 
+    @GET
+    @Path("/quotes/post/{slug}")
+    @Transactional
+    public Response listQuotesByPost(@PathParam("slug") String slug) {
+        Post post = findPublicPost(slug);
+
+        List<CommentQuote> quotes = CommentQuote.list(
+                "post = ?1 and comment.status = ?2 and comment.deletedAt is null and (quoteType = 'QUOTE' or (quoteType = 'CORRECTION' and status = 0))",
+                post, STATUS_APPROVED);
+
+        List<Map<String, Object>> resultList = new ArrayList<>();
+        for (CommentQuote q : quotes) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", q.id);
+            map.put("commentId", q.comment.id);
+            map.put("userName", q.comment.user != null ? q.comment.user.username : "Guest");
+            map.put("content", q.comment.content);
+            map.put("quoteType", q.quoteType);
+            map.put("quoteText", q.quoteText);
+            map.put("anchorData", q.anchorData);
+            map.put("status", q.status);
+            map.put("createdAt", q.createdAt);
+            resultList.add(map);
+        }
+
+        return Response.ok(Map.of(
+                "success", true,
+                "data", resultList
+        )).build();
+    }
+
     public record CommentCreateRequest(
             @NotBlank String postSlug,
             Long parentId,
-            @NotBlank @Size(max = MAX_COMMENT_LENGTH) String content) {
+            @NotBlank @Size(max = MAX_COMMENT_LENGTH) String content,
+            String quoteType,
+            String quoteText,
+            String anchorDataJson) {
     }
 
     public record CommentNode(

@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -32,9 +31,7 @@ public class OllamaAiService implements AiService {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .build();
+    // 代理选择器及 HttpClient 实例转交由 AiHttpClientHelper 统一维护与缓存
 
     @Inject
     ObjectMapper objectMapper;
@@ -98,7 +95,7 @@ public class OllamaAiService implements AiService {
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
                     .build();
 
-            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("Ollama 调用失败，code=" + response.statusCode());
@@ -201,7 +198,7 @@ public class OllamaAiService implements AiService {
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
                     .build();
 
-            return httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("Ollama 审核失败: " + response.statusCode() + " " + response.body());
@@ -264,7 +261,7 @@ public class OllamaAiService implements AiService {
                         .build();
 
                 if (request.stream()) {
-                    httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofLines())
+                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(req, HttpResponse.BodyHandlers.ofLines())
                         .whenComplete((res, err) -> {
                             if (err != null) {
                                 emitter.fail(err);
@@ -293,7 +290,7 @@ public class OllamaAiService implements AiService {
                             emitter.complete();
                         });
                 } else {
-                    httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                             .whenComplete((res, err) -> {
                                 if (err != null) {
                                     emitter.fail(err);
@@ -330,7 +327,7 @@ public class OllamaAiService implements AiService {
                     .GET()
                     .build();
 
-            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             log.warn("获取 Ollama 模型列表失败: " + response.statusCode());

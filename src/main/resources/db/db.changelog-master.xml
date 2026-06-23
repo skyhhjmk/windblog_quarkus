@@ -85,4 +85,5 @@
     <include file="db/migration/081-add-link-application-and-distributed-monitoring.sql"
              relativeToChangelogFile="false"/>
     <include file="db/migration/082-fix-empty-visibility-regions.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/083-create-comment-quotes.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

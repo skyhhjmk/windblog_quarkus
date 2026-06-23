@@ -1,0 +1,411 @@
+/* post-quote.css - 引用与纠错功能专属样式 */
+
+/* 1. 正文划线样式 */
+.post-quote-line {
+    border-bottom: 2px dashed rgba(156, 163, 175, 0.4); /* 淡灰色虚线 */
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    padding-bottom: 1px;
+}
+
+.post-quote-line:hover {
+    background-color: rgba(156, 163, 175, 0.08);
+    border-bottom-color: rgba(156, 163, 175, 0.8);
+}
+
+.post-correction-line {
+    border-bottom: 2px dashed rgba(239, 68, 68, 0.6); /* 红色虚线 */
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    padding-bottom: 1px;
+}
+
+.post-correction-line:hover {
+    background-color: rgba(239, 68, 68, 0.06);
+    border-bottom-color: rgba(239, 68, 68, 1);
+}
+
+/* 2. 选中文本悬浮菜单 (Popcard) */
+.post-quote-popcard {
+    position: absolute;
+    z-index: 1000;
+    background: rgba(23, 23, 23, 0.85); /* 深色磨砂背景 */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    transform: translateY(10px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.post-quote-popcard.active {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.post-quote-popbtn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.post-quote-popbtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.post-quote-popbtn.primary-accent {
+    color: var(--accent);
+}
+
+.post-quote-popbtn.primary-accent:hover {
+    background: rgba(6, 182, 212, 0.15); /* cyan bg */
+}
+
+/* 3. 左侧争议提示框 (Tip box) */
+.post-correction-tip-box {
+    position: absolute;
+    width: 260px;
+    background: rgba(30, 41, 59, 0.7); /* slate bg */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-left: 4px solid rgb(239, 68, 68);
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    z-index: 100;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.post-correction-tip-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(239, 68, 68, 0.15);
+}
+
+.post-correction-tip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgb(239, 68, 68);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.post-correction-tip-body {
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 12px;
+    word-break: break-all;
+}
+
+.post-correction-tip-author {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+    margin-bottom: 4px;
+}
+
+.post-correction-tip-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.post-correction-tip-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+/* 4. SVG 覆盖画布 */
+#correction-svg-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 90;
+}
+
+.correction-path {
+    fill: none;
+    stroke: rgba(239, 68, 68, 0.45);
+    stroke-width: 1.5px;
+    stroke-dasharray: 4, 3;
+    transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.post-correction-line:hover + #correction-svg-canvas .correction-path,
+.post-correction-tip-box:hover ~ #correction-svg-canvas .correction-path {
+    stroke: rgba(239, 68, 68, 0.95);
+    stroke-width: 2px;
+}
+
+/* 5. 窄屏 Info 图标与引用暂存卡片 */
+.post-correction-info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: rgb(239, 68, 68);
+    font-size: 10px;
+    font-weight: bold;
+    border-radius: 50%;
+    margin-left: 4px;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: all 0.2s ease;
+}
+
+.post-correction-info-btn:hover {
+    background: rgb(239, 68, 68);
+    color: #fff;
+    transform: scale(1.1);
+}
+
+/* 评论区引用暂存预览 */
+.comment-quote-preview-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: justify;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    gap: 12px;
+}
+
+.comment-quote-preview-text {
+    flex: 1;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.5;
+    word-break: break-all;
+}
+
+.comment-quote-preview-close {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.comment-quote-preview-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* 评论渲染中的引用卡片展示 */
+.comment-item-quote-box {
+    background: rgba(255, 255, 255, 0.015);
+    border-left: 3px solid rgba(156, 163, 175, 0.3);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 0 6px 6px 0;
+}
+
+.comment-item-quote-box.correction {
+    border-left-color: rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.02);
+}
+
+.comment-item-quote-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.comment-item-quote-meta .badge-correction {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: rgb(239, 68, 68);
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.comment-item-quote-meta .badge-quote {
+    background: rgba(156, 163, 175, 0.15);
+    border: 1px solid rgba(156, 163, 175, 0.3);
+    color: rgb(156, 163, 175);
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.comment-item-quote-meta .status-warning {
+    color: rgba(239, 68, 68, 0.85);
+    font-weight: bold;
+}
+
+/* 6. 纠错提交模态框 */
+.post-quote-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1010;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.post-quote-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.post-quote-modal {
+    width: 90%;
+    max-width: 500px;
+    background: rgba(30, 41, 59, 0.95); /* slate background */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    transform: scale(0.95);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.post-quote-modal-overlay.active .post-quote-modal {
+    transform: scale(1);
+}
+
+.post-quote-modal-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 16px;
+}
+
+.post-quote-modal-text-preview {
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 4px solid rgb(239, 68, 68);
+    padding: 10px 14px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 20px;
+    max-height: 120px;
+    overflow-y: auto;
+    word-break: break-all;
+}
+
+.post-quote-modal-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 8px;
+}
+
+.post-quote-modal-textarea {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    padding: 12px;
+    resize: none;
+    margin-bottom: 20px;
+    transition: border-color 0.2s ease;
+}
+
+.post-quote-modal-textarea:focus {
+    outline: none;
+    border-color: rgb(239, 68, 68);
+}
+
+.post-quote-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.post-quote-modal-btn {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.post-quote-modal-btn.cancel {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.post-quote-modal-btn.cancel:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.post-quote-modal-btn.submit {
+    background: rgb(239, 68, 68);
+    color: #fff;
+}
+
+.post-quote-modal-btn.submit:hover {
+    background: rgb(220, 38, 38);
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}

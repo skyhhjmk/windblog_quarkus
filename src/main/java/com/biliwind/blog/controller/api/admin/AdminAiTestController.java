@@ -69,9 +69,18 @@ public class AdminAiTestController {
                 long durationMs = System.currentTimeMillis() - startTime;
                 String finalOutput = outputBuffer.toString();
 
-                // 流式任务完成后的补充记录
-                auditService.log("ai_provider", String.valueOf(configId), "ai_provider_test_completed",
-                        null, java.util.Map.of("output", finalOutput), java.util.Map.of("durationMs", durationMs));
+                // 异步在线程池中记录审计日志，并显式传入 performingUserId 以避免在 Vert.x 线程中操作数据库造成阻塞以及上下文丢失
+                java.util.concurrent.CompletableFuture.runAsync(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            auditService.log("ai_provider", String.valueOf(configId), "ai_provider_test_completed",
+                                    null, java.util.Map.of("output", finalOutput), java.util.Map.of("durationMs", durationMs), performingUserId);
+                        } catch (Exception e) {
+                            // 审计日志写入异常不应影响测试接口的流响应
+                        }
+                    }
+                });
             }
         });
     }

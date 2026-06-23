@@ -8,7 +8,6 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -32,9 +31,7 @@ public class ChatGlmAiService implements AiService {
     private static final String DEFAULT_MODEL = "glm-4-flash";
     private static final String DEFAULT_ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .build();
+    // 代理选择器及 HttpClient 实例转交由 AiHttpClientHelper 统一维护与缓存
 
     @Inject
     ObjectMapper objectMapper;
@@ -80,7 +77,7 @@ public class ChatGlmAiService implements AiService {
             Map<String, Object> payload = buildPayload(config, buildPrompt(lang, text), false);
             HttpRequest request = buildRequest(config, payload);
 
-            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("ChatGLM 调用失败: " + response.statusCode() + " " + response.body());
@@ -192,7 +189,7 @@ public class ChatGlmAiService implements AiService {
 
         try {
             HttpRequest httpRequest = buildRequest(config, payload);
-            return httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("ChatGLM 审核调用失败: " + response.statusCode() + " " + response.body());
@@ -247,7 +244,7 @@ public class ChatGlmAiService implements AiService {
                 LOG.infof("开始 ChatGLM 连通性测试, stream: %b, endpoint: %s", request.stream(), httpRequest.uri());
 
                 if (request.stream()) {
-                    httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines())
+                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines())
                         .whenComplete((res, err) -> {
                             if (err != null) {
                                 LOG.error("ChatGLM 测试流请求失败", err);
@@ -299,7 +296,7 @@ public class ChatGlmAiService implements AiService {
                             }
                         });
                 } else {
-                    httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                             .whenComplete((res, err) -> {
                                 if (err != null) {
                                     emitter.fail(err);

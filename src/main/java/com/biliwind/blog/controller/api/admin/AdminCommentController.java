@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminCommentDtos.AdminCommentI
 import com.biliwind.blog.controller.api.admin.dto.AdminCommentDtos.CommentUpdateRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.Comment;
+import com.biliwind.blog.model.CommentQuote;
 import com.biliwind.blog.service.AuditService;
 import com.biliwind.blog.service.ai.AiManager;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
@@ -258,5 +259,28 @@ public class AdminCommentController {
             }
         }
         return null;
+    }
+
+    @PUT
+    @Path("/quotes/{quoteId}/status")
+    @Transactional
+    @Operation(summary = "处理纠错状态")
+    public void updateQuoteStatus(@PathParam("quoteId") Long quoteId, @QueryParam("status") short status) {
+        CommentQuote quote = CommentQuote.findById(quoteId);
+        if (quote == null) {
+            throw new NotFoundException("Quote not found");
+        }
+
+        Map<String, Object> oldVal = new HashMap<>();
+        oldVal.put("status", quote.status);
+
+        quote.status = status;
+        quote.updatedAt = OffsetDateTime.now();
+
+        Map<String, Object> newVal = new HashMap<>();
+        newVal.put("status", quote.status);
+
+        auditService.log("comment_quote", String.valueOf(quote.id), "update_status", oldVal, newVal);
+        invalidateCommentCaches();
     }
 }

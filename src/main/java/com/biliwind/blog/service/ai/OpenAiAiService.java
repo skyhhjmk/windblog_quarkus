@@ -8,7 +8,6 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -30,9 +29,7 @@ public class OpenAiAiService implements AiService {
     private static final Logger LOG = Logger.getLogger(OpenAiAiService.class);
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .build();
+    // 代理选择器及 HttpClient 实例转交由 AiHttpClientHelper 统一维护与缓存
 
     @Inject
     ObjectMapper objectMapper;
@@ -86,7 +83,7 @@ public class OpenAiAiService implements AiService {
 
             attachApiKeyHeader(builder, config);
 
-            return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("OpenAI 调用失败: " + response.statusCode() + " " + response.body());
@@ -115,7 +112,7 @@ public class OpenAiAiService implements AiService {
         }
     }
 
-    private URI resolveUri(AiProviderConfig config) {
+    protected URI resolveUri(AiProviderConfig config) {
         String endpoint = config.endpoint;
         if (endpoint == null || endpoint.isBlank()) {
             return URI.create("https://api.openai.com/v1/chat/completions");
@@ -131,7 +128,7 @@ public class OpenAiAiService implements AiService {
         }
     }
 
-    private Map<String, Object> buildPayload(AiProviderConfig config, String prompt, boolean stream) {
+    protected Map<String, Object> buildPayload(AiProviderConfig config, String prompt, boolean stream) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
         payload.put("messages", List.of(Map.of("role", "user", "content", prompt)));
@@ -140,7 +137,7 @@ public class OpenAiAiService implements AiService {
         return payload;
     }
 
-    private String chooseModel(AiProviderConfig config, String defaultModel) {
+    protected String chooseModel(AiProviderConfig config, String defaultModel) {
         return (config.model == null || config.model.isBlank()) ? defaultModel : config.model;
     }
 
@@ -187,7 +184,7 @@ public class OpenAiAiService implements AiService {
 
             attachApiKeyHeader(builder, config);
 
-            return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("OpenAI 审核调用失败: " + response.statusCode() + " " + response.body());
@@ -226,6 +223,16 @@ public class OpenAiAiService implements AiService {
         }
     }
 
+    protected void emitJson(io.smallrye.mutiny.subscription.MultiEmitter<? super String> emitter, String type, String content) {
+        try {
+            Map<String, String> payload = new HashMap<>();
+            payload.put("type", type);
+            payload.put("content", content);
+            emitter.emit(objectMapper.writeValueAsString(payload));
+        } catch (Exception ignored) {
+        }
+    }
+
     @Override
     public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest request) {
         return io.smallrye.mutiny.Multi.createFrom().emitter(emitter -> {
@@ -260,14 +267,23 @@ public class OpenAiAiService implements AiService {
                 attachApiKeyHeader(builder, config);
 
                 if (request.stream()) {
-                    httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofLines())
+                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofLines())
                         .whenComplete((res, err) -> {
                             if (err != null) {
-                                emitter.fail(err);
+                                emitJson(emitter, "error", "[接口调用超时或异常]: " + err.getMessage());
+                                emitter.complete();
                                 return;
                             }
                             if (res.statusCode() >= 400) {
-                                emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode()));
+                                String bodyText = "";
+                                try (java.util.stream.Stream<String> lines = res.body()) {
+                                    StringBuilder sb = new StringBuilder();
+                                    lines.forEach(line -> sb.append(line).append("\n"));
+                                    bodyText = sb.toString();
+                                } catch (Exception ignored) {
+                                }
+                                emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]: " + bodyText);
+                                emitter.complete();
                                 return;
                             }
                             try (java.util.stream.Stream<String> lines = res.body()) {
@@ -285,13 +301,13 @@ public class OpenAiAiService implements AiService {
                                                     if (delta.has("reasoning_content")) {
                                                         String reasoning = delta.get("reasoning_content").asText("");
                                                         if (!reasoning.isEmpty()) {
-                                                            emitter.emit("{\"type\":\"reasoning\",\"content\":" + objectMapper.writeValueAsString(reasoning) + "}");
+                                                            emitJson(emitter, "reasoning", reasoning);
                                                         }
                                                     }
                                                     if (delta.has("content")) {
                                                         String content = delta.get("content").asText("");
                                                         if (!content.isEmpty()) {
-                                                            emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(content) + "}");
+                                                            emitJson(emitter, "content", content);
                                                         }
                                                     }
                                                 }
@@ -305,28 +321,32 @@ public class OpenAiAiService implements AiService {
                             emitter.complete();
                         });
                 } else {
-                    httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                             .whenComplete((res, err) -> {
                                 if (err != null) {
-                                    emitter.fail(err);
+                                    emitJson(emitter, "error", "[接口调用超时或异常]: " + err.getMessage());
+                                    emitter.complete();
                                     return;
                                 }
                                 if (res.statusCode() >= 400) {
-                                    emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode() + ", body=" + res.body()));
+                                    emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]: " + res.body());
+                                    emitter.complete();
                                     return;
                                 }
                                 try {
                                     JsonNode root = objectMapper.readTree(res.body());
                                     String text = extractTextFromResponse(root);
-                                    emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(text) + "}");
+                                    emitJson(emitter, "content", text);
                                     emitter.complete();
                                 } catch (Exception e) {
-                                    emitter.fail(e);
+                                    emitJson(emitter, "error", "[解析响应异常]: " + e.getMessage());
+                                    emitter.complete();
                                 }
                             });
                 }
             } catch (Exception e) {
-                emitter.fail(e);
+                emitJson(emitter, "error", "[请求发送异常]: " + e.getMessage());
+                emitter.complete();
             }
         });
     }
@@ -356,7 +376,7 @@ public class OpenAiAiService implements AiService {
 
             attachApiKeyHeader(builder, config);
 
-            return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             LOG.warn("获取 OpenAI 模型列表失败: " + response.statusCode() + " " + response.body());

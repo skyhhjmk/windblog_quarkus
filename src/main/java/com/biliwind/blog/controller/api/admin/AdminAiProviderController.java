@@ -78,6 +78,7 @@ public class AdminAiProviderController {
 
     @POST
     @Path("/fetch-models")
+    @Blocking
     public CompletionStage<List<String>> fetchModels(AiProviderConfigUpdateRequest request) {
         if (request == null) throw new BadRequestException("内容不能为空");
         com.biliwind.blog.model.AiProviderConfig config = new com.biliwind.blog.model.AiProviderConfig();
