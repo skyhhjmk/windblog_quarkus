@@ -152,8 +152,8 @@ public class PostAccessService {
 
         long postPrice = getPostPrice(post);
 
-        // 如果已经全站买断，则无需再买区块
-        if (getMaxPointsPaid(userId, postId) >= postPrice && postPrice > 0) {
+        // 如果已经全站买断，则无需再买区块（依赖明确的全文购买记录，不用积分比较）
+        if (hasPurchasedPost(userId, postId)) {
             return;
         }
 
@@ -263,9 +263,8 @@ public class PostAccessService {
     public String filterHiddenContent(String rawContent, long maxPointsPaid, boolean isAuthor, Long postId, long postPrice, Long userId) {
         if (rawContent == null || rawContent.isEmpty()) return rawContent;
 
-        // 全站买断判定：或者是作者，或者支付过文章全价（且总价 > 0）
+        // 全站买断判定：只依赖作者身份或明确的全文购买记录，不用积分比较
         boolean fullUnlocked = isAuthor
-                || (postPrice > 0 && maxPointsPaid >= postPrice)
                 || hasPurchasedPost(userId, postId);
 
         // 处理 [hide-text]
@@ -374,8 +373,8 @@ public class PostAccessService {
         java.util.Map<String, String> unlockedBlocks = new java.util.HashMap<>();
         if (rawContent == null || rawContent.isEmpty()) return unlockedBlocks;
 
+        // 全站买断判定：只依赖作者身份或明确的全文购买记录，不用积分比较
         boolean fullUnlocked = isAuthor
-                || (postPrice > 0 && maxPointsPaid >= postPrice)
                 || hasPurchasedPost(userId, postId);
 
         // 处理 [hide-text]
@@ -470,19 +469,22 @@ public class PostAccessService {
 
 
     private String generateBlockId(String attrStr, String content) {
+        // 只使用属性字符串（price、show 等）计算哈希，不包含正文内容。
+        // 这样作者修改区块内容文字时不会导致 blockId 变化，已购记录不失效。
+        // 根本解决方案是在标签上加显式 id= 属性。
         try {
-            String combined = (attrStr != null ? attrStr : "") + (content != null ? content : "");
+            String inputForHash = (attrStr != null ? attrStr.trim() : "");
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-            byte[] hash = md.digest(combined.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            byte[] hash = md.digest(inputForHash.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
                 String hex = Integer.toHexString(0xff & b);
                 if (hex.length() == 1) hexString.append('0');
                 hexString.append(hex);
             }
-            return hexString.toString().substring(0, 16); // 取前16位作为 ID
+            return hexString.toString().substring(0, 16);
         } catch (Exception e) {
-            return "block-" + (content != null ? content.hashCode() : "unknown");
+            return "block-" + (attrStr != null ? attrStr.hashCode() : "unknown");
         }
     }
 

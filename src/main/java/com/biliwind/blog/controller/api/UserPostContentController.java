@@ -11,10 +11,7 @@ import com.biliwind.blog.service.PostAccessService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.*;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
@@ -31,6 +28,8 @@ import java.util.stream.Collectors;
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "UserPostContent")
 public class UserPostContentController {
+
+    private static final String PASSWORD_HEADER = "X-Post-Password";
 
     @Inject
     PostAccessService postAccessService;
@@ -49,8 +48,9 @@ public class UserPostContentController {
      * <p>
      * 关键安全特性：
      * 1. 严格验证用户购买权限
-     * 2. 设置禁止缓存的响应头
-     * 3. 仅返回已授权的完整内容
+     * 2. 密码保护文章必须提供正确密码
+     * 3. 设置禁止缓存的响应头
+     * 4. 仅返回已授权的完整内容
      */
     @GET
     @Path("/content/{postId}")
@@ -69,6 +69,16 @@ public class UserPostContentController {
                     .build();
         }
 
+        // 密码保护校验：密码保护文章必须提供正确密码才能获取内容
+        if (post.visibility == 2) {
+            boolean passwordPassed = checkPasswordAccess(post, postId, headers);
+            if (!passwordPassed) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(Map.of("success", false, "message", "需要密码才能访问此文章"))
+                        .build();
+            }
+        }
+
         long postPrice = postAccessService.getPostPrice(post);
         boolean isAuthor = userId != null && post.user != null && userId.equals(post.user.id);
         long maxPointsPaid = postAccessService.getMaxPointsPaid(userId, postId);
@@ -85,9 +95,8 @@ public class UserPostContentController {
         String localizedContent = resolveContent(post.publishedRevision, resolvedLang);
         localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postId, postPrice, userId);
 
-        // 全站买断判定
+        // 全站买断判定：只依赖明确的全文购买记录，不用 maxPointsPaid 比较
         boolean hasPurchased = isAuthor
-                || (postPrice > 0 && maxPointsPaid >= postPrice)
                 || postAccessService.hasPurchasedPost(userId, postId);
 
         PostBodyView postBody = resolvePostBody(post.renderType, localizedContent);
@@ -142,6 +151,16 @@ public class UserPostContentController {
                     .build();
         }
 
+        // 密码保护校验：密码保护文章必须提供正确密码才能获取区块内容
+        if (post.visibility == 2) {
+            boolean passwordPassed = checkPasswordAccess(post, postId, headers);
+            if (!passwordPassed) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(Map.of("success", false, "message", "需要密码才能访问此文章"))
+                        .build();
+            }
+        }
+
         long postPrice = postAccessService.getPostPrice(post);
         boolean isAuthor = post.user != null && userId.equals(post.user.id);
         long maxPointsPaid = postAccessService.getMaxPointsPaid(userId, postId);
@@ -158,8 +177,8 @@ public class UserPostContentController {
             renderedBlocks.put(entry.getKey(), postBody.body());
         }
 
+        // 全站买断判定：只依赖明确的全文购买记录，不用 maxPointsPaid 比较
         boolean hasPurchased = isAuthor
-                || (postPrice > 0 && maxPointsPaid >= postPrice)
                 || postAccessService.hasPurchasedPost(userId, postId);
 
         List<AttachmentView> attachments = hasPurchased ? PostMedia.<PostMedia>list("post.id = ?1", postId).stream()
@@ -202,6 +221,27 @@ public class UserPostContentController {
             return unauthorized();
         }
 
+        Post post = Post.find(
+                "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                postId,
+                com.biliwind.blog.model.PostStatus.PUBLISHED
+        ).firstResult();
+        if (post == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("success", false, "message", "文章不存在"))
+                    .build();
+        }
+
+        // 密码保护校验：购买密码保护文章的内容也需要提供密码
+        if (post.visibility == 2) {
+            boolean passwordPassed = checkPasswordAccess(post, postId, headers);
+            if (!passwordPassed) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(Map.of("success", false, "message", "需要密码才能解锁此文章"))
+                        .build();
+            }
+        }
+
         try {
             postAccessService.buyPost(userId, postId, price, blockId);
             return Response.ok(Map.of("success", true, "message", "解锁成功"))
@@ -227,6 +267,27 @@ public class UserPostContentController {
     }
 
     // ==================== 私有辅助方法 ====================
+
+    /**
+     * 校验请求方是否通过了密码保护验证。
+     * 从 X-Post-Password header 或 post_pw_{postId} Cookie 中读取密码，
+     * 再交给 PostAccessService 验证哈希是否匹配。
+     */
+    private boolean checkPasswordAccess(Post post, Long postId, HttpHeaders headers) {
+        // 优先从请求头取密码
+        String passwordFromHeader = headers.getHeaderString(PASSWORD_HEADER);
+        if (passwordFromHeader != null && !passwordFromHeader.isBlank()) {
+            return postAccessService.verifyPassword(post, passwordFromHeader);
+        }
+
+        // 再从 Cookie 取（Cookie 中保存的是用户上次验证过的明文密码）
+        Cookie passwordCookie = headers.getCookies().get("post_pw_" + postId);
+        if (passwordCookie != null && passwordCookie.getValue() != null) {
+            return postAccessService.verifyPassword(post, passwordCookie.getValue());
+        }
+
+        return false;
+    }
 
     private Long resolveUserId(HttpHeaders headers) {
         jakarta.ws.rs.core.Cookie cookie = headers.getCookies().get("user_token");

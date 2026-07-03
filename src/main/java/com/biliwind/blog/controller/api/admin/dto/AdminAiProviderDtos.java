@@ -20,6 +20,8 @@ public class AdminAiProviderDtos {
     ) {
 
         public static AiProviderConfigDto of(AiProviderConfig config) {
+            // apiKey 敏感字段脱敏：只返回占位符，不暴露真实 key
+            String maskedApiKey = (config.apiKey != null && !config.apiKey.isBlank()) ? "sk-****" : null;
             return new AiProviderConfigDto(
                     config.id,
                     config.type,
@@ -28,7 +30,7 @@ public class AdminAiProviderDtos {
                     config.enabled,
                     config.endpoint,
                     config.model,
-                    config.apiKey,
+                    maskedApiKey,
                     config.config,
                     config.updatedAt
             );

@@ -53,7 +53,7 @@ public class AiProviderConfigService {
         if (update.endpoint() != null) {
             config.endpoint = update.endpoint().trim();
         }
-        if (update.apiKey() != null && !update.apiKey().isBlank()) {
+        if (update.apiKey() != null && !update.apiKey().isBlank() && !update.apiKey().equals("sk-****")) {
             config.apiKey = update.apiKey().trim();
         }
         if (update.model() != null) {

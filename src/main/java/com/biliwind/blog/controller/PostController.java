@@ -177,16 +177,10 @@ public class PostController {
             template = postTemplate;
         }
 
-        // 全站买断判定
+        // 全站买断判定：只依赖作者身份或明确的全文购买记录，不用积分比较
         boolean hasPurchased = false;
         if (isAuthor) {
             hasPurchased = true;
-        } else {
-            if (postPrice > 0) {
-                if (maxPointsPaid >= postPrice) {
-                    hasPurchased = true;
-                }
-            }
         }
         if (hasPurchased == false) {
             if (postAccessService.hasPurchasedPost(currentUserId, postEntity.id)) {

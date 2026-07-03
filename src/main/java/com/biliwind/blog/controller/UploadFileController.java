@@ -40,10 +40,17 @@ public class UploadFileController {
         try {
             String storageKeyCandidate = extractStorageKey(fileName);
             Media media = Media.find("storageKey = ?1 AND deletedAt IS NULL", storageKeyCandidate).firstResult();
-            if (media != null && !mediaAccessService.canAccess(media, regionContext.getCurrentRegion())) {
+
+            // 软删除防绕过：数据库中不存在或已软删除的文件，一律拒绝访问，
+            // 不允许因 media 为 null 就跳过权限检查直接读取本地物理文件。
+            if (media == null) {
                 throw new NotFoundException();
             }
-            if (media != null && media.storageClasses != null) {
+
+            if (!mediaAccessService.canAccess(media, regionContext.getCurrentRegion())) {
+                throw new NotFoundException();
+            }
+            if (media.storageClasses != null) {
                 String bestUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
                 if (bestUrl != null && !bestUrl.isBlank()) {
                     if (isSameRequestUrl(bestUrl, uriInfo) == false) {
