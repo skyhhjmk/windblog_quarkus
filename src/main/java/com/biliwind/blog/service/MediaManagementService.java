@@ -358,7 +358,7 @@ public class MediaManagementService {
         Path target = uploadRoot.resolve(storageKey);
         // 写入文件到磁盘
         try (OutputStream output = Files.newOutputStream(target, StandardOpenOption.CREATE_NEW)) {
-            source.transferTo(output);
+            copySourceWithinLimit(source, output, role.maxSingleUploadBytes);
         } catch (IOException e) {
             deleteTarget(target);
             throw new IllegalStateException("写入媒体文件失败", e);
@@ -1144,6 +1144,19 @@ public class MediaManagementService {
      * 删除目标文件（如果存在）
      * @param target 文件路径
      */
+    private void copySourceWithinLimit(InputStream source, OutputStream output, Long maxSingleUploadBytes) throws IOException {
+        byte[] buffer = new byte[8192];
+        long copiedBytes = 0;
+        int readLength = source.read(buffer);
+        while (readLength >= 0) {
+            copiedBytes = copiedBytes + readLength;
+            if (maxSingleUploadBytes != null && maxSingleUploadBytes > 0 && copiedBytes > maxSingleUploadBytes) {
+                throw new BadRequestException("单文件大小超出限制");
+            }
+            output.write(buffer, 0, readLength);
+            readLength = source.read(buffer);
+        }
+    }
     private void deleteTarget(Path target) {
         try {
             Files.deleteIfExists(target);

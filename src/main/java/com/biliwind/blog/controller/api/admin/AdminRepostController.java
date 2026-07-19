@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.security.SafeExternalHttpService;
 import com.biliwind.blog.service.edge.DataSyncEvent;
 import com.biliwind.blog.service.repost.*;
 import io.quarkus.panache.common.Page;
@@ -31,6 +32,9 @@ public class AdminRepostController {
 
     @Inject
     AffiliateTokenService affiliateTokenService;
+
+    @Inject
+    SafeExternalHttpService safeExternalHttpService;
 
     @Inject
     RepostLicenseService repostLicenseService;
@@ -194,7 +198,8 @@ public class AdminRepostController {
         }
 
         try {
-            Document document = Jsoup.connect(license.targetUrl).timeout(5000).get();
+            String responseHtml = safeExternalHttpService.get(license.targetUrl, "WindBlog-Repost-Inspector/1.0").bodyAsText();
+            Document document = Jsoup.parse(responseHtml, license.targetUrl);
             String html = document.html();
             String originalUrl = repostLicenseService.buildPostUrl(license.article);
             boolean hasOriginalLink = html.contains(originalUrl);

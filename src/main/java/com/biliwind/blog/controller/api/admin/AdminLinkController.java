@@ -4,6 +4,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.*;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.link.LinkMonitorService;
+import com.biliwind.blog.service.security.SafeExternalHttpService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
@@ -30,6 +31,9 @@ public class AdminLinkController {
 
     @Inject
     LinkMonitorService linkMonitorService;
+
+    @Inject
+    SafeExternalHttpService safeExternalHttpService;
 
     @Inject
     com.biliwind.blog.service.ai.AiManager aiManager;
@@ -262,10 +266,9 @@ public class AdminLinkController {
         }
 
         try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                    .timeout(5000)
-                    .get();
+            String userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+            String html = safeExternalHttpService.get(url, userAgent).bodyAsText();
+            Document doc = Jsoup.parse(html, url);
 
             String title = doc.title();
             if (title != null && title.length() > 255) {

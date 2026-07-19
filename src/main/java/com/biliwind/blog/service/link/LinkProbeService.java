@@ -1,84 +1,47 @@
 package com.biliwind.blog.service.link;
 
+import com.biliwind.blog.service.security.SafeExternalHttpService;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
-import jakarta.ws.rs.core.Response;
+import jakarta.inject.Inject;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-import java.net.Inet6Address;
-import java.net.InetAddress;
 import java.net.URI;
-import java.util.concurrent.TimeUnit;
 
 @ApplicationScoped
 public class LinkProbeService {
 
+    @Inject
+    SafeExternalHttpService safeExternalHttpService;
+
     public LinkProbeResult probe(String url, String siteUrl) {
         long startedAt = System.currentTimeMillis();
-        if (!isPublicHttpUrl(url)) {
-            return new LinkProbeResult(false, 0, 0, false, "拒绝访问非公开网络地址");
-        }
-        try (Client client = createHttpClient()) {
-            try (Response response = client.target(url)
-                    .request()
-                    .header("User-Agent", "WindBlog-Link-Monitor/1.0")
-                    .get()) {
-                int statusCode = response.getStatus();
-                int loadTimeMs = calculateLoadTime(startedAt);
-                boolean reachable = statusCode >= 200 && statusCode < 400;
-                boolean backlinkFound = false;
-                if (reachable && response.hasEntity()) {
-                    String html = response.readEntity(String.class);
-                    backlinkFound = containsBacklink(html, url, siteUrl);
-                }
-                return new LinkProbeResult(reachable, statusCode, loadTimeMs, backlinkFound, "");
+        try {
+            SafeExternalHttpService.ExternalHttpResponse response = safeExternalHttpService.get(
+                    url,
+                    "WindBlog-Link-Monitor/1.0"
+            );
+            int statusCode = response.statusCode();
+            int loadTimeMs = calculateLoadTime(startedAt);
+            boolean reachable = statusCode >= 200 && statusCode < 400;
+            boolean backlinkFound = false;
+            if (reachable) {
+                backlinkFound = containsBacklink(response.bodyAsText(), url, siteUrl);
             }
+            return new LinkProbeResult(reachable, statusCode, loadTimeMs, backlinkFound, "");
         } catch (Exception exception) {
-            String errorMessage = exception.getMessage();
-            if (errorMessage == null || errorMessage.isBlank()) {
-                errorMessage = exception.getClass().getSimpleName();
-            }
-            return new LinkProbeResult(false, 0, calculateLoadTime(startedAt), false, errorMessage);
+            return new LinkProbeResult(false, 0, calculateLoadTime(startedAt), false, "外部地址请求失败");
         }
     }
 
     public boolean isPublicHttpUrl(String url) {
-        if (url == null || url.isBlank()) {
-            return false;
-        }
         try {
-            URI uri = URI.create(url.trim());
-            String scheme = uri.getScheme();
-            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                return false;
-            }
-            String host = uri.getHost();
-            if (host == null || host.isBlank()) {
-                return false;
-            }
-            InetAddress[] addresses = InetAddress.getAllByName(host);
-            if (addresses.length == 0) {
-                return false;
-            }
-            for (InetAddress address : addresses) {
-                if (!isPublicAddress(address)) {
-                    return false;
-                }
-            }
+            safeExternalHttpService.validatePublicHttpUri(url);
             return true;
         } catch (Exception exception) {
             return false;
         }
-    }
-
-    private Client createHttpClient() {
-        return ClientBuilder.newBuilder()
-                .connectTimeout(5, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
-                .build();
     }
 
     private int calculateLoadTime(long startedAt) {
@@ -94,7 +57,6 @@ public class LinkProbeService {
         if (expectedHost.isBlank()) {
             return false;
         }
-
         Document document = Jsoup.parse(html, checkedUrl);
         for (Element anchor : document.select("a[href]")) {
             if (!isVisible(anchor)) {
@@ -118,10 +80,7 @@ public class LinkProbeService {
                 return false;
             }
             String style = currentElement.attr("style").replace(" ", "").toLowerCase();
-            if (style.contains("display:none")) {
-                return false;
-            }
-            if (style.contains("visibility:hidden")) {
+            if (style.contains("display:none") || style.contains("visibility:hidden")) {
                 return false;
             }
             currentElement = currentElement.parent();
@@ -146,31 +105,5 @@ public class LinkProbeService {
         } catch (Exception exception) {
             return "";
         }
-    }
-
-    private boolean isPublicAddress(InetAddress address) {
-        if (address.isAnyLocalAddress()) {
-            return false;
-        }
-        if (address.isLoopbackAddress()) {
-            return false;
-        }
-        if (address.isLinkLocalAddress()) {
-            return false;
-        }
-        if (address.isSiteLocalAddress()) {
-            return false;
-        }
-        if (address.isMulticastAddress()) {
-            return false;
-        }
-        if (address instanceof Inet6Address) {
-            byte[] addressBytes = address.getAddress();
-            int firstByte = addressBytes[0] & 0xff;
-            if ((firstByte & 0xfe) == 0xfc) {
-                return false;
-            }
-        }
-        return true;
     }
 }

@@ -22,7 +22,7 @@ public class AdminBootstrapInitializer {
     @Inject
     UploadRoleService uploadRoleService;
 
-    @ConfigProperty(name = "admin.init.enabled", defaultValue = "true")
+    @ConfigProperty(name = "admin.init.enabled", defaultValue = "false")
     boolean initEnabled;
 
     @ConfigProperty(name = "admin.init.username", defaultValue = "admin")
@@ -36,38 +36,35 @@ public class AdminBootstrapInitializer {
 
     @Transactional
     void onStart(@Observes StartupEvent ignored) {
+        uploadRoleService.ensureDefaults();
         if (!initEnabled) {
             return;
         }
-        uploadRoleService.ensureDefaults();
-        upsertAdminUser();
-    }
-
-    private void upsertAdminUser() {
-        User admin = User.find("(username = ?1 or email = ?2)", initUsername, initEmail).firstResult();
-        OffsetDateTime now = OffsetDateTime.now();
-        String hashedPassword = passwordHasher.hash(initPassword);
-
-        if (admin == null) {
-            admin = new User();
-            admin.username = initUsername;
-            admin.email = initEmail;
-            admin.password = hashedPassword;
-            admin.status = 1;
-            admin.roleName = RoleConstant.SUPER_ADMIN;
-            admin.createdAt = now;
-            admin.updatedAt = now;
-            admin.deletedAt = null;
-            admin.persist();
+        if (hasActiveSuperAdmin()) {
             return;
         }
+        createInitialSuperAdmin();
+    }
 
+    private boolean hasActiveSuperAdmin() {
+        long count = User.count("roleName = ?1 and status = 1 and deletedAt is null", RoleConstant.SUPER_ADMIN);
+        return count > 0;
+    }
+
+    private void createInitialSuperAdmin() {
+        User existingUser = User.find("username = ?1 or email = ?2", initUsername, initEmail).firstResult();
+        if (existingUser != null) {
+            return;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        User admin = new User();
         admin.username = initUsername;
         admin.email = initEmail;
-        admin.password = hashedPassword;
+        admin.password = passwordHasher.hash(initPassword);
         admin.status = 1;
         admin.roleName = RoleConstant.SUPER_ADMIN;
-        admin.deletedAt = null;
+        admin.createdAt = now;
         admin.updatedAt = now;
+        admin.persist();
     }
 }

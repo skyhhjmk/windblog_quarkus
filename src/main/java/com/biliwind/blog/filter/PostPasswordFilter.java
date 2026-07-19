@@ -12,7 +12,6 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
-import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
@@ -81,13 +80,6 @@ public class PostPasswordFilter implements ContainerRequestFilter {
 
         if (headerPassword != null && !headerPassword.isBlank()) {
             return headerPassword;
-        }
-
-        Cookie cookie =
-                ctx.getCookies().get("post_pw_" + postId);
-
-        if (cookie != null) {
-            return cookie.getValue();
         }
 
         return null;

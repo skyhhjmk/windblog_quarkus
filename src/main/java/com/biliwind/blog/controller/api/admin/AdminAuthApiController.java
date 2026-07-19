@@ -10,6 +10,7 @@ import io.smallrye.jwt.build.Jwt;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
+import io.vertx.ext.web.RoutingContext;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -41,6 +42,15 @@ public class AdminAuthApiController {
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
+    @Inject
+    com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
+
+    @Inject
+    com.biliwind.blog.service.security.SecurityRateLimitService securityRateLimitService;
+
+    @Inject
+    RoutingContext routingContext;
+
     @ConfigProperty(name = "admin.jwt.secret")
     String jwtSecret;
 
@@ -58,14 +68,33 @@ public class AdminAuthApiController {
             content = @Content(schema = @Schema(implementation = AdminLoginResponse.class)))
     @APIResponse(responseCode = "401", description = "账号或密码错误")
     public Response login(@Valid AdminLoginRequest request) {
+        String normalizedAccount = request.account().trim().toLowerCase();
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        String accountLimitKey = "admin-login-account:" + normalizedAccount;
+        String ipLimitKey = "admin-login-ip:" + clientIp;
+        Duration limitWindow = Duration.ofMinutes(15);
+        if (!securityRateLimitService.isAllowed(accountLimitKey, 5, limitWindow)
+                || !securityRateLimitService.isAllowed(ipLimitKey, 5, limitWindow)) {
+            return Response.status(Response.Status.TOO_MANY_REQUESTS)
+                    .header("Retry-After", "900")
+                    .entity(Map.of("success", false, "message", "登录尝试过于频繁，请15分钟后重试"))
+                    .build();
+        }
         User user = User.find("(username = ?1 or email = ?1) and deletedAt is null", request.account().trim()).firstResult();
         if (user == null || user.status != 1) {
+            securityRateLimitService.recordFailure(accountLimitKey, limitWindow);
+            securityRateLimitService.recordFailure(ipLimitKey, limitWindow);
             return unauthorized();
         }
 
         if (!passwordHasher.matches(request.password(), user.password)) {
+            securityRateLimitService.recordFailure(accountLimitKey, limitWindow);
+            securityRateLimitService.recordFailure(ipLimitKey, limitWindow);
             return unauthorized();
         }
+
+        securityRateLimitService.clear(accountLimitKey);
+        securityRateLimitService.clear(ipLimitKey);
 
         String roleName = user.roleName;
         if (roleName == null || roleName.isBlank()) {

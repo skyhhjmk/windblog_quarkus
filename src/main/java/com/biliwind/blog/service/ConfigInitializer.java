@@ -248,6 +248,15 @@ public class ConfigInitializer {
                 "Elasticsearch 搜索、分词与同义词设置"
         ));
 
+        ObjectNode securityNetworkSchema = mapper.createObjectNode();
+        securityNetworkSchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode securityNetworkFields = securityNetworkSchema.putArray("fields");
+        securityNetworkFields.addObject().put("key", "trusted_proxy_cidrs").put("label", "可信代理 CIDR").put("widget", "textarea").put("required", true);
+        securityNetworkFields.addObject().put("key", "client_ip_header").put("label", "客户端 IP 请求头").put("widget", "input").put("required", true);
+        ObjectNode securityNetworkValue = mapper.createObjectNode();
+        securityNetworkValue.put("trusted_proxy_cidrs", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16");
+        securityNetworkValue.put("client_ip_header", "X-Forwarded-For");
+        list.add(new SettingDefinition("security_network", securityNetworkValue, "object", "安全设置", securityNetworkSchema, "可信代理与客户端 IP 解析设置"));
         return list;
     }
 

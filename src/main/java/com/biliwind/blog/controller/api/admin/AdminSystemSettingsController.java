@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import io.vertx.ext.web.RoutingContext;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -45,6 +46,12 @@ public class AdminSystemSettingsController {
 
     @Inject
     Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
+    @Inject
+    com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
+
+    @Inject
+    RoutingContext routingContext;
 
     @GET
     @SecurityRequirement(name = "adminBearerAuth")
@@ -230,6 +237,25 @@ public class AdminSystemSettingsController {
         return Response.ok(Map.of("success", true, "message", "已应用配置并进入验证期")).build();
     }
 
+    @GET
+    @Path("/client-ip/inspect")
+    @SecurityRequirement(name = "adminBearerAuth")
+    @Operation(summary = "查看当前客户端 IP 解析结果")
+    public Response inspectClientIp() {
+        com.biliwind.blog.service.security.ClientIpResolver.ClientIpResolution resolution = clientIpResolver.resolve(routingContext);
+        return Response.ok(Map.of("success", true, "data", resolution)).build();
+    }
+
+    @POST
+    @Path("/client-ip/simulate")
+    @SecurityRequirement(name = "adminBearerAuth")
+    @Operation(summary = "模拟客户端 IP 请求头解析")
+    public Response simulateClientIp(Map<String, String> request) {
+        String remoteIp = request.get("remoteIp");
+        String headerValue = request.get("headerValue");
+        com.biliwind.blog.service.security.ClientIpResolver.ClientIpResolution resolution = clientIpResolver.resolve(remoteIp, headerValue);
+        return Response.ok(Map.of("success", true, "data", resolution)).build();
+    }
     private Map<String, Object> sanitizeForAudit(String key, JsonNode value) {
         Map<String, Object> result = new HashMap<>();
         result.put("key", key);

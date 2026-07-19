@@ -62,7 +62,8 @@ public class UploadFileController {
             }
         } catch (NotFoundException notFoundException) {
             throw notFoundException;
-        } catch (Exception ignored) {
+        } catch (Exception exception) {
+            throw new ServiceUnavailableException("媒体访问校验暂不可用");
         }
 
         java.nio.file.Path root = java.nio.file.Paths.get(uploadDir).toAbsolutePath().normalize();
