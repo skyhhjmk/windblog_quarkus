@@ -63,6 +63,9 @@ public class UserController {
     ConfigManager configManager;
 
     @Inject
+    com.biliwind.blog.service.EmailVerificationService emailVerificationService;
+
+    @Inject
     @Location("user/register.html")
     Template registerTemplate;
 
@@ -204,6 +207,8 @@ public class UserController {
             @FormParam("username") @NotBlank @Size(min = 3, max = 20) String username,
             @FormParam("email") @NotBlank @Email String email,
             @FormParam("password") @NotBlank @Size(min = 6, max = 32) String password,
+            @FormParam("subscribeArticleUpdates") String subscribeArticleUpdates,
+            @FormParam("subscribePromotions") String subscribePromotions,
             @FormParam("redirect") String redirect) {
 
         if (!configManager.getBoolean("feature_toggles", "enable_registration", true)) {
@@ -233,7 +238,10 @@ public class UserController {
         user.password = passwordHasher.hash(password);
         user.status = 1;
         user.roleName = RoleConstant.USER;
+        user.subscribeArticleUpdates = "on".equals(subscribeArticleUpdates);
+        user.subscribePromotions = "on".equals(subscribePromotions);
         user.persist();
+        emailVerificationService.sendVerification(user);
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("USER", user.id, "UPSERT"));
 
         // 生成JWT Token
@@ -245,7 +253,7 @@ public class UserController {
         String targetUrl = sanitizeRedirect(redirect);
         return Response.ok(Map.of(
                         "success", true,
-                        "message", "注册成功",
+                        "message", "注册成功，请查收验证邮件",
                         "redirect", targetUrl,
                         "user", new UserProfile(user.id, user.username, user.email, user.roleName)
                 ))
@@ -369,6 +377,45 @@ public class UserController {
                 .build();
     }
 
+    @POST
+    @Path("/api/subscriptions")
+    @Transactional
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response updateSubscriptions(SubscriptionRequest request, @Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) throw new NotAuthorizedException("请先登录");
+        User user = User.findById(profile.id());
+        if (user.emailVerifiedAt == null) throw new ForbiddenException("请先完成邮箱验证后再管理订阅");
+        user.subscribeArticleUpdates = request.subscribeArticleUpdates();
+        user.subscribePromotions = request.subscribePromotions();
+        return Response.ok(Map.of("success", true)).build();
+    }
+
+    @GET
+    @Path("/api/subscriptions")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getSubscriptions(@Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) {
+            throw new NotAuthorizedException("请先登录");
+        }
+        User user = User.findById(profile.id());
+        return Response.ok(Map.of("success", true, "data", Map.of(
+                "emailVerified", user.emailVerifiedAt != null,
+                "subscribeArticleUpdates", user.subscribeArticleUpdates,
+                "subscribePromotions", user.subscribePromotions))).build();
+    }
+
+    @GET
+    @Path("/verify-email")
+    @Produces(MediaType.TEXT_HTML)
+    public Response verifyEmail(@QueryParam("token") String token) {
+        boolean verified = token != null && emailVerificationService.verify(token);
+        String message = verified ? "邮箱验证成功，您现在可以发表评论和管理订阅。" : "验证链接无效或已过期。";
+        return Response.ok("<html><body><h1>" + message + "</h1><p><a href=\"/user/login\">返回登录</a></p></body></html>").build();
+    }
+
     private String sanitizeRedirect(String redirect) {
         if (redirect == null || redirect.isBlank()) {
             return "/";
@@ -410,5 +457,8 @@ public class UserController {
     }
 
     public record UserProfile(Long id, String username, String email, String roleName) {
+    }
+
+    public record SubscriptionRequest(boolean subscribeArticleUpdates, boolean subscribePromotions) {
     }
 }

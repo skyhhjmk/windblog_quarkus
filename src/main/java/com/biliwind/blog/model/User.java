@@ -31,6 +31,15 @@ public class User extends PanacheEntityBase {
     @Column(nullable = false, length = 255, unique = true)
     public String email;
 
+    @Column(name = "email_verified_at")
+    public OffsetDateTime emailVerifiedAt;
+
+    @Column(name = "subscribe_article_updates", nullable = false)
+    public boolean subscribeArticleUpdates;
+
+    @Column(name = "subscribe_promotions", nullable = false)
+    public boolean subscribePromotions;
+
     /** 加密后密码 */
     @Column(nullable = false, length = 255)
     public String password;

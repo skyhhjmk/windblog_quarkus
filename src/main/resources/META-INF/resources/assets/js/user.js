@@ -142,6 +142,38 @@
         };
     }
 
+    function bindSubscriptions() {
+        const form = document.getElementById('subscriptionForm');
+        if (!form) return;
+        const articleUpdates = document.getElementById('subscribeArticleUpdates');
+        const promotions = document.getElementById('subscribePromotions');
+        const hint = document.getElementById('subscriptionVerificationHint');
+        fetch('/user/api/subscriptions').then(response => response.json()).then(result => {
+            if (!result.success) return;
+            articleUpdates.checked = result.data.subscribeArticleUpdates === true;
+            promotions.checked = result.data.subscribePromotions === true;
+            if (result.data.emailVerified !== true) {
+                articleUpdates.disabled = true;
+                promotions.disabled = true;
+                form.querySelector('button').disabled = true;
+                hint.textContent = '请先完成邮箱验证后再管理订阅。';
+            }
+        });
+        form.onsubmit = async function (event) {
+            event.preventDefault();
+            const response = await fetch('/user/api/subscriptions', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': window.getCsrfToken()},
+                body: JSON.stringify({
+                    subscribeArticleUpdates: articleUpdates.checked,
+                    subscribePromotions: promotions.checked
+                })
+            });
+            const result = await response.json();
+            window.showToast(result.success ? '订阅偏好已保存' : '订阅偏好保存失败', result.success ? 'success' : 'error');
+        };
+    }
+
     function bindRegisterForm() {
         const form = document.getElementById('registerForm');
         const errorDiv = document.getElementById('errorMessage');
@@ -434,6 +466,7 @@
         bindLoginForm();
         bindRegisterForm();
         bindUserWallet();
+        bindSubscriptions();
     }
 
     ready(() => {

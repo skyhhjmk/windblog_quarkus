@@ -127,6 +127,9 @@ public class CommentApiController {
         if (user == null) {
             throw new ForbiddenException("Login required");
         }
+        if (user.emailVerifiedAt == null) {
+            throw new ForbiddenException("请先完成邮箱验证后再发表评论");
+        }
 
         final Post post = findPublicPost(request.postSlug());
         final Comment parent = resolveParent(post, request.parentId());

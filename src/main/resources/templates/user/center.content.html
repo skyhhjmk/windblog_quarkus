@@ -99,6 +99,18 @@
                 </div>
             </section>
 
+            <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
+                <h2 class="text-lg font-bold mb-4">邮件订阅</h2>
+                <p id="subscriptionVerificationHint" class="text-sm text-gray-400 mb-4"></p>
+                <form id="subscriptionForm" class="space-y-3">
+                    <label class="flex items-center gap-2"><input id="subscribeArticleUpdates" type="checkbox"> 接收新文章更新</label>
+                    <label class="flex items-center gap-2"><input id="subscribePromotions" type="checkbox"> 接收推广通知</label>
+                    <button id="saveSubscriptions" type="submit"
+                            class="btn-minimal px-4 py-2 border border-[var(--border)] rounded">保存订阅偏好
+                    </button>
+                </form>
+            </section>
+
             <!-- 2D Backpack -->
             <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
                 <div class="flex justify-between items-center mb-6">

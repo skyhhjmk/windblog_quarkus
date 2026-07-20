@@ -63,6 +63,9 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.service.link.ArticleExternalLinkService articleExternalLinkService;
 
+    @Inject
+    com.biliwind.blog.service.ArticleEmailNotificationService articleEmailNotificationService;
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -282,7 +285,7 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "200", description = "发布成功")
     @APIResponse(responseCode = "404", description = "文章不存在")
     @APIResponse(responseCode = "409", description = "内容相同")
-    public AdminPostDetail publish(@PathParam("id") Long id) {
+    public AdminPostDetail publish(@PathParam("id") Long id, EmailDispatchRequest emailDispatchRequest) {
         Post post = mustFindPost(id);
         if (post.currentRevision == null) {
             throw badRequest("文章暂无草稿内容");
@@ -291,6 +294,7 @@ public class AdminPostApiController {
             throw conflict("内容相同");
         }
         publishRevision(post, post.currentRevision, OffsetDateTime.now());
+        articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         return toDetail(post);
     }
@@ -302,13 +306,14 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "200", description = "发布成功")
     @APIResponse(responseCode = "404", description = "文章或版本不存在")
     @APIResponse(responseCode = "409", description = "内容相同")
-    public AdminPostDetail publishRevision(@PathParam("id") Long id, @PathParam("revisionNumber") int revisionNumber) {
+    public AdminPostDetail publishRevision(@PathParam("id") Long id, @PathParam("revisionNumber") int revisionNumber, EmailDispatchRequest emailDispatchRequest) {
         Post post = mustFindPost(id);
         PostRevision revision = findRevisionOrThrow(id, revisionNumber);
         if (post.status == PostStatus.PUBLISHED && sameRevision(post.publishedRevision, revision)) {
             throw conflict("内容相同");
         }
         publishRevision(post, revision, OffsetDateTime.now());
+        articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         return toDetail(post);
     }

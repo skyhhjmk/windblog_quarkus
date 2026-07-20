@@ -86,4 +86,5 @@
              relativeToChangelogFile="false"/>
     <include file="db/migration/082-fix-empty-visibility-regions.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/083-create-comment-quotes.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/086-create-email-center.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

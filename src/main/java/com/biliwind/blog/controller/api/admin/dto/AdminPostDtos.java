@@ -77,6 +77,12 @@ public final class AdminPostDtos {
                         OffsetDateTime updatedAt) {
         }
 
+    public record EmailDispatchRequest(
+            Boolean sendArticleUpdate,
+            Long channelGroupId,
+            Long channelId) {
+    }
+
         public record AdminPostDetail(
                         Long id,
                         String slug,

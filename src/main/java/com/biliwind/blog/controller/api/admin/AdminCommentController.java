@@ -30,6 +30,9 @@ import java.util.Map;
 public class AdminCommentController {
 
     @Inject
+    com.biliwind.blog.service.CommentEmailNotificationService commentEmailNotificationService;
+
+    @Inject
     AiManager aiManager;
 
     @Inject
@@ -121,6 +124,7 @@ public class AdminCommentController {
         Map<String, Object> oldVal = new HashMap<String, Object>();
         Map<String, Object> newVal = new HashMap<String, Object>();
 
+        boolean shouldNotifyReplyRecipient = false;
         if (req.status() != null) {
             oldVal.put("status", comment.status);
             oldVal.put("auditStatus", comment.auditStatus);
@@ -129,6 +133,7 @@ public class AdminCommentController {
 
             if (comment.status == 1) {
                 comment.auditStatus = 2; // 通过
+                shouldNotifyReplyRecipient = oldVal.get("status") instanceof Short && ((Short) oldVal.get("status")) != 1;
             } else {
                 comment.auditStatus = 3; // 拒绝
             }
@@ -146,6 +151,9 @@ public class AdminCommentController {
         }
 
         auditService.log("comment", String.valueOf(comment.id), "update", oldVal, newVal);
+        if (shouldNotifyReplyRecipient) {
+            commentEmailNotificationService.notifyReplyRecipient(comment);
+        }
         invalidateCommentCaches();
 
         return toItem(comment);
