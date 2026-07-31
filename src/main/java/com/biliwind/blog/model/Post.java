@@ -155,6 +155,13 @@ public class Post extends PanacheEntityBase {
     @Column(name = "visibility_regions", columnDefinition = "jsonb")
     public java.util.List<String> visibilityRegions;
 
+    /**
+     * 文章内容声明代码，用于向读者明确广告、AI、观点、自动化使用和授权限制。
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "content_declarations", columnDefinition = "jsonb")
+    public java.util.List<String> contentDeclarations;
+
     /** 乐观锁版本号 */
     @Version
     @Column(nullable = false)

@@ -31,7 +31,8 @@ public final class AdminPostDtos {
                         Integer freeLines,
                         Long categoryId,
                 List<Long> tagIds,
-                List<String> visibilityRegions) {
+                List<String> visibilityRegions,
+                List<String> contentDeclarations) {
         }
 
         public record PostUpdateRequest(
@@ -54,7 +55,8 @@ public final class AdminPostDtos {
                         Integer freeLines,
                         Long categoryId,
                         List<Long> tagIds,
-                        List<String> visibilityRegions) {
+                        List<String> visibilityRegions,
+                        List<String> contentDeclarations) {
         }
 
         public record AdminPostItem(
@@ -109,6 +111,7 @@ public final class AdminPostDtos {
                         Long categoryId,
                         List<Long> tagIds,
                         List<String> visibilityRegions,
+                        List<String> contentDeclarations,
                         Integer publishedRevisionNumber,
                         Boolean hasPublishedRevision,
                         OffsetDateTime publishedAt,

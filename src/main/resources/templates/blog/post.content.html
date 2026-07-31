@@ -213,6 +213,14 @@
                         </span>
                     </div>
                 </div>
+                {#if contentDeclarations && ! contentDeclarations.isEmpty}
+                    <div class="rounded-lg border border-accent/30 bg-accent/[0.04] px-4 py-3 text-sm text-body"
+                         aria-label="内容声明">
+                        {#for declaration in contentDeclarations}
+                            {declaration}{#if declaration_hasNext} <span class="mx-2 text-accent/70">|</span>{/if}
+                        {/for}
+                    </div>
+                {/if}
                 <div class="rounded-lg border border-border/60 bg-card-bg/40 p-4 text-sm text-body flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div>
                         <p class="font-bold text-main">授权转载声明</p>

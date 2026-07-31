@@ -1,11 +1,9 @@
 package com.biliwind.blog.service;
 
-import com.biliwind.blog.model.EmailChannel;
-import com.biliwind.blog.model.EmailDelivery;
-import com.biliwind.blog.model.EmailChannelGroup;
-import com.biliwind.blog.model.EmailChannelGroupMember;
-import com.biliwind.blog.model.EmailScenarioRoute;
-import com.biliwind.blog.model.EmailTemplate;
+import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.storage.StorageConfigProtector;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.mail.Message;
@@ -14,9 +12,6 @@ import jakarta.mail.Transport;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.transaction.Transactional;
-import io.quarkus.scheduler.Scheduled;
-import com.biliwind.blog.service.storage.StorageConfigProtector;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
@@ -34,7 +29,6 @@ public class EmailDeliveryService {
     @Inject
     EmailTemplateRenderer emailTemplateRenderer;
 
-    @Scheduled(every = "30s")
     @Transactional
     public void queue(String scenario, String recipientAddress, String subject, String htmlContent) {
         queueWithRoute(scenario, recipientAddress, subject, htmlContent, null, null);
@@ -57,6 +51,7 @@ public class EmailDeliveryService {
         delivery.persist();
     }
 
+    @Scheduled(every = "30s")
     @Transactional
     public void deliverPendingMessages() {
         if (!enabled) {

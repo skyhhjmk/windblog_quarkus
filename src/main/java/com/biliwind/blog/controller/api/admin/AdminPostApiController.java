@@ -30,6 +30,13 @@ import java.util.*;
 @SecurityRequirement(name = "adminBearerAuth")
 public class AdminPostApiController {
 
+    private static final Set<String> CONTENT_DECLARATION_CODES = Set.of(
+            "EXPLICIT_AND_EMBEDDED_ADVERTISING",
+            "AI_GENERATED_CONTENT",
+            "SUBJECTIVE_VIEWPOINTS",
+            "AUTOMATION_USE_ALLOWED",
+            "CC_BY_NC_4_0");
+
     @Inject
     com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
 
@@ -167,6 +174,7 @@ public class AdminPostApiController {
         post.createdAt = now;
         post.updatedAt = now;
         post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
+        post.contentDeclarations = validateContentDeclarations(request.contentDeclarations());
 
         // 设置分类
         if (request.categoryId() != null) {
@@ -446,6 +454,7 @@ public class AdminPostApiController {
                 post.category == null ? null : post.category.id,
                 tagIds,
                 post.visibilityRegions,
+                post.contentDeclarations,
                 post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
                 post.publishedRevision != null,
                 post.publishedAt,
@@ -468,6 +477,21 @@ public class AdminPostApiController {
 
     private short statusCode(PostStatus status) {
         return status == null ? PostStatus.DRAFT.getCode() : status.getCode();
+    }
+
+    private List<String> validateContentDeclarations(List<String> requestedDeclarations) {
+        if (requestedDeclarations == null || requestedDeclarations.isEmpty()) {
+            return List.of();
+        }
+
+        LinkedHashSet<String> normalizedDeclarations = new LinkedHashSet<>();
+        for (String declaration : requestedDeclarations) {
+            if (declaration == null || !CONTENT_DECLARATION_CODES.contains(declaration)) {
+                throw badRequest("包含未知的文章内容声明");
+            }
+            normalizedDeclarations.add(declaration);
+        }
+        return new ArrayList<>(normalizedDeclarations);
     }
 
 
@@ -582,6 +606,13 @@ public class AdminPostApiController {
         if (request.visibilityRegions() != null && !Objects.equals(post.visibilityRegions, request.visibilityRegions())) {
             post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
             changed = true;
+        }
+        if (request.contentDeclarations() != null) {
+            List<String> nextDeclarations = validateContentDeclarations(request.contentDeclarations());
+            if (!Objects.equals(post.contentDeclarations, nextDeclarations)) {
+                post.contentDeclarations = nextDeclarations;
+                changed = true;
+            }
         }
         String nextPassword = resolveUpdatedPassword(post, request);
         if (!Objects.equals(post.password, nextPassword)) {
@@ -738,6 +769,7 @@ public class AdminPostApiController {
                 post.category == null ? null : post.category.id,
                 tagIds,
                 post.visibilityRegions,
+                post.contentDeclarations,
                 post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
                 post.publishedRevision != null,
                 post.publishedAt,

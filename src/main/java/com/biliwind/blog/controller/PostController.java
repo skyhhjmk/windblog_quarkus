@@ -18,9 +18,17 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Path("/")
 public class PostController {
+
+    private static final Map<String, String> CONTENT_DECLARATION_LABELS = Map.of(
+            "EXPLICIT_AND_EMBEDDED_ADVERTISING", "包含显式广告和植入式广告",
+            "AI_GENERATED_CONTENT", "存在 AI 生成内容",
+            "SUBJECTIVE_VIEWPOINTS", "存在主观观点",
+            "AUTOMATION_USE_ALLOWED", "可用于自动化程序",
+            "CC_BY_NC_4_0", "CC BY-NC 4.0");
 
     @Inject
     @Location("blog/post.html")
@@ -282,6 +290,7 @@ public class PostController {
                 .data("hasPurchased", hasPurchased)
                 .data("repostUserLoggedIn", currentUserId != null)
                 .data("postTags", postTags)
+                .data("contentDeclarations", resolveContentDeclarationLabels(postEntity.contentDeclarations))
                 .data("attachments", attachments)
                 .data("relatedStoreItems", resolveRelatedStoreItems(postEntity))
                 .data("repostOriginalUrl", repostLicenseService.buildPostUrl(postEntity))
@@ -296,6 +305,20 @@ public class PostController {
                 .tag(etag)
                 .cacheControl(cacheControl)
                 .build();
+    }
+
+    private List<String> resolveContentDeclarationLabels(List<String> declarationCodes) {
+        List<String> labels = new java.util.ArrayList<>();
+        if (declarationCodes == null) {
+            return labels;
+        }
+        for (String declarationCode : declarationCodes) {
+            String label = CONTENT_DECLARATION_LABELS.get(declarationCode);
+            if (label != null) {
+                labels.add(label);
+            }
+        }
+        return labels;
     }
 
     private String buildCanonicalUrl(String slug) {
