@@ -6,6 +6,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportProgress
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportResult;
 import com.biliwind.blog.common.helper.MediaPathHelper;
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.*;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.smallrye.mutiny.Multi;
@@ -117,17 +118,8 @@ public class ImportService {
     }
 
     static String sanitizeErrorMessage(String message) {
-        if (message == null || message.isBlank()) {
-            return "未知导入错误";
-        }
-        String sanitized = message
-                .replaceAll("(?i)(password|passwd|pwd|secret|token|api[_-]?key)(\\s*[=:]\\s*)[^\\s&;,)}]+",
-                        "$1$2[REDACTED]")
-                .replaceAll("(?i)(//[^/\\s:@]+):([^/@\\s]+)@", "$1:[REDACTED]@");
-        if (sanitized.length() > 500) {
-            return sanitized.substring(0, 500) + "...";
-        }
-        return sanitized;
+        String sanitized = SensitiveMessageSanitizer.sanitize(message);
+        return "未知错误".equals(sanitized) ? "未知导入错误" : sanitized;
     }
 
     private int importCategories(Connection conn, ImportContext ctx) throws SQLException {

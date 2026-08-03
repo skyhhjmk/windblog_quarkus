@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.MediaManagementService;
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.service.edge.EdgeWriteGuard;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -149,7 +150,8 @@ public class AdminMediaController {
             Media media = mediaService.retryImport(id);
             return mediaService.toDto(media, List.of());
         } catch (IOException e) {
-            throw new BadRequestException("重试失败: " + e.getMessage());
+            throw new BadRequestException("重试失败: "
+                    + SensitiveMessageSanitizer.sanitize(e.getMessage()));
         }
     }
 

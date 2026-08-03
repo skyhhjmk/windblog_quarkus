@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.common.helper.MediaPathHelper;
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.edge.EdgeWriteGuard;
@@ -130,10 +131,10 @@ public class MediaManagementService {
                     successCount++;
                 } catch (IOException e) {
                     failedCount++;
-                    errorMessage = e.getMessage();
+                    errorMessage = SensitiveMessageSanitizer.sanitize(e.getMessage());
                 } catch (Exception e) {
                     failedCount++;
-                    errorMessage = e.getMessage();
+                    errorMessage = SensitiveMessageSanitizer.sanitize(e.getMessage());
                 }
                 AdminMediaDtos.BatchRetryItemResult itemResult = new AdminMediaDtos.BatchRetryItemResult(
                         mediaId,
@@ -785,7 +786,7 @@ public class MediaManagementService {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("importStatus", "failed");
         metadata.put("sourceUrl", sourceUrl);
-        metadata.put("importError", error);
+        metadata.put("importError", SensitiveMessageSanitizer.sanitize(error));
         media.metadata = metadata;
 
         media.persist();
@@ -809,8 +810,9 @@ public class MediaManagementService {
             Media newMedia = importFromUrl(operator, context.sourceUrl());
             return selfProxy.get().applyRetryImportResult(context.mediaId(), context.oldUrl(), newMedia);
         } catch (Exception e) {
-            selfProxy.get().recordRetryImportFailure(context.mediaId(), e.getMessage());
-            throw new IOException("重试导入仍然失败: " + e.getMessage(), e);
+            String safeMessage = SensitiveMessageSanitizer.sanitize(e.getMessage());
+            selfProxy.get().recordRetryImportFailure(context.mediaId(), safeMessage);
+            throw new IOException("重试导入仍然失败: " + safeMessage);
         }
     }
 
@@ -868,7 +870,7 @@ public class MediaManagementService {
             return;
         }
         Map<String, Object> metadata = media.metadata != null ? new HashMap<>(media.metadata) : new HashMap<>();
-        metadata.put("importError", error);
+        metadata.put("importError", SensitiveMessageSanitizer.sanitize(error));
         metadata.put("lastRetryAt", OffsetDateTime.now().toString());
         media.metadata = metadata;
         media.persist();
