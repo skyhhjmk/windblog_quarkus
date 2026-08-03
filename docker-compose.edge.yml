@@ -6,6 +6,10 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    ports:
+      - target: 5432
+        published: "${EDGE_DB_PORT:-5434}"
+        host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
     environment:
       POSTGRES_USER: ${EDGE_DB_USER}
       POSTGRES_PASSWORD: ${EDGE_DB_PASSWORD}
@@ -25,10 +29,17 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    ports:
+      - target: 6379
+        published: "${EDGE_REDIS_PORT:-6381}"
+        host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
+    environment:
+      REDIS_PASSWORD: ${EDGE_REDIS_PASSWORD:?EDGE_REDIS_PASSWORD must be set}
     volumes:
       - edge-redis-data:/data
+    command: ["redis-server", "--appendonly", "yes", "--bind", "0.0.0.0", "--requirepass", "${EDGE_REDIS_PASSWORD:?EDGE_REDIS_PASSWORD must be set}"]
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,8 +52,12 @@ services:
     networks:
       - app-network
     ports:
-      - "${EDGE_GRPC_PORT:-9001}:${EDGE_GRPC_PORT:-9001}"
-      - "8081:8081"
+      - target: ${EDGE_GRPC_PORT:-9001}
+        published: "${EDGE_GRPC_PORT:-9001}"
+        host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
+      - target: 8081
+        published: "${EDGE_APP_HTTP_PORT:-8081}"
+        host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
     env_file:
       - .env.edge
     environment:
@@ -50,6 +65,7 @@ services:
       - QUARKUS_DATASOURCE_USERNAME=${EDGE_DB_USER}
       - QUARKUS_DATASOURCE_PASSWORD=${EDGE_DB_PASSWORD}
       - QUARKUS_REDIS_HOSTS=${EDGE_REDIS_URL}
+      - QUARKUS_REDIS_PASSWORD=${EDGE_REDIS_PASSWORD}
       - QUARKUS_HTTP_PORT=8081
       - QUARKUS_GRPC_SERVER_PORT=${EDGE_GRPC_PORT:-9001}
       - EDGE_NODE_CONNECTION_TYPE=${EDGE_CONNECTION_TYPE:-ACTIVE_POLL}
