@@ -26,7 +26,7 @@
 > RabbitMQ 适配器交付的 Buffer/JSON 载荷现在由存储同步和 ES 同步消费者显式解码并校验，避免运行时类型强转异常。
 > 边缘同步接收端不再将公开 JSON 直接反序列化为实体；首次同步使用白名单字段和显式主键插入，并保留本地删除/处理错误状态。
 > 生产启动的默认 secret 检查不再受告警开关绕过，生产环境预检也强制 `SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=true`，示例文件不再放置可误用的固定 Elasticsearch/Kibana 凭据。
-> 管理 API 的 CORS `OPTIONS` 预检在 Bearer 授权过滤链中明确放行。密码保护文章即使价格为 0 也只生成锁定预览，带有效票据的文章页从已发布版本读取全文。媒体保护判定不再依赖 `usageType = 3`，正文媒体被密码/付费文章引用时同样不进入公共上传路径、缓存或边缘公开同步。生产启动和预检均拒绝 `ELASTICSEARCH_SSL_TRUST_ALL=true`，并要求 `ELASTICSEARCH_SSL_VERIFY=full`。下载审计新增票据创建到下载的 `ticketAgeMillis`，覆盖用户和管理员原图入口；AI、媒体和链接 endpoint 现在共享网络地址分类规则；同一下载票据新增十分钟请求预算，Redis 故障时仍使用有界本地保护。本轮后端全量回归为 63 个报告、286 个测试，0 failure/error/skip；
+> 管理 API 的 CORS `OPTIONS` 预检在 Bearer 授权过滤链中明确放行。密码保护文章即使价格为 0 也只生成锁定预览，带有效票据的文章页从已发布版本读取全文。媒体保护判定不再依赖 `usageType = 3`，正文媒体被密码/付费文章引用时同样不进入公共上传路径、缓存或边缘公开同步。生产启动和预检均拒绝 `ELASTICSEARCH_SSL_TRUST_ALL=true`，并要求 `ELASTICSEARCH_SSL_VERIFY=full`。下载审计新增票据创建到下载的 `ticketAgeMillis`，覆盖用户和管理员原图入口；AI、媒体和链接 endpoint 现在共享网络地址分类规则；同一下载票据新增十分钟请求预算，Redis 故障时仍使用有界本地保护；按主体/IP 的十分钟窗口新增 403/404 比率检测，至少累计 20 次且错误率达到 80% 时进入 429 降级，Redis 故障时仍使用有界本地保护。本轮后端全量回归为 63 个报告、287 个测试，0 failure/error/skip；
 > 真实 CDN、代理、多节点和家庭网络验收仍未完成。
 
 ## 1. 目标与结论
