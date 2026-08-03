@@ -10,6 +10,8 @@ import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.jboss.logging.Logger;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 @ApplicationScoped
 public class EsSyncDeadLetterConsumer {
@@ -25,10 +27,10 @@ public class EsSyncDeadLetterConsumer {
 
     @Incoming("es-sync-tasks-dlq-in")
     @Transactional
-    public void consume(org.eclipse.microprofile.reactive.messaging.Message<?> message) {
+    public CompletionStage<Void> consume(org.eclipse.microprofile.reactive.messaging.Message<?> message) {
         if (nodeRoleService.isEdgeNode()) {
             log.debug("当前节点是边缘节点，忽略 ES 死信同步任务");
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         EsSyncTask task;
@@ -36,7 +38,7 @@ public class EsSyncDeadLetterConsumer {
             task = esSyncMessageDecoder.decode(message.getPayload());
         } catch (Exception exception) {
             log.error("ES 死信同步消息无法解码，丢弃该消息", exception);
-            return;
+            return message.ack();
         }
         log.errorf("收到 ES 同步死信任务: postId=%d, action=%s", task.postId(), task.actionType());
 
@@ -56,5 +58,6 @@ public class EsSyncDeadLetterConsumer {
         dlm.messageContent = Map.of("postId", task.postId(), "actionType", task.actionType());
         dlm.isProcessed = false;
         dlm.persist();
+        return CompletableFuture.completedFuture(null);
     }
 }
