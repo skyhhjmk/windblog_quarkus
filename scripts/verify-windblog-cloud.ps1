@@ -147,7 +147,7 @@ Assert-Condition ($homepage.StatusCode -ge 200 -and $homepage.StatusCode -lt 400
 Assert-Condition (-not $homepage.Body.Contains("post_pw_")) `
     "公开首页响应中发现旧的明文文章密码 Cookie 名称。"
 $setCookie = $homepage.Headers.Get("Set-Cookie")
-Assert-Condition ($null -eq $setCookie -or -not $setCookie -match "post_pw_") `
+Assert-Condition ($null -eq $setCookie -or -not ($setCookie -match "post_pw_")) `
     "公开首页 Set-Cookie 中发现旧的明文文章密码 Cookie。"
 $checks.Add("public homepage")
 
