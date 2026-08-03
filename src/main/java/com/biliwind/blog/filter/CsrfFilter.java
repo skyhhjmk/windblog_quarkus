@@ -47,27 +47,28 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
     public void filter(ContainerRequestContext requestContext) {
         String method = requestContext.getMethod();
 
-        // 1. 对于非安全方法（POST, PUT, DELETE 等），执行验证
-        if (!SAFE_METHODS.contains(method)) {
-            String path = normalizePath(requestContext.getUriInfo().getPath());
-            // 排除不需要 CSRF 防护的路径（如 Admin API，通常使用 Bearer Token 已经天然防御 CSRF）
-            // 但如果 Admin API 也使用 Cookie 认证，则也需要校验
-            // 这里我们主要针对前台 API
-            // 针对前台和用户中心 API 进行校验
-            // 排除 /api/admin/：后台 API 使用 Bearer Token 认证，天然防御 CSRF
-            if ((path.startsWith("/api/") && !path.startsWith("/api/admin/")) || path.startsWith("/user/api/")) {
-                Cookie csrfCookie = requestContext.getCookies().get(CSRF_COOKIE_NAME);
-                String csrfHeader = requestContext.getHeaderString(CSRF_HEADER_NAME);
+        if (requiresCsrf(method, requestContext.getUriInfo().getPath())) {
+            Cookie csrfCookie = requestContext.getCookies().get(CSRF_COOKIE_NAME);
+            String csrfHeader = requestContext.getHeaderString(CSRF_HEADER_NAME);
 
-                if (csrfCookie == null || !csrfTokenManager.verifyToken(csrfHeader, csrfCookie.getValue())) {
-                    securityMetricsService.increment("csrf.denied", "token_mismatch");
-                    requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
-                            .type(MediaType.APPLICATION_JSON)
-                            .entity(Map.of("success", false, "message", "CSRF token mismatch or missing"))
-                            .build());
-                }
+            if (csrfCookie == null || !csrfTokenManager.verifyToken(csrfHeader, csrfCookie.getValue())) {
+                securityMetricsService.increment("csrf.denied", "token_mismatch");
+                requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
+                        .type(MediaType.APPLICATION_JSON)
+                        .entity(Map.of("success", false, "message", "CSRF token mismatch or missing"))
+                        .build());
             }
         }
+    }
+
+    static boolean requiresCsrf(String method, String path) {
+        String normalizedMethod = method == null ? "" : method.toUpperCase(java.util.Locale.ROOT);
+        if (SAFE_METHODS.contains(normalizedMethod)) {
+            return false;
+        }
+        String normalizedPath = normalizePath(path);
+        return (normalizedPath.startsWith("/api/") && !normalizedPath.startsWith("/api/admin/"))
+                || normalizedPath.startsWith("/user/api/");
     }
 
     @Override
@@ -106,7 +107,7 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
                 || normalized.contains("s-maxage");
     }
 
-    private String normalizePath(String path) {
+    private static String normalizePath(String path) {
         if (path == null || path.isBlank()) {
             return "/";
         }
