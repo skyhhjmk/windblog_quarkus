@@ -25,7 +25,8 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:windblog_tls:10m;
 
-    client_max_body_size 50m;
+    # Keep the public proxy cap aligned with WINDBLOG_EDGE_MAX_ROUTED_BODY_BYTES=10 MiB.
+    client_max_body_size 10m;
     client_body_timeout 30s;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
