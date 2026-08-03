@@ -178,7 +178,7 @@ try {
         WINDBLOG_PUBLIC_READ_HOME_LIMIT_PER_MINUTE = $HomeLimit
         WINDBLOG_NODE_ROLE = "primary"
     }
-    & docker.exe exec redis redis-cli -a redis -n 15 FLUSHDB | Out-Null
+    & docker.exe exec -e REDISCLI_AUTH=redis redis redis-cli -n 15 FLUSHDB | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "无法清理本地多节点 smoke 使用的 Redis DB 15。"
     }
@@ -245,7 +245,7 @@ finally {
         Invoke-DockerRabbit @("delete_user", $smokeUser)
     } catch {
     }
-    & docker.exe exec redis redis-cli -a redis -n 15 FLUSHDB | Out-Null
+    & docker.exe exec -e REDISCLI_AUTH=redis redis redis-cli -n 15 FLUSHDB | Out-Null
     if (Test-Path -LiteralPath $trustStorePath) {
         Remove-Item -LiteralPath $trustStorePath -Force -ErrorAction SilentlyContinue
     }
