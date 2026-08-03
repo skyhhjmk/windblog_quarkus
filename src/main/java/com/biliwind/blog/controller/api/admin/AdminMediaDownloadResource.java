@@ -79,6 +79,7 @@ public class AdminMediaDownloadResource {
         if (relation == null || !postAccessService.isProtectedMediaReference(relation)) {
             downloadAuditService.recordDenied(ticket, mediaId,
                     resolveClientIp(), userAgent, referer, "TICKET_RESOURCE_MISMATCH");
+            downloadRiskService.recordClientAttempt(adminId, resolveClientIp(), 404);
             return notFound();
         }
 

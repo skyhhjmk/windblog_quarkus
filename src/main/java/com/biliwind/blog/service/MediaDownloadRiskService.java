@@ -29,6 +29,7 @@ public class MediaDownloadRiskService {
     private static final int TICKET_PER_TEN_MINUTES = 24;
     private static final int BEHAVIOR_MIN_SAMPLES = 20;
     private static final int BEHAVIOR_DENIED_PERCENT = 80;
+    private static final int MAX_LOCAL_BEHAVIOR_WINDOWS = 4096;
     private static final long SUBJECT_BYTES_PER_TEN_MINUTES = 2L * 1024L * 1024L * 1024L;
     private static final long IP_BYTES_PER_TEN_MINUTES = 4L * 1024L * 1024L * 1024L;
     private static final long ARTICLE_BYTES_PER_TEN_MINUTES = 1L * 1024L * 1024L * 1024L;
@@ -129,6 +130,17 @@ public class MediaDownloadRiskService {
         recordBehaviorDenied(buildBehaviorKey(subjectId, ipKey));
     }
 
+    /** Records a validated-ticket request that ended in a 403/404 before risk checks ran. */
+    public void recordClientAttempt(Long subjectId, String clientIp, int statusCode) {
+        if (statusCode != 403 && statusCode != 404) {
+            return;
+        }
+        String ipKey = digest(clientIp == null || clientIp.isBlank() ? "unknown" : clientIp);
+        String key = buildBehaviorKey(subjectId, ipKey);
+        recordBehaviorRequest(key);
+        recordBehaviorDenied(key);
+    }
+
     public DownloadLease tryAcquireConcurrency(Long subjectId, Long postId, String clientIp) {
         String principal = subjectId == null ? digest(clientIp == null ? "unknown" : clientIp)
                 : "subject:" + subjectId;
@@ -213,6 +225,19 @@ public class MediaDownloadRiskService {
         securityMetricsService.setGauge("download.active", activeLeaseCount());
     }
 
+    @Scheduled(every = "1m", identity = "media-download-behavior-cleanup")
+    void cleanExpiredBehaviorWindows() {
+        long now = System.currentTimeMillis();
+        for (Map.Entry<String, BehaviorWindow> entry : behaviorWindows.entrySet()) {
+            BehaviorWindow window = entry.getValue();
+            synchronized (window) {
+                if (now - window.startedAt >= LONG_WINDOW.toMillis()) {
+                    behaviorWindows.remove(entry.getKey(), window);
+                }
+            }
+        }
+    }
+
     private long activeLeaseCount() {
         long count = 0;
         for (Map<String, Long> leases : activeDownloads.values()) {
@@ -276,8 +301,10 @@ public class MediaDownloadRiskService {
                 return;
             }
         }
-        BehaviorWindow window = behaviorWindows.computeIfAbsent(key,
-                ignored -> new BehaviorWindow(System.currentTimeMillis()));
+        BehaviorWindow window = getOrCreateLocalBehaviorWindow(key);
+        if (window == null) {
+            return;
+        }
         synchronized (window) {
             resetBehaviorWindowIfExpired(window);
             window.requests = window.requests + 1;
@@ -291,11 +318,45 @@ public class MediaDownloadRiskService {
                 return;
             }
         }
-        BehaviorWindow window = behaviorWindows.computeIfAbsent(key,
-                ignored -> new BehaviorWindow(System.currentTimeMillis()));
+        BehaviorWindow window = getOrCreateLocalBehaviorWindow(key);
+        if (window == null) {
+            return;
+        }
         synchronized (window) {
             resetBehaviorWindowIfExpired(window);
             window.denied = window.denied + 1;
+        }
+    }
+
+    private BehaviorWindow getOrCreateLocalBehaviorWindow(String key) {
+        synchronized (behaviorWindows) {
+            BehaviorWindow existing = behaviorWindows.get(key);
+            if (existing != null) {
+                return existing;
+            }
+            if (behaviorWindows.size() >= MAX_LOCAL_BEHAVIOR_WINDOWS) {
+                evictOldestLocalBehaviorWindow();
+            }
+            BehaviorWindow created = new BehaviorWindow(System.currentTimeMillis());
+            behaviorWindows.put(key, created);
+            return created;
+        }
+    }
+
+    private void evictOldestLocalBehaviorWindow() {
+        String oldestKey = null;
+        BehaviorWindow oldestWindow = null;
+        for (Map.Entry<String, BehaviorWindow> entry : behaviorWindows.entrySet()) {
+            BehaviorWindow candidate = entry.getValue();
+            synchronized (candidate) {
+                if (oldestWindow == null || candidate.startedAt < oldestWindow.startedAt) {
+                    oldestKey = entry.getKey();
+                    oldestWindow = candidate;
+                }
+            }
+        }
+        if (oldestKey != null && oldestWindow != null) {
+            behaviorWindows.remove(oldestKey, oldestWindow);
         }
     }
 

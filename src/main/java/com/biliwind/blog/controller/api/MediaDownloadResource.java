@@ -63,22 +63,23 @@ public class MediaDownloadResource {
     public Response download(@PathParam("token") String token, @Context HttpHeaders headers) {
         Long userId = resolveUserId(headers);
         if (userId == null) {
-            return Response.status(Response.Status.UNAUTHORIZED).build();
+            return noStore(Response.Status.UNAUTHORIZED);
         }
         User user = User.find("id = ?1 and status = 1 and deletedAt is null", userId).firstResult();
         if (user == null) {
-            return Response.status(Response.Status.UNAUTHORIZED).build();
+            return noStore(Response.Status.UNAUTHORIZED);
         }
 
         ContentAccessTicket ticket = ticketService.requireMediaTicket(
                 token, userId, headers.getHeaderString("X-Device-Id"));
         if (ticket == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            return noStore(Response.Status.NOT_FOUND);
         }
 
         Long mediaId = resolveMediaId(ticket);
         if (mediaId == null || ticket.postId == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            downloadRiskService.recordClientAttempt(userId, resolveClientIp(headers), 404);
+            return noStore(Response.Status.NOT_FOUND);
         }
         Media media = Media.find("id = ?1 and deletedAt is null", mediaId).firstResult();
         PostMedia relation = media == null ? null : PostMedia.find(
@@ -89,7 +90,8 @@ public class MediaDownloadResource {
             downloadAuditService.recordDenied(ticket, mediaId,
                     resolveClientIp(headers), headers.getHeaderString("User-Agent"),
                     headers.getHeaderString("Referer"), "TICKET_RESOURCE_MISMATCH");
-            return Response.status(Response.Status.NOT_FOUND).build();
+            downloadRiskService.recordClientAttempt(userId, resolveClientIp(headers), 404);
+            return noStore(Response.Status.NOT_FOUND);
         }
         String clientIp = resolveClientIp(headers);
         MediaDownloadRiskService.Decision risk = downloadRiskService.check(
@@ -126,7 +128,7 @@ public class MediaDownloadResource {
                     ? Response.Status.FORBIDDEN
                     : Response.Status.NOT_FOUND;
             downloadRiskService.recordClientError(userId, clientIp, status.getStatusCode());
-            return Response.status(status).build();
+            return noStore(status);
         }
 
         try {
@@ -177,7 +179,7 @@ public class MediaDownloadResource {
                     .build();
         } catch (Exception exception) {
             downloadRiskService.releaseConcurrency(concurrencyLease);
-            return Response.status(Response.Status.NOT_FOUND).build();
+            return noStore(Response.Status.NOT_FOUND);
         }
     }
 
@@ -203,6 +205,13 @@ public class MediaDownloadResource {
         } catch (Exception exception) {
             return null;
         }
+    }
+
+    private Response noStore(Response.Status status) {
+        return Response.status(status)
+                .header("Cache-Control", "no-store")
+                .header("Pragma", "no-cache")
+                .build();
     }
 
     static long writeLimitedChunk(OutputStream output, byte[] buffer, int bytesRead,
