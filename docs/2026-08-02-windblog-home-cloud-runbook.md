@@ -162,6 +162,16 @@ $env:WINDBLOG_IT_DB_NAME = 'windblog'
 媒体处理、RabbitMQ 不可用或 SMTP 故障时，任务会留在可重试状态，不应无限占用调度线程。生产环境可通过
 `WINDBLOG_OUTBOX_*` 和 `WINDBLOG_MAIL_*` 调整，但应在压测后再提高上限。
 
+公开首页、文章页和搜索的 Redis 分布式限额可通过 `WINDBLOG_PUBLIC_READ_HOME_LIMIT_PER_MINUTE`、
+`WINDBLOG_PUBLIC_READ_PAGE_LIMIT_PER_MINUTE`、`WINDBLOG_PUBLIC_READ_SEARCH_LIMIT_PER_MINUTE` 覆盖；
+默认值保持源码中的生产保护值。两个本地 prod 实例可使用共享 PostgreSQL/Redis 做一致性 smoke：
+
+```powershell
+.\scripts\verify-windblog-multi-node-smoke.ps1
+```
+
+该脚本只证明同一 Redis 上的两个本地 JVM 共享公开阅读计数，不替代跨主机、边缘撤销状态、真实网络和 CDN 验收。
+
 ## 备份与恢复
 
 目标是 3-2-1：主机在线数据、同机或外接加密备份、异地/云端加密备份。数据库备份应包含
