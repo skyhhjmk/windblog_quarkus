@@ -83,4 +83,38 @@ class MediaDownloadRiskServiceTest {
             availableField.setBoolean(cacheService, originalAvailability);
         }
     }
+
+    @Test
+    void shouldLimitHighFourOhFourRatioInLocalFallback() throws Exception {
+        Field availableField = CacheService.class.getDeclaredField("redisAvailable");
+        availableField.setAccessible(true);
+        boolean originalAvailability = availableField.getBoolean(cacheService);
+        availableField.setBoolean(cacheService, true);
+
+        Field valueCommandsField = CacheService.class.getDeclaredField("valueCommands");
+        valueCommandsField.setAccessible(true);
+        Object originalValueCommands = valueCommandsField.get(cacheService);
+        valueCommandsField.set(cacheService, null);
+
+        try {
+            Long subjectId = Math.abs(UUID.randomUUID().getMostSignificantBits());
+            String clientIp = "four-oh-four-ratio-" + UUID.randomUUID();
+            for (int attempt = 0; attempt < 16; attempt++) {
+                assertTrue(riskService.check(subjectId, 9901L, clientIp, null).allowed());
+                riskService.recordClientError(subjectId, clientIp, 404);
+            }
+            for (int attempt = 0; attempt < 4; attempt++) {
+                assertTrue(riskService.check(subjectId, 9901L, clientIp, null).allowed());
+            }
+
+            MediaDownloadRiskService.Decision denied = riskService.check(
+                    subjectId, 9901L, clientIp, null);
+
+            assertEquals("BEHAVIOR_4XX_RATIO_LIMIT", denied.reason());
+            assertEquals(600, denied.retryAfterSeconds());
+        } finally {
+            valueCommandsField.set(cacheService, originalValueCommands);
+            availableField.setBoolean(cacheService, originalAvailability);
+        }
+    }
 }

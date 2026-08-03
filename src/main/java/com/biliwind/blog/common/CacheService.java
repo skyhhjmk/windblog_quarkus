@@ -132,6 +132,24 @@ public class CacheService {
         }
     }
 
+    /** Reads a Redis counter without turning a missing key into a cache failure. */
+    public long getLong(String key) {
+        if (!isRedisAvailable()) {
+            return -1L;
+        }
+        try {
+            String value = valueCommands.get(CACHE_PREFIX + key);
+            if (value == null || value.isBlank()) {
+                return 0L;
+            }
+            return Long.parseLong(value);
+        } catch (Exception e) {
+            markUnavailable();
+            LOG.warnf("Failed to read cache counter: %s", e.getMessage());
+            return -1L;
+        }
+    }
+
     /** Decrements a distributed counter and removes it when no lease remains. */
     public long decrement(String key) {
         if (!isRedisAvailable()) {

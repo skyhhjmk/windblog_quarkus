@@ -27,6 +27,8 @@ public class MediaDownloadRiskService {
     private static final int IP_PER_MINUTE = 60;
     private static final int SUBJECT_PER_TEN_MINUTES = 120;
     private static final int TICKET_PER_TEN_MINUTES = 24;
+    private static final int BEHAVIOR_MIN_SAMPLES = 20;
+    private static final int BEHAVIOR_DENIED_PERCENT = 80;
     private static final long SUBJECT_BYTES_PER_TEN_MINUTES = 2L * 1024L * 1024L * 1024L;
     private static final long IP_BYTES_PER_TEN_MINUTES = 4L * 1024L * 1024L * 1024L;
     private static final long ARTICLE_BYTES_PER_TEN_MINUTES = 1L * 1024L * 1024L * 1024L;
@@ -47,6 +49,7 @@ public class MediaDownloadRiskService {
     SecurityMetricsService securityMetricsService;
 
     private final Map<String, Map<String, Long>> activeDownloads = new ConcurrentHashMap<>();
+    private final Map<String, BehaviorWindow> behaviorWindows = new ConcurrentHashMap<>();
 
     public Decision check(Long subjectId, Long postId, String clientIp) {
         return check(subjectId, postId, clientIp, null);
@@ -64,6 +67,12 @@ public class MediaDownloadRiskService {
         }
         String subjectKey = subjectId == null ? "anonymous" : String.valueOf(subjectId);
         String ipKey = digest(clientIp == null || clientIp.isBlank() ? "unknown" : clientIp);
+        String behaviorKey = buildBehaviorKey(subjectId, ipKey);
+        if (!isBehaviorAllowed(behaviorKey)) {
+            securityMetricsService.increment("download.denied", "BEHAVIOR_4XX_RATIO_LIMIT");
+            return new Decision(false, "BEHAVIOR_4XX_RATIO_LIMIT", 600);
+        }
+        recordBehaviorRequest(behaviorKey);
 
         if (ticketId != null && !allow(
                 "media-download:ticket:" + digest(String.valueOf(ticketId)) + ":ten-minutes",
@@ -109,6 +118,15 @@ public class MediaDownloadRiskService {
         }
         securityMetricsService.increment("download.allowed");
         return new Decision(true, null, 0);
+    }
+
+    /** Records a client error after an authenticated ticket reached a 403/404 outcome. */
+    public void recordClientError(Long subjectId, String clientIp, int statusCode) {
+        if (statusCode != 403 && statusCode != 404) {
+            return;
+        }
+        String ipKey = digest(clientIp == null || clientIp.isBlank() ? "unknown" : clientIp);
+        recordBehaviorDenied(buildBehaviorKey(subjectId, ipKey));
     }
 
     public DownloadLease tryAcquireConcurrency(Long subjectId, Long postId, String clientIp) {
@@ -226,6 +244,70 @@ public class MediaDownloadRiskService {
         return localRateLimitService.tryAcquireWeighted(key, amount, limit, window);
     }
 
+    private String buildBehaviorKey(Long subjectId, String ipKey) {
+        String subjectKey = subjectId == null ? "anonymous" : String.valueOf(subjectId);
+        return "media-download:behavior:" + subjectKey + ":" + ipKey;
+    }
+
+    private boolean isBehaviorAllowed(String key) {
+        if (cacheService.isAvailable()) {
+            long requests = cacheService.getLong(key + ":requests");
+            long denied = cacheService.getLong(key + ":denied");
+            if (requests >= 0 && denied >= 0) {
+                return requests < BEHAVIOR_MIN_SAMPLES
+                        || denied * 100L < requests * BEHAVIOR_DENIED_PERCENT;
+            }
+        }
+        BehaviorWindow window = behaviorWindows.get(key);
+        if (window == null) {
+            return true;
+        }
+        synchronized (window) {
+            resetBehaviorWindowIfExpired(window);
+            return window.requests < BEHAVIOR_MIN_SAMPLES
+                    || window.denied * 100L < window.requests * BEHAVIOR_DENIED_PERCENT;
+        }
+    }
+
+    private void recordBehaviorRequest(String key) {
+        if (cacheService.isAvailable()) {
+            long value = cacheService.increment(key + ":requests", LONG_WINDOW);
+            if (value >= 0) {
+                return;
+            }
+        }
+        BehaviorWindow window = behaviorWindows.computeIfAbsent(key,
+                ignored -> new BehaviorWindow(System.currentTimeMillis()));
+        synchronized (window) {
+            resetBehaviorWindowIfExpired(window);
+            window.requests = window.requests + 1;
+        }
+    }
+
+    private void recordBehaviorDenied(String key) {
+        if (cacheService.isAvailable()) {
+            long value = cacheService.increment(key + ":denied", LONG_WINDOW);
+            if (value >= 0) {
+                return;
+            }
+        }
+        BehaviorWindow window = behaviorWindows.computeIfAbsent(key,
+                ignored -> new BehaviorWindow(System.currentTimeMillis()));
+        synchronized (window) {
+            resetBehaviorWindowIfExpired(window);
+            window.denied = window.denied + 1;
+        }
+    }
+
+    private void resetBehaviorWindowIfExpired(BehaviorWindow window) {
+        long now = System.currentTimeMillis();
+        if (now - window.startedAt >= LONG_WINDOW.toMillis()) {
+            window.startedAt = now;
+            window.requests = 0;
+            window.denied = 0;
+        }
+    }
+
     private String digest(String value) {
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256")
@@ -237,6 +319,16 @@ public class MediaDownloadRiskService {
             return result.toString();
         } catch (Exception exception) {
             throw new IllegalStateException("无法生成下载限流键", exception);
+        }
+    }
+
+    private static class BehaviorWindow {
+        private long startedAt;
+        private long requests;
+        private long denied;
+
+        private BehaviorWindow(long startedAt) {
+            this.startedAt = startedAt;
         }
     }
 

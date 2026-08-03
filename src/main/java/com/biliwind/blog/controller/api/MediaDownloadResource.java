@@ -125,6 +125,7 @@ public class MediaDownloadResource {
             Response.Status status = "PURCHASE_REQUIRED".equals(access.reason())
                     ? Response.Status.FORBIDDEN
                     : Response.Status.NOT_FOUND;
+            downloadRiskService.recordClientError(userId, clientIp, status.getStatusCode());
             return Response.status(status).build();
         }
 
