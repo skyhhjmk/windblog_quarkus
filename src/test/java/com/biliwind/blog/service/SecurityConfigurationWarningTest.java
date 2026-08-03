@@ -74,6 +74,18 @@ class SecurityConfigurationWarningTest {
     }
 
     @Test
+    void shouldRejectElasticsearchTrustAllInProduction() {
+        SecurityConfigurationWarning warning = validPrimaryConfiguration();
+        warning.elasticsearchSslTrustAll = true;
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                warning::validateProductionConfiguration);
+
+        assertTrue(exception.getMessage().contains("Elasticsearch"));
+    }
+
+    @Test
     void shouldRejectDefaultSecretEvenWhenWarningsAreDisabled() {
         SecurityConfigurationWarning warning = validPrimaryConfiguration();
         warning.adminInitPassword = "admin";

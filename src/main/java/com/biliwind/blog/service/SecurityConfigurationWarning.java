@@ -75,6 +75,9 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "quarkus.http.cors.access-control-allow-credentials", defaultValue = "false")
     boolean corsCredentialsAllowed;
 
+    @ConfigProperty(name = "elasticsearch.ssl-trust-all", defaultValue = "false")
+    boolean elasticsearchSslTrustAll;
+
     @ConfigProperty(name = "admin.init.enabled", defaultValue = "false")
     boolean adminInitializationEnabled;
 
@@ -157,6 +160,9 @@ public class SecurityConfigurationWarning {
         }
         if (corsCredentialsAllowed) {
             throw new IllegalStateException("生产环境禁止 CORS credentials 全局开启");
+        }
+        if (elasticsearchSslTrustAll) {
+            throw new IllegalStateException("生产环境禁止 Elasticsearch 信任全部 TLS 证书");
         }
         if (adminInitializationEnabled) {
             throw new IllegalStateException("生产环境必须关闭 ADMIN_INIT_ENABLED");
