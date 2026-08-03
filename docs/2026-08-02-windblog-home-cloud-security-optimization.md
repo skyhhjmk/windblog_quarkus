@@ -39,7 +39,7 @@
 > 后端管理员、用户错误响应、健康检查和边缘同步失败状态统一经过敏感信息脱敏；管理员 `X-Request-Id`
 > 只接受安全字符格式并可关联 outbox/审计。公开首页、文章/分类/标签和搜索入口新增按可信客户端 IP 的
 > Redis/本地降级请求预算，超限返回 429 且不缓存；outbox 调度器新增 shutdown 闸门，避免应用关闭时继续使用已销毁的事务会话。
-> 当前默认 `mvn test` 回归为 58 个报告、245 个测试，0 failure/error/skip；打包 JVM 镜像的
+> 当前默认 `mvn test` 回归为 58 个报告、246 个测试，0 failure/error/skip；打包 JVM 镜像的
 > `AdminOutboxControllerIT` 另行通过 2 个 HTTP 测试。不能把历史 IT 报告目录与本次默认回归混合计数；
 > 生产预检同时校验基础服务宿主机端口及 Compose `host_ip` 的 IPv4/IPv6 格式。
 > 本地 security profile 已完成 ClamAV clamd ping、`/etc/hostname` 清洁扫描和标准 EICAR 测试串拦截（`Eicar-Signature FOUND`，退出码 1）；生产媒体上传仍需用真实样本和生产病毒库验收。
