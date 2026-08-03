@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * ChatGLM AI 服务 - 使用 OpenAI 兼容协议 (V4)
@@ -260,7 +261,9 @@ public class ChatGlmAiService implements AiService {
                                 return;
                             }
                             try (java.util.stream.Stream<String> lines = res.body()) {
+                                AtomicInteger responseBytes = new AtomicInteger();
                                 lines.forEach(line -> {
+                                    AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
                                     if (line.startsWith("data: ")) {
                                         String data = line.substring(6).trim();
                                         if ("[DONE]".equals(data)) {
@@ -292,7 +295,7 @@ public class ChatGlmAiService implements AiService {
                                     }
                                 });
                             } catch (Exception e) {
-                                LOG.error("流处理异常", e);
+                                LOG.error("流处理异常，已停止读取 AI 响应流");
                             } finally {
                                 LOG.info("ChatGLM 测试流结束");
                                 emitter.complete();

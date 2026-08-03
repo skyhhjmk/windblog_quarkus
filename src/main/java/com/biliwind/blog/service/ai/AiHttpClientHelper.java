@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * AI 专用 HTTP 客户端服务类。
@@ -144,6 +145,22 @@ public class AiHttpClientHelper {
 
     static HttpResponse.BodyHandler<String> boundedStringBodyHandler() {
         return boundedStringBodyHandler(MAX_NON_STREAM_RESPONSE_BYTES);
+    }
+
+    static void consumeStreamingResponseBudget(AtomicInteger byteCounter, String line) {
+        if (byteCounter == null) {
+            throw new IllegalArgumentException("AI 流响应计数器无效");
+        }
+        int lineBytes = line == null ? 0 : line.getBytes(StandardCharsets.UTF_8).length;
+        while (true) {
+            int currentBytes = byteCounter.get();
+            if (lineBytes > MAX_NON_STREAM_RESPONSE_BYTES - currentBytes) {
+                throw new IllegalArgumentException("AI 流响应内容超过限制");
+            }
+            if (byteCounter.compareAndSet(currentBytes, currentBytes + lineBytes)) {
+                return;
+            }
+        }
     }
 
     static HttpResponse.BodyHandler<String> boundedStringBodyHandler(int maxBytes) {

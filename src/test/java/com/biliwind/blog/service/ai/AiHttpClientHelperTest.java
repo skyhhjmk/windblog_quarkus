@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -104,5 +105,13 @@ class AiHttpClientHelperTest {
         subscriber.onComplete();
 
         assertEquals("ok", subscriber.getBody().toCompletableFuture().join());
+    }
+
+    @Test
+    void shouldRejectStreamingResponseAfterBudgetIsExceeded() {
+        AtomicInteger byteCounter = new AtomicInteger(8 * 1024 * 1024);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> AiHttpClientHelper.consumeStreamingResponseBudget(byteCounter, "x"));
     }
 }

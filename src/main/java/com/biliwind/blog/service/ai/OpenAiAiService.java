@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * OpenAI 兼容 AI 服务
@@ -282,8 +283,12 @@ public class OpenAiAiService implements AiService {
                             if (res.statusCode() >= 400) {
                                 String bodyText = "";
                                 try (java.util.stream.Stream<String> lines = res.body()) {
+                                    AtomicInteger responseBytes = new AtomicInteger();
                                     StringBuilder sb = new StringBuilder();
-                                    lines.forEach(line -> sb.append(line).append("\n"));
+                                    lines.forEach(line -> {
+                                        AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
+                                        sb.append(line).append("\n");
+                                    });
                                     bodyText = sb.toString();
                                 } catch (Exception ignored) {
                                 }
@@ -293,7 +298,9 @@ public class OpenAiAiService implements AiService {
                                 return;
                             }
                             try (java.util.stream.Stream<String> lines = res.body()) {
+                                AtomicInteger responseBytes = new AtomicInteger();
                                 lines.forEach(line -> {
+                                    AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
                                     if (line.startsWith("data: ")) {
                                         String data = line.substring(6).trim();
                                         if ("[DONE]".equals(data)) {
@@ -323,6 +330,8 @@ public class OpenAiAiService implements AiService {
                                         }
                                     }
                                 });
+                            } catch (Exception streamException) {
+                                emitJson(emitter, "error", "[接口流响应异常]: " + safeError(streamException));
                             }
                             emitter.complete();
                         });

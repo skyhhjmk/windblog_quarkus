@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Ollama AI 摘要服务
@@ -275,7 +276,9 @@ public class OllamaAiService implements AiService {
                                 return;
                             }
                             try (java.util.stream.Stream<String> lines = res.body()) {
+                                AtomicInteger responseBytes = new AtomicInteger();
                                 lines.forEach(line -> {
+                                    AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
                                     if (line.isBlank()) return;
                                     try {
                                         JsonNode root = objectMapper.readTree(line);
@@ -289,6 +292,9 @@ public class OllamaAiService implements AiService {
                                         // Parse error
                                     }
                                 });
+                            } catch (Exception streamException) {
+                                emitter.fail(new IllegalStateException("AI 流响应处理失败"));
+                                return;
                             }
                             emitter.complete();
                         });
