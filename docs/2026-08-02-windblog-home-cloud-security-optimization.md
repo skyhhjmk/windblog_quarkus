@@ -31,6 +31,7 @@
 > 2026-08-04 在当前目标数据库 `postgres` 完成 `ANALYZE` 和只读执行计划复核：252 篇文章中 136 篇满足公开筛选，
 > 公开分页实际耗时约 0.186ms，outbox 领取查询在事务回滚测试中实际耗时约 0.668ms 并命中领取索引；102 号迁移幂等重放耗时约 284ms，11 个索引均已存在并安全跳过。
 > 当前数据量较小，公开分页选择顺序扫描是合理的成本决策；这些结果不能替代生产规模执行计划、首次建索引耗时和迁移锁表验收。
+> 同日使用 `scripts/verify-windblog-edge-template.ps1` 在 `nginx:1.27-alpine` 容器中完成边缘模板 `nginx -t`，现代 HTTP/2 配置无弃用警告；真实证书、CDN 缓存、回源和 allowlist 仍需现场验证。
 > 管理端受保护原图已补充一次性 `ADMIN_MEDIA_DOWNLOAD` 票据入口，要求 `media.download_original` 权限、step-up、
 > 幂等键和下载审计；浏览器必须在管理 Bearer 会话下使用该票据。
 > AI、ES 和存储同步的消费重试/死信重放也统一写入 outbox，不再在容量或数据库异常时偷偷绕过租约直接发 RabbitMQ。

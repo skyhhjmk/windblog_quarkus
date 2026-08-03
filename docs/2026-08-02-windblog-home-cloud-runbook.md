@@ -21,6 +21,12 @@ PostgreSQL 镜像可通过 `POSTGRES_IMAGE` 配置，示例默认是 `postgres:1
 `docker compose up -d db`；切换前后都不得删除 `postgres-data` 数据卷。镜像与扩展不一致时，`pg_dump`
 可能在读取索引定义阶段失败，不能通过排除索引来伪造完整备份。
 
+部署前可用仓库脚本渲染并在 Nginx 容器中验证边缘模板语法；它使用测试域名和仓库证书，不代表真实 TLS、CDN、回源或 allowlist 验收：
+
+```powershell
+.\scripts\verify-windblog-edge-template.ps1
+```
+
 ## 生产启动前
 
 必须提供并保存于部署平台 secret store 的配置至少包括：
