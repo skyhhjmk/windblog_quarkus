@@ -26,7 +26,7 @@
 > RabbitMQ 适配器交付的 Buffer/JSON 载荷现在由存储同步和 ES 同步消费者显式解码并校验，避免运行时类型强转异常。
 > 边缘同步接收端不再将公开 JSON 直接反序列化为实体；首次同步使用白名单字段和显式主键插入，并保留本地删除/处理错误状态。
 > 生产启动的默认 secret 检查不再受告警开关绕过，生产环境预检也强制 `SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=true`，示例文件不再放置可误用的固定 Elasticsearch/Kibana 凭据。
-> 管理 API 的 CORS `OPTIONS` 预检在 Bearer 授权过滤链中明确放行。密码保护文章即使价格为 0 也只生成锁定预览，带有效票据的文章页从已发布版本读取全文。媒体保护判定不再依赖 `usageType = 3`，正文媒体被密码/付费文章引用时同样不进入公共上传路径、缓存或边缘公开同步。生产启动和预检均拒绝 `ELASTICSEARCH_SSL_TRUST_ALL=true`，并要求 `ELASTICSEARCH_SSL_VERIFY=full`。下载审计新增票据创建到下载的 `ticketAgeMillis`，覆盖用户和管理员原图入口；AI、媒体和链接 endpoint 现在共享网络地址分类规则；同一下载票据新增十分钟请求预算，Redis 故障时仍使用有界本地保护；按主体/IP 的十分钟窗口新增 403/404 比率检测，至少累计 20 次且错误率达到 80% 时进入 429 降级，Redis 故障时仍使用有界本地保护；本地降级窗口上限为 4096 条并定时清理，有效票据的资源错配也计入 404 行为分母，受保护下载拒绝响应统一 `no-store`；边缘回源写请求体默认限制为 10 MiB，并在边缘读取和主节点执行器两侧再次校验，配置超出 1–64 MiB 范围时生产启动拒绝。本轮后端全量回归为 64 个报告、291 个测试，0 failure/error/skip；
+> 管理 API 的 CORS `OPTIONS` 预检在 Bearer 授权过滤链中明确放行。密码保护文章即使价格为 0 也只生成锁定预览，带有效票据的文章页从已发布版本读取全文。媒体保护判定不再依赖 `usageType = 3`，正文媒体被密码/付费文章引用时同样不进入公共上传路径、缓存或边缘公开同步。生产启动和预检均拒绝 `ELASTICSEARCH_SSL_TRUST_ALL=true`，并要求 `ELASTICSEARCH_SSL_VERIFY=full`。下载审计新增票据创建到下载的 `ticketAgeMillis`，覆盖用户和管理员原图入口；AI、媒体和链接 endpoint 现在共享网络地址分类规则；同一下载票据新增十分钟请求预算，Redis 故障时仍使用有界本地保护；按主体/IP 的十分钟窗口新增 403/404 比率检测，至少累计 20 次且错误率达到 80% 时进入 429 降级，Redis 故障时仍使用有界本地保护；本地降级窗口上限为 4096 条并定时清理，有效票据的资源错配也计入 404 行为分母，受保护下载拒绝响应统一 `no-store`；边缘回源写请求体默认限制为 10 MiB，并在边缘读取和主节点执行器两侧再次校验，配置超出 1–64 MiB 范围时生产启动拒绝；管理动作按资源前缀精确映射，导入异常消息脱敏并限长，`/api/user/post/*` 的错误和重定向也统一禁止缓存，生产预检校验所有宿主机服务端口。本轮后端全量回归为 66 个报告、295 个测试，0 failure/error/skip；
 > 真实 CDN、代理、多节点和家庭网络验收仍未完成。
 
 ## 1. 目标与结论
@@ -173,8 +173,8 @@ AdminAuthentication → AdminAuthorization(resource, action) → DomainPolicy �
 证据：
 
 - `User.java` 的 `password` 是 public 字段且没有 `@JsonIgnore`。
-- `EdgeDataSyncService.java` 的 `syncUser` 直接 `objectMapper.writeValueAsString(user)`，并在 `EdgeSyncDataApplyService.java` 写回 `incomingUser.password`。
-- `AdminSystemSettingsController.java` 的 `getAllSettings` 和 `getSettingByKey` 直接返回 `SystemSetting`，其中 `configValue` 可能包含 AI key、ES 密码、邮件密码或其他 secret；当前 `sanitizeForAudit` 只作用于审计值，不作用于普通响应和边缘同步。
+- 边缘同步当前只携带文章对作者的 ID 引用，不再同步完整 `User` 实体；但 `User` 的 `password` 仍是 public 字段，未来新增直接实体序列化时仍有回归风险。
+- `AdminSystemSettingsController` 当前已通过 `SystemSettingView`、递归敏感字段掩码和设置/历史分页返回，仍需继续保持新增设置字段的脱敏回归测试；边缘同步不接收设置 secret。
 - `AiProviderConfigDtos` 有脱敏逻辑，说明项目已经意识到问题，但设置、用户同步和若干实体没有统一 DTO 边界。
 
 建议：
@@ -231,11 +231,11 @@ AdminAuthentication → AdminAuthorization(resource, action) → DomainPolicy �
 
 #### P2-2 Elasticsearch、RabbitMQ 和自建边缘同步不能阻断公开阅读
 
-当前 ES 有异步初始化和降级；搜索控制器在 ES 不可用时会回退到 `SearchController.buildHits`，该路径会加载已发布文章列表到 JVM 再过滤/分页。文章量增长后，这会带来数据库和堆内存压力，并放大爬虫请求影响。
+当前 ES 有异步初始化和降级；搜索控制器在 ES 不可用时已回退到 PostgreSQL `tsvector`/`LIKE` 的有界分页查询，仍需在真实数据量下确认执行计划、锁表和慢查询表现。
 
 建议：
 
-- PostgreSQL 增加全文搜索向量、GIN 索引、前缀建议表；把 ES 不可用时的 fallback 变成有数据库分页的正式实现，而不是“全量 list 后内存筛选”。
+- PostgreSQL 已增加全文搜索向量、GIN 索引和有数据库分页的正式 fallback；前缀建议表及真实生产执行计划仍需继续验收。
 - Elasticsearch 作为正式搜索能力运行，同时保留索引重建、磁盘水位和故障切换策略；搜索服务异常时不能影响公开文章读取。
 - RabbitMQ 继续承载邮件、AI、媒体等异步任务；DB outbox、租约和 scheduler 用于保证消息投递、重试和恢复，不替代 RabbitMQ。消息消费异常时应隔离失败任务，不能让公开请求同步等待。
 - 边缘节点只同步公开发布内容和必要的撤销清单；不能同步密码、secret 和无关的用户数据。边缘没有原始付费资源，所有授权下载回源主节点或对象存储。
@@ -246,7 +246,7 @@ AdminAuthentication → AdminAuthorization(resource, action) → DomainPolicy �
 
 - 控制器、服务和实体混合使用 `@Transactional`；媒体上传在请求中写盘、检测、生成变体和写数据库，视频处理可能阻塞请求线程。
 - `EdgeDataSyncService` 的完整同步逐个实体序列化、重试并阻塞等待，文章又逐篇查询标签，规模变大后会形成长事务和 N+1。
-- `EmailDeliveryService.deliverPendingMessages` 在一次事务中取出所有 pending 邮件并逐个 SMTP 发送，缺少租约/并发领取；多副本会重复发送。
+- `EmailDeliveryService.deliverPendingMessages` 当前按批次领取数据库租约后发送 SMTP，并有重试/保留上限；多副本和真实 SMTP 故障恢复仍需现场验收。
 - `SafeModeWatchdog`、ES 日志缓冲、存储重试和边缘连接各自创建线程/调度器，缺少统一 shutdown、队列容量和指标。
 
 目标是明确四类边界：
@@ -264,8 +264,8 @@ AdminAuthentication → AdminAuthorization(resource, action) → DomainPolicy �
 - `RegionRuleService` 每次请求都加载所有启用规则；应使用版本化缓存。
 - `MediaManagementService.toDto` 的单媒体兼容入口仍会查询上传者；媒体列表主路径已批量加载上传者，后续可继续把单媒体入口改为显式传入批量上下文。
 - 文章页重复加载 tags、media、购买记录和权限；建立 `PublishedPostReadModel` 和批量 media reference 查询。
-- 全量媒体引用扫描会删除全部 `PostMedia` 后重新遍历所有文章，应该改为离线任务、分批提交和可恢复进度。
-- `AdminSystemSettingsController` 返回全量设置/历史，没有字段级分页、权限过滤或敏感数据投影。
+- 媒体引用重建当前已提供 `MediaReferenceRebuildJob`、outbox 驱动、游标批处理和可恢复状态；旧的同步兼容入口仍应避免在大数据量生产环境调用。
+- `AdminSystemSettingsController` 当前已有设置/历史分页、权限过滤链和敏感字段投影，后续重点是继续保持新配置字段的白名单测试。
 
 数据库建议补充并验证实际执行计划：
 
