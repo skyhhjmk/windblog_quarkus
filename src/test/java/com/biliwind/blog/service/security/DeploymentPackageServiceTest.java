@@ -83,12 +83,13 @@ public class DeploymentPackageServiceTest {
         assertTrue(envContent.contains("EDGE_NODE_REGION=cn"));
         assertTrue(envContent.contains("MAIN_NODE_GRPC_HOST="));
         assertTrue(envContent.contains("EDGE_DB_USER=windblog"));
-        assertTrue(envContent.contains("EDGE_DB_PASSWORD=windblog_edge_pwd"));
+        assertTrue(envContent.matches("(?s).*EDGE_DB_PASSWORD=[0-9a-f]{64}\\n.*"));
         assertTrue(envContent.contains("EDGE_DB_NAME=windblog_edge"));
-        assertTrue(envContent.contains("EDGE_DB_PORT="));
+        assertFalse(envContent.contains("EDGE_DB_PORT="));
         assertTrue(envContent.contains("EDGE_DATASOURCE_URL=jdbc:postgresql://edge-db:5432/windblog_edge"));
-        assertTrue(envContent.contains("EDGE_REDIS_PORT="));
-        assertTrue(envContent.contains("EDGE_REDIS_URL=redis://edge-redis:6379"));
+        assertTrue(envContent.matches("(?s).*EDGE_REDIS_PASSWORD=[0-9a-f]{64}\\n.*"));
+        assertTrue(envContent.contains("EDGE_REDIS_URL=redis://:"));
+        assertFalse(envContent.contains("EDGE_REDIS_PORT="));
         assertTrue(envContent.contains("EDGE_APP_HTTP_PORT="));
         assertTrue(envContent.contains("EDGE_APP_GRPC_PORT=9005"));
         assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=hhjmk/windblog_quarkus:latest"));
@@ -103,18 +104,15 @@ public class DeploymentPackageServiceTest {
         assertTrue(envContent.contains("GRPC_CLIENT_CA_CERTIFICATE=certs/ca/ca.crt"));
         assertTrue(envContent.contains("GRPC_CLIENT_CERTIFICATE=certs/ca/server.crt"));
         assertTrue(envContent.contains("GRPC_CLIENT_KEY=certs/ca/server.key"));
+        assertTrue(envContent.contains("GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK=false"));
+        assertTrue(envContent.contains("GRPC_SERVER_CLIENT_AUTH=required"));
+        assertTrue(envContent.matches("(?s).*GRPC_SERVER_TRUST_STORE_PASSWORD=[0-9a-f]{64}\\n.*"));
         assertTrue(hasServerCertificate);
         assertTrue(hasServerKey);
         assertTrue(hasCaCertificate);
         assertTrue(hasTrustStore);
 
-        // 提取端口并校验高位随机端口范围
-        int dbPort = extractPort(envContent, "EDGE_DB_PORT=");
-        assertTrue(dbPort >= 20000 && dbPort <= 60000);
-
-        int redisPort = extractPort(envContent, "EDGE_REDIS_PORT=");
-        assertTrue(redisPort >= 20000 && redisPort <= 60000);
-
+        // 仅入口端口对宿主机开放，数据库和 Redis 保持内部网络。
         int httpPort = extractPort(envContent, "EDGE_APP_HTTP_PORT=");
         assertTrue(httpPort >= 20000 && httpPort <= 60000);
         assertTrue(envContent.contains("QUARKUS_PROFILE=edge"));
@@ -123,10 +121,10 @@ public class DeploymentPackageServiceTest {
         assertNotNull(dockerComposeContent);
         assertTrue(dockerComposeContent.contains("edge-db:"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-db"));
-        assertTrue(dockerComposeContent.contains("\"${EDGE_DB_PORT}:5432\""));
+        assertFalse(dockerComposeContent.contains("${EDGE_DB_PORT}:5432"));
         assertTrue(dockerComposeContent.contains("edge-redis:"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-redis"));
-        assertTrue(dockerComposeContent.contains("\"${EDGE_REDIS_PORT}:6379\""));
+        assertFalse(dockerComposeContent.contains("${EDGE_REDIS_PORT}:6379"));
         assertTrue(dockerComposeContent.contains("edge-node:"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-node"));
         assertTrue(dockerComposeContent.contains("\"${EDGE_APP_HTTP_PORT}:8081\""));
@@ -138,6 +136,10 @@ public class DeploymentPackageServiceTest {
                 "SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=${SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD:-true}"
         ));
         assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/ca/server.crt}"));
+        assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_SERVER_SSL_CLIENT_AUTH=required"));
+        assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_SERVER_SSL_TRUST_STORE_PASSWORD=${GRPC_SERVER_TRUST_STORE_PASSWORD}"));
+        assertTrue(dockerComposeContent.contains("redis-cli -a \\\"$$REDIS_PASSWORD\\\" ping | grep PONG"));
+        assertFalse(dockerComposeContent.contains("$$EDGE_REDIS_PASSWORD"));
         assertTrue(dockerComposeContent.contains("QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca/ca.crt}"));
         assertTrue(dockerComposeContent.contains("depends_on:"));
         assertTrue(dockerComposeContent.contains("edge-db:"));

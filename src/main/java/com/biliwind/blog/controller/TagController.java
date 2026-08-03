@@ -54,22 +54,29 @@ public class TagController {
         String lang = languageContext.getLang();
         String safeKeyword = safe(keyword);
 
-        List<Tag> allTags = Tag.listAll();
-        List<TagListItem> filtered = allTags.stream()
-                .filter(t -> matchesKeyword(t, safeKeyword, lang))
-                .map(t -> toTagListItem(t, lang))
-                .sorted((a, b) -> Long.compare(b.postCount, a.postCount))
-                .toList();
+        io.quarkus.hibernate.orm.panache.PanacheQuery<Tag> tagQuery;
+        if (safeKeyword.isBlank()) {
+            tagQuery = Tag.find("order by id");
+        } else {
+            String pattern = "%" + safeKeyword.toLowerCase(Locale.ROOT) + "%";
+            tagQuery = Tag.find(
+                    "lower(cast(name as String)) like ?1 or lower(cast(description as String)) like ?1 "
+                            + "or lower(slug) like ?1 order by id",
+                    pattern);
+        }
 
-        long totalCount = filtered.size();
+        long totalCount = tagQuery.count();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
         if (currentPage > totalPages) {
             currentPage = totalPages;
         }
 
-        int fromIndex = Math.max(0, (currentPage - 1) * PAGE_SIZE);
-        int toIndex = Math.min(filtered.size(), fromIndex + PAGE_SIZE);
-        List<TagListItem> pageItems = filtered.subList(fromIndex, toIndex);
+        List<Tag> tags = tagQuery.page(io.quarkus.panache.common.Page.of(currentPage - 1, PAGE_SIZE)).list();
+        java.util.Map<Long, Long> postCounts = loadPostCounts(tags);
+        List<TagListItem> pageItems = tags.stream()
+                .map(tag -> toTagListItem(tag, lang, postCounts.getOrDefault(tag.id, 0L)))
+                .sorted((a, b) -> Long.compare(b.postCount, a.postCount))
+                .toList();
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
         return template
@@ -118,7 +125,10 @@ public class TagController {
         }
 
         List<Post> posts = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
-        List<TagPostItem> postItems = posts.stream().map(post -> toTagPostItem(post, lang)).toList();
+        java.util.Map<Long, List<TagItem>> tagsByPost = loadTagsByPost(posts, lang);
+        List<TagPostItem> postItems = posts.stream()
+                .map(post -> toTagPostItem(post, lang, tagsByPost.getOrDefault(post.id, List.of())))
+                .toList();
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
         return template
@@ -138,13 +148,38 @@ public class TagController {
     }
 
     private TagListItem toTagListItem(Tag tag, String lang) {
+        return toTagListItem(tag, lang, PostTag.count(
+                "tag.id = ?1 and post.status = ?2 and post.deletedAt is null and post.visibility = 0 and post.publishedRevision is not null",
+                tag.id, PostStatus.PUBLISHED));
+    }
+
+    private TagListItem toTagListItem(Tag tag, String lang, long postCount) {
         String name = resolveTagName(tag, lang);
         String description = resolveTagDescription(tag, lang);
-        long postCount = PostTag.count("tag.id = ?1 and post.status = ?2 and post.deletedAt is null and post.visibility = 0 and post.publishedRevision is not null", tag.id, PostStatus.PUBLISHED);
         return new TagListItem(tag.slug, name, description, postCount, formatDate(tag.createdAt));
     }
 
-    private TagPostItem toTagPostItem(Post post, String lang) {
+    private java.util.Map<Long, Long> loadPostCounts(List<Tag> tags) {
+        if (tags.isEmpty()) {
+            return java.util.Map.of();
+        }
+        List<Long> tagIds = tags.stream().map(tag -> tag.id).toList();
+        java.util.Map<Long, Long> postCounts = new java.util.HashMap<>();
+        List<Object[]> rows = PostTag.getEntityManager().createQuery(
+                        "select tag.id, count(post.id) from PostTag "
+                                + "where tag.id in ?1 and post.status = ?2 and post.deletedAt is null "
+                                + "and post.visibility = 0 and post.publishedRevision is not null group by tag.id",
+                        Object[].class)
+                .setParameter(1, tagIds)
+                .setParameter(2, PostStatus.PUBLISHED)
+                .getResultList();
+        for (Object[] row : rows) {
+            postCounts.put((Long) row[0], ((Number) row[1]).longValue());
+        }
+        return postCounts;
+    }
+
+    private TagPostItem toTagPostItem(Post post, String lang, List<TagItem> tags) {
         String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
 
@@ -157,15 +192,25 @@ public class TagController {
 
         OffsetDateTime date = post.publishedAt != null ? post.publishedAt : post.createdAt;
         
-        List<TagItem> tags = PostTag.<PostTag>find("post", post).stream()
-                .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, lang), pt.tag.slug))
-                .toList();
-
         return new TagPostItem(post.slug, title, summary, formatDate(date), 
                 post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", tags);
     }
 
     public record TagItem(String name, String slug) {}
+
+    private java.util.Map<Long, List<TagItem>> loadTagsByPost(List<Post> posts, String lang) {
+        if (posts.isEmpty()) {
+            return java.util.Map.of();
+        }
+        List<Long> postIds = posts.stream().map(post -> post.id).toList();
+        java.util.Map<Long, List<TagItem>> tagsByPost = new java.util.HashMap<>();
+        List<PostTag> postTags = PostTag.find("post.id in ?1", postIds).list();
+        for (PostTag postTag : postTags) {
+            tagsByPost.computeIfAbsent(postTag.post.id, ignored -> new java.util.ArrayList<>())
+                    .add(new TagItem(LanguageHelper.resolveLocalizedValue(postTag.tag.name, lang), postTag.tag.slug));
+        }
+        return tagsByPost;
+    }
 
     private boolean matchesKeyword(Tag tag, String keyword, String lang) {
         if (keyword.isBlank()) {

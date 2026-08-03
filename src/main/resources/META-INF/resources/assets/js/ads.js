@@ -43,7 +43,10 @@
         const containers = document.querySelectorAll('[data-wb-ad-container]');
         if (!containers.length) return;
 
-        const clientId = 'ca-pub-'; // TODO: 替换为你的 Adsense client id
+        // Ads are opt-in. A placeholder must never trigger a third-party script
+        // request that would violate the production CSP or leak page metadata.
+        const clientId = window.windblogAdsenseClientId || '';
+        if (!clientId) return;
         await loadAdsense(clientId);
 
         // 等待 DOM 稳定后 push

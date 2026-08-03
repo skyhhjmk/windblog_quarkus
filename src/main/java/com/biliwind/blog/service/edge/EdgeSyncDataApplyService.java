@@ -36,6 +36,11 @@ public class EdgeSyncDataApplyService {
             String action = request.getAction();
             String entityType = request.getEntityType();
 
+            if (!isPublicSyncEntity(entityType)) {
+                LOGGER.warn("拒绝非公开同步实体: {}", entityType);
+                return;
+            }
+
             if ("DELETE".equals(action)) {
                 deleteEntity(entityType, request.getEntityId());
                 return;
@@ -52,15 +57,15 @@ public class EdgeSyncDataApplyService {
         }
     }
 
+    private boolean isPublicSyncEntity(String entityType) {
+        return "TAG".equals(entityType)
+                || "CATEGORY".equals(entityType)
+                || "MEDIA".equals(entityType)
+                || "POST".equals(entityType)
+                || "CLUSTER_PUBLIC_KEY".equals(entityType);
+    }
+
     private void upsertEntity(String entityType, String payload) throws Exception {
-        if ("USER".equals(entityType)) {
-            upsertUser(payload);
-            return;
-        }
-        if ("SYSTEM_SETTING".equals(entityType)) {
-            upsertSystemSetting(payload);
-            return;
-        }
         if ("TAG".equals(entityType)) {
             mergeEntity(objectMapper.readValue(payload, Tag.class));
             return;
@@ -69,32 +74,8 @@ public class EdgeSyncDataApplyService {
             mergeEntity(objectMapper.readValue(payload, Category.class));
             return;
         }
-        if ("LINK".equals(entityType)) {
-            mergeEntity(objectMapper.readValue(payload, Link.class));
-            return;
-        }
         if ("MEDIA".equals(entityType)) {
             mergeEntity(objectMapper.readValue(payload, Media.class));
-            return;
-        }
-        if ("AFFILIATE_LINK".equals(entityType)) {
-            mergeEntity(objectMapper.readValue(payload, AffiliateLink.class));
-            return;
-        }
-        if ("REPOST_LICENSE".equals(entityType)) {
-            mergeEntity(objectMapper.readValue(payload, RepostLicense.class));
-            return;
-        }
-        if ("AFFILIATE_TOKEN".equals(entityType)) {
-            mergeEntity(objectMapper.readValue(payload, AffiliateToken.class));
-            return;
-        }
-        if ("BLOCKED_DOMAIN".equals(entityType)) {
-            mergeEntity(objectMapper.readValue(payload, BlockedDomain.class));
-            return;
-        }
-        if ("RISK_DEVICE".equals(entityType)) {
-            mergeEntity(objectMapper.readValue(payload, RiskDevice.class));
             return;
         }
         if ("POST".equals(entityType)) {
@@ -106,61 +87,6 @@ public class EdgeSyncDataApplyService {
             return;
         }
         LOGGER.warn("忽略暂不支持的同步实体类型: {}", entityType);
-    }
-
-    private void upsertUser(String payload) throws Exception {
-        User incomingUser = objectMapper.readValue(payload, User.class);
-        if (incomingUser.id == null) {
-            return;
-        }
-
-        User existingUser = User.findById(incomingUser.id);
-        if (existingUser == null) {
-            entityManager.merge(incomingUser);
-            return;
-        }
-
-        existingUser.username = incomingUser.username;
-        existingUser.email = incomingUser.email;
-        existingUser.password = incomingUser.password;
-        existingUser.status = incomingUser.status;
-        existingUser.roleName = incomingUser.roleName;
-        existingUser.nickname = incomingUser.nickname;
-        existingUser.avatar = incomingUser.avatar;
-        existingUser.phone = incomingUser.phone;
-        existingUser.extraInfo = incomingUser.extraInfo;
-        existingUser.walletId = incomingUser.walletId;
-        existingUser.level = incomingUser.level;
-        existingUser.exp = incomingUser.exp;
-        existingUser.backpackCapacity = incomingUser.backpackCapacity;
-        existingUser.deletedAt = incomingUser.deletedAt;
-    }
-
-    private void upsertSystemSetting(String payload) throws Exception {
-        SystemSetting incomingSetting = objectMapper.readValue(payload, SystemSetting.class);
-        if (incomingSetting.configKey == null || incomingSetting.configKey.isBlank()) {
-            return;
-        }
-
-        SystemSetting existingSetting = SystemSetting.findByKey(incomingSetting.configKey);
-        if (existingSetting == null) {
-            entityManager.merge(incomingSetting);
-            return;
-        }
-
-        if (existingSetting.version != null && incomingSetting.version != null) {
-            if (existingSetting.version.intValue() > incomingSetting.version.intValue()) {
-                return;
-            }
-        }
-
-        existingSetting.configValue = incomingSetting.configValue;
-        existingSetting.configType = incomingSetting.configType;
-        existingSetting.groupName = incomingSetting.groupName;
-        existingSetting.uiSchema = incomingSetting.uiSchema;
-        existingSetting.description = incomingSetting.description;
-        existingSetting.version = incomingSetting.version;
-        existingSetting.isFrozen = incomingSetting.isFrozen;
     }
 
     private void upsertPostBundle(String payload) throws Exception {
@@ -202,10 +128,6 @@ public class EdgeSyncDataApplyService {
             return;
         }
 
-        if ("USER".equals(entityType)) {
-            User.deleteById(entityId);
-            return;
-        }
         if ("TAG".equals(entityType)) {
             Tag.deleteById(entityId);
             return;
@@ -214,32 +136,8 @@ public class EdgeSyncDataApplyService {
             Category.deleteById(entityId);
             return;
         }
-        if ("LINK".equals(entityType)) {
-            Link.deleteById(entityId);
-            return;
-        }
         if ("MEDIA".equals(entityType)) {
             Media.deleteById(entityId);
-            return;
-        }
-        if ("AFFILIATE_LINK".equals(entityType)) {
-            AffiliateLink.deleteById(entityId);
-            return;
-        }
-        if ("REPOST_LICENSE".equals(entityType)) {
-            RepostLicense.deleteById(entityId);
-            return;
-        }
-        if ("AFFILIATE_TOKEN".equals(entityType)) {
-            AffiliateToken.deleteById(entityId);
-            return;
-        }
-        if ("BLOCKED_DOMAIN".equals(entityType)) {
-            BlockedDomain.deleteById(entityId);
-            return;
-        }
-        if ("RISK_DEVICE".equals(entityType)) {
-            RiskDevice.deleteById(entityId);
             return;
         }
         if ("POST".equals(entityType)) {

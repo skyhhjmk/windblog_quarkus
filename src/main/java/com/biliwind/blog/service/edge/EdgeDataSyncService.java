@@ -4,7 +4,10 @@ import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.biliwind.blog.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.runtime.StartupEvent;
+import io.quarkus.panache.common.Page;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -23,6 +26,7 @@ import java.util.function.Consumer;
 @ApplicationScoped
 public class EdgeDataSyncService {
     private static final Logger log = LoggerFactory.getLogger(EdgeDataSyncService.class);
+    private static final int PUBLIC_FULL_SYNC_BATCH_SIZE = 200;
     private final Map<String, SyncProgress> syncProgressMap = new ConcurrentHashMap<>();
     @Inject
     EdgeNodeRegistry registry;
@@ -38,6 +42,11 @@ public class EdgeDataSyncService {
     PrimaryEdgeChannelRegistry primaryEdgeChannelRegistry;
     @Inject
     NodeRoleService nodeRoleService;
+    @Inject
+    com.biliwind.blog.service.PostAccessService postAccessService;
+
+    @Inject
+    jakarta.enterprise.inject.Instance<com.biliwind.blog.service.OutboxEventService> outboxEventService;
 
     void onStart(@Observes StartupEvent ev) {
         if (nodeRoleService.isEdgeNode()) {
@@ -71,8 +80,8 @@ public class EdgeDataSyncService {
             return;
         }
 
-        log.info("Detected post change, syncing to edge nodes: {}", event.getPostId());
-        syncPost(event.getPostId());
+        log.info("Detected post change, enqueueing edge sync: {}", event.getPostId());
+        enqueueEdgeSync("POST", event.getPostId(), "UPSERT");
     }
 
     /**
@@ -83,61 +92,47 @@ public class EdgeDataSyncService {
             return;
         }
 
-        log.info("Detected {} change, action: {}, id: {}", event.getEntityType(), event.getAction(), event.getEntityId());
-
-        if ("TAG".equals(event.getEntityType())) {
-            syncTag(event.getEntityId(), event.getAction());
-        } else if ("CATEGORY".equals(event.getEntityType())) {
-            syncCategory(event.getEntityId(), event.getAction());
-        } else if ("LINK".equals(event.getEntityType())) {
-            syncLink(event.getEntityId(), event.getAction());
-        } else if ("MEDIA".equals(event.getEntityType())) {
-            syncMedia(event.getEntityId(), event.getAction());
-        } else if ("USER".equals(event.getEntityType())) {
-            syncUser(event.getEntityId(), event.getAction());
-        } else if ("SYSTEM_SETTING".equals(event.getEntityType())) {
-            syncSystemSetting(event.getEntityId(), event.getAction());
-        } else if ("AFFILIATE_LINK".equals(event.getEntityType())) {
-            syncAffiliateLink(event.getEntityId(), event.getAction());
-        } else if ("REPOST_LICENSE".equals(event.getEntityType())) {
-            syncRepostLicense(event.getEntityId(), event.getAction());
-        } else if ("AFFILIATE_TOKEN".equals(event.getEntityType())) {
-            syncAffiliateToken(event.getEntityId(), event.getAction());
-        } else if ("BLOCKED_DOMAIN".equals(event.getEntityType())) {
-            syncBlockedDomain(event.getEntityId(), event.getAction());
-        } else if ("RISK_DEVICE".equals(event.getEntityType())) {
-            syncRiskDevice(event.getEntityId(), event.getAction());
+        log.info("Detected {} change, enqueueing edge sync: {}, id: {}",
+                event.getEntityType(), event.getAction(), event.getEntityId());
+        if (isOutboxSyncType(event.getEntityType())) {
+            enqueueEdgeSync(event.getEntityType(), event.getEntityId(), event.getAction());
         }
     }
 
-    private void syncUser(Long userId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            User user = User.findById(userId);
-            if (user == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(user);
-            } catch (Exception e) {
-                log.error("Failed to serialize user: {}", e.getMessage());
-                return;
-            }
-        }
-        broadcastSync("USER", action, userId.toString(), payload);
+    private boolean isOutboxSyncType(String entityType) {
+        return "POST".equals(entityType) || "TAG".equals(entityType)
+                || "CATEGORY".equals(entityType) || "MEDIA".equals(entityType);
     }
 
-    private void syncSystemSetting(Long settingId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            SystemSetting setting = SystemSetting.findById(settingId);
-            if (setting == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(setting);
-            } catch (Exception e) {
-                log.error("Failed to serialize system setting: {}", e.getMessage());
-                return;
-            }
+    private void enqueueEdgeSync(String entityType, Long entityId, String action) {
+        if (entityId == null || action == null || !isOutboxSyncType(entityType)) {
+            return;
         }
-        broadcastSync("SYSTEM_SETTING", action, settingId.toString(), payload);
+        outboxEventService.get().enqueue(
+                "EDGE_SYNC:" + entityType + ":" + entityId + ":" + action + ":" + java.util.UUID.randomUUID(),
+                "EDGE_SYNC",
+                entityType,
+                entityId.toString(),
+                Map.of("entityType", entityType, "entityId", entityId, "action", action),
+                null);
+    }
+
+    @jakarta.enterprise.context.control.ActivateRequestContext
+    public void dispatchOutboxSync(String entityType, Long entityId, String action) {
+        if (entityId == null || action == null) {
+            throw new IllegalArgumentException("EDGE_SYNC payload 不完整");
+        }
+        if ("POST".equals(entityType)) {
+            syncPost(entityId);
+        } else if ("TAG".equals(entityType)) {
+            syncTag(entityId, action);
+        } else if ("CATEGORY".equals(entityType)) {
+            syncCategory(entityId, action);
+        } else if ("MEDIA".equals(entityType)) {
+            syncMedia(entityId, action);
+        } else {
+            throw new IllegalArgumentException("不支持的 EDGE_SYNC 类型: " + entityType);
+        }
     }
 
     private void syncCategory(Long categoryId, String action) {
@@ -146,7 +141,7 @@ public class EdgeDataSyncService {
             Category category = Category.findById(categoryId);
             if (category == null) return;
             try {
-                payload = objectMapper.writeValueAsString(category);
+                payload = objectMapper.writeValueAsString(buildPublicCategoryNode(category));
             } catch (Exception e) {
                 log.error("Failed to serialize category: {}", e.getMessage());
                 return;
@@ -155,28 +150,17 @@ public class EdgeDataSyncService {
         broadcastSync("CATEGORY", action, categoryId.toString(), payload);
     }
 
-    private void syncLink(Long linkId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            Link link = Link.findById(linkId);
-            if (link == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(link);
-            } catch (Exception e) {
-                log.error("Failed to serialize link: {}", e.getMessage());
-                return;
-            }
-        }
-        broadcastSync("LINK", action, linkId.toString(), payload);
-    }
-
     private void syncMedia(Long mediaId, String action) {
         String payload = "{}";
         if ("UPSERT".equals(action)) {
             Media media = Media.findById(mediaId);
             if (media == null) return;
+            if (PostMedia.count("media.id = ?1 and usageType = 3", mediaId) > 0) {
+                broadcastSync("MEDIA", "DELETE", mediaId.toString(), "{}");
+                return;
+            }
             try {
-                payload = objectMapper.writeValueAsString(media);
+                payload = objectMapper.writeValueAsString(buildPublicMediaNode(media));
             } catch (Exception e) {
                 log.error("Failed to serialize media: {}", e.getMessage());
                 return;
@@ -185,13 +169,88 @@ public class EdgeDataSyncService {
         broadcastSync("MEDIA", action, mediaId.toString(), payload);
     }
 
+    private ObjectNode buildPublicMediaNode(Media media) {
+        ObjectNode publicMedia = objectMapper.createObjectNode();
+        putLong(publicMedia, "id", media.id);
+        putText(publicMedia, "storageKey", media.storageKey);
+        putText(publicMedia, "url", media.url);
+        putShort(publicMedia, "mediaType", media.mediaType);
+        putText(publicMedia, "mimeType", media.mimeType);
+        putText(publicMedia, "fileName", media.fileName);
+        putLong(publicMedia, "size", media.size);
+        putLong(publicMedia, "uploadedBy", media.uploadedBy);
+        putInteger(publicMedia, "width", media.width);
+        putInteger(publicMedia, "height", media.height);
+        publicMedia.set("alt", objectMapper.valueToTree(media.alt));
+        publicMedia.set("metadata", safePublicMediaMetadata(media.metadata));
+        publicMedia.set("storageClasses", safePublicStorageClasses(media.storageClasses));
+        publicMedia.set("visibilityRegions", objectMapper.valueToTree(media.visibilityRegions));
+        publicMedia.set("hiddenRegions", objectMapper.valueToTree(media.hiddenRegions));
+        publicMedia.set("syncStorageClasses", objectMapper.valueToTree(media.syncStorageClasses));
+        publicMedia.set("skipStorageClasses", objectMapper.valueToTree(media.skipStorageClasses));
+        putInteger(publicMedia, "version", media.version);
+        putDateTime(publicMedia, "createdAt", media.createdAt);
+        putDateTime(publicMedia, "updatedAt", media.updatedAt);
+        putText(publicMedia, "processingStatus", media.processingStatus);
+        putInteger(publicMedia, "processingProgress", media.processingProgress);
+        return publicMedia;
+    }
+
+    private ObjectNode safePublicMediaMetadata(Map<String, Object> metadata) {
+        ObjectNode result = objectMapper.createObjectNode();
+        if (metadata == null) {
+            return result;
+        }
+        for (String key : List.of("placeholderUrl", "thumbnailUrl", "previewUrl", "webpUrl",
+                "coverUrl", "width", "height")) {
+            JsonNode value = objectMapper.valueToTree(metadata.get(key));
+            if (value != null && !value.isNull()) {
+                result.set(key, value);
+            }
+        }
+        return result;
+    }
+
+    private ObjectNode safePublicStorageClasses(Map<String, Object> storageClasses) {
+        ObjectNode result = objectMapper.createObjectNode();
+        if (storageClasses == null) {
+            return result;
+        }
+        for (Map.Entry<String, Object> providerEntry : storageClasses.entrySet()) {
+            if (!(providerEntry.getValue() instanceof Map<?, ?> providerData)) {
+                continue;
+            }
+            ObjectNode variants = objectMapper.createObjectNode();
+            for (Map.Entry<?, ?> variantEntry : providerData.entrySet()) {
+                if (!(variantEntry.getKey() instanceof String variantName)
+                        || !(variantEntry.getValue() instanceof Map<?, ?> variantData)) {
+                    continue;
+                }
+                ObjectNode safeVariant = objectMapper.createObjectNode();
+                copyScalar(variantData, safeVariant, "status");
+                copyScalar(variantData, safeVariant, "path");
+                copyScalar(variantData, safeVariant, "size");
+                variants.set(variantName, safeVariant);
+            }
+            result.set(providerEntry.getKey(), variants);
+        }
+        return result;
+    }
+
+    private void copyScalar(Map<?, ?> source, ObjectNode target, String key) {
+        Object value = source.get(key);
+        if (value instanceof String || value instanceof Number || value instanceof Boolean) {
+            target.set(key, objectMapper.valueToTree(value));
+        }
+    }
+
     private void syncTag(Long tagId, String action) {
         String payload = "{}";
         if ("UPSERT".equals(action)) {
             Tag tag = Tag.findById(tagId);
             if (tag == null) return;
             try {
-                payload = objectMapper.writeValueAsString(tag);
+                payload = objectMapper.writeValueAsString(buildPublicTagNode(tag));
             } catch (Exception e) {
                 log.error("Failed to serialize tag: {}", e.getMessage());
                 return;
@@ -199,81 +258,6 @@ public class EdgeDataSyncService {
         }
 
         broadcastSync("TAG", action, tagId.toString(), payload);
-    }
-
-    private void syncAffiliateLink(Long affiliateLinkId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            AffiliateLink affiliateLink = AffiliateLink.findById(affiliateLinkId);
-            if (affiliateLink == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(affiliateLink);
-            } catch (Exception e) {
-                log.error("Failed to serialize affiliate link: {}", e.getMessage());
-                return;
-            }
-        }
-        broadcastSync("AFFILIATE_LINK", action, affiliateLinkId.toString(), payload);
-    }
-
-    private void syncRepostLicense(Long repostLicenseId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            RepostLicense repostLicense = RepostLicense.findById(repostLicenseId);
-            if (repostLicense == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(repostLicense);
-            } catch (Exception e) {
-                log.error("Failed to serialize repost license: {}", e.getMessage());
-                return;
-            }
-        }
-        broadcastSync("REPOST_LICENSE", action, repostLicenseId.toString(), payload);
-    }
-
-    private void syncAffiliateToken(Long affiliateTokenId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            AffiliateToken affiliateToken = AffiliateToken.findById(affiliateTokenId);
-            if (affiliateToken == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(affiliateToken);
-            } catch (Exception e) {
-                log.error("Failed to serialize affiliate token: {}", e.getMessage());
-                return;
-            }
-        }
-        broadcastSync("AFFILIATE_TOKEN", action, affiliateTokenId.toString(), payload);
-    }
-
-    private void syncBlockedDomain(Long blockedDomainId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            BlockedDomain blockedDomain = BlockedDomain.findById(blockedDomainId);
-            if (blockedDomain == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(blockedDomain);
-            } catch (Exception e) {
-                log.error("Failed to serialize blocked domain: {}", e.getMessage());
-                return;
-            }
-        }
-        broadcastSync("BLOCKED_DOMAIN", action, blockedDomainId.toString(), payload);
-    }
-
-    private void syncRiskDevice(Long riskDeviceId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            RiskDevice riskDevice = RiskDevice.findById(riskDeviceId);
-            if (riskDevice == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(riskDevice);
-            } catch (Exception e) {
-                log.error("Failed to serialize risk device: {}", e.getMessage());
-                return;
-            }
-        }
-        broadcastSync("RISK_DEVICE", action, riskDeviceId.toString(), payload);
     }
 
     private void syncPost(Long postId) {
@@ -285,19 +269,13 @@ public class EdgeDataSyncService {
             action = "DELETE";
         } else {
             try {
-                Map<String, Object> bundle = new HashMap<>();
-                bundle.put("post", post);
-
-                if (post.publishedRevision != null) {
-                    bundle.put("currentRevision", post.publishedRevision);
-                    bundle.put("publishedRevision", post.publishedRevision);
-                }
+                Map<String, Object> bundle = buildPublicPostBundle(post);
 
                 // 包含标签关联
                 List<PostTag> postTags = PostTag.find("post.id = ?1", postId).list();
-                java.util.ArrayList<Tag> tags = new java.util.ArrayList<>();
+                java.util.ArrayList<ObjectNode> tags = new java.util.ArrayList<>();
                 for (PostTag postTag : postTags) {
-                    tags.add(postTag.tag);
+                    tags.add(buildPublicTagNode(postTag.tag));
                 }
                 bundle.put("tags", tags);
 
@@ -309,6 +287,159 @@ public class EdgeDataSyncService {
         }
 
         broadcastSync("POST", action, postId.toString(), payload);
+    }
+
+    private Map<String, Object> buildPublicPostBundle(Post post) {
+        Map<String, Object> bundle = new HashMap<>();
+        ObjectNode publicPost = buildPublicPostNode(post);
+        ObjectNode publicRevision = buildPublicRevision(post);
+        publicPost.set("publishedRevision", publicRevision);
+        bundle.put("post", publicPost);
+        if (publicRevision != null) {
+            // Apply service accepts this compatibility key and merges only the public revision.
+            bundle.put("currentRevision", publicRevision);
+        }
+        return bundle;
+    }
+
+    private ObjectNode buildPublicPostNode(Post post) {
+        ObjectNode publicPost = objectMapper.createObjectNode();
+        putLong(publicPost, "id", post.id);
+        putText(publicPost, "slug", post.slug);
+        publicPost.set("title", objectMapper.valueToTree(post.title));
+        publicPost.set("summary", objectMapper.valueToTree(post.summary));
+        publicPost.set("aiSummary", objectMapper.valueToTree(post.aiSummary));
+        putShort(publicPost, "aiSummaryStatus", post.aiSummaryStatus);
+        putText(publicPost, "status", post.status == null ? null : post.status.name());
+        putShort(publicPost, "visibility", post.visibility);
+        putText(publicPost, "seoTitle", post.seoTitle);
+        putText(publicPost, "seoKeywords", post.seoKeywords);
+        putText(publicPost, "seoDescription", post.seoDescription);
+        putText(publicPost, "renderType", post.renderType == null ? null : post.renderType.name());
+        putReference(publicPost, "user", post.user == null ? null : post.user.id);
+        putReference(publicPost, "category", post.category == null ? null : post.category.id);
+        publicPost.set("extraInfo", safePublicExtraInfo(post.extraInfo));
+        publicPost.set("visibilityRegions", objectMapper.valueToTree(post.visibilityRegions));
+        publicPost.set("contentDeclarations", objectMapper.valueToTree(post.contentDeclarations));
+        putDateTime(publicPost, "publishedAt", post.publishedAt);
+        putDateTime(publicPost, "createdAt", post.createdAt);
+        putDateTime(publicPost, "updatedAt", post.updatedAt);
+        putLong(publicPost, "viewCount", post.viewCount);
+        putBoolean(publicPost, "featured", post.featured);
+        putBoolean(publicPost, "allowComment", post.allowComment);
+        putInteger(publicPost, "version", post.version);
+        return publicPost;
+    }
+
+    private ObjectNode buildPublicRevision(Post post) {
+        if (post == null || post.publishedRevision == null) {
+            return null;
+        }
+        PostRevision source = post.publishedRevision;
+        ObjectNode revision = objectMapper.createObjectNode();
+        putLong(revision, "id", source.id);
+        revision.set("title", objectMapper.valueToTree(source.title));
+        putShort(revision, "editorType", source.editorType);
+        putInteger(revision, "revisionNumber", source.revisionNumber);
+        putReference(revision, "createdBy", source.createdBy == null ? null : source.createdBy.id);
+        putDateTime(revision, "createdAt", source.createdAt);
+        if (source.contentMarkdown == null) {
+            revision.set("contentMarkdown", objectMapper.createObjectNode());
+            return revision;
+        }
+        Map<String, String> publicContent = new HashMap<>();
+        long postPrice = postAccessService.getPostPrice(post);
+        int freeLines = postAccessService.getFreeLines(post);
+        for (Map.Entry<String, String> entry : source.contentMarkdown.entrySet()) {
+            publicContent.put(entry.getKey(), postAccessService.getPreviewOnlyContent(
+                    entry.getValue(), freeLines, postPrice > 0, post.id, postPrice, null));
+        }
+        revision.set("contentMarkdown", objectMapper.valueToTree(publicContent));
+        return revision;
+    }
+
+    private JsonNode safePublicExtraInfo(Object extraInfo) {
+        ObjectNode result = objectMapper.createObjectNode();
+        if (extraInfo == null) {
+            return result;
+        }
+        JsonNode source = objectMapper.valueToTree(extraInfo);
+        if (!source.isObject()) {
+            return result;
+        }
+        copyPublicExtraField(source, result, "points_price");
+        copyPublicExtraField(source, result, "free_lines");
+        copyPublicExtraField(source, result, "related_store_items");
+        return result;
+    }
+
+    private void copyPublicExtraField(JsonNode source, ObjectNode target, String fieldName) {
+        JsonNode value = source.get(fieldName);
+        if (value != null && !value.isNull()) {
+            target.set(fieldName, value.deepCopy());
+        }
+    }
+
+    private void putReference(ObjectNode target, String fieldName, Long id) {
+        if (id == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        ObjectNode reference = objectMapper.createObjectNode();
+        reference.put("id", id);
+        target.set(fieldName, reference);
+    }
+
+    private void putText(ObjectNode target, String fieldName, String value) {
+        if (value == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        target.put(fieldName, value);
+    }
+
+    private void putLong(ObjectNode target, String fieldName, Long value) {
+        if (value == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        target.put(fieldName, value);
+    }
+
+    private void putInteger(ObjectNode target, String fieldName, Integer value) {
+        if (value == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        target.put(fieldName, value);
+    }
+
+    private void putShort(ObjectNode target, String fieldName, Short value) {
+        if (value == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        target.put(fieldName, value.shortValue());
+    }
+
+    private void putShort(ObjectNode target, String fieldName, short value) {
+        target.put(fieldName, value);
+    }
+
+    private void putBoolean(ObjectNode target, String fieldName, Boolean value) {
+        if (value == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        target.put(fieldName, value.booleanValue());
+    }
+
+    private void putDateTime(ObjectNode target, String fieldName, java.time.OffsetDateTime value) {
+        if (value == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        target.put(fieldName, value.toString());
     }
 
     private void broadcastSync(String entityType, String action, String entityId, String payload) {
@@ -458,7 +589,7 @@ public class EdgeDataSyncService {
                 .emitOn(io.smallrye.mutiny.infrastructure.Infrastructure.getDefaultWorkerPool())
                 .subscribe().with(id -> {
                     try {
-                        self.get().performFullSyncInternal(id, force);
+                        self.get().performPublicFullSyncInternal(id, force);
                     } catch (Exception e) {
                         log.error("Unhandled error in full sync thread for node {}: {}", id, e.getMessage(), e);
                         syncProgressMap.put(id, new SyncProgress(0, 0, "FAILED", "Internal error: " + e.getMessage()));
@@ -467,288 +598,274 @@ public class EdgeDataSyncService {
     }
 
     /**
-     * 实际执行同步的内部方法，运行在独立事务中
+     * Sends the public snapshot in bounded keyset pages. Each page is built in a
+     * short database transaction and all gRPC work happens after that transaction
+     * has ended.
      */
     @jakarta.enterprise.context.control.ActivateRequestContext
-    @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
-    public void performFullSyncInternal(String nodeId, boolean force) {
-        EdgeNode node = EdgeNode.findByNodeId(nodeId);
-        if (node == null) return;
-
+    public void performPublicFullSyncInternal(String nodeId, boolean force) {
+        EdgeNode node = self.get().loadNodeForFullSync(nodeId);
+        if (node == null) {
+            return;
+        }
         try {
-            log.info("Performing full sync internal for node {}", nodeId);
-
-            List<User> users = User.list("deletedAt is null");
-            List<SystemSetting> settings = SystemSetting.listAll();
-            List<Tag> tags = Tag.listAll();
-            List<Category> categories = Category.listAll();
-            List<Link> links = Link.listAll();
-            List<Media> mediaList = Media.listAll();
-            List<Post> posts = Post.list("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null", PostStatus.PUBLISHED);
-            List<AffiliateLink> affiliateLinks = AffiliateLink.list("status = 1");
-            List<RepostLicense> repostLicenses = RepostLicense.listAll();
-            List<AffiliateToken> affiliateTokens = AffiliateToken.listAll();
-            List<BlockedDomain> blockedDomains = BlockedDomain.list("status = 1");
-            List<RiskDevice> riskDevices = RiskDevice.list("status = 1");
-            int total = users.size() + settings.size() + tags.size() + categories.size() + links.size() + mediaList.size() + posts.size()
-                    + affiliateLinks.size() + repostLicenses.size() + affiliateTokens.size() + blockedDomains.size() + riskDevices.size();
-
-            syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Syncing users..."));
-
+            PublicFullSyncCounts counts = self.get().loadPublicFullSyncCounts();
+            int total = counts.total();
             int processed = 0;
-            int failedCount = 0;
+            int failed = 0;
+            syncProgressMap.put(nodeId, new SyncProgress(total, 0, "SYNCING", "Sending public snapshot..."));
 
-            for (User user : users) {
-                try {
-                    String userPayload = objectMapper.writeValueAsString(user);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "USER", action, user.id.toString(), userPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push user {} to node {}", user.id, nodeId);
+            for (String entityType : List.of("TAG", "CATEGORY", "MEDIA", "MEDIA_REVOKED",
+                    "POST", "POST_REVOKED")) {
+                long lastId = 0L;
+                while (true) {
+                    List<FullSyncItem> batch = self.get().loadPublicFullSyncBatch(
+                            force, entityType, lastId, PUBLIC_FULL_SYNC_BATCH_SIZE);
+                    if (batch.isEmpty()) {
+                        break;
                     }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing user {} to node {}: {}", user.id, nodeId, e.getMessage());
+                    for (FullSyncItem item : batch) {
+                        boolean success = pushToNodeWithRetry(
+                                node, item.entityType(), item.action(), item.entityId(),
+                                item.payload(), item.timeoutSeconds());
+                        if (!success) {
+                            failed++;
+                        }
+                        processed++;
+                        syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING",
+                                "Sending public snapshot (" + processed + "/" + total + ")"));
+                        lastId = Long.parseLong(item.entityId());
+                    }
+                    if (batch.size() < PUBLIC_FULL_SYNC_BATCH_SIZE) {
+                        break;
+                    }
                 }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing users (" + processed + "/" + total + ")"));
             }
-
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing settings..."));
-            for (SystemSetting setting : settings) {
-                try {
-                    String settingPayload = objectMapper.writeValueAsString(setting);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "SYSTEM_SETTING", action, setting.id.toString(), settingPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push setting {} to node {}", setting.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing setting {} to node {}: {}", setting.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing settings (" + processed + "/" + total + ")"));
-            }
-
-            // 1. 同步标签
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing tags..."));
-            for (Tag tag : tags) {
-                try {
-                    String tagPayload = objectMapper.writeValueAsString(tag);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "TAG", action, tag.id.toString(), tagPayload, 15);
-
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push tag {} to node {}", tag.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing tag {} to node {}: {}", tag.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing tags (" + processed + "/" + total + ")"));
-            }
-
-            // 1.1 同步分类
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing categories..."));
-            for (Category category : categories) {
-                try {
-                    String categoryPayload = objectMapper.writeValueAsString(category);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "CATEGORY", action, category.id.toString(), categoryPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push category {} to node {}", category.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing category {} to node {}: {}", category.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing categories (" + processed + "/" + total + ")"));
-            }
-
-            // 1.2 同步链接
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing links..."));
-            for (Link link : links) {
-                try {
-                    String linkPayload = objectMapper.writeValueAsString(link);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "LINK", action, link.id.toString(), linkPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push link {} to node {}", link.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing link {} to node {}: {}", link.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing links (" + processed + "/" + total + ")"));
-            }
-
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate links..."));
-            for (AffiliateLink affiliateLink : affiliateLinks) {
-                try {
-                    String affiliateLinkPayload = objectMapper.writeValueAsString(affiliateLink);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "AFFILIATE_LINK", action, affiliateLink.id.toString(), affiliateLinkPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push affiliate link {} to node {}", affiliateLink.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing affiliate link {} to node {}: {}", affiliateLink.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate links (" + processed + "/" + total + ")"));
-            }
-
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing repost licenses..."));
-            for (RepostLicense repostLicense : repostLicenses) {
-                try {
-                    String repostLicensePayload = objectMapper.writeValueAsString(repostLicense);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "REPOST_LICENSE", action, repostLicense.id.toString(), repostLicensePayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push repost license {} to node {}", repostLicense.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing repost license {} to node {}: {}", repostLicense.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing repost licenses (" + processed + "/" + total + ")"));
-            }
-
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate tokens..."));
-            for (AffiliateToken affiliateToken : affiliateTokens) {
-                try {
-                    String affiliateTokenPayload = objectMapper.writeValueAsString(affiliateToken);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "AFFILIATE_TOKEN", action, affiliateToken.id.toString(), affiliateTokenPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push affiliate token {} to node {}", affiliateToken.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing affiliate token {} to node {}: {}", affiliateToken.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing affiliate tokens (" + processed + "/" + total + ")"));
-            }
-
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing blocked domains..."));
-            for (BlockedDomain blockedDomain : blockedDomains) {
-                try {
-                    String blockedDomainPayload = objectMapper.writeValueAsString(blockedDomain);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "BLOCKED_DOMAIN", action, blockedDomain.id.toString(), blockedDomainPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push blocked domain {} to node {}", blockedDomain.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing blocked domain {} to node {}: {}", blockedDomain.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing blocked domains (" + processed + "/" + total + ")"));
-            }
-
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing risk devices..."));
-            for (RiskDevice riskDevice : riskDevices) {
-                try {
-                    String riskDevicePayload = objectMapper.writeValueAsString(riskDevice);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "RISK_DEVICE", action, riskDevice.id.toString(), riskDevicePayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push risk device {} to node {}", riskDevice.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing risk device {} to node {}: {}", riskDevice.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing risk devices (" + processed + "/" + total + ")"));
-            }
-
-            // 1.3 同步媒体元数据
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing media metadata..."));
-            for (Media media : mediaList) {
-                try {
-                    String mediaPayload = objectMapper.writeValueAsString(media);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "MEDIA", action, media.id.toString(), mediaPayload, 15);
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push media {} to node {}", media.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing media {} to node {}: {}", media.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing media (" + processed + "/" + total + ")"));
-            }
-
-            // 2. 同步文章
-            syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing posts..."));
-            for (Post post : posts) {
-                try {
-                    Map<String, Object> bundle = new HashMap<>();
-                    bundle.put("post", post);
-                    if (post.publishedRevision != null) {
-                        bundle.put("currentRevision", post.publishedRevision);
-                        bundle.put("publishedRevision", post.publishedRevision);
-                    }
-                    List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
-                    java.util.ArrayList<Tag> postTagEntities = new java.util.ArrayList<>();
-                    for (PostTag postTag : postTags) {
-                        postTagEntities.add(postTag.tag);
-                    }
-                    bundle.put("tags", postTagEntities);
-
-                    String postPayload = objectMapper.writeValueAsString(bundle);
-                    String action = force ? "FORCE_UPSERT" : "UPSERT";
-                    boolean success = pushToNodeWithRetry(node, "POST", action, post.id.toString(), postPayload, 30);
-
-                    if (!success) {
-                        failedCount++;
-                        log.warn("Failed to push post {} to node {}", post.id, nodeId);
-                    }
-                } catch (Exception e) {
-                    failedCount++;
-                    log.error("Error syncing post {} to node {}: {}", post.id, nodeId, e.getMessage());
-                }
-                processed++;
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING", "Syncing posts (" + processed + "/" + total + ")"));
-            }
-
-            if (failedCount > 0) {
-                String errorMsg = "Sync completed with " + failedCount + " failures out of " + total + " items";
-                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "COMPLETED_WITH_ERRORS", errorMsg));
-                log.warn("Full sync completed for node {} with {} failures", nodeId, failedCount);
+            if (failed == 0) {
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "COMPLETED", null));
             } else {
-                syncProgressMap.put(nodeId, new SyncProgress(total, total, "COMPLETED", null));
-                log.info("Full sync completed for node {} successfully", nodeId);
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "COMPLETED_WITH_ERRORS",
+                        "公开快照同步失败 " + failed + " 项"));
             }
-        } catch (Exception e) {
-            log.error("Full sync execution failed for node {}: {}", nodeId, e.getMessage(), e);
+        } catch (Exception exception) {
+            log.error("Public full sync execution failed for node {}", nodeId, exception);
             SyncProgress current = syncProgressMap.get(nodeId);
-            syncProgressMap.put(nodeId, new SyncProgress(current != null ? current.total : 0,
-                    current != null ? current.processed : 0, "FAILED", e.getMessage()));
+            syncProgressMap.put(nodeId, new SyncProgress(
+                    current == null ? 0 : current.total(),
+                    current == null ? 0 : current.processed(),
+                    "FAILED", exception.getMessage()));
         }
     }
 
+    @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
+    public PublicFullSyncCounts loadPublicFullSyncCounts() {
+        long publicMediaCount = entityManager.createQuery(
+                        "select count(media.id) from Media media where media.deletedAt is null "
+                                + "and not exists (select relation.id from PostMedia relation "
+                                + "where relation.media = media and relation.usageType = 3)",
+                        Long.class)
+                .getSingleResult();
+        long revokedMediaCount = entityManager.createQuery(
+                        "select count(distinct media.id) from PostMedia relation join relation.media media "
+                                + "where relation.usageType = 3", Long.class)
+                .getSingleResult();
+        long revokedPostCount = entityManager.createQuery(
+                        "select count(post.id) from Post post where post.deletedAt is not null "
+                                + "or post.status <> :published or post.visibility <> 0 "
+                                + "or post.publishedRevision is null", Long.class)
+                .setParameter("published", PostStatus.PUBLISHED)
+                .getSingleResult();
+        return new PublicFullSyncCounts(
+                Tag.count(),
+                Category.count(),
+                publicMediaCount,
+                revokedMediaCount,
+                Post.count("status = ?1 and deletedAt is null and visibility = 0 "
+                        + "and publishedRevision is not null", PostStatus.PUBLISHED),
+                revokedPostCount);
+    }
+
+    @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
+    public List<FullSyncItem> loadPublicFullSyncBatch(boolean force, String entityType,
+                                                       long afterId, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, PUBLIC_FULL_SYNC_BATCH_SIZE));
+        String upsertAction = force ? "FORCE_UPSERT" : "UPSERT";
+        List<FullSyncItem> items = new java.util.ArrayList<>();
+        if ("TAG".equals(entityType)) {
+            List<Tag> tags = Tag.<Tag>find("id > ?1 order by id", afterId)
+                    .page(Page.ofSize(safeLimit)).list();
+            for (Tag tag : tags) {
+                items.add(new FullSyncItem("TAG", upsertAction, tag.id.toString(),
+                        writePayload(buildPublicTagNode(tag)), 15));
+            }
+            return items;
+        }
+        if ("CATEGORY".equals(entityType)) {
+            List<Category> categories = Category.<Category>find("id > ?1 order by id", afterId)
+                    .page(Page.ofSize(safeLimit)).list();
+            for (Category category : categories) {
+                items.add(new FullSyncItem("CATEGORY", upsertAction, category.id.toString(),
+                        writePayload(buildPublicCategoryNode(category)), 15));
+            }
+            return items;
+        }
+        if ("MEDIA".equals(entityType)) {
+            List<Media> mediaBatch = entityManager.createQuery(
+                            "select media from Media media where media.deletedAt is null "
+                                    + "and media.id > :afterId and not exists (select relation.id from PostMedia relation "
+                                    + "where relation.media = media and relation.usageType = 3) order by media.id",
+                            Media.class)
+                    .setParameter("afterId", afterId)
+                    .setMaxResults(safeLimit)
+                    .getResultList();
+            for (Media media : mediaBatch) {
+                items.add(new FullSyncItem("MEDIA", upsertAction, media.id.toString(),
+                        writePayload(buildPublicMediaNode(media)), 15));
+            }
+            return items;
+        }
+        if ("MEDIA_REVOKED".equals(entityType)) {
+            List<Long> mediaIds = entityManager.createQuery(
+                            "select distinct media.id from PostMedia relation join relation.media media "
+                                    + "where relation.usageType = 3 and media.id > :afterId order by media.id",
+                            Long.class)
+                    .setParameter("afterId", afterId)
+                    .setMaxResults(safeLimit)
+                    .getResultList();
+            for (Long mediaId : mediaIds) {
+                items.add(new FullSyncItem("MEDIA", "DELETE", mediaId.toString(), "{}", 15));
+            }
+            return items;
+        }
+        if ("POST".equals(entityType)) {
+            List<Post> posts = Post.<Post>find(
+                            "status = ?1 and deletedAt is null and visibility = 0 "
+                                    + "and publishedRevision is not null and id > ?2 order by id",
+                            PostStatus.PUBLISHED, afterId)
+                    .page(Page.ofSize(safeLimit)).list();
+            Map<Long, List<ObjectNode>> tagsByPost = loadTagsByPost(posts);
+            for (Post post : posts) {
+                Map<String, Object> bundle = buildPublicPostBundle(post);
+                bundle.put("tags", tagsByPost.getOrDefault(post.id, List.of()));
+                items.add(new FullSyncItem("POST", upsertAction, post.id.toString(),
+                        writePayload(bundle), 30));
+            }
+            return items;
+        }
+        if ("POST_REVOKED".equals(entityType)) {
+            List<Long> postIds = entityManager.createQuery(
+                            "select post.id from Post post where post.id > :afterId and "
+                                    + "(post.deletedAt is not null or post.status <> :published "
+                                    + "or post.visibility <> 0 or post.publishedRevision is null) order by post.id",
+                            Long.class)
+                    .setParameter("afterId", afterId)
+                    .setParameter("published", PostStatus.PUBLISHED)
+                    .setMaxResults(safeLimit)
+                    .getResultList();
+            for (Long postId : postIds) {
+                items.add(new FullSyncItem("POST", "DELETE", postId.toString(), "{}", 30));
+            }
+        }
+        return items;
+    }
+
+    @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
+    public EdgeNode loadNodeForFullSync(String nodeId) {
+        return EdgeNode.findByNodeId(nodeId);
+    }
+
+    @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
+    public List<FullSyncItem> buildPublicFullSyncSnapshot(boolean force) {
+        List<FullSyncItem> items = new java.util.ArrayList<>();
+        for (String entityType : List.of("TAG", "CATEGORY", "MEDIA", "MEDIA_REVOKED",
+                "POST", "POST_REVOKED")) {
+            long lastId = 0L;
+            while (true) {
+                List<FullSyncItem> batch = loadPublicFullSyncBatch(
+                        force, entityType, lastId, PUBLIC_FULL_SYNC_BATCH_SIZE);
+                if (batch.isEmpty()) {
+                    break;
+                }
+                items.addAll(batch);
+                lastId = Long.parseLong(batch.get(batch.size() - 1).entityId());
+                if (batch.size() < PUBLIC_FULL_SYNC_BATCH_SIZE) {
+                    break;
+                }
+            }
+        }
+        return items;
+    }
+
+    private Map<Long, List<ObjectNode>> loadTagsByPost(List<Post> posts) {
+        Map<Long, List<ObjectNode>> tagsByPost = new HashMap<>();
+        if (posts.isEmpty()) {
+            return tagsByPost;
+        }
+        List<PostTag> relations = entityManager.createQuery(
+                        "select relation from PostTag relation join fetch relation.tag "
+                                + "where relation.post in :posts", PostTag.class)
+                .setParameter("posts", posts)
+                .getResultList();
+        for (PostTag relation : relations) {
+            tagsByPost.computeIfAbsent(relation.post.id, ignored -> new java.util.ArrayList<>())
+                    .add(buildPublicTagNode(relation.tag));
+        }
+        return tagsByPost;
+    }
+
+    private ObjectNode buildPublicTagNode(Tag tag) {
+        ObjectNode publicTag = objectMapper.createObjectNode();
+        putLong(publicTag, "id", tag.id);
+        putText(publicTag, "slug", tag.slug);
+        publicTag.set("name", objectMapper.valueToTree(tag.name));
+        publicTag.set("description", objectMapper.valueToTree(tag.description));
+        putDateTime(publicTag, "createdAt", tag.createdAt);
+        putDateTime(publicTag, "updatedAt", tag.updatedAt);
+        return publicTag;
+    }
+
+    private ObjectNode buildPublicCategoryNode(Category category) {
+        ObjectNode publicCategory = objectMapper.createObjectNode();
+        putLong(publicCategory, "id", category.id);
+        putReference(publicCategory, "parent", category.parent == null ? null : category.parent.id);
+        putText(publicCategory, "slug", category.slug);
+        publicCategory.set("name", objectMapper.valueToTree(category.name));
+        publicCategory.set("description", objectMapper.valueToTree(category.description));
+        putText(publicCategory, "path", category.path);
+        putDateTime(publicCategory, "createdAt", category.createdAt);
+        putDateTime(publicCategory, "updatedAt", category.updatedAt);
+        putLong(publicCategory, "postCount", category.postCount);
+        return publicCategory;
+    }
+
+    private String writePayload(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception exception) {
+            throw new IllegalStateException("无法生成边缘公开快照", exception);
+        }
+    }
+
+    public record FullSyncItem(String entityType, String action, String entityId,
+                               String payload, int timeoutSeconds) {
+    }
+
+    public record PublicFullSyncCounts(long tags, long categories, long publicMedia,
+                                      long revokedMedia, long publicPosts, long revokedPosts) {
+        public int total() {
+            long total = tags + categories + publicMedia + revokedMedia + publicPosts + revokedPosts;
+            return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
+        }
+    }
+
+    /**
+     * @deprecated Use the bounded public full-sync path triggered by triggerFullSync.
+     */
+    @jakarta.enterprise.context.control.ActivateRequestContext
+    @Deprecated
+    public void performFullSyncInternal(String nodeId, boolean force) {
+        performPublicFullSyncInternal(nodeId, force);
+    }
     /**
      * 获取节点的 gRPC 地址，优先使用 grpcAddress，回退到已废弃的 address 字段
      */
@@ -930,6 +1047,38 @@ public class EdgeDataSyncService {
             return errorMessage;
         }
         return errorMessage.substring(0, 1000);
+    }
+
+    private boolean containsSecret(String key, JsonNode value) {
+        if (key != null && isSecretName(key)) {
+            return true;
+        }
+        if (value == null) {
+            return false;
+        }
+        if (value.isObject()) {
+            java.util.Iterator<String> fields = value.fieldNames();
+            while (fields.hasNext()) {
+                String field = fields.next();
+                if (isSecretName(field) || containsSecret(field, value.get(field))) {
+                    return true;
+                }
+            }
+        } else if (value.isArray()) {
+            for (JsonNode item : value) {
+                if (containsSecret(key, item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isSecretName(String value) {
+        String normalized = value.toLowerCase();
+        return normalized.contains("password") || normalized.contains("secret")
+                || normalized.contains("token") || normalized.contains("api_key")
+                || normalized.endsWith("_key");
     }
 
     public record SyncProgress(int total, int processed, String status, String lastError) {

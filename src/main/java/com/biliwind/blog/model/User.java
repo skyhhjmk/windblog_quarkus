@@ -1,6 +1,7 @@
 package com.biliwind.blog.model;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -42,6 +43,7 @@ public class User extends PanacheEntityBase {
 
     /** 加密后密码 */
     @Column(nullable = false, length = 255)
+    @JsonIgnore
     public String password;
 
     /** 用户状态：0禁用，1正常 */

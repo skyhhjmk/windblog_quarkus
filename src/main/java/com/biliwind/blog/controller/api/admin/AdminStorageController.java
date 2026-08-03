@@ -20,7 +20,9 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Path("/api/admin/storage")
 @Produces(MediaType.APPLICATION_JSON)
@@ -244,42 +246,52 @@ public class AdminStorageController {
     @Path("/sync/status")
     public Response getSyncStatus(@QueryParam("page") @DefaultValue("0") int page,
                                   @QueryParam("size") @DefaultValue("20") int size) {
-        // 计算全量统计信息 (这里可以优化为原生 SQL 以提高性能，目前先保持逻辑简单)
-        List<Media> allMedia = Media.listAll();
-        int totalMedia = allMedia.size();
+        // 统计扫描按固定批次进行，避免管理端请求把全部媒体实体同时装入 JVM。
+        final int scanBatchSize = 200;
+        int scanPage = 0;
+        int totalMedia = 0;
         int totalVariants = 0;
         int syncedCount = 0;
         int pendingCount = 0;
         int failedCount = 0;
 
-        for (Media media : allMedia) {
-            if (media.storageClasses != null) {
-                for (java.util.Map.Entry<String, Object> entry : media.storageClasses.entrySet()) {
-                    Object providerDataObj = entry.getValue();
-                    if (providerDataObj instanceof java.util.Map) {
-                        java.util.Map<String, Object> providerData = (java.util.Map<String, Object>) providerDataObj;
-                        for (java.util.Map.Entry<String, Object> varEntry : providerData.entrySet()) {
-                            Object variantDataObj = varEntry.getValue();
-                            if (variantDataObj instanceof java.util.Map) {
-                                java.util.Map<String, Object> variantData = (java.util.Map<String, Object>) variantDataObj;
-                                Object statusObj = variantData.get("status");
-                                String status = "unknown";
-                                if (statusObj != null) {
-                                    status = statusObj.toString();
-                                }
-                                totalVariants++;
-                                if ("synced".equals(status)) {
-                                    syncedCount++;
-                                } else if ("pending".equals(status)) {
-                                    pendingCount++;
-                                } else if ("failed".equals(status)) {
-                                    failedCount++;
+        while (true) {
+            List<Media> mediaBatch = Media.find("order by id").page(
+                    io.quarkus.panache.common.Page.of(scanPage, scanBatchSize)).list();
+            if (mediaBatch.isEmpty()) {
+                break;
+            }
+            totalMedia += mediaBatch.size();
+            for (Media media : mediaBatch) {
+                if (media.storageClasses != null) {
+                    for (java.util.Map.Entry<String, Object> entry : media.storageClasses.entrySet()) {
+                        Object providerDataObj = entry.getValue();
+                        if (providerDataObj instanceof java.util.Map) {
+                            java.util.Map<String, Object> providerData = (java.util.Map<String, Object>) providerDataObj;
+                            for (java.util.Map.Entry<String, Object> varEntry : providerData.entrySet()) {
+                                Object variantDataObj = varEntry.getValue();
+                                if (variantDataObj instanceof java.util.Map) {
+                                    java.util.Map<String, Object> variantData = (java.util.Map<String, Object>) variantDataObj;
+                                    Object statusObj = variantData.get("status");
+                                    String status = "unknown";
+                                    if (statusObj != null) {
+                                        status = statusObj.toString();
+                                    }
+                                    totalVariants++;
+                                    if ("synced".equals(status)) {
+                                        syncedCount++;
+                                    } else if ("pending".equals(status)) {
+                                        pendingCount++;
+                                    } else if ("failed".equals(status)) {
+                                        failedCount++;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+            scanPage++;
         }
 
         // 分页获取详情列表
@@ -290,7 +302,7 @@ public class AdminStorageController {
         ArrayList<MediaSyncDetailResponse> details = new ArrayList<>();
         for (Media media : paginatedMedia) {
             MediaSyncDetailResponse detail = new MediaSyncDetailResponse(
-                    media.id, media.fileName, media.mimeType, media.storageClasses);
+                    media.id, media.fileName, media.mimeType, safeStorageClasses(media.storageClasses));
             details.add(detail);
         }
 
@@ -313,8 +325,43 @@ public class AdminStorageController {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
         MediaSyncDetailResponse detail = new MediaSyncDetailResponse(
-                media.id, media.fileName, media.mimeType, media.storageClasses);
+                media.id, media.fileName, media.mimeType, safeStorageClasses(media.storageClasses));
         return Response.ok(detail).build();
+    }
+
+    static Map<String, Object> safeStorageClasses(Map<String, Object> storageClasses) {
+        if (storageClasses == null || storageClasses.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, Object> safeProviders = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> providerEntry : storageClasses.entrySet()) {
+            if (!(providerEntry.getValue() instanceof Map<?, ?> providerValue)) {
+                continue;
+            }
+
+            Map<String, Object> safeVariants = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> variantEntry : providerValue.entrySet()) {
+                if (!(variantEntry.getKey() instanceof String variantName)
+                        || !(variantEntry.getValue() instanceof Map<?, ?> variantValue)) {
+                    continue;
+                }
+
+                Map<String, Object> safeVariant = new LinkedHashMap<>();
+                copySafeScalar(variantValue, safeVariant, "status");
+                copySafeScalar(variantValue, safeVariant, "size");
+                safeVariants.put(variantName, safeVariant);
+            }
+            safeProviders.put(providerEntry.getKey(), safeVariants);
+        }
+        return safeProviders;
+    }
+
+    private static void copySafeScalar(Map<?, ?> source, Map<String, Object> target, String key) {
+        Object value = source.get(key);
+        if (value instanceof String || value instanceof Number || value instanceof Boolean) {
+            target.put(key, value);
+        }
     }
 
     @POST

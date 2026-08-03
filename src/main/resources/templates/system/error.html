@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>系统异常 - WindBlog</title>
 
+    <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js"></script>
+
     <!-- 本地化 Tailwind CDN 运行时脚本，避免错误页依赖外网 -->
     <script src="/assets/vendor/tailwind/tailwind-cdn.min.js"></script>
-    <script>
+    <script nonce="{cspNonce}">
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -29,7 +31,7 @@
             }
         }
     </script>
-    <script>
+    <script nonce="{cspNonce}">
         (function () {
             const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
             if (theme === 'light') {
@@ -42,7 +44,7 @@
     <link rel="stylesheet" href="/assets/css/theme.css"/>
     <link rel="stylesheet" href="/assets/css/ui.css"/>
 
-    <style>
+    <style nonce="{cspNonce}">
         :root {
             --primary-color: #6366f1;
             --error-color: #ef4444;
@@ -197,11 +199,9 @@
             </div>
             <div class="tracking-item">
                 <span class="tracking-label">错误追踪文本 (如有必要，请将此文本反馈给管理员)</span>
-                <span class="tracking-value" id="trackingText"
-                      style="max-height: 100px; overflow-y: auto;">{trackingText}</span>
+                <span class="tracking-value tracking-text" id="trackingText">{trackingText}</span>
             </div>
-            <button class="btn btn-secondary" onclick="copyTrackingText()"
-                    style="width: 100%; margin-top: 8px; padding: 8px; font-size: 14px;">
+            <button id="copyTrackingTextButton" class="btn btn-secondary copy-tracking-text-button">
                 复制追踪文本
             </button>
             <p class="copy-hint">追踪文本已经过加密处理，仅管理员可查看其中包含的调试信息。</p>
@@ -210,12 +210,12 @@
 
     <div class="actions">
         <a href="/" class="btn btn-primary">返回首页</a>
-        <a href="javascript:location.reload()" class="btn btn-secondary">重试一次</a>
+        <button id="reloadErrorButton" type="button" class="btn btn-secondary">重试一次</button>
     </div>
 </div>
 
 <script src="/assets/js/ui.js"></script>
-<script>
+<script nonce="{cspNonce}">
     function copyTrackingText() {
         const text = document.getElementById('trackingText').innerText;
         const tempTextArea = document.createElement('textarea');
@@ -230,6 +230,15 @@
         } else {
             alert('追踪文本已复制到剪贴板');
         }
+    }
+
+    const copyTrackingTextButton = document.getElementById('copyTrackingTextButton');
+    if (copyTrackingTextButton) {
+        copyTrackingTextButton.addEventListener('click', copyTrackingText);
+    }
+    const reloadErrorButton = document.getElementById('reloadErrorButton');
+    if (reloadErrorButton) {
+        reloadErrorButton.addEventListener('click', () => window.location.reload());
     }
 </script>
 </body>

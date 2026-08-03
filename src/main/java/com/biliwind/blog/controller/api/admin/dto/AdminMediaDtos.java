@@ -63,6 +63,17 @@ public final class AdminMediaDtos {
             long unreferenced) {
     }
 
+    public record MediaScanJob(
+            Long jobId,
+            String status,
+            long postsScanned,
+            long referencesCreated,
+            long unreferenced,
+            String lastError,
+            java.time.OffsetDateTime createdAt,
+            java.time.OffsetDateTime updatedAt) {
+    }
+
     public record BatchRetryResult(
             int totalCount,
             int successCount,

@@ -95,10 +95,10 @@ class PasswordHasherTest {
     }
 
     @Test
-    void shouldHandlePlainTextComparisonWhenNotHashedFormat() {
+    void shouldRejectPlainTextComparisonWhenNotHashedFormat() {
         String plainText = "plainPassword";
 
-        assertTrue(passwordHasher.matches(plainText, plainText));
+        assertFalse(passwordHasher.matches(plainText, plainText));
     }
 
     @Test

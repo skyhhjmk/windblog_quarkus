@@ -36,6 +36,9 @@ public class AdminImportApiController {
     @Path("/test-connection")
     @Operation(summary = "测试数据库连接")
     public java.util.Map<String, Object> testConnection(TestConnectionRequest req) {
+        if (!adminRequestContext.isSuperAdmin()) {
+            throw new ForbiddenException("只有超级管理员可以测试导入数据库连接");
+        }
         boolean success = importService.testConnection(req.driver(), req.url(), req.username(), req.password());
         return java.util.Map.of("success", success, "message", success ? "连接成功" : "连接失败，请检查配置");
     }

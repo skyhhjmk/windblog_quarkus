@@ -38,7 +38,7 @@ public class CommentApiController {
     ConfigManager configManager;
 
     @Inject
-    com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
+    com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
 
     @Inject
     com.biliwind.blog.common.CacheService cacheService;
@@ -186,7 +186,8 @@ public class CommentApiController {
 
         // 提交成功后发送异步任务
         if (result.isReviewing) {
-            aiTaskProducer.sendAuditTask(result.id, result.content);
+            reliableAiTaskService.enqueueAudit(
+                    new com.biliwind.blog.service.ai.AiAuditTask(result.id, result.content));
         }
 
         // 清理侧边栏统计

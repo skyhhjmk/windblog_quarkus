@@ -1,36 +1,49 @@
 package com.biliwind.blog.service;
 
-import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
-import com.biliwind.blog.common.helper.MarkdownHelper;
-import com.biliwind.blog.model.Post;
-import com.biliwind.blog.repository.PostRepository;
+import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.model.Category;
+import com.biliwind.blog.model.Tag;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jsoup.Jsoup;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class FeedService {
 
     @Inject
-    PostRepository postRepository;
+    PublicCacheRefreshService publicCacheRefreshService;
+
+    @Inject
+    LanguageContext languageContext;
+
+    @Inject
+    RegionContext regionContext;
 
     @ConfigProperty(name = "blog.url")
     String baseUrl;
 
     private static final DateTimeFormatter RFC_822_FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
     private static final DateTimeFormatter ISO_8601_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+    private static final int MAX_PUBLIC_FEED_POSTS = 500;
+    private static final int MAX_PUBLIC_TAXONOMY_ITEMS = 1000;
 
     public List<FeedPostView> getPublishedPosts() {
-        return postRepository.findAllPublished().stream()
-                .map(this::toView)
-                .collect(Collectors.toList());
+        String language = languageContext.getLang();
+        String region = regionContext.getCurrentRegion().getCode();
+        List<PublicCacheRefreshService.PublicPostListSnapshot> snapshots =
+                publicCacheRefreshService.findPublishedFeed(MAX_PUBLIC_FEED_POSTS, language, region);
+        List<FeedPostView> result = new ArrayList<>();
+        for (PublicCacheRefreshService.PublicPostListSnapshot snapshot : snapshots) {
+            result.add(toView(snapshot, language));
+        }
+        return result;
     }
 
     public String getBaseUrl() {
@@ -44,63 +57,47 @@ public class FeedService {
         return OffsetDateTime.now().format(RFC_822_FORMATTER);
     }
 
-    private FeedPostView toView(Post post) {
-        String lang = LanguageConstant.DEFAULT_LANG;
-        String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
-        if (title == null) title = post.slug;
+    private FeedPostView toView(PublicCacheRefreshService.PublicPostListSnapshot snapshot, String language) {
+        String title = LanguageHelper.resolveLocalizedValue(snapshot.title(), language);
+        if (title == null || title.isBlank()) title = snapshot.slug();
 
-        String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
+        String summary = LanguageHelper.resolveLocalizedValue(snapshot.summary(), language);
         if (summary == null || summary.isBlank()) {
-            // Try AI summary
-            summary = LanguageHelper.resolveLocalizedValue(post.aiSummary, lang);
-        }
-        if (summary == null || summary.isBlank()) {
-            // Extract from content
-            String content = LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
-            summary = extractSummary(content);
+            summary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), language);
         }
 
         return new FeedPostView(
-                post.slug,
+                snapshot.slug(),
                 title,
                 summary,
-                post.publishedAt != null ? post.publishedAt.format(RFC_822_FORMATTER) : "",
-                formatLastModified(post.updatedAt, post.createdAt),
-                post.user != null ? post.user.username : "Admin"
+                snapshot.publishedAt() != null ? snapshot.publishedAt().format(RFC_822_FORMATTER) : "",
+                formatLastModified(snapshot.updatedAt(), snapshot.createdAt()),
+                snapshot.authorName()
         );
     }
 
-    private String extractSummary(String content) {
-        if (content == null || content.isBlank()) {
-            return "";
-        }
-        // Convert to HTML and strip tags
-        String html = MarkdownHelper.toHtml(content);
-        String text = Jsoup.parse(html).text();
-        if (text.length() > 200) {
-            text = text.substring(0, 200) + "...";
-        }
-        return text;
-    }
-
     public List<SitemapUrlView> getCategorySitemapUrls() {
-        return com.biliwind.blog.model.Category.listAll().stream()
-                .map(c -> (com.biliwind.blog.model.Category) c)
-                .map(c -> new SitemapUrlView(
-                        getBaseUrl() + "/category/" + c.slug,
-                        formatLastModified(c.updatedAt, c.createdAt)
-                ))
-                .collect(Collectors.toList());
+        List<Category> categories = Category.find("order by path")
+                .page(io.quarkus.panache.common.Page.ofSize(MAX_PUBLIC_TAXONOMY_ITEMS)).list();
+        List<SitemapUrlView> result = new ArrayList<>();
+        for (Category category : categories) {
+            result.add(new SitemapUrlView(
+                    getBaseUrl() + "/category/" + category.slug,
+                    formatLastModified(category.updatedAt, category.createdAt)));
+        }
+        return result;
     }
 
     public List<SitemapUrlView> getTagSitemapUrls() {
-        return com.biliwind.blog.model.Tag.listAll().stream()
-                .map(t -> (com.biliwind.blog.model.Tag) t)
-                .map(t -> new SitemapUrlView(
-                        getBaseUrl() + "/tag/" + t.slug,
-                        formatLastModified(t.updatedAt, t.createdAt)
-                ))
-                .collect(Collectors.toList());
+        List<Tag> tags = Tag.find("order by id")
+                .page(io.quarkus.panache.common.Page.ofSize(MAX_PUBLIC_TAXONOMY_ITEMS)).list();
+        List<SitemapUrlView> result = new ArrayList<>();
+        for (Tag tag : tags) {
+            result.add(new SitemapUrlView(
+                    getBaseUrl() + "/tag/" + tag.slug,
+                    formatLastModified(tag.updatedAt, tag.createdAt)));
+        }
+        return result;
     }
 
     public List<SitemapUrlView> getPageSitemapUrls() {

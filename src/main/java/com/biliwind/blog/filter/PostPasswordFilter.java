@@ -3,7 +3,8 @@ package com.biliwind.blog.filter;
 import com.biliwind.blog.common.annotation.PasswordProtected;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.model.Post;
-import com.biliwind.blog.service.PostAccessService;
+import com.biliwind.blog.common.security.UserTokenVerifier;
+import com.biliwind.blog.service.PostAccessPolicy;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -26,8 +27,6 @@ import java.io.IOException;
 @Priority(Priorities.AUTHENTICATION)
 public class PostPasswordFilter implements ContainerRequestFilter {
 
-    private static final String PASSWORD_HEADER = "X-Post-Password";
-
     @Inject
     @Location("blog/password.html")
     Template passwordTemplate;
@@ -37,7 +36,10 @@ public class PostPasswordFilter implements ContainerRequestFilter {
     Template passwordContentTemplate;
 
     @Inject
-    PostAccessService postAccessService;
+    PostAccessPolicy postAccessPolicy;
+
+    @Inject
+    UserTokenVerifier userTokenVerifier;
 
     @Override
     public void filter(ContainerRequestContext ctx) throws IOException {
@@ -64,35 +66,23 @@ public class PostPasswordFilter implements ContainerRequestFilter {
             return;
         }
 
-        String submittedPassword =
-                resolveSubmittedPassword(post.id, ctx);
-
-        if (!isPasswordValid(post, submittedPassword)) {
+        jakarta.ws.rs.core.Cookie ticketCookie = ctx.getCookies().get("post_access_ticket_" + post.id);
+        String ticketToken = ticketCookie == null ? null : ticketCookie.getValue();
+        PostAccessPolicy.Decision access = postAccessPolicy.evaluate(
+                post, resolveUserId(ctx), null, ticketToken,
+                ctx.getHeaderString("X-Device-Id"));
+        if (!access.allowed()) {
             abortWithPasswordPrompt(ctx, post);
         }
     }
 
-    private String resolveSubmittedPassword(Long postId,
-                                            ContainerRequestContext ctx) {
-
-        String headerPassword =
-                ctx.getHeaderString(PASSWORD_HEADER);
-
-        if (headerPassword != null && !headerPassword.isBlank()) {
-            return headerPassword;
+    private Long resolveUserId(ContainerRequestContext ctx) {
+        jakarta.ws.rs.core.Cookie cookie = ctx.getCookies().get("user_token");
+        if (cookie == null || cookie.getValue() == null || cookie.getValue().isBlank()) {
+            return null;
         }
-
-        return null;
-    }
-
-    private boolean isPasswordValid(Post post,
-                                    String submittedPassword) {
-
-        if (submittedPassword == null) {
-            return false;
-        }
-
-        return postAccessService.verifyPassword(post, submittedPassword);
+        UserTokenVerifier.VerifiedToken verified = userTokenVerifier.verify(cookie.getValue());
+        return verified == null ? null : verified.uid();
     }
 
     private void abortWithPasswordPrompt(ContainerRequestContext ctx,
@@ -108,6 +98,9 @@ public class PostPasswordFilter implements ContainerRequestFilter {
         Response response = Response
                 .status(Response.Status.UNAUTHORIZED)
                 .entity(template)
+                .header("Cache-Control", "no-store")
+                .header("Pragma", "no-cache")
+                .header("Vary", "Cookie")
                 .build();
 
         ctx.abortWith(response);

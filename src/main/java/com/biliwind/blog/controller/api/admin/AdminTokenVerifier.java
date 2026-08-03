@@ -19,6 +19,9 @@ public class AdminTokenVerifier {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    com.biliwind.blog.service.security.AdminTokenRevocationService tokenRevocationService;
+
     @ConfigProperty(name = "admin.jwt.secret")
     String jwtSecret;
 
@@ -82,11 +85,15 @@ public class AdminTokenVerifier {
             return null;
         }
 
+        if (tokenRevocationService.isRevoked(token)) {
+            return null;
+        }
+
         boolean isAdmin = Boolean.TRUE.equals(claims.get("is_admin"));
         boolean isSuperAdmin = Boolean.TRUE.equals(claims.get("is_super_admin"));
         String roleName = toStringValue(claims.get("role_name"));
         String username = toStringValue(claims.get("upn"));
-        return new VerifiedToken(uid, username, isAdmin, isSuperAdmin, roleName);
+        return new VerifiedToken(uid, username, isAdmin, isSuperAdmin, roleName, exp);
     }
 
     private String sign(String signingInput, String secret) {
@@ -131,7 +138,8 @@ public class AdminTokenVerifier {
         return String.valueOf(value);
     }
 
-    public record VerifiedToken(Long uid, String username, boolean isAdmin, boolean isSuperAdmin, String roleName) {
+    public record VerifiedToken(Long uid, String username, boolean isAdmin, boolean isSuperAdmin,
+                                String roleName, long expiresAtEpochSeconds) {
     }
     
     /**

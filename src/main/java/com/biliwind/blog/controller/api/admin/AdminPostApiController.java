@@ -38,7 +38,7 @@ public class AdminPostApiController {
             "CC_BY_NC_4_0");
 
     @Inject
-    com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
+    com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
 
     @Inject
     MediaManagementService mediaService;
@@ -57,6 +57,9 @@ public class AdminPostApiController {
 
     @Inject
     com.biliwind.blog.service.PostAccessService postAccessService;
+
+    @Inject
+    com.biliwind.blog.service.ContentAccessTicketService contentAccessTicketService;
 
     @Inject
     com.biliwind.blog.repository.PostRepository postRepository;
@@ -91,7 +94,7 @@ public class AdminPostApiController {
         }
 
         Long userId = adminRequestContext.getUserId();
-        aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
+        reliableAiTaskService.enqueueSummary(new com.biliwind.blog.service.ai.AiSummaryTask(
                 post.id,
                 com.biliwind.blog.common.helper.PostHelper.prepareContentForAi(rev.contentMarkdown),
                 1, // Medium priority
@@ -188,7 +191,7 @@ public class AdminPostApiController {
 
         // 如果状态为自动(0)，则触发 AI 摘要任务
         if (post.aiSummaryStatus == 0 && request.contentMarkdown() != null && !request.contentMarkdown().isEmpty()) {
-            aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
+        reliableAiTaskService.enqueueSummary(new com.biliwind.blog.service.ai.AiSummaryTask(
                     post.id,
                     com.biliwind.blog.common.helper.PostHelper.prepareContentForAi(request.contentMarkdown()),
                     1,
@@ -273,7 +276,7 @@ public class AdminPostApiController {
             PostRevision rev = post.currentRevision;
             if (rev != null && rev.contentMarkdown != null && !rev.contentMarkdown.isEmpty()) {
                 Long userId = adminRequestContext.getUserId();
-                aiTaskProducer.sendSummaryTask(new com.biliwind.blog.service.ai.AiSummaryTask(
+        reliableAiTaskService.enqueueSummary(new com.biliwind.blog.service.ai.AiSummaryTask(
                         post.id,
                         com.biliwind.blog.common.helper.PostHelper.prepareContentForAi(rev.contentMarkdown),
                         1,
@@ -337,6 +340,8 @@ public class AdminPostApiController {
         OffsetDateTime now = OffsetDateTime.now();
         post.deletedAt = now;
         post.updatedAt = now;
+        contentAccessTicketService.revokePasswordTickets(post.id);
+        contentAccessTicketService.revokeMediaDownloadTickets(null, post.id, null);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         auditService.log("post", post.id, "delete", java.util.Map.of("deleted", false), java.util.Map.of("deleted", true));
         return Response.ok(Map.of("success", true, "id", id)).build();
@@ -617,6 +622,7 @@ public class AdminPostApiController {
         String nextPassword = resolveUpdatedPassword(post, request);
         if (!Objects.equals(post.password, nextPassword)) {
             post.password = nextPassword;
+            contentAccessTicketService.revokePasswordTickets(post.id);
             changed = true;
         }
         if (request.seoTitle() != null && !Objects.equals(post.seoTitle, request.seoTitle())) {

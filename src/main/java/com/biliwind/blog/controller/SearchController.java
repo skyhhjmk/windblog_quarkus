@@ -2,13 +2,13 @@ package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
-import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.RoutedHttpExchange;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
+import com.biliwind.blog.service.SecurityMetricsService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.qute.Location;
@@ -16,6 +16,8 @@ import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -38,6 +40,7 @@ public class SearchController {
 
     private static final Logger log = Logger.getLogger(SearchController.class);
     private static final int PAGE_SIZE = 10;
+    private static final int MAX_FALLBACK_PAGE = 1000;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -54,10 +57,16 @@ public class SearchController {
 
     @Inject
     ElasticsearchPostSearchService postSearchService;
+
+    @Inject
+    SecurityMetricsService securityMetricsService;
     @Inject
     NodeRoleService nodeRoleService;
     @Inject
     EdgePersistentChannelClient edgePersistentChannelClient;
+
+    @PersistenceContext
+    EntityManager entityManager;
 
     @Inject
     com.biliwind.blog.context.RegionContext regionContext;
@@ -75,7 +84,7 @@ public class SearchController {
                                   @QueryParam("deep") @DefaultValue("false") boolean deep,
                                   @QueryParam("page") @DefaultValue("1") Integer page,
                                   @Context HttpHeaders httpHeaders) {
-        int currentPage = page == null || page < 1 ? 1 : page;
+        int currentPage = page == null || page < 1 ? 1 : Math.min(MAX_FALLBACK_PAGE, page);
         String searchKeyword = safe(keyword);
         String searchType = normalizeType(type);
         String searchSort = normalizeSort(sort);
@@ -98,17 +107,21 @@ public class SearchController {
             usedElasticsearch = primaryResult.usedElasticsearch();
             esDegraded = primaryResult.degraded();
             deepSearchFailed = primaryResult.degraded();
-            searchResultAlreadyPaged = primaryResult.usedElasticsearch();
+            searchResultAlreadyPaged = primaryResult.alreadyPaged();
         } else if (!edgeNode && useElasticsearch && !searchKeyword.isBlank() && ("all".equals(searchType) || "post".equals(searchType))) {
             ElasticsearchResult esResult = searchWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
             searchHits = esResult.hits();
             totalCount = esResult.totalCount();
             usedElasticsearch = esResult.usedElasticsearch();
             esDegraded = esResult.degraded();
-            searchResultAlreadyPaged = esResult.usedElasticsearch();
+            searchResultAlreadyPaged = esResult.alreadyPaged();
         } else {
-            searchHits = buildHits(searchKeyword, searchType, searchSort, searchDate, lang);
-            totalCount = searchHits.size();
+            ElasticsearchResult databaseResult = searchWithDatabaseFallback(
+                    searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
+            searchHits = databaseResult.hits();
+            totalCount = databaseResult.totalCount();
+            searchResultAlreadyPaged = databaseResult.alreadyPaged();
+            esDegraded = databaseResult.degraded();
         }
 
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
@@ -188,7 +201,7 @@ public class SearchController {
             throw new NotFoundException();
         }
 
-        int currentPage = page == null || page < 1 ? 1 : page;
+        int currentPage = page == null || page < 1 ? 1 : Math.min(MAX_FALLBACK_PAGE, page);
         String searchKeyword = safe(keyword);
         String searchType = normalizeType(type);
         String searchSort = normalizeSort(sort);
@@ -202,48 +215,244 @@ public class SearchController {
         );
     }
 
-    private List<SearchHit> buildHits(String keyword, String type, String sort, String date, String lang) {
-        if (keyword.isBlank()) {
-            return List.of();
+    /**
+     * Elasticsearch 故障时，文章搜索走 PostgreSQL tsvector + GIN 分页；标签和分类保持现有小表 fallback。
+     */
+    private ElasticsearchResult searchWithDatabaseFallback(
+            String keyword, String type, String sort, String date, String lang, int page) {
+        securityMetricsService.increment("search.degraded", "database_fallback");
+        if (keyword == null || keyword.isBlank()) {
+            return new ElasticsearchResult(List.of(), 0, false, true, true);
+        }
+        if ("all".equals(type)) {
+            return searchAllWithDatabaseFallback(keyword, sort, date, lang, page);
+        }
+        if ("tag".equals(type) || "category".equals(type)) {
+            return searchTaxonomyWithDatabaseFallback(keyword, type, date, lang, page);
+        }
+        if (!"post".equals(type)) {
+            return new ElasticsearchResult(List.of(), 0, false, true, true);
         }
 
-        String lowerKeyword = keyword.toLowerCase(Locale.ROOT);
+        String orderBy = "latest".equals(sort) || sort.isBlank()
+                ? "p.published_at DESC NULLS LAST, p.id DESC"
+                : "p.view_count DESC NULLS LAST, p.published_at DESC NULLS LAST, p.id DESC";
+        String regionPattern = "%\"" + regionContext.getCurrentRegion().getCode() + "\"%";
+        String searchPattern = "%" + escapeLike(keyword.toLowerCase(Locale.ROOT)) + "%";
         OffsetDateTime threshold = dateThreshold(date);
+
+        String where = "p.status = 1 and p.deleted_at is null and p.visibility = 0 "
+                + "and p.published_revision_id is not null "
+                + "and (p.visibility_regions is null or p.visibility_regions::text like ?3) "
+                + "and (p.search_document @@ plainto_tsquery('simple', ?1) "
+                + "or lower(p.slug) like ?2 escape '\\' "
+                + "or lower(p.title::text) like ?2 escape '\\' "
+                + "or lower(coalesce(p.summary::text, '')) like ?2 escape '\\')";
+        if (threshold != null) {
+            where = where + " and p.published_at >= ?4";
+        }
+
+        String selectSql = "select p.* from posts p where " + where + " order by " + orderBy;
+        jakarta.persistence.Query selectQuery = entityManager.createNativeQuery(selectSql, Post.class);
+        selectQuery.setParameter(1, keyword);
+        selectQuery.setParameter(2, searchPattern);
+        selectQuery.setParameter(3, regionPattern);
+        if (threshold != null) {
+            selectQuery.setParameter(4, threshold);
+        }
+        int safePage = Math.max(1, page);
+        selectQuery.setFirstResult((safePage - 1) * PAGE_SIZE);
+        selectQuery.setMaxResults(PAGE_SIZE);
+
+        @SuppressWarnings("unchecked")
+        List<Post> posts = selectQuery.getResultList();
         List<SearchHit> hits = new ArrayList<>();
-
-        if ("all".equals(type) || "post".equals(type)) {
-            String currentRegion = regionContext.getCurrentRegion().getCode();
-            List<Post> posts = Post.find(
-                    "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
-                    PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%"
-            ).list();
-            posts.stream()
-                    .filter(post -> matchesPost(post, lowerKeyword, lang))
-                    .map(post -> toPostHit(post, lang))
-                    .filter(hit -> threshold == null || hit.date == null || !hit.date.isBefore(threshold))
-                    .forEach(hits::add);
+        Map<Long, List<IndexController.TagItem>> tagsByPost = loadTagsByPost(posts, lang);
+        for (Post post : posts) {
+            hits.add(toPostHit(post, lang, tagsByPost));
         }
 
-        if ("all".equals(type) || "tag".equals(type)) {
-            List<Tag> tags = Tag.listAll();
-            tags.stream()
-                    .filter(tag -> matchesTag(tag, lowerKeyword, lang))
-                    .map(tag -> toTagHit(tag, lang))
-                    .filter(hit -> threshold == null || hit.date == null || !hit.date.isBefore(threshold))
-                    .forEach(hits::add);
+        String countSql = "select count(*) from posts p where " + where;
+        jakarta.persistence.Query countQuery = entityManager.createNativeQuery(countSql);
+        countQuery.setParameter(1, keyword);
+        countQuery.setParameter(2, searchPattern);
+        countQuery.setParameter(3, regionPattern);
+        if (threshold != null) {
+            countQuery.setParameter(4, threshold);
+        }
+        Number total = (Number) countQuery.getSingleResult();
+        return new ElasticsearchResult(hits, total.longValue(), false, true, true);
+    }
+
+    private ElasticsearchResult searchTaxonomyWithDatabaseFallback(
+            String keyword, String type, String date, String lang, int page) {
+        String table = "tag".equals(type) ? "tags" : "categories";
+        String searchPattern = "%" + escapeLike(keyword.toLowerCase(Locale.ROOT)) + "%";
+        OffsetDateTime threshold = dateThreshold(date);
+        String where = "(lower(" + table + ".slug) like ?1 escape '\\' "
+                + "or lower(" + table + ".name::text) like ?1 escape '\\' "
+                + "or lower(coalesce(" + table + ".description::text, '')) like ?1 escape '\\')";
+        if (threshold != null) {
+            where = where + " and " + table + ".created_at >= ?2";
         }
 
-        if ("all".equals(type) || "category".equals(type)) {
-            List<Category> categories = Category.listAll();
-            categories.stream()
-                    .filter(category -> matchesCategory(category, lowerKeyword, lang))
-                    .map(category -> toCategoryHit(category, lang))
-                    .filter(hit -> threshold == null || hit.date == null || !hit.date.isBefore(threshold))
-                    .forEach(hits::add);
+        jakarta.persistence.Query countQuery = entityManager.createNativeQuery(
+                "select count(*) from " + table + " where " + where);
+        countQuery.setParameter(1, searchPattern);
+        if (threshold != null) {
+            countQuery.setParameter(2, threshold);
         }
+        long total = ((Number) countQuery.getSingleResult()).longValue();
 
-        hits.sort(hitComparator(sort));
-        return hits;
+        jakarta.persistence.Query selectQuery;
+        if ("tag".equals(type)) {
+            selectQuery = entityManager.createNativeQuery(
+                    "select * from tags where " + where + " order by created_at desc, id desc", Tag.class);
+        } else {
+            selectQuery = entityManager.createNativeQuery(
+                    "select * from categories where " + where + " order by created_at desc, id desc", Category.class);
+        }
+        selectQuery.setParameter(1, searchPattern);
+        if (threshold != null) {
+            selectQuery.setParameter(2, threshold);
+        }
+        int safePage = Math.max(1, page);
+        selectQuery.setFirstResult((safePage - 1) * PAGE_SIZE);
+        selectQuery.setMaxResults(PAGE_SIZE);
+
+        List<SearchHit> hits = new ArrayList<>();
+        if ("tag".equals(type)) {
+            @SuppressWarnings("unchecked")
+            List<Tag> tags = selectQuery.getResultList();
+            for (Tag tag : tags) {
+                hits.add(toTagHit(tag, lang));
+            }
+        } else {
+            @SuppressWarnings("unchecked")
+            List<Category> categories = selectQuery.getResultList();
+            for (Category category : categories) {
+                hits.add(toCategoryHit(category, lang));
+            }
+        }
+        return new ElasticsearchResult(hits, total, false, true, true);
+    }
+
+    private ElasticsearchResult searchAllWithDatabaseFallback(
+            String keyword, String sort, String date, String lang, int page) {
+        OffsetDateTime threshold = dateThreshold(date);
+        String searchPattern = "%" + escapeLike(keyword.toLowerCase(Locale.ROOT)) + "%";
+        int safePage = Math.min(MAX_FALLBACK_PAGE, Math.max(1, page));
+        // Each source is bounded and paged in PostgreSQL; never materialize the full table.
+        int candidateLimit = safePage * PAGE_SIZE;
+
+        PostFallbackPage posts = findPostFallbackCandidates(keyword, searchPattern, threshold, candidateLimit);
+        TaxonomyFallbackPage tags = findTaxonomyFallbackCandidates("tags", searchPattern, threshold, candidateLimit);
+        TaxonomyFallbackPage categories = findTaxonomyFallbackCandidates("categories", searchPattern, threshold, candidateLimit);
+
+        List<SearchHit> candidates = new ArrayList<>();
+        Map<Long, List<IndexController.TagItem>> tagsByPost = loadTagsByPost(posts.items(), lang);
+        for (Post post : posts.items()) {
+            candidates.add(toPostHit(post, lang, tagsByPost));
+        }
+        for (Tag tag : tags.tags()) {
+            candidates.add(toTagHit(tag, lang));
+        }
+        for (Category category : categories.categories()) {
+            candidates.add(toCategoryHit(category, lang));
+        }
+        candidates.sort(hitComparator(sort));
+        int fromIndex = Math.min(candidates.size(), (safePage - 1) * PAGE_SIZE);
+        int toIndex = Math.min(candidates.size(), fromIndex + PAGE_SIZE);
+        List<SearchHit> hits = new ArrayList<>(candidates.subList(fromIndex, toIndex));
+        long total = posts.total() + tags.total() + categories.total();
+        return new ElasticsearchResult(hits, total, false, true, true);
+    }
+
+    private PostFallbackPage findPostFallbackCandidates(
+            String keyword, String searchPattern, OffsetDateTime threshold, int limit) {
+        String orderBy = "p.published_at DESC NULLS LAST, p.id DESC";
+        String regionPattern = "%\"" + regionContext.getCurrentRegion().getCode() + "\"%";
+        String where = "p.status = 1 and p.deleted_at is null and p.visibility = 0 "
+                + "and p.published_revision_id is not null "
+                + "and (p.visibility_regions is null or p.visibility_regions::text like ?3) "
+                + "and (p.search_document @@ plainto_tsquery('simple', ?1) "
+                + "or lower(p.slug) like ?2 escape '\\' "
+                + "or lower(p.title::text) like ?2 escape '\\' "
+                + "or lower(coalesce(p.summary::text, '')) like ?2 escape '\\')";
+        if (threshold != null) {
+            where = where + " and p.published_at >= ?4";
+        }
+        jakarta.persistence.Query countQuery = entityManager.createNativeQuery("select count(*) from posts p where " + where);
+        setPostFallbackParameters(countQuery, keyword, searchPattern, regionPattern, threshold);
+        long total = ((Number) countQuery.getSingleResult()).longValue();
+        jakarta.persistence.Query selectQuery = entityManager.createNativeQuery(
+                "select p.* from posts p where " + where + " order by " + orderBy, Post.class);
+        setPostFallbackParameters(selectQuery, keyword, searchPattern, regionPattern, threshold);
+        selectQuery.setMaxResults(limit);
+        @SuppressWarnings("unchecked")
+        List<Post> items = selectQuery.getResultList();
+        return new PostFallbackPage(items, total);
+    }
+
+    private TaxonomyFallbackPage findTaxonomyFallbackCandidates(
+            String table, String searchPattern, OffsetDateTime threshold, int limit) {
+        String where = "(lower(" + table + ".slug) like ?1 escape '\\' "
+                + "or lower(" + table + ".name::text) like ?1 escape '\\' "
+                + "or lower(coalesce(" + table + ".description::text, '')) like ?1 escape '\\')";
+        if (threshold != null) {
+            where = where + " and " + table + ".created_at >= ?2";
+        }
+        jakarta.persistence.Query countQuery = entityManager.createNativeQuery(
+                "select count(*) from " + table + " where " + where);
+        countQuery.setParameter(1, searchPattern);
+        if (threshold != null) {
+            countQuery.setParameter(2, threshold);
+        }
+        long total = ((Number) countQuery.getSingleResult()).longValue();
+        jakarta.persistence.Query selectQuery;
+        if ("tags".equals(table)) {
+            selectQuery = entityManager.createNativeQuery(
+                    "select * from tags where " + where + " order by created_at desc, id desc", Tag.class);
+        } else {
+            selectQuery = entityManager.createNativeQuery(
+                    "select * from categories where " + where + " order by created_at desc, id desc", Category.class);
+        }
+        selectQuery.setParameter(1, searchPattern);
+        if (threshold != null) {
+            selectQuery.setParameter(2, threshold);
+        }
+        selectQuery.setMaxResults(limit);
+        if ("tags".equals(table)) {
+            @SuppressWarnings("unchecked")
+            List<Tag> tags = selectQuery.getResultList();
+            return new TaxonomyFallbackPage(tags, List.of(), total);
+        }
+        @SuppressWarnings("unchecked")
+        List<Category> categories = selectQuery.getResultList();
+        return new TaxonomyFallbackPage(List.of(), categories, total);
+    }
+
+    private void setPostFallbackParameters(jakarta.persistence.Query query, String keyword,
+                                            String searchPattern, String regionPattern,
+                                            OffsetDateTime threshold) {
+        query.setParameter(1, keyword);
+        query.setParameter(2, searchPattern);
+        query.setParameter(3, regionPattern);
+        if (threshold != null) {
+            query.setParameter(4, threshold);
+        }
+    }
+
+    private record PostFallbackPage(List<Post> items, long total) {
+    }
+
+    private record TaxonomyFallbackPage(List<Tag> tags, List<Category> categories, long total) {
+    }
+
+    private String escapeLike(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     private ElasticsearchResult searchPrimaryWithElasticsearch(String keyword, String type, String sort, String date, String lang, int page) {
@@ -263,14 +472,12 @@ public class SearchController {
             RoutedHttpExchange.Response response = edgePersistentChannelClient.forwardWriteRequest(request);
             if (response.status() != 200) {
                 log.warnf("深度搜索回源失败，状态码: %d", response.status());
-                List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
-                return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
+                return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
             }
-            return parseDeepSearchResponse(response.body(), keyword, type, sort, date, lang);
+            return parseDeepSearchResponse(response.body(), keyword, type, sort, date, lang, page);
         } catch (Exception exception) {
             log.error("深度搜索回源失败，使用边缘本地数据库搜索", exception);
-            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
-            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
+            return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
         }
     }
 
@@ -279,10 +486,10 @@ public class SearchController {
                                                         String type,
                                                         String sort,
                                                         String date,
-                                                        String lang) throws Exception {
+                                                        String lang,
+                                                        int page) throws Exception {
         if (responseBody == null || responseBody.length == 0) {
-            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
-            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
+            return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
         }
 
         JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
@@ -297,7 +504,7 @@ public class SearchController {
         boolean usedElasticsearch = rootNode.path("usedElasticsearch").asBoolean(false);
         boolean degraded = rootNode.path("degraded").asBoolean(false);
         long totalCount = rootNode.path("totalCount").asLong(hits.size());
-        return new ElasticsearchResult(hits, totalCount, usedElasticsearch, degraded);
+        return new ElasticsearchResult(hits, totalCount, usedElasticsearch, degraded, usedElasticsearch);
     }
 
     private SearchHit parseSearchHit(JsonNode hitNode) {
@@ -348,7 +555,9 @@ public class SearchController {
         }
 
         String lang = languageContext.getLang();
-        List<SearchHit> hits = buildHits(searchKeyword, "all", "", "", lang);
+        ElasticsearchResult fallback = searchWithDatabaseFallback(
+                searchKeyword, "all", "", "", lang, 1);
+        List<SearchHit> hits = fallback.hits();
         List<String> suggestions = new ArrayList<>();
         for (SearchHit hit : hits) {
             if (suggestions.size() >= 10) {
@@ -372,8 +581,7 @@ public class SearchController {
         try {
             if (!postSearchService.isAvailable()) {
                 log.debug("Elasticsearch 不可用，使用数据库搜索");
-                List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
-                return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
+                return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
             }
 
             log.infof("使用 Elasticsearch 搜索：keyword=%s, type=%s, page=%d", keyword, type, page);
@@ -426,20 +634,46 @@ public class SearchController {
             hits.sort(hitComparator(sort));
 
             log.infof("Elasticsearch 搜索结果：%d 篇文章（共 %d 条）", hits.size(), searchResult.total());
-            return new ElasticsearchResult(hits, searchResult.total(), true, false);
+            return new ElasticsearchResult(hits, searchResult.total(), true, false, true);
 
         } catch (ElasticsearchPostSearchService.ElasticsearchUnavailableException e) {
             log.warnf("Elasticsearch 服务不可用，回退到数据库搜索: %s", e.getMessage());
-            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
-            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
+            return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
         } catch (Exception e) {
             log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);
-            List<SearchHit> fallbackHits = buildHits(keyword, type, sort, date, lang);
-            return new ElasticsearchResult(fallbackHits, fallbackHits.size(), false, true);
+            return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
         }
     }
 
-    private SearchHit toPostHit(Post post, String lang) {
+    private Map<Long, List<IndexController.TagItem>> loadTagsByPost(List<Post> posts, String lang) {
+        Map<Long, List<IndexController.TagItem>> tagsByPost = new HashMap<>();
+        List<Long> postIds = new ArrayList<>();
+        for (Post post : posts) {
+            if (post.id != null) {
+                postIds.add(post.id);
+                tagsByPost.put(post.id, new ArrayList<>());
+            }
+        }
+        if (postIds.isEmpty()) {
+            return tagsByPost;
+        }
+        List<PostTag> postTags = entityManager.createQuery(
+                        "select postTag from PostTag postTag join fetch postTag.tag where postTag.post.id in :postIds",
+                        PostTag.class)
+                .setParameter("postIds", postIds)
+                .getResultList();
+        for (PostTag postTag : postTags) {
+            List<IndexController.TagItem> tags = tagsByPost.get(postTag.post.id);
+            if (tags != null) {
+                tags.add(new IndexController.TagItem(
+                        LanguageHelper.resolveLocalizedValue(postTag.tag.name, lang), postTag.tag.slug));
+            }
+        }
+        return tagsByPost;
+    }
+
+    private SearchHit toPostHit(Post post, String lang,
+                                Map<Long, List<IndexController.TagItem>> tagsByPost) {
         String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
 
@@ -457,12 +691,7 @@ public class SearchController {
             categorySlug = post.category.slug;
         }
 
-        List<IndexController.TagItem> tags = new ArrayList<>();
-        List<PostTag> postTags = PostTag.find("post", post).list();
-        for (PostTag pt : postTags) {
-            String tagName = LanguageHelper.resolveLocalizedValue(pt.tag.name, lang);
-            tags.add(new IndexController.TagItem(tagName, pt.tag.slug));
-        }
+        List<IndexController.TagItem> tags = tagsByPost.getOrDefault(post.id, List.of());
 
         OffsetDateTime displayDate = effectiveDate(post);
         long viewCount = 0;
@@ -572,36 +801,6 @@ public class SearchController {
             return byDateDesc.thenComparing(byTypeWeight).thenComparing(byTitle);
         }
         return byTypeWeight.thenComparing(byDateDesc).thenComparing(byTitle);
-    }
-
-    private boolean matchesPost(Post post, String lowerKeyword, String lang) {
-        String title = safe(LanguageHelper.resolveLocalizedValue(post.title, lang)).toLowerCase(Locale.ROOT);
-        String summary = safe(LanguageHelper.resolveLocalizedValue(post.summary, lang)).toLowerCase(Locale.ROOT);
-        String slug = safe(post.slug).toLowerCase(Locale.ROOT);
-        String content = "";
-        if (post.publishedRevision != null && post.publishedRevision.contentMarkdown != null) {
-            String localizedContent = LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
-            content = SearchContentHelper.toSearchableText(localizedContent, post.renderType).toLowerCase(Locale.ROOT);
-        }
-        return title.contains(lowerKeyword)
-                || summary.contains(lowerKeyword)
-                || slug.contains(lowerKeyword)
-                || content.contains(lowerKeyword);
-    }
-
-    private boolean matchesTag(Tag tag, String lowerKeyword, String lang) {
-        String name = safe(LanguageHelper.resolveLocalizedValue(tag.name, lang)).toLowerCase(Locale.ROOT);
-        String description = safe(LanguageHelper.resolveLocalizedValue(tag.description, lang)).toLowerCase(Locale.ROOT);
-        String slug = safe(tag.slug).toLowerCase(Locale.ROOT);
-        return name.contains(lowerKeyword) || description.contains(lowerKeyword) || slug.contains(lowerKeyword);
-    }
-
-    private boolean matchesCategory(Category category, String lowerKeyword, String lang) {
-        String name = safe(LanguageHelper.resolveLocalizedValue(category.name, lang)).toLowerCase(Locale.ROOT);
-        String description = safe(LanguageHelper.resolveLocalizedValue(category.description, lang)).toLowerCase(Locale.ROOT);
-        String slug = safe(category.slug).toLowerCase(Locale.ROOT);
-        String path = safe(category.path).toLowerCase(Locale.ROOT);
-        return name.contains(lowerKeyword) || description.contains(lowerKeyword) || slug.contains(lowerKeyword) || path.contains(lowerKeyword);
     }
 
     private OffsetDateTime effectiveDate(Post post) {
@@ -770,7 +969,8 @@ public class SearchController {
             List<SearchHit> hits,
             long totalCount,
             boolean usedElasticsearch,
-            boolean degraded
+            boolean degraded,
+            boolean alreadyPaged
     ) {
     }
 

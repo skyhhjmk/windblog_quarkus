@@ -40,4 +40,8 @@ public class EmailDelivery extends PanacheEntityBase {
     public OffsetDateTime createdAt;
     @Column(name = "sent_at")
     public OffsetDateTime sentAt;
+    @Column(name = "locked_until")
+    public OffsetDateTime lockedUntil;
+    @Column(name = "lock_owner", length = 64)
+    public String lockOwner;
 }

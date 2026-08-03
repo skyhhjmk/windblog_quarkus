@@ -36,7 +36,7 @@ public class AdminCommentController {
     AiManager aiManager;
 
     @Inject
-    com.biliwind.blog.service.ai.AiTaskProducer aiTaskProducer;
+    com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
 
     @Inject
     AuditService auditService;
@@ -198,7 +198,8 @@ public class AdminCommentController {
         });
 
         // 事务提交后发送异步任务
-        aiTaskProducer.sendAuditTask(id, data.content);
+        reliableAiTaskService.enqueueAudit(
+                new com.biliwind.blog.service.ai.AiAuditTask(id, data.content));
 
         return data.item;
     }

@@ -7,14 +7,13 @@ import jakarta.transaction.Transactional;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import io.vertx.ext.web.RoutingContext;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -22,8 +21,6 @@ import java.util.UUID;
  */
 @ApplicationScoped
 public class GoRedirectService {
-
-    private final Map<String, ClickWindow> clickWindowByKey = new HashMap<>();
 
     @ConfigProperty(name = "windblog.site.primary-domain", defaultValue = "localhost")
     String primaryDomain;
@@ -42,6 +39,15 @@ public class GoRedirectService {
 
     @Inject
     RepostDetectionService repostDetectionService;
+
+    @Inject
+    com.biliwind.blog.service.security.SecurityRateLimitService securityRateLimitService;
+
+    @Inject
+    com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
+
+    @Inject
+    RoutingContext routingContext;
 
     @Transactional
     public Response redirect(String rawToken, HttpHeaders httpHeaders) {
@@ -201,22 +207,8 @@ public class GoRedirectService {
 
     private boolean isRateLimited(Long tokenId, String ipHash) {
         String key = String.valueOf(tokenId) + ":" + ipHash;
-        long currentMinute = System.currentTimeMillis() / 60000L;
-        ClickWindow clickWindow = clickWindowByKey.get(key);
-        if (clickWindow == null) {
-            clickWindow = new ClickWindow(currentMinute, 1);
-            clickWindowByKey.put(key, clickWindow);
-            return false;
-        }
-
-        if (clickWindow.minute != currentMinute) {
-            clickWindow.minute = currentMinute;
-            clickWindow.count = 1;
-            return false;
-        }
-
-        clickWindow.count = clickWindow.count + 1;
-        return clickWindow.count > 60;
+        return !securityRateLimitService.tryAcquire(
+                "go:redirect:" + key, 60, java.time.Duration.ofMinutes(1));
     }
 
     private Response.ResponseBuilder buildRedirectResponse(String targetUrl) {
@@ -235,15 +227,10 @@ public class GoRedirectService {
     }
 
     private String resolveClientIp(HttpHeaders httpHeaders) {
-        String forwardedFor = resolveHeader(httpHeaders, "X-Forwarded-For");
-        if (forwardedFor != null && forwardedFor.isBlank() == false) {
-            int commaIndex = forwardedFor.indexOf(",");
-            if (commaIndex >= 0) {
-                return forwardedFor.substring(0, commaIndex).trim();
-            }
-            return forwardedFor.trim();
+        if (routingContext != null) {
+            return clientIpResolver.resolve(routingContext).clientIp();
         }
-        return resolveHeader(httpHeaders, "X-Real-IP");
+        return "unknown";
     }
 
     private String resolveDeviceRiskId(HttpHeaders httpHeaders) {
@@ -271,13 +258,4 @@ public class GoRedirectService {
         }
     }
 
-    private static class ClickWindow {
-        long minute;
-        int count;
-
-        ClickWindow(long minute, int count) {
-            this.minute = minute;
-            this.count = count;
-        }
-    }
 }

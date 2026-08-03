@@ -7,6 +7,7 @@ import com.biliwind.blog.service.link.LinkApplicationRateLimitService;
 import com.biliwind.blog.service.link.LinkProbeResult;
 import com.biliwind.blog.service.link.LinkProbeService;
 import com.biliwind.blog.service.link.LinkPublicTokenService;
+import com.biliwind.blog.service.security.ClientIpResolver;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -14,7 +15,6 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-import java.net.InetAddress;
 import java.net.URI;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -48,15 +48,17 @@ public class LinkApplicationApiController {
     @Inject
     ConfigManager configManager;
 
+    @Inject
+    ClientIpResolver clientIpResolver;
+
     @POST
     @Transactional
     public Response apply(LinkApplicationRequest request) {
         validateApplicationRequest(request);
-        String remoteAddress = routingContext.request().remoteAddress().host();
-        rateLimitService.checkAndRecord(
-                remoteAddress,
-                resolveForwardedAddress(remoteAddress)
-        );
+        ClientIpResolver.ClientIpResolution clientIp = clientIpResolver.resolve(routingContext);
+        String forwardedAddress = clientIp.trustedProxy()
+                && !clientIp.clientIp().equals(clientIp.remoteIp()) ? clientIp.clientIp() : "";
+        rateLimitService.checkAndRecord(clientIp.remoteIp(), forwardedAddress);
 
         String normalizedUrl = request.url().trim();
         Link existingLink = Link.find("lower(url) = ?1", normalizedUrl.toLowerCase()).firstResult();
@@ -124,35 +126,6 @@ public class LinkApplicationApiController {
         putIfPresent(settings, "placementPageName", request.placementPageName());
         putIfPresent(settings, "placementDescription", request.placementDescription());
         return settings;
-    }
-
-    private String resolveForwardedAddress(String remoteAddress) {
-        if (!isTrustedProxyAddress(remoteAddress)) {
-            return "";
-        }
-        String forwardedAddress = routingContext.request().getHeader("X-Forwarded-For");
-        if (forwardedAddress == null) {
-            return "";
-        }
-        return forwardedAddress;
-    }
-
-    private boolean isTrustedProxyAddress(String remoteAddress) {
-        if (remoteAddress == null || remoteAddress.isBlank()) {
-            return false;
-        }
-        try {
-            InetAddress address = InetAddress.getByName(remoteAddress);
-            if (address.isLoopbackAddress()) {
-                return true;
-            }
-            if (address.isSiteLocalAddress()) {
-                return true;
-            }
-            return address.isLinkLocalAddress();
-        } catch (Exception exception) {
-            return false;
-        }
     }
 
     private void putIfPresent(Map<String, Object> settings, String key, String value) {

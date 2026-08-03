@@ -7,8 +7,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 /**
  * 文章数据访问仓库。
  * <p>
- * 当前阶段暂未接入调用链。
- * 后续将逐步替换 PostAccessService 中的数据库访问逻辑。
+ * Public feed reads use the bounded methods here; protected article access
+ * remains in its dedicated policy service.
  */
 @ApplicationScoped
 public class PostRepository implements PanacheRepositoryBase<Post, Long> {
@@ -24,8 +24,16 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
     }
 
     public java.util.List<Post> findAllPublished() {
-        return list("status = :status and visibility = 0 and deletedAt is null and publishedRevision is not null order by publishedAt desc",
-                java.util.Map.of("status", com.biliwind.blog.model.PostStatus.PUBLISHED));
+        return findAllPublished(500);
+    }
+
+    public java.util.List<Post> findAllPublished(int limit) {
+        int safeLimit = Math.max(1, Math.min(5000, limit));
+        return find("status = :status and visibility = 0 and deletedAt is null "
+                        + "and publishedRevision is not null order by publishedAt desc, id desc",
+                java.util.Map.of("status", com.biliwind.blog.model.PostStatus.PUBLISHED))
+                .page(io.quarkus.panache.common.Page.ofSize(safeLimit))
+                .list();
     }
 
 

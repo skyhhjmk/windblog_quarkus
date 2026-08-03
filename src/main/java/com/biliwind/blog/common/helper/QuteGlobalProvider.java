@@ -34,6 +34,17 @@ public class QuteGlobalProvider {
     }
 
     @TemplateGlobal
+    public static String cspNonce() {
+        try {
+            com.biliwind.blog.context.CspNonceContext context =
+                    Arc.container().instance(com.biliwind.blog.context.CspNonceContext.class).get();
+            return context.getNonce();
+        } catch (Exception exception) {
+            return "";
+        }
+    }
+
+    @TemplateGlobal
     public static com.biliwind.blog.common.helper.LanguageHelper LanguageHelper() {
         return new com.biliwind.blog.common.helper.LanguageHelper();
     }

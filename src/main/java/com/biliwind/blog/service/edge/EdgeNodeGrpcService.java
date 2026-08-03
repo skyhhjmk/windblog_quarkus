@@ -3,6 +3,7 @@ package com.biliwind.blog.service.edge;
 import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.model.Media;
+import com.biliwind.blog.model.PostMedia;
 import com.biliwind.blog.model.StorageClassEntity;
 import com.biliwind.blog.service.security.CertificateRenewalService;
 import com.biliwind.blog.service.security.EdgeCertificateInstaller;
@@ -369,8 +370,12 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                 .setVersion(media.version != null ? media.version : 1);
 
         if (media.storageClasses != null) {
+            boolean protectedMedia = PostMedia.count("media.id = ?1 and usageType = 3", media.id) > 0;
             // Get all possible variants
             for (VariantType vt : VariantType.values()) {
+                if (protectedMedia && (vt == VariantType.ORIGINAL || vt == VariantType.RAW)) {
+                    continue;
+                }
                 String variantName = vt.name().toLowerCase();
                 String bestUrl = getStorageService().getBestAccessUrl(media, vt);
 
@@ -422,6 +427,15 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                             if (media == null) {
                                 multi = Multi.createFrom().failure(new Exception("Media not found: " + req.getMediaId()));
                             } else {
+                                boolean protectedMedia = PostMedia.count(
+                                        "media.id = ?1 and usageType = 3", media.id) > 0;
+                                String requestedVariant = req.getVariantType();
+                                if (protectedMedia && ("ORIGINAL".equalsIgnoreCase(requestedVariant)
+                                        || "RAW".equalsIgnoreCase(requestedVariant))) {
+                                    multi = Multi.createFrom().failure(
+                                            new Exception("Protected original media is not available on edge nodes"));
+                                    return multi;
+                                }
                                 String variantName = req.getVariantType().toLowerCase();
                                 Object providerDataObj = media.storageClasses.get(getStorageService().getPrimaryProviderName());
                                 if (!(providerDataObj instanceof Map)) {

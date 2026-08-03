@@ -9,6 +9,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.safety.Safelist;
+import com.biliwind.blog.service.PublicMediaUrlPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,13 +19,13 @@ import java.util.Collections;
 public final class MarkdownHelper {
     private static final Logger log = LoggerFactory.getLogger(MarkdownHelper.class);
 
-    // 文章内容允许的标签（比评论更宽松，允许图片、表格等）
+    // 文章内容允许的标签；脚本、内联样式和 SVG 不属于文章数据，避免内容域承担主动内容。
     private static final Safelist POST_SAFE_LIST = Safelist.relaxed()
-            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "button", "svg", "path", "rect", "line", "polyline")
+            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "button")
             .addAttributes("code", "class")
             .addAttributes("pre", "class")
-            .addAttributes("span", "class", "style")
-            .addAttributes("div", "class", "id", "style", "data-name", "data-group", "data-title", "data-block-id")
+            .addAttributes("span", "class")
+            .addAttributes("div", "class", "id", "data-name", "data-group", "data-title", "data-block-id")
             .addAttributes("a", "href", "target", "rel", "class", "title",
                     "data-article-link-preview", "data-link-name", "data-link-url",
                     "data-link-description", "data-link-icon")
@@ -33,12 +34,8 @@ public final class MarkdownHelper {
             .addAttributes("td", "align")
             // 允许卡片购买按钮属性
             .addAttributes("button", "class", "data-post-id", "data-price", "data-block-id")
-            // 允许卡片内联 SVG 属性
-            .addAttributes("svg", "xmlns", "viewBox", "fill", "stroke", "stroke-width", "class", "width", "height")
-            .addAttributes("rect", "x", "y", "width", "height", "rx", "ry")
-            .addAttributes("path", "d")
-            .addAttributes("line", "x1", "y1", "x2", "y2")
-            .addAttributes("polyline", "points");
+            .addProtocols("a", "href", "http", "https", "mailto")
+            .addProtocols("img", "src", "http", "https");
 
     public MarkdownHelper() {
     }
@@ -51,7 +48,13 @@ public final class MarkdownHelper {
 
         // 执行 HTML 净化，并提供基础 URL 以补全相对路径
         Document.OutputSettings outputSettings = new Document.OutputSettings().prettyPrint(false);
-        return Jsoup.clean(unsafeHtml, getBlogUrl(), POST_SAFE_LIST, outputSettings);
+        String sanitized = Jsoup.clean(unsafeHtml, getBlogUrl(), POST_SAFE_LIST, outputSettings);
+        Document document = Jsoup.parseBodyFragment(sanitized);
+        PublicMediaUrlPolicy.removeDisallowedImages(document);
+        for (org.jsoup.nodes.Element anchor : document.select("a")) {
+            anchor.attr("rel", "nofollow noopener noreferrer");
+        }
+        return document.body().html();
     }
 
     private static String renderMarkdown(String markdown) {

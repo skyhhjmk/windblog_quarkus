@@ -5,7 +5,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -38,10 +37,7 @@ public class PasswordHasher {
             return false;
         }
         if (!isHashedFormat(encodedPassword)) {
-            return MessageDigest.isEqual(
-                    rawPassword.getBytes(StandardCharsets.UTF_8),
-                    encodedPassword.getBytes(StandardCharsets.UTF_8)
-            );
+            return false;
         }
 
         String[] parts = encodedPassword.split("\\$");

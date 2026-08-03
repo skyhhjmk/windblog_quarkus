@@ -1,6 +1,8 @@
 package com.biliwind.blog.filter;
 
 import com.biliwind.blog.context.AdminAuditRequestContext;
+import com.biliwind.blog.service.security.ClientIpResolver;
+import io.vertx.ext.web.RoutingContext;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -11,7 +13,6 @@ import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.ext.Provider;
 
-import java.util.List;
 import java.util.UUID;
 
 @Provider
@@ -24,6 +25,12 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
 
     @Inject
     AdminAuditRequestContext adminAuditRequestContext;
+
+    @Inject
+    ClientIpResolver clientIpResolver;
+
+    @Inject
+    RoutingContext routingContext;
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
@@ -64,48 +71,15 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
     }
 
     private String resolveClientIp(ContainerRequestContext requestContext) {
-        String clientIp = resolveHeaderValue(requestContext, "X-Forwarded-For");
-        if (!isBlank(clientIp)) {
-            int commaIndex = clientIp.indexOf(',');
-            if (commaIndex > -1) {
-                clientIp = clientIp.substring(0, commaIndex);
-            }
-            return clientIp.trim();
+        if (routingContext == null) {
+            return "unknown";
         }
-
-        clientIp = resolveHeaderValue(requestContext, "X-Real-IP");
-        if (!isBlank(clientIp)) {
-            return clientIp.trim();
-        }
-
-        clientIp = resolveHeaderValue(requestContext, "CF-Connecting-IP");
-        if (!isBlank(clientIp)) {
-            return clientIp.trim();
-        }
-
-        clientIp = resolveHeaderValue(requestContext, "X-Client-IP");
-        if (!isBlank(clientIp)) {
-            return clientIp.trim();
-        }
-
-        return "unknown";
+        return clientIpResolver.resolve(routingContext).clientIp();
     }
 
     private String resolveHeaderValue(ContainerRequestContext requestContext, String headerName) {
-        String headerValue = requestContext.getHeaderString(headerName);
-        if (!isBlank(headerValue)) {
-            return headerValue;
-        }
-
-        List<String> headerValues = requestContext.getHeaders().get(headerName);
-        if (headerValues != null && !headerValues.isEmpty()) {
-            String firstHeaderValue = headerValues.get(0);
-            if (!isBlank(firstHeaderValue)) {
-                return firstHeaderValue;
-            }
-        }
-
-        return null;
+        String value = requestContext.getHeaderString(headerName);
+        return isBlank(value) ? null : value;
     }
 
     private String normalizePath(String path) {

@@ -35,6 +35,9 @@ public class GrpcChannelFactory {
     @ConfigProperty(name = "windblog.grpc.client.rewrite-local-target", defaultValue = "false")
     boolean rewriteLocalTarget;
 
+    @ConfigProperty(name = "windblog.grpc.client.allow-plaintext-fallback", defaultValue = "true")
+    boolean allowPlaintextFallback;
+
     /**
      * 创建支持 mTLS 的 gRPC 通道。
      * 如果证书文件不存在，则回退到明文连接（用于兼容旧节点或初始引导）。
@@ -49,6 +52,9 @@ public class GrpcChannelFactory {
             );
 
             if (caFile == null) {
+                if (!allowPlaintextFallback) {
+                    throw new IllegalStateException("gRPC CA 证书文件缺失，已禁止明文回退: " + channelTarget);
+                }
                 LOGGER.warn("CA 证书文件缺失，回退到明文模式: {}", channelTarget);
                 return io.grpc.ManagedChannelBuilder.forTarget(channelTarget).usePlaintext().build();
             }
@@ -67,6 +73,9 @@ public class GrpcChannelFactory {
             if (clientCertificateFile != null && clientKeyFile != null) {
                 sslContextBuilder.keyManager(clientCertificateFile, clientKeyFile);
             } else {
+                if (!allowPlaintextFallback) {
+                    throw new IllegalStateException("gRPC 客户端证书或私钥缺失，无法建立 mTLS: " + channelTarget);
+                }
                 LOGGER.warn("gRPC 客户端证书或私钥缺失，将只校验服务端证书: {}", channelTarget);
             }
             LOGGER.info("正在为 {} 创建加密的 gRPC 通道", channelTarget);

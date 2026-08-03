@@ -92,7 +92,10 @@ public class AdminTagController {
         return toItem(t);
     }
 
+    @DELETE
+    @Path("/{id}")
     @Transactional
+    @Operation(summary = "删除标签")
     public void delete(@PathParam("id") Long id) {
         com.biliwind.blog.model.Tag t = com.biliwind.blog.model.Tag.findById(id);
         if (t != null) {

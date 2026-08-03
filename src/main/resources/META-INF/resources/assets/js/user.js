@@ -274,25 +274,26 @@
                     var amountColor = t.changeAmount > 0 ? '#10b981' : '#ef4444';
                     var amountBg = t.changeAmount > 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)';
                     var prefix = t.changeAmount > 0 ? '+' : '';
-                    var desc = t.description || t.bizType;
+                    var desc = escapeHtml(t.description || t.bizType);
                     var dateStr = new Date(t.createdAt).toLocaleString();
 
                     return '<div class="group flex justify-between items-center p-4 border border-border/50 bg-bg/20 hover:bg-bg/40 hover:border-accent/30 rounded-xl transition-all duration-300">' +
                         '<div class="flex items-center gap-4">' +
-                        '<div class="w-10 h-10 rounded-full flex items-center justify-center font-bold" style="background:' + amountBg + '; color:' + amountColor + '">' +
+                        '<div class="w-10 h-10 rounded-full flex items-center justify-center font-bold wallet-amount-icon" data-wallet-background="' + amountBg + '" data-wallet-color="' + amountColor + '">' +
                         (t.changeAmount > 0 ? '↑' : '↓') +
                         '</div>' +
                         '<div>' +
                         '<div class="font-bold text-main group-hover:text-accent transition-colors">' + desc + '</div>' +
-                        '<div class="text-[11px] text-meta mt-0.5 font-mono">' + dateStr + '</div>' +
+                        '<div class="text-[11px] text-meta mt-0.5 font-mono">' + escapeHtml(dateStr) + '</div>' +
                         '</div>' +
                         '</div>' +
                         '<div class="text-right">' +
-                        '<div class="font-black text-xl tracking-tight" style="color:' + amountColor + '">' + prefix + t.changeAmount + '</div>' +
-                        '<div class="text-[10px] text-meta font-mono tracking-tighter mt-0.5 opacity-60">BALANCE: ' + t.balanceAfter + '</div>' +
+                        '<div class="font-black text-xl tracking-tight wallet-amount-value" data-wallet-color="' + amountColor + '">' + prefix + escapeHtml(t.changeAmount) + '</div>' +
+                        '<div class="text-[10px] text-meta font-mono tracking-tighter mt-0.5 opacity-60">BALANCE: ' + escapeHtml(t.balanceAfter) + '</div>' +
                         '</div>' +
                         '</div>';
                 }).join('');
+                applyWalletColors(list);
 
                 updateWalletPagination();
             } else {
@@ -302,6 +303,45 @@
         } catch (e) {
             list.innerHTML = '<div class="text-center py-20"><div class="text-red-400/20 text-6xl mb-4">!</div><p class="text-red-400 text-sm">加载失败，请检查网络连接</p></div>';
         }
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
+            var entities = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
+            return entities[character];
+        });
+    }
+
+    function safeColor(value) {
+        var color = String(value || '').trim();
+        if (/^#[0-9a-fA-F]{3,8}$/.test(color)) {
+            return color;
+        }
+        return 'var(--accent)';
+    }
+
+    function applyWalletColors(container) {
+        container.querySelectorAll('[data-wallet-background]').forEach(function (element) {
+            element.style.backgroundColor = safeColor(element.dataset.walletBackground);
+            element.style.color = safeColor(element.dataset.walletColor);
+        });
+        container.querySelectorAll('[data-wallet-color]').forEach(function (element) {
+            element.style.color = safeColor(element.dataset.walletColor);
+        });
+    }
+
+    function applyDynamicPublicStyles() {
+        document.querySelectorAll('.exp-progress-bar[data-exp-percent]').forEach(function (element) {
+            var percent = Number.parseFloat(element.dataset.expPercent);
+            if (!Number.isFinite(percent)) {
+                percent = 0;
+            }
+            percent = Math.max(0, Math.min(100, percent));
+            element.style.width = percent + '%';
+        });
+        document.querySelectorAll('[data-backpack-item]').forEach(function (element) {
+            element.style.setProperty('--backpack-rarity', safeColor(element.dataset.itemRarity));
+        });
     }
 
     function updateWalletPagination() {
@@ -466,7 +506,21 @@
         bindLoginForm();
         bindRegisterForm();
         bindUserWallet();
+        bindBackpackItems();
         bindSubscriptions();
+        applyDynamicPublicStyles();
+    }
+
+    function bindBackpackItems() {
+        document.querySelectorAll('[data-backpack-item]').forEach((item) => {
+            item.onclick = () => window.showItemDetails(
+                item.dataset.itemId,
+                item.dataset.itemName,
+                item.dataset.itemDescription,
+                item.dataset.itemRarity,
+                item.dataset.itemType
+            );
+        });
     }
 
     ready(() => {

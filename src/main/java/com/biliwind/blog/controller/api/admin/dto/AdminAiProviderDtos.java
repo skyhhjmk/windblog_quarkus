@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.admin.dto;
 
 import com.biliwind.blog.model.AiProviderConfig;
+import com.biliwind.blog.service.ai.AiProviderConfigSanitizer;
 
 import java.time.OffsetDateTime;
 
@@ -31,7 +32,7 @@ public class AdminAiProviderDtos {
                     config.endpoint,
                     config.model,
                     maskedApiKey,
-                    config.config,
+                    AiProviderConfigSanitizer.maskConfig(config.config),
                     config.updatedAt
             );
         }

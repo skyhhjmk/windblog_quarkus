@@ -11,14 +11,12 @@ import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import org.eclipse.microprofile.reactive.messaging.Channel;
-import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.jboss.logging.Logger;
 
 import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class PostLifecycleListener {
@@ -35,16 +33,15 @@ public class PostLifecycleListener {
     ElasticsearchConnectionManager connectionManager;
 
     @Inject
-    @Channel("es-sync-tasks")
-    Instance<Emitter<EsSyncTask>> esSyncEmitter;
-
-    @Inject
     TempDataService tempDataService;
 
     @Inject
     CacheService cacheService;
     @Inject
     NodeRoleService nodeRoleService;
+
+    @Inject
+    com.biliwind.blog.service.OutboxEventService outboxEventService;
 
     private void invalidatePostCaches() {
         // 清理首页缓存 (1-5页)
@@ -148,10 +145,16 @@ public class PostLifecycleListener {
 
     private void sendToQueue(Long postId, String actionType) {
         try {
-            esSyncEmitter.get().send(new EsSyncTask(postId, actionType));
-            log.infof("同步任务已发送至 RabbitMQ: postId=%d, action=%s", postId, actionType);
+            outboxEventService.enqueue(
+                    "ES_SYNC:" + actionType + ":" + postId,
+                    "ES_SYNC",
+                    "POST",
+                    postId.toString(),
+                    Map.of("postId", postId, "action", actionType),
+                    null);
+            log.infof("ES 同步任务已写入 outbox: postId=%d, action=%s", postId, actionType);
         } catch (Exception e) {
-            log.errorf("发送同步任务到 RabbitMQ 失败，保存到 temp_data 表: %d, 错误: %s", postId, e.getMessage());
+            log.errorf("写入 ES outbox 失败，保存到 temp_data 表: %d, 错误: %s", postId, e.getMessage());
             JsonNode payload = tempDataService.createSyncTaskPayload(postId, actionType);
             tempDataService.save("es_sync_task", postId.toString(), payload);
         }

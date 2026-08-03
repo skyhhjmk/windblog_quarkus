@@ -34,8 +34,8 @@
                         <span class="text-[var(--accent)] font-bold">{expPercent}%</span>
                     </div>
                     <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
-                        <div class="h-full bg-[var(--accent)] transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(var(--accent-rgb),0.8)]"
-                             style="width: {expPercent}%"></div>
+                        <div class="h-full bg-[var(--accent)] transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(var(--accent-rgb),0.8)] exp-progress-bar"
+                             data-exp-percent="{expPercent}"></div>
                     </div>
                     <p class="text-xs text-gray-500 mt-2 text-right">总经验值: {exp}</p>
                 </div>
@@ -129,18 +129,23 @@
                 <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 gap-2">
                     {#for item in backpackItems}
                         {#if item}
-                            <div class="aspect-square bg-[var(--bg)] border border-gray-700/50 rounded-md relative group cursor-pointer overflow-hidden transition-all duration-300 hover:scale-105 hover:z-10"
-                                 style="box-shadow: inset 0 0 10px {item.rarity}20, 0 0 0 1px {item.rarity}50;"
+                            <div class="aspect-square bg-[var(--bg)] border border-gray-700/50 rounded-md relative group cursor-pointer overflow-hidden transition-all duration-300 hover:scale-105 hover:z-10 backpack-item-shell"
                                  title="{item.name} ({item.type})"
-                                 onclick="showItemDetails('{item.id}', '{item.name}', '{item.description}', '{item.rarity}', '{item.type}')">
+                                 data-backpack-item="true"
+                                 data-item-id="{item.id}"
+                                 data-item-name="{item.name}"
+                                 data-item-description="{item.description}"
+                                 data-item-rarity="{item.rarity}"
+                                 data-item-type="{item.type}"
+                                 data-item-rarity="{item.rarity}">
                                 <div class="absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity"
-                                     style="background-color: {item.rarity}"></div>
+                                     data-backpack-rarity-background="true"></div>
                                 <div class="absolute inset-0 flex items-center justify-center p-2 text-xs font-bold text-center drop-shadow-md z-10"
-                                     style="color: {item.rarity}">
+                                     data-backpack-rarity-color="true">
                                     {item.name.substring(0, 2)}
                                 </div>
                                 <div class="absolute bottom-0 inset-x-0 h-1"
-                                     style="background-color: {item.rarity}"></div>
+                                     data-backpack-rarity-background="true"></div>
                             </div>
                         {#else}
                             <div class="aspect-square bg-gray-900/50 border border-gray-800 rounded-md shadow-inner flex items-center justify-center opacity-50">
@@ -231,12 +236,6 @@
                 </div>
             </div>
 
-            <style>
-                #historyModal.show .modal-container {
-                    transform: translate(-50%, -50%) scale(1);
-                    opacity: 1;
-                }
-            </style>
         </aside>
     </div>
 </div>

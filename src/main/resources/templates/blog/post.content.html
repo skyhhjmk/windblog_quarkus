@@ -14,7 +14,7 @@
             {/for}
         {/if}
         {#if jsonLd.or(null)}
-            <script type="application/ld+json" data-pjax-managed="true">{jsonLd.raw}</script>
+            <script type="application/ld+json" nonce="{cspNonce}" data-pjax-managed="true">{jsonLd.raw}</script>
         {/if}
     </template>
     <div id="pjax-nav-path" class="hidden">
@@ -86,8 +86,8 @@
                                            title="{media.fileName}">{media.fileName}</p>
                                         <p class="text-[10px] text-gray-500 font-mono opacity-80">{media.formattedSize}</p>
                                     </div>
-                                    {#if hasPurchased && media.url}
-                                        <a href="{media.url}" download
+                                    {#if hasPurchased && media.downloadUrl}
+                                        <a href="{media.downloadUrl}" download
                                            class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -228,8 +228,7 @@
                     </div>
                     <button type="button"
                             id="request-repost-license-button"
-                            data-post-id="{postId}"
-                            data-logged-in="{repostUserLoggedIn}"
+                            data-post-ref="{postSlug}"
                             class="inline-flex items-center justify-center rounded-lg border border-accent/40 px-4 py-2 text-sm font-bold text-accent hover:bg-accent/10 transition-colors">
                         我要转载
                     </button>
@@ -261,7 +260,7 @@
 
             <!-- 付费内容安全加载：初始只显示预览内容 -->
             <section class="prose dark:prose-invert max-w-none" id="post-content-section"
-                     data-post-id="{postId}"
+                     data-post-ref="{postSlug}"
                      data-post-price="{postPrice}"
                      data-has-purchased="{hasPurchased}">
                 {#if postBody && ! postBody.isEmpty()}

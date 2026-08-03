@@ -18,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SidebarTemplateData {
 
     private static final long LOCAL_CACHE_TTL_MILLIS = 10000L;
+    private static final int MAX_PUBLIC_CATEGORIES = 200;
+    private static final int MAX_PUBLIC_TAGS = 500;
     private static final ConcurrentHashMap<String, LocalCacheEntry> LOCAL_CACHE = new ConcurrentHashMap<>();
 
     private static LanguageContext getLanguageContext() {
@@ -62,7 +64,7 @@ public class SidebarTemplateData {
             String title = LanguageHelper.resolveLocalizedValue(p.title, lang);
             String safeTitle = resolvePostTitle(title, p.slug, p.id);
             String titleInitial = resolveTitleInitial(safeTitle);
-            result.add(new PostView(p.id, safeTitle, titleInitial, p.slug, p.publishedAt, p.createdAt));
+            result.add(new PostView(safeTitle, titleInitial, p.slug, p.publishedAt, p.createdAt));
         }
 
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
@@ -119,12 +121,14 @@ public class SidebarTemplateData {
             return cachedCategories;
         }
 
-        List<Category> categories = Category.listAll(Sort.ascending("path"));
+        List<Category> categories = Category.find("order by path")
+                .page(0, MAX_PUBLIC_CATEGORIES)
+                .list();
 
         List<CategoryView> result = new ArrayList<>();
         for (Category c : categories) {
             String name = LanguageHelper.resolveLocalizedValue(c.name, lang);
-            result.add(new CategoryView(c.id, name, c.slug, c.postCount));
+            result.add(new CategoryView(name, c.slug, c.postCount));
         }
 
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
@@ -149,12 +153,14 @@ public class SidebarTemplateData {
             return cachedTags;
         }
 
-        List<Tag> tags = Tag.listAll();
+        List<Tag> tags = Tag.find("order by id")
+                .page(0, MAX_PUBLIC_TAGS)
+                .list();
 
         List<TagView> result = new ArrayList<>();
         for (Tag t : tags) {
             String name = LanguageHelper.resolveLocalizedValue(t.name, lang);
-            result.add(new TagView(t.id, name, t.slug));
+            result.add(new TagView(name, t.slug));
         }
 
         getCacheService().set(cacheKey, result, java.time.Duration.ofHours(1));
@@ -211,16 +217,16 @@ public class SidebarTemplateData {
     }
 
     @TemplateData
-    public record PostView(Long id, String title, String titleInitial, String slug, java.time.OffsetDateTime publishedAt,
+    public record PostView(String title, String titleInitial, String slug, java.time.OffsetDateTime publishedAt,
                            java.time.OffsetDateTime createdAt) {
     }
 
     @TemplateData
-    public record CategoryView(Long id, String name, String slug, Long count) {
+    public record CategoryView(String name, String slug, Long count) {
     }
 
     @TemplateData
-    public record TagView(Long id, String name, String slug) {
+    public record TagView(String name, String slug) {
     }
 
     @TemplateData

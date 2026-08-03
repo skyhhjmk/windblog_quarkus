@@ -88,4 +88,18 @@
     <include file="db/migration/083-create-comment-quotes.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/086-create-email-center.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/087-add-post-content-declarations.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/088-create-content-access-tickets.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/089-add-email-delivery-leases.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/090-create-media-download-events.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/091-add-postgres-search-fallback.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/092-create-outbox-events.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/093-create-admin-idempotency-keys.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/094-add-media-download-referrer-hash.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/095-create-admin-role-permissions.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/096-seed-admin-resource-permissions.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/097-seed-admin-secondary-resource-permissions.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/098-create-media-reference-rebuild-jobs.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/099-create-content-access-ticket-key-state.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/100-add-content-access-ticket-device-hash.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/101-create-admin-revoked-tokens.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

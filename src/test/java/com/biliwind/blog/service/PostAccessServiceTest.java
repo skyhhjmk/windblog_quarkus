@@ -95,11 +95,11 @@ class PostAccessServiceTest {
     }
 
     @Test
-    void shouldVerifyOldPlainTextPasswordBeforeMigration() {
+    void shouldRejectOldPlainTextPasswordAfterMigrationBoundary() {
         Post post = new Post();
         post.password = "secret123";
 
-        assertTrue(postAccessService.verifyPassword(post, "secret123"));
+        assertFalse(postAccessService.verifyPassword(post, "secret123"));
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.enterprise.inject.Instance;
 import jakarta.mail.Message;
 import jakarta.mail.Session;
 import jakarta.mail.Transport;
@@ -15,8 +16,11 @@ import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 
 @ApplicationScoped
 public class EmailDeliveryService {
@@ -29,6 +33,30 @@ public class EmailDeliveryService {
     @Inject
     EmailTemplateRenderer emailTemplateRenderer;
 
+    @Inject
+    Instance<EmailDeliveryService> self;
+
+    @Inject
+    Instance<OutboxEventService> outboxEventService;
+
+    @ConfigProperty(name = "windblog.outbox.enabled", defaultValue = "true")
+    boolean outboxEnabled;
+
+    @ConfigProperty(name = "windblog.mail.max-deliveries-per-cycle", defaultValue = "100")
+    int maxDeliveriesPerCycle;
+
+    @ConfigProperty(name = "windblog.mail.delivery.lease-duration", defaultValue = "5M")
+    java.time.Duration deliveryLeaseDuration;
+
+    @ConfigProperty(name = "windblog.mail.smtp.connect-timeout", defaultValue = "10S")
+    java.time.Duration smtpConnectTimeout;
+
+    @ConfigProperty(name = "windblog.mail.smtp.read-timeout", defaultValue = "30S")
+    java.time.Duration smtpReadTimeout;
+
+    @ConfigProperty(name = "windblog.mail.smtp.write-timeout", defaultValue = "30S")
+    java.time.Duration smtpWriteTimeout;
+
     @Transactional
     public void queue(String scenario, String recipientAddress, String subject, String htmlContent) {
         queueWithRoute(scenario, recipientAddress, subject, htmlContent, null, null);
@@ -37,61 +65,165 @@ public class EmailDeliveryService {
     @Transactional
     public void queueWithRoute(String scenario, String recipientAddress, String subject, String htmlContent,
                                Long channelGroupId, Long channelId) {
+        String resolvedHtml = resolveTemplateHtml(scenario, htmlContent);
+        Long resolvedChannelGroupId = channelGroupId;
+        Long resolvedChannelId = channelId;
+        if (resolvedChannelGroupId == null && resolvedChannelId == null) {
+            EmailScenarioRoute route = EmailScenarioRoute.findById(scenario);
+            if (route != null) {
+                resolvedChannelGroupId = route.channelGroupId;
+                resolvedChannelId = route.channelId;
+            }
+        }
+        if (outboxEnabled) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("scenario", scenario);
+            payload.put("recipientAddress", recipientAddress);
+            payload.put("subject", subject);
+            payload.put("htmlContent", resolvedHtml);
+            payload.put("channelGroupId", resolvedChannelGroupId);
+            payload.put("channelId", resolvedChannelId);
+            outboxEventService.get().enqueue(
+                    "EMAIL_DELIVERY:" + UUID.randomUUID(),
+                    "EMAIL_DELIVERY",
+                    "EMAIL",
+                    recipientAddress,
+                    payload,
+                    null);
+            return;
+        }
+        self.get().persistQueuedDelivery(scenario, recipientAddress, subject, resolvedHtml,
+                resolvedChannelGroupId, resolvedChannelId);
+    }
+
+    @Transactional
+    public void persistQueuedDelivery(String scenario, String recipientAddress, String subject,
+                                     String resolvedHtml, Long channelGroupId, Long channelId) {
         EmailDelivery delivery = new EmailDelivery();
         delivery.scenario = scenario;
         delivery.recipientAddress = recipientAddress;
         delivery.subject = subject;
-        delivery.htmlContent = resolveTemplateHtml(scenario, htmlContent);
+        delivery.htmlContent = resolvedHtml;
         delivery.status = "PENDING";
         delivery.createdAt = OffsetDateTime.now();
         delivery.channelGroupId = channelGroupId;
         delivery.channelId = channelId;
-        if (channelGroupId == null && channelId == null) applyScenarioRoute(delivery);
         delivery.nextAttemptAt = OffsetDateTime.now();
         delivery.persist();
     }
 
     @Scheduled(every = "30s")
-    @Transactional
     public void deliverPendingMessages() {
         if (!enabled) {
             return;
         }
-        List<EmailDelivery> deliveries = EmailDelivery.list("status = 'PENDING' and nextAttemptAt <= ?1 order by id", OffsetDateTime.now());
-        for (EmailDelivery delivery : deliveries) {
-            sendDelivery(delivery);
+        String owner = UUID.randomUUID().toString();
+        int processedDeliveries = 0;
+        int cycleLimit = Math.max(1, Math.min(maxDeliveriesPerCycle, 1000));
+        while (processedDeliveries < cycleLimit) {
+            Long deliveryId = self.get().claimNextDelivery(owner);
+            if (deliveryId == null) {
+                return;
+            }
+            processedDeliveries = processedDeliveries + 1;
+            EmailDelivery delivery = EmailDelivery.findById(deliveryId);
+            if (delivery == null) {
+                continue;
+            }
+            DeliveryOutcome outcome = sendDelivery(delivery);
+            self.get().completeDelivery(delivery.id, owner, outcome);
         }
     }
 
-    private void sendDelivery(EmailDelivery delivery) {
-        EmailChannel channel = selectChannel(delivery);
-        if (channel == null) {
-            deferDelivery(delivery, "没有可用的邮件通道");
-            return;
+    @Transactional
+    Long claimNextDelivery(String owner) {
+        java.time.Duration effectiveLease = deliveryLeaseDuration;
+        if (effectiveLease == null || effectiveLease.isNegative() || effectiveLease.isZero()) {
+            effectiveLease = java.time.Duration.ofMinutes(2);
         }
+        OffsetDateTime leaseUntil = OffsetDateTime.now().plus(effectiveLease);
+        @SuppressWarnings("unchecked")
+        List<Number> ids = (List<Number>) EmailDelivery.getEntityManager().createNativeQuery(
+                        "update email_deliveries set locked_until = ?1, lock_owner = ?2 "
+                                + "where id = (select id from email_deliveries where status = 'PENDING' "
+                                + "and next_attempt_at <= now() and (locked_until is null or locked_until < now()) "
+                                + "order by id limit 1 for update skip locked) returning id")
+                .setParameter(1, leaseUntil)
+                .setParameter(2, owner)
+                .getResultList();
+        if (ids.isEmpty()) {
+            return null;
+        }
+        return ids.get(0).longValue();
+    }
+
+    private DeliveryOutcome sendDelivery(EmailDelivery delivery) {
+        EmailChannel channel = null;
+        Long channelId = null;
+        Transport transport = null;
         try {
+            channel = self.get().selectChannel(delivery);
+            if (channel == null) {
+                return new DeliveryOutcome(null, "没有可用的邮件通道");
+            }
+            channelId = channel.id;
             Properties properties = new Properties();
             properties.put("mail.smtp.host", channel.host);
             properties.put("mail.smtp.port", String.valueOf(channel.port));
             properties.put("mail.smtp.auth", channel.username != null && !channel.username.isBlank());
             properties.put("mail.smtp.starttls.enable", "STARTTLS".equals(channel.securityMode));
             properties.put("mail.smtp.ssl.enable", "SSL_TLS".equals(channel.securityMode));
+            properties.put("mail.smtp.connectiontimeout", String.valueOf(durationMillis(smtpConnectTimeout, 10000L)));
+            properties.put("mail.smtp.timeout", String.valueOf(durationMillis(smtpReadTimeout, 30000L)));
+            properties.put("mail.smtp.writetimeout", String.valueOf(durationMillis(smtpWriteTimeout, 30000L)));
             Session session = Session.getInstance(properties);
             MimeMessage message = new MimeMessage(session);
             message.setFrom(new InternetAddress(channel.fromAddress, channel.fromName));
             message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(delivery.recipientAddress, false));
             message.setSubject(delivery.subject, "UTF-8");
             message.setContent(delivery.htmlContent, "text/html; charset=UTF-8");
-            Transport transport = session.getTransport("smtp");
+            transport = session.getTransport("smtp");
             transport.connect(channel.host, channel.port, channel.username, getPassword(channel));
             transport.sendMessage(message, message.getAllRecipients());
-            transport.close();
-            delivery.channelId = channel.id;
+            delivery.channelId = channelId;
+            return new DeliveryOutcome(channelId, null);
+        } catch (Exception exception) {
+            return new DeliveryOutcome(channelId, exception.getMessage());
+        } finally {
+            if (transport != null) {
+                try {
+                    transport.close();
+                } catch (Exception ignored) {
+                    // 发送结果已经确定，关闭连接失败不能阻止租约释放和重试状态落库。
+                }
+            }
+        }
+    }
+
+    private long durationMillis(java.time.Duration duration, long fallbackMillis) {
+        if (duration == null || duration.isNegative() || duration.isZero()) {
+            return fallbackMillis;
+        }
+        return Math.max(1000L, duration.toMillis());
+    }
+
+    @Transactional
+    void completeDelivery(Long deliveryId, String owner, DeliveryOutcome outcome) {
+        EmailDelivery delivery = EmailDelivery.find("id = ?1 and lockOwner = ?2", deliveryId, owner).firstResult();
+        if (delivery == null) {
+            return;
+        }
+        if (outcome.errorMessage() == null) {
+            delivery.channelId = outcome.channelId();
             delivery.status = "SENT";
             delivery.sentAt = OffsetDateTime.now();
-        } catch (Exception exception) {
-            deferDelivery(delivery, exception.getMessage());
+            delivery.lockedUntil = null;
+            delivery.lockOwner = null;
+            return;
         }
+        deferDelivery(delivery, outcome.errorMessage());
+        delivery.lockedUntil = null;
+        delivery.lockOwner = null;
     }
 
     private void applyScenarioRoute(EmailDelivery delivery) {
@@ -114,7 +246,8 @@ public class EmailDeliveryService {
                 template.buttonText, template.buttonUrl);
     }
 
-    private EmailChannel selectChannel(EmailDelivery delivery) {
+    @Transactional
+    EmailChannel selectChannel(EmailDelivery delivery) {
         if (delivery.channelId != null)
             return EmailChannel.find("id = ?1 and enabled = true", delivery.channelId).firstResult();
         if (delivery.channelGroupId == null) return EmailChannel.find("enabled = true order by id").firstResult();
@@ -156,5 +289,8 @@ public class EmailDeliveryService {
             return;
         }
         delivery.nextAttemptAt = OffsetDateTime.now().plusMinutes(5L * delivery.attemptCount);
+    }
+
+    private record DeliveryOutcome(Long channelId, String errorMessage) {
     }
 }

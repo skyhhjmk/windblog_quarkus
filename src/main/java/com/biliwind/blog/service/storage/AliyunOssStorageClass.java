@@ -266,7 +266,8 @@ public class AliyunOssStorageClass implements StorageClass {
             return result.url();
         } catch (Exception e) {
             log.error("Failed to generate signed URL from Aliyun OSS", e);
-            return getPublicUrl(storagePath);
+            // A signing failure must never downgrade a protected object to a public URL.
+            return null;
         }
     }
 

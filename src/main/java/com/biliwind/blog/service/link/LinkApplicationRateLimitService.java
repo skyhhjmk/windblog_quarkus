@@ -1,21 +1,22 @@
 package com.biliwind.blog.service.link;
 
+import com.biliwind.blog.service.security.SecurityRateLimitService;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
 
-import java.time.Instant;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
 
 @ApplicationScoped
 public class LinkApplicationRateLimitService {
 
-    private static final long WINDOW_SECONDS = 3600;
     private static final int CLIENT_LIMIT = 3;
     private static final int INGRESS_LIMIT = 300;
+    private static final Duration WINDOW = Duration.ofHours(1);
 
-    private final Map<String, RequestWindow> requestWindows = new ConcurrentHashMap<>();
+    @Inject
+    SecurityRateLimitService securityRateLimitService;
 
     public void checkAndRecord(String remoteAddress, String forwardedAddress) {
         String normalizedRemoteAddress = normalizeAddress(remoteAddress);
@@ -28,35 +29,14 @@ public class LinkApplicationRateLimitService {
             clientAddress = normalizedForwardedAddress;
         }
         checkWindow("client:" + clientAddress, CLIENT_LIMIT);
-        removeExpiredWindows();
     }
 
-    private synchronized void checkWindow(String key, int maximumRequests) {
-        long currentEpochSecond = Instant.now().getEpochSecond();
-        RequestWindow requestWindow = requestWindows.get(key);
-        if (requestWindow == null || currentEpochSecond - requestWindow.startedAt >= WINDOW_SECONDS) {
-            requestWindows.put(key, new RequestWindow(currentEpochSecond, 1));
-            return;
-        }
-        if (requestWindow.requestCount >= maximumRequests) {
+    private void checkWindow(String key, int maximumRequests) {
+        if (!securityRateLimitService.tryAcquire("link-application:" + key, maximumRequests, WINDOW)) {
             throw new ClientErrorException(
                     "提交过于频繁，请一小时后再试",
                     Response.Status.TOO_MANY_REQUESTS
             );
-        }
-        requestWindow.requestCount = requestWindow.requestCount + 1;
-    }
-
-    private void removeExpiredWindows() {
-        if (requestWindows.size() < 1000) {
-            return;
-        }
-        long currentEpochSecond = Instant.now().getEpochSecond();
-        for (Map.Entry<String, RequestWindow> entry : requestWindows.entrySet()) {
-            RequestWindow requestWindow = entry.getValue();
-            if (currentEpochSecond - requestWindow.startedAt >= WINDOW_SECONDS) {
-                requestWindows.remove(entry.getKey(), requestWindow);
-            }
         }
     }
 
@@ -72,15 +52,5 @@ public class LinkApplicationRateLimitService {
             return firstAddress.substring(0, 128);
         }
         return firstAddress;
-    }
-
-    private static class RequestWindow {
-        private final long startedAt;
-        private int requestCount;
-
-        private RequestWindow(long startedAt, int requestCount) {
-            this.startedAt = startedAt;
-            this.requestCount = requestCount;
-        }
     }
 }

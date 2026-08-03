@@ -24,7 +24,7 @@
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
             {#if postBody && !postBody.isEmpty}
                 <link rel="stylesheet" href="/webjars/vditor/dist/index.css">
-                <style>
+                <style nonce="{cspNonce}">
                     .vditor-reset {
                         color: #e6e6e6 !important;
                     }
@@ -67,7 +67,7 @@
                 </style>
                 <script src="/webjars/vditor/dist/index.min.js"></script>
                 <div id="vditor-preview" class="vditor-reset"></div>
-                <script>
+                <script nonce="{cspNonce}">
                     {#if postBodyJson && !postBodyJson.isEmpty}
                     document.addEventListener('DOMContentLoaded', function() {
                         const markdownContent = "{postBodyJson}";

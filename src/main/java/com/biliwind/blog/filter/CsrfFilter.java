@@ -1,6 +1,7 @@
 package com.biliwind.blog.filter;
 
 import com.biliwind.blog.common.security.CsrfTokenManager;
+import com.biliwind.blog.service.SecurityMetricsService;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -10,6 +11,7 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
@@ -35,6 +37,9 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
     @Inject
     CsrfTokenManager csrfTokenManager;
 
+    @Inject
+    SecurityMetricsService securityMetricsService;
+
     @ConfigProperty(name = "cookie.secure", defaultValue = "false")
     boolean cookieSecure;
 
@@ -55,6 +60,7 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
                 String csrfHeader = requestContext.getHeaderString(CSRF_HEADER_NAME);
 
                 if (csrfCookie == null || !csrfTokenManager.verifyToken(csrfHeader, csrfCookie.getValue())) {
+                    securityMetricsService.increment("csrf.denied", "token_mismatch");
                     requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
                             .type(MediaType.APPLICATION_JSON)
                             .entity(Map.of("success", false, "message", "CSRF token mismatch or missing"))
@@ -78,7 +84,26 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
                     .sameSite(NewCookie.SameSite.LAX)
                     .build();
             responseContext.getHeaders().add("Set-Cookie", cookie);
+            if (isCacheableHtmlResponse(responseContext.getMediaType(),
+                    responseContext.getHeaderString(HttpHeaders.CACHE_CONTROL))) {
+                responseContext.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, "no-store");
+            }
         }
+    }
+
+    static boolean isCacheableHtmlResponse(MediaType mediaType, String cacheControl) {
+        if (mediaType == null) {
+            return false;
+        }
+        if (!mediaType.isCompatible(MediaType.TEXT_HTML_TYPE)) {
+            return false;
+        }
+        if (cacheControl == null || cacheControl.isBlank()) {
+            return false;
+        }
+        String normalized = cacheControl.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("public") || normalized.contains("max-age")
+                || normalized.contains("s-maxage");
     }
 
     private String normalizePath(String path) {

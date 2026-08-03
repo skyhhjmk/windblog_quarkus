@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api;
 
 import com.biliwind.blog.common.security.UserTokenVerifier;
+import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.RepostLicense;
 import com.biliwind.blog.service.repost.RepostLicenseService;
 import jakarta.inject.Inject;
@@ -35,8 +36,14 @@ public class UserRepostLicenseController {
             return unauthorized();
         }
 
+        Long postId = resolvePostId(request);
+        if (postId == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("success", false, "message", "文章不存在"))
+                    .build();
+        }
         RepostLicenseService.LicenseCreationResult result =
-                repostLicenseService.createLicense(request.postId, userId, request.targetUrl);
+                repostLicenseService.createLicense(postId, userId, request.targetUrl);
 
         Map<String, Object> body = new HashMap<>();
         body.put("success", true);
@@ -65,7 +72,7 @@ public class UserRepostLicenseController {
         Map<String, Object> data = new HashMap<>();
         data.put("id", license.id);
         data.put("code", license.code);
-        data.put("postId", license.article.id);
+        data.put("postSlug", license.article.slug);
         data.put("allowedDomain", license.allowedDomain);
         data.put("targetUrl", license.targetUrl);
         data.put("status", license.status);
@@ -106,8 +113,22 @@ public class UserRepostLicenseController {
         return Response.status(Response.Status.UNAUTHORIZED).entity(body).build();
     }
 
+    private Long resolvePostId(LicenseCreateRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (request.postSlug != null && !request.postSlug.isBlank()) {
+            Post post = Post.find("slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                    request.postSlug, com.biliwind.blog.model.PostStatus.PUBLISHED).firstResult();
+            return post == null ? null : post.id;
+        }
+        return request.postId;
+    }
+
     public static class LicenseCreateRequest {
+        /** Legacy field for existing clients; public pages now send postSlug. */
         public Long postId;
+        public String postSlug;
         public String targetUrl;
     }
 }

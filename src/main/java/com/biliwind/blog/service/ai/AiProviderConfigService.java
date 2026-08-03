@@ -64,7 +64,7 @@ public class AiProviderConfigService {
             if (c.isEmpty()) {
                 config.config = null;
             } else {
-                config.config = c;
+                config.config = AiProviderConfigSanitizer.mergeMaskedSecrets(c, config.config);
             }
         }
 

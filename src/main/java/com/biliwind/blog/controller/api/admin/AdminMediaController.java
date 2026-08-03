@@ -33,6 +33,9 @@ public class AdminMediaController {
     MediaManagementService mediaService;
 
     @Inject
+    com.biliwind.blog.service.MediaReferenceRebuildService mediaReferenceRebuildService;
+
+    @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
 
     @Inject
@@ -108,9 +111,28 @@ public class AdminMediaController {
     @Path("/scan")
     @Transactional
     @Operation(summary = "重建媒体引用索引")
-    public AdminMediaDtos.MediaScanResult scan() {
+    public AdminMediaDtos.MediaScanJob scan() {
         mustFindOperator();
-        return mediaService.rebuildReferences();
+        com.biliwind.blog.model.MediaReferenceRebuildJob job = mediaReferenceRebuildService.start();
+        return toMediaScanJob(job);
+    }
+
+    @GET
+    @Path("/scan/{jobId}")
+    @Operation(summary = "获取媒体引用重建任务状态")
+    public AdminMediaDtos.MediaScanJob scanStatus(@PathParam("jobId") Long jobId) {
+        mustFindOperator();
+        com.biliwind.blog.model.MediaReferenceRebuildJob job = mediaReferenceRebuildService.find(jobId);
+        if (job == null) {
+            throw new NotFoundException("媒体引用重建任务不存在");
+        }
+        return toMediaScanJob(job);
+    }
+
+    private AdminMediaDtos.MediaScanJob toMediaScanJob(
+            com.biliwind.blog.model.MediaReferenceRebuildJob job) {
+        return new AdminMediaDtos.MediaScanJob(job.id, job.status, job.postsScanned,
+                job.referencesCreated, job.unreferencedMedia, job.lastError, job.createdAt, job.updatedAt);
     }
 
     @POST

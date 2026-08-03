@@ -6,6 +6,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminLoginRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminLoginResponse;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserProfile;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.AdminActionSecurityService;
 import io.smallrye.jwt.build.Jwt;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -38,6 +39,12 @@ public class AdminAuthApiController {
 
     @Inject
     AdminTokenVerifier tokenVerifier;
+
+    @Inject
+    AdminActionSecurityService adminActionSecurityService;
+
+    @Inject
+    com.biliwind.blog.service.security.AdminTokenRevocationService tokenRevocationService;
 
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
@@ -73,8 +80,8 @@ public class AdminAuthApiController {
         String accountLimitKey = "admin-login-account:" + normalizedAccount;
         String ipLimitKey = "admin-login-ip:" + clientIp;
         Duration limitWindow = Duration.ofMinutes(15);
-        if (!securityRateLimitService.isAllowed(accountLimitKey, 5, limitWindow)
-                || !securityRateLimitService.isAllowed(ipLimitKey, 5, limitWindow)) {
+        if (!securityRateLimitService.tryAcquire(accountLimitKey, 5, limitWindow)
+                || !securityRateLimitService.tryAcquire(ipLimitKey, 5, limitWindow)) {
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
                     .header("Retry-After", "900")
                     .entity(Map.of("success", false, "message", "登录尝试过于频繁，请15分钟后重试"))
@@ -82,14 +89,10 @@ public class AdminAuthApiController {
         }
         User user = User.find("(username = ?1 or email = ?1) and deletedAt is null", request.account().trim()).firstResult();
         if (user == null || user.status != 1) {
-            securityRateLimitService.recordFailure(accountLimitKey, limitWindow);
-            securityRateLimitService.recordFailure(ipLimitKey, limitWindow);
             return unauthorized();
         }
 
         if (!passwordHasher.matches(request.password(), user.password)) {
-            securityRateLimitService.recordFailure(accountLimitKey, limitWindow);
-            securityRateLimitService.recordFailure(ipLimitKey, limitWindow);
             return unauthorized();
         }
 
@@ -150,9 +153,49 @@ public class AdminAuthApiController {
         )).build();
     }
 
+    @POST
+    @Path("/logout")
+    @SecurityRequirement(name = "adminBearerAuth")
+    @Operation(summary = "撤销当前管理员 token")
+    public Response logout(@HeaderParam("Authorization") String authorization) {
+        String rawToken = extractBearerToken(authorization);
+        AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(rawToken);
+        if (verified == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(Map.of("success", false, "message", "Token 已失效或已撤销"))
+                    .build();
+        }
+        tokenRevocationService.revoke(rawToken, adminRequestContext.getUserId(),
+                verified.expiresAtEpochSeconds(), "logout");
+        return Response.ok(Map.of("success", true)).build();
+    }
+
+    @POST
+    @Path("/step-up")
+    @Operation(summary = "签发短时高风险操作凭证")
+    public Response stepUp(StepUpRequest request) {
+        String token = adminActionSecurityService.issueStepUp(
+                adminRequestContext.getUserId(), request == null ? null : request.password());
+        if (token == null) {
+            return unauthorized();
+        }
+        return Response.ok(Map.of("success", true, "token", token, "expiresInSeconds", 300)).build();
+    }
+
+    public record StepUpRequest(String password) {
+    }
+
     private Response unauthorized() {
         return Response.status(Response.Status.UNAUTHORIZED)
                 .entity(Map.of("success", false, "message", "账号或密码错误"))
                 .build();
+    }
+
+    private String extractBearerToken(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authorization.substring("Bearer ".length()).trim();
+        return token.isBlank() ? null : token;
     }
 }

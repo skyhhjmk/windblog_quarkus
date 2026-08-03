@@ -6,6 +6,9 @@ import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.security.ClientIpResolver;
+import com.biliwind.blog.service.security.SecurityRateLimitService;
+import io.vertx.ext.web.RoutingContext;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -21,6 +24,9 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -93,6 +99,15 @@ public class UserController {
     @Inject
     com.biliwind.blog.service.StoreService storeService;
 
+    @Inject
+    ClientIpResolver clientIpResolver;
+
+    @Inject
+    SecurityRateLimitService securityRateLimitService;
+
+    @Inject
+    RoutingContext routingContext;
+
     // ==================== 页面路由 ====================
 
     /**
@@ -153,24 +168,44 @@ public class UserController {
         int currentLevelMaxExp = nextLevelRequiredExp - currentLevelBaseExp;
         int expPercent = Math.min(100, Math.max(0, (int) ((float) currentLevelExp / currentLevelMaxExp * 100)));
 
-        java.util.List<com.biliwind.blog.model.UserBackpackItem> backpack = storeService.getUserBackpack(profile.id());
+        List<com.biliwind.blog.model.UserBackpackItem> backpack = storeService.getUserBackpack(profile.id());
+        List<Long> storeItemIds = new ArrayList<>();
+        for (com.biliwind.blog.model.UserBackpackItem item : backpack) {
+            if (item.storeItemId != null && !storeItemIds.contains(item.storeItemId)) {
+                storeItemIds.add(item.storeItemId);
+            }
+        }
 
-        java.util.List<java.util.Map<String, Object>> backpackDetails = backpack.stream().map(item -> {
-            java.util.Map<String, Object> map = new java.util.HashMap<>();
+        Map<Long, com.biliwind.blog.model.StoreItem> storeItemsById = new HashMap<>();
+        if (!storeItemIds.isEmpty()) {
+            List<com.biliwind.blog.model.StoreItem> storeItems =
+                    com.biliwind.blog.model.StoreItem.find("id in ?1", storeItemIds).list();
+            for (com.biliwind.blog.model.StoreItem storeItem : storeItems) {
+                storeItemsById.put(storeItem.id, storeItem);
+            }
+        }
+
+        List<Map<String, Object>> backpackDetails = new ArrayList<>();
+        for (com.biliwind.blog.model.UserBackpackItem item : backpack) {
+            Map<String, Object> map = new HashMap<>();
             map.put("id", item.id);
             map.put("storeItemId", item.storeItemId);
-            com.biliwind.blog.model.StoreItem sItem = com.biliwind.blog.model.StoreItem.findById(item.storeItemId);
-            if (sItem != null) {
-                map.put("name", sItem.name);
-                map.put("rarity", sItem.rarity != null ? sItem.rarity : "#4b5563");
-                map.put("type", sItem.type);
-                map.put("description", sItem.description);
+            com.biliwind.blog.model.StoreItem storeItem = storeItemsById.get(item.storeItemId);
+            if (storeItem != null) {
+                map.put("name", storeItem.name);
+                String rarity = storeItem.rarity;
+                if (rarity == null || rarity.isBlank()) {
+                    rarity = "#4b5563";
+                }
+                map.put("rarity", rarity);
+                map.put("type", storeItem.type);
+                map.put("description", storeItem.description);
             } else {
                 map.put("name", "未知物品");
                 map.put("rarity", "#4b5563");
             }
-            return map;
-        }).collect(java.util.stream.Collectors.toList());
+            backpackDetails.add(map);
+        }
 
         // 填充空白格子以满足容量
         while (backpackDetails.size() < backpackCapacity) {
@@ -215,6 +250,11 @@ public class UserController {
             return Response.status(Response.Status.FORBIDDEN)
                     .entity(Map.of("success", false, "message", "注册功能暂未开放"))
                     .build();
+        }
+
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        if (!securityRateLimitService.tryAcquire("user-register-ip:" + clientIp, 5, Duration.ofHours(1))) {
+            return rateLimitedResponse("注册尝试过于频繁，请一小时后重试", 3600);
         }
 
         // 检查用户名是否已存在
@@ -275,6 +315,16 @@ public class UserController {
             @FormParam("remember") String remember,
             @FormParam("redirect") String redirect) {
 
+        String normalizedAccount = account.trim().toLowerCase();
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        String accountLimitKey = "user-login-account:" + normalizedAccount;
+        String ipLimitKey = "user-login-ip:" + clientIp;
+        Duration loginLimitWindow = Duration.ofMinutes(15);
+        if (!securityRateLimitService.tryAcquire(accountLimitKey, 10, loginLimitWindow)
+                || !securityRateLimitService.tryAcquire(ipLimitKey, 20, loginLimitWindow)) {
+            return rateLimitedResponse("登录尝试过于频繁，请15分钟后重试", 900);
+        }
+
         // 查找用户（支持用户名或邮箱登录）
         User user = User.find("(username = ?1 or email = ?1) and deletedAt is null",
                 account.trim()).firstResult();
@@ -291,6 +341,9 @@ public class UserController {
                     .entity(Map.of("success", false, "message", "账号或密码错误"))
                     .build();
         }
+
+        securityRateLimitService.clear(accountLimitKey);
+        securityRateLimitService.clear(ipLimitKey);
 
         // 生成JWT Token
         String token = generateUserToken(user);
@@ -374,6 +427,13 @@ public class UserController {
                 .httpOnly(true)
                 .secure(cookieSecure)
                 .sameSite(NewCookie.SameSite.LAX)
+                .build();
+    }
+
+    private Response rateLimitedResponse(String message, int retryAfterSeconds) {
+        return Response.status(Response.Status.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(retryAfterSeconds))
+                .entity(Map.of("success", false, "message", message))
                 .build();
     }
 

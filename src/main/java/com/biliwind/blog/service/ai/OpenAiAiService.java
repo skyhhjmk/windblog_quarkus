@@ -83,7 +83,8 @@ public class OpenAiAiService implements AiService {
 
             attachApiKeyHeader(builder, config);
 
-            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("OpenAI 调用失败: " + response.statusCode() + " " + response.body());
@@ -184,7 +185,8 @@ public class OpenAiAiService implements AiService {
 
             attachApiKeyHeader(builder, config);
 
-            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("OpenAI 审核调用失败: " + response.statusCode() + " " + response.body());
@@ -267,7 +269,8 @@ public class OpenAiAiService implements AiService {
                 attachApiKeyHeader(builder, config);
 
                 if (request.stream()) {
-                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofLines())
+                    AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
+                            HttpResponse.BodyHandlers.ofLines())
                         .whenComplete((res, err) -> {
                             if (err != null) {
                                 emitJson(emitter, "error", "[接口调用超时或异常]: " + err.getMessage());
@@ -321,7 +324,8 @@ public class OpenAiAiService implements AiService {
                             emitter.complete();
                         });
                 } else {
-                    AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
+                            HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                             .whenComplete((res, err) -> {
                                 if (err != null) {
                                     emitJson(emitter, "error", "[接口调用超时或异常]: " + err.getMessage());
@@ -376,7 +380,8 @@ public class OpenAiAiService implements AiService {
 
             attachApiKeyHeader(builder, config);
 
-            return AiHttpClientHelper.getClient(config, objectMapper).sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             LOG.warn("获取 OpenAI 模型列表失败: " + response.statusCode() + " " + response.body());

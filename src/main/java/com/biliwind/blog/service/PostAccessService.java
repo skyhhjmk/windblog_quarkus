@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.PostMedia;
 import com.biliwind.blog.model.UserPurchaseRecord;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -32,11 +33,26 @@ public class PostAccessService {
     @Inject
     PasswordHasher passwordHasher;
 
+    @Inject
+    ContentAccessTicketService contentAccessTicketService;
+
     public Post findBySlug(String slug) {
         return Post.find("slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
                         slug,
                         com.biliwind.blog.model.PostStatus.PUBLISHED)
                 .firstResult();
+    }
+
+    /**
+     * Public HTML uses the stable slug instead of exposing the database key.
+     * Internal authorization and purchase records continue to use the numeric ID.
+     */
+    private String resolvePostRef(Long postId) {
+        if (postId == null) {
+            return null;
+        }
+        Post post = Post.findById(postId);
+        return post == null ? null : post.slug;
     }
 
     public boolean isPrivate(Post post) {
@@ -262,6 +278,7 @@ public class PostAccessService {
      */
     public String filterHiddenContent(String rawContent, long maxPointsPaid, boolean isAuthor, Long postId, long postPrice, Long userId) {
         if (rawContent == null || rawContent.isEmpty()) return rawContent;
+        String postRef = resolvePostRef(postId);
 
         // 全站买断判定：只依赖作者身份或明确的全文购买记录，不用积分比较
         boolean fullUnlocked = isAuthor
@@ -305,7 +322,7 @@ public class PostAccessService {
                         .data("title", title)
                         .data("desc", descText)
                         .data("showButton", true)
-                        .data("postId", postId)
+                        .data("postRef", postRef)
                         .data("price", displayPrice)
                         .data("blockId", blockId)
                         .data("buttonText", buttonText)
@@ -351,7 +368,7 @@ public class PostAccessService {
                         .data("title", label)
                         .data("desc", descText)
                         .data("showButton", true)
-                        .data("postId", postId)
+                        .data("postRef", postRef)
                         .data("price", displayPrice)
                         .data("blockId", blockId)
                         .data("buttonText", buttonText)
@@ -372,6 +389,7 @@ public class PostAccessService {
     public java.util.Map<String, String> getUnlockedBlocks(String rawContent, long maxPointsPaid, boolean isAuthor, Long postId, long postPrice, Long userId) {
         java.util.Map<String, String> unlockedBlocks = new java.util.HashMap<>();
         if (rawContent == null || rawContent.isEmpty()) return unlockedBlocks;
+        String postRef = resolvePostRef(postId);
 
         // 全站买断判定：只依赖作者身份或明确的全文购买记录，不用积分比较
         boolean fullUnlocked = isAuthor
@@ -502,7 +520,21 @@ public class PostAccessService {
      */
     public String getCachedPreviewContent(Post post, String lang, String localizedContent, long postPrice) {
         String revisionStr = post.publishedRevision != null ? String.valueOf(post.publishedRevision.id) : "0";
-        String cacheKey = "post:preview:" + post.id + ":" + lang + ":" + revisionStr;
+        java.util.Optional<PublicCacheRefreshService.PublicPostSnapshot> publicSnapshot =
+                cacheService.get(com.biliwind.blog.common.CacheService.Keys.postMeta(post.slug),
+                        PublicCacheRefreshService.PublicPostSnapshot.class);
+        if (publicSnapshot.isPresent()) {
+            PublicCacheRefreshService.PublicPostSnapshot snapshot = publicSnapshot.get();
+            if (snapshot.publishedRevisionId() != null
+                    && snapshot.publishedRevisionId().equals(post.publishedRevision == null ? null : post.publishedRevision.id)
+                    && snapshot.previewContent() != null) {
+                String snapshotContent = snapshot.previewContent().get(lang);
+                if (snapshotContent != null) {
+                    return snapshotContent;
+                }
+            }
+        }
+        String cacheKey = "post:preview:v2:" + post.id + ":" + lang + ":" + revisionStr;
 
         java.util.Optional<String> cached = cacheService.get(cacheKey, String.class);
         if (cached.isPresent()) {
@@ -523,13 +555,95 @@ public class PostAccessService {
     public String getPreviewOnlyContent(String content, int freeLines, boolean isPaid, Long postId, long postPrice, Long userId) {
         if (content == null) return null;
         // 预览模式下假设未支付任何积分
-        if (!isPaid) return filterHiddenContent(content, -1, false, postId, postPrice, userId);
+        if (!isPaid) {
+            String filteredFreeContent = filterHiddenContent(content, -1, false, postId, postPrice, userId);
+            return removeProtectedMediaReferences(postId, filteredFreeContent);
+        }
 
         // 先过滤隐藏内容（都替换为占位符）
         String filtered = filterHiddenContentForPreview(content, postId, postPrice, userId);
 
         // 应用免费预览行数限制
-        return applyFreePreviewForPreview(filtered, freeLines, postId, postPrice);
+        String preview = applyFreePreviewForPreview(filtered, freeLines, postId, postPrice);
+        return removeProtectedMediaReferences(postId, preview);
+    }
+
+    public String rewriteProtectedMediaReferences(Long postId, String content, Long userId,
+                                                   boolean authorized, String deviceId) {
+        if (content == null || content.isBlank() || postId == null) {
+            return content;
+        }
+        java.util.List<PostMedia> references = PostMedia.list(
+                "post.id = ?1 and usageType = 3", postId);
+        String rewritten = content;
+        java.util.Map<Long, String> replacementByMedia = new java.util.HashMap<>();
+        for (PostMedia reference : references) {
+            if (reference.media == null || reference.media.deletedAt != null) {
+                continue;
+            }
+            String replacement = replacementByMedia.get(reference.media.id);
+            for (String source : protectedMediaSources(reference.media)) {
+                if (!rewritten.contains(source)) {
+                    continue;
+                }
+                if (replacement == null) {
+                    if (!authorized || userId == null) {
+                        replacement = "[受保护附件已隐藏]";
+                    } else {
+                        replacement = "/api/media/download/"
+                                + contentAccessTicketService.issueMediaDownloadPath(
+                                reference.media.id, postId, userId,
+                                java.time.Duration.ofMinutes(10), deviceId);
+                    }
+                    replacementByMedia.put(reference.media.id, replacement);
+                }
+                rewritten = rewritten.replace(source, replacement);
+            }
+        }
+        return rewritten;
+    }
+
+    private String removeProtectedMediaReferences(Long postId, String content) {
+        return rewriteProtectedMediaReferences(postId, content, null, false, null);
+    }
+
+    private java.util.List<String> protectedMediaSources(com.biliwind.blog.model.Media media) {
+        java.util.Set<String> sources = new java.util.LinkedHashSet<>();
+        addMediaSource(sources, media.url);
+        addMediaSource(sources, media.storageKey);
+        if (media.metadata != null) {
+            for (String key : java.util.List.of("thumbnailUrl", "previewUrl", "webpUrl",
+                    "placeholderUrl", "coverUrl")) {
+                Object value = media.metadata.get(key);
+                if (value != null) {
+                    addMediaSource(sources, value.toString());
+                }
+            }
+        }
+        collectStoragePaths(sources, media.storageClasses);
+        return new java.util.ArrayList<>(sources);
+    }
+
+    private void collectStoragePaths(java.util.Set<String> sources, Object value) {
+        if (value instanceof java.util.Map<?, ?> map) {
+            for (java.util.Map.Entry<?, ?> entry : map.entrySet()) {
+                if ("path".equals(entry.getKey()) && entry.getValue() != null) {
+                    addMediaSource(sources, entry.getValue().toString());
+                } else {
+                    collectStoragePaths(sources, entry.getValue());
+                }
+            }
+        } else if (value instanceof java.util.Collection<?> collection) {
+            for (Object item : collection) {
+                collectStoragePaths(sources, item);
+            }
+        }
+    }
+
+    private void addMediaSource(java.util.Set<String> sources, String value) {
+        if (value != null && !value.isBlank() && value.length() >= 4) {
+            sources.add(value);
+        }
     }
 
     /**
@@ -537,6 +651,7 @@ public class PostAccessService {
      */
     private String filterHiddenContentForPreview(String rawContent, Long postId, long postPrice, Long userId) {
         if (rawContent == null || rawContent.isEmpty()) return rawContent;
+        String postRef = resolvePostRef(postId);
 
         // 处理 [hide-text]
         java.util.regex.Pattern textPattern = java.util.regex.Pattern.compile(
@@ -565,7 +680,7 @@ public class PostAccessService {
                     .data("title", title)
                     .data("desc", descText)
                     .data("showButton", true)
-                    .data("postId", postId)
+                    .data("postRef", postRef)
                     .data("price", displayPrice)
                     .data("blockId", blockId)
                     .data("buttonText", buttonText)
@@ -596,7 +711,7 @@ public class PostAccessService {
                     .data("title", "专属附件已隐藏")
                     .data("desc", "您可以解锁当前区块或购买整篇文章后查看该专属附件。")
                     .data("showButton", true)
-                    .data("postId", postId)
+                    .data("postRef", postRef)
                     .data("price", displayPrice)
                     .data("blockId", blockId)
                     .data("buttonText", buttonText)
@@ -642,6 +757,7 @@ public class PostAccessService {
      */
     private String applyFreePreviewForPreview(String content, int freeLines, Long postId, long postPrice) {
         if (content == null) return null;
+        String postRef = resolvePostRef(postId);
 
         String[] lines = content.split("\r?\n");
         if (lines.length <= freeLines && freeLines > 0) return content;
@@ -657,7 +773,7 @@ public class PostAccessService {
                 .data("title", limit == 0 ? "本文内容已锁定" : "专享内容已锁定")
                 .data("desc", limit == 0 ? "这是一篇付费专享文章，解锁后即可阅读全文内容" : "解锁全文即可查看此处及后续所有精彩内容")
                 .data("showButton", true)
-                .data("postId", postId)
+                .data("postRef", postRef)
                 .data("price", postPrice)
                 .data("blockId", null)
                 .data("buttonText", "立即解锁全文")
@@ -688,7 +804,7 @@ public class PostAccessService {
                 .data("title", limit == 0 ? "本文内容已锁定" : "专享内容已锁定")
                 .data("desc", limit == 0 ? "这是一篇付费专享文章，解锁后即可阅读全文内容" : "解锁全文即可查看此处及后续所有精彩内容")
                 .data("showButton", true)
-                .data("postId", null)
+                .data("postRef", null)
                 .data("price", null)
                 .data("blockId", null)
                 .data("buttonText", "立即解锁全文")

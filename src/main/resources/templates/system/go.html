@@ -1,14 +1,12 @@
 <!DOCTYPE html>
 <html lang="{language}">
 <head>
+    <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{pageTitle}</title>
     <link rel="stylesheet" href="/assets/css/ui.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-    <style>
+    <style nonce="{cspNonce}">
         :root {
             --primary: #6366f1;
             --primary-hover: #4f46e5;
@@ -176,7 +174,7 @@
     </div>
 
     <div class="actions">
-        <a href="javascript:history.back()" class="btn btn-outline">返回</a>
+        <button id="goBackButton" type="button" class="btn btn-outline">返回</button>
         <a href="{targetUrl}" class="btn btn-primary" rel="nofollow noopener noreferrer">确认前往</a>
     </div>
 
@@ -184,5 +182,8 @@
         Powered by WindBlog
     </div>
 </div>
+<script nonce="{cspNonce}">
+    document.getElementById('goBackButton')?.addEventListener('click', () => window.history.back());
+</script>
 </body>
 </html>

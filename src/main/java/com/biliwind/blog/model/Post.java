@@ -69,7 +69,8 @@ public class Post extends PanacheEntityBase {
     @Column(nullable = false)
     public short visibility;
 
-    /** 访问密码 */
+    /** 访问密码；禁止出现在实体默认 JSON 序列化中。 */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @Column(length = 100)
     public String password;
 

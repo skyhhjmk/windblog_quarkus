@@ -3,6 +3,7 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.common.exception.BadRequestException;
 import com.biliwind.blog.model.RegionRule;
 import jakarta.transaction.Transactional;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -17,6 +18,9 @@ import java.util.List;
 @Consumes(MediaType.APPLICATION_JSON)
 public class AdminRegionController extends AdminBaseApiController {
 
+    @Inject
+    com.biliwind.blog.service.RegionRuleService regionRuleService;
+
     @GET
     public List<RegionRule> listRules() {
         return RegionRule.list("order by priority desc");
@@ -30,6 +34,7 @@ public class AdminRegionController extends AdminBaseApiController {
         }
         rule.id = null; // 确保是新增
         rule.persist();
+        regionRuleService.invalidate();
         return Response.status(Response.Status.CREATED).entity(rule).build();
     }
 
@@ -48,6 +53,7 @@ public class AdminRegionController extends AdminBaseApiController {
         entity.region = update.region;
         entity.priority = update.priority;
         entity.isEnabled = update.isEnabled;
+        regionRuleService.invalidate();
 
         return entity;
     }
@@ -61,6 +67,7 @@ public class AdminRegionController extends AdminBaseApiController {
             throw new NotFoundException("规则不存在");
         }
         entity.delete();
+        regionRuleService.invalidate();
         return Response.noContent().build();
     }
 }

@@ -14,8 +14,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.security.SecureRandom;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.HexFormat;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -24,6 +26,7 @@ import java.util.zip.ZipOutputStream;
 public class DeploymentPackageService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DeploymentPackageService.class);
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final String DEFAULT_ADMIN_JWT_SECRET = "windblog-admin-dev-secret-change-me";
     private static final String DEFAULT_USER_JWT_SECRET = "windblog-user-dev-secret-change-me";
     private static final String DEFAULT_ADMIN_INIT_PASSWORD = "admin";
@@ -53,6 +56,10 @@ public class DeploymentPackageService {
     @Inject
     @ConfigProperty(name = "admin.init.password", defaultValue = DEFAULT_ADMIN_INIT_PASSWORD)
     String adminInitPassword;
+
+    @Inject
+    @ConfigProperty(name = "security.event-hash-secret", defaultValue = "windblog-dev-event-hash-secret")
+    String eventHashSecret;
 
     @Inject
     @ConfigProperty(name = "blog.url", defaultValue = "http://localhost:8080")
@@ -109,6 +116,9 @@ public class DeploymentPackageService {
 
         CertificateService.GeneratedCertificate primary = certificateService.generateNodeCertificate(node.nodeId, 24);
         CertificateService.GeneratedCertificate backup = certificateService.generateNodeCertificate(node.nodeId, 72);
+        String trustStorePassword = generateSecretHex(32);
+        String edgeDatabasePassword = generateSecretHex(32);
+        String edgeRedisPassword = generateSecretHex(32);
 
         node.certificateSerial = primary.serialNumber();
         node.certificateExpiry = primary.expiry();
@@ -126,9 +136,11 @@ public class DeploymentPackageService {
         addTextEntry(zipOutputStream, baseDir + "/certs/ca/backup.crt", backup.certificatePem());
         addTextEntry(zipOutputStream, baseDir + "/certs/ca/backup.key", backup.privateKeyPem());
         addTextEntry(zipOutputStream, baseDir + "/certs/ca/ca.crt", primary.caCertificatePem());
-        addBinaryEntry(zipOutputStream, baseDir + "/certs/ca/truststore.p12", buildTrustStoreBytes(primary.caCertificatePem()));
+        addBinaryEntry(zipOutputStream, baseDir + "/certs/ca/truststore.p12",
+                buildTrustStoreBytes(primary.caCertificatePem(), trustStorePassword));
 
-        String envContent = buildEnvContent(node, imageReference, effectiveImageVariant);
+        String envContent = buildEnvContent(node, imageReference, effectiveImageVariant,
+                trustStorePassword, edgeDatabasePassword, edgeRedisPassword);
         addTextEntry(zipOutputStream, baseDir + "/.env", envContent);
 
         String dockerComposeContent = buildDockerCompose(node);
@@ -147,7 +159,10 @@ public class DeploymentPackageService {
     private String buildEnvContent(
             EdgeNode node,
             String imageReference,
-            EdgeImageVariant imageVariant
+            EdgeImageVariant imageVariant,
+            String trustStorePassword,
+            String edgeDatabasePassword,
+            String edgeRedisPassword
     ) {
         StringBuilder sb = new StringBuilder();
         sb.append("EDGE_NODE_ID=").append(node.nodeId).append("\n");
@@ -159,8 +174,6 @@ public class DeploymentPackageService {
         if (node.edgeGrpcPort != null) {
             grpcPort = node.edgeGrpcPort.intValue();
         }
-        int dbPort = node.edgeDbPort.intValue();
-        int redisPort = node.edgeRedisPort.intValue();
         int httpPort = node.edgeHttpPort.intValue();
 
         sb.append("EDGE_GRPC_PORT=").append(grpcPort).append("\n");
@@ -173,15 +186,29 @@ public class DeploymentPackageService {
         sb.append("GRPC_CLIENT_CERTIFICATE=certs/ca/server.crt\n");
         sb.append("GRPC_CLIENT_KEY=certs/ca/server.key\n");
         sb.append("GRPC_CLIENT_REWRITE_LOCAL_TARGET=false\n");
+        sb.append("GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK=false\n");
+        sb.append("GRPC_SERVER_CERTIFICATE=certs/ca/server.crt\n");
+        sb.append("GRPC_SERVER_KEY=certs/ca/server.key\n");
+        sb.append("GRPC_SERVER_TRUST_STORE=certs/ca/truststore.p12\n");
+        sb.append("GRPC_SERVER_TRUST_STORE_PASSWORD=").append(trustStorePassword).append("\n");
+        sb.append("GRPC_SERVER_CLIENT_AUTH=required\n");
+        sb.append("COOKIE_SECURE=true\n");
+        sb.append("WINDBLOG_SITE_PUBLIC_URL=").append(blogUrl).append("\n");
+        sb.append("CORS_ORIGINS=").append(blogUrl).append("\n");
+        sb.append("CORS_ALLOW_CREDENTIALS=false\n");
+        sb.append("SECURITY_HEADERS_CSP_ENFORCE=true\n");
+        sb.append("SECURITY_HEADERS_HSTS_ENABLED=true\n");
+        sb.append("SWAGGER_UI_ENABLED=false\n");
+        sb.append("ADMIN_INIT_ENABLED=false\n");
+        sb.append("SECURITY_EVENT_HASH_SECRET=").append(eventHashSecret).append("\n");
 
         sb.append("EDGE_DB_USER=windblog\n");
-        sb.append("EDGE_DB_PASSWORD=windblog_edge_pwd\n");
+        sb.append("EDGE_DB_PASSWORD=").append(edgeDatabasePassword).append("\n");
         sb.append("EDGE_DB_NAME=windblog_edge\n");
-        sb.append("EDGE_DB_PORT=").append(dbPort).append("\n");
         sb.append("EDGE_DATASOURCE_URL=jdbc:postgresql://edge-db:5432/windblog_edge\n");
 
-        sb.append("EDGE_REDIS_PORT=").append(redisPort).append("\n");
-        sb.append("EDGE_REDIS_URL=redis://edge-redis:6379\n");
+        sb.append("EDGE_REDIS_PASSWORD=").append(edgeRedisPassword).append("\n");
+        sb.append("EDGE_REDIS_URL=redis://:").append(edgeRedisPassword).append("@edge-redis:6379\n");
 
         sb.append("EDGE_APP_HTTP_PORT=").append(httpPort).append("\n");
         sb.append("WINDBLOG_EDGE_IMAGE=").append(imageReference).append("\n");
@@ -251,8 +278,6 @@ public class DeploymentPackageService {
         sb.append("      POSTGRES_DB: ${EDGE_DB_NAME}\n");
         sb.append("    volumes:\n");
         sb.append("      - edge-db-data-").append(node.nodeId).append(":/var/lib/postgresql\n");
-        sb.append("    ports:\n");
-        sb.append("      - \"${EDGE_DB_PORT}:5432\"\n");
         sb.append("    healthcheck:\n");
         sb.append("      test: [\"CMD-SHELL\", \"pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB\"]\n");
         sb.append("      interval: 10s\n");
@@ -268,10 +293,11 @@ public class DeploymentPackageService {
         sb.append("      - app-network\n");
         sb.append("    volumes:\n");
         sb.append("      - edge-redis-data-").append(node.nodeId).append(":/data\n");
-        sb.append("    ports:\n");
-        sb.append("      - \"${EDGE_REDIS_PORT}:6379\"\n");
+        sb.append("    environment:\n");
+        sb.append("      REDIS_PASSWORD: ${EDGE_REDIS_PASSWORD}\n");
+        sb.append("    command: [\"redis-server\", \"--appendonly\", \"yes\", \"--bind\", \"0.0.0.0\", \"--requirepass\", \"${EDGE_REDIS_PASSWORD}\"]\n");
         sb.append("    healthcheck:\n");
-        sb.append("      test: [\"CMD\", \"redis-cli\", \"ping\"]\n");
+        sb.append("      test: [\"CMD-SHELL\", \"redis-cli -a \\\"$$REDIS_PASSWORD\\\" ping | grep PONG\"]\n");
         sb.append("      interval: 10s\n");
         sb.append("      timeout: 5s\n");
         sb.append("      retries: 5\n");
@@ -301,7 +327,9 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_GRPC_SERVER_PLAIN_TEXT=false\n");
         sb.append("      - QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=${EDGE_CERT_PATH:-certs/ca/server.crt}\n");
         sb.append("      - QUARKUS_GRPC_SERVER_SSL_KEY=${EDGE_KEY_PATH:-certs/ca/server.key}\n");
-        sb.append("      - QUARKUS_GRPC_SERVER_SSL_CLIENT_AUTH=none\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_TRUST_STORE=${GRPC_SERVER_TRUST_STORE}\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_TRUST_STORE_PASSWORD=${GRPC_SERVER_TRUST_STORE_PASSWORD}\n");
+        sb.append("      - QUARKUS_GRPC_SERVER_SSL_CLIENT_AUTH=required\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=${EDGE_CLIENT_CERT_PATH:-certs/ca/server.crt}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=${EDGE_CLIENT_KEY_PATH:-certs/ca/server.key}\n");
         sb.append("      - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=${CA_CERT_PATH:-certs/ca/ca.crt}\n");
@@ -379,8 +407,8 @@ public class DeploymentPackageService {
         sb.append("\n");
         sb.append("3. 确保 Docker 和 Docker Compose 已安装\n");
         sb.append("\n");
-        sb.append("4. 本节点使用 bridge 网络模式，docker-compose.yml 会映射数据库、Redis、HTTP 和 gRPC 端口。\n");
-        sb.append("   编辑 .env 文件确认 EDGE_DB_PORT、EDGE_REDIS_PORT、EDGE_APP_HTTP_PORT、EDGE_GRPC_PORT 未被占用。\n");
+        sb.append("4. 本节点使用 bridge 网络模式，仅映射受控的 HTTP 和 gRPC 入口；数据库与 Redis 只在内部网络可见。\n");
+        sb.append("   编辑 .env 文件确认 EDGE_APP_HTTP_PORT、EDGE_GRPC_PORT 未被占用，并保留 gRPC mTLS 配置。\n");
         sb.append("\n");
         sb.append("5. 如果主节点不在 host.docker.internal 上,\n");
         sb.append("   请编辑 .env 文件修改 MAIN_NODE_GRPC_HOST 为实际主节点地址\n");
@@ -472,7 +500,7 @@ public class DeploymentPackageService {
         }
     }
 
-    private byte[] buildTrustStoreBytes(String caCertificatePem) throws Exception {
+    private byte[] buildTrustStoreBytes(String caCertificatePem, String trustStorePassword) throws Exception {
         CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
         ByteArrayInputStream certificateInputStream = new ByteArrayInputStream(caCertificatePem.getBytes(StandardCharsets.UTF_8));
         X509Certificate caCertificate = (X509Certificate) certificateFactory.generateCertificate(certificateInputStream);
@@ -482,7 +510,13 @@ public class DeploymentPackageService {
         keyStore.setCertificateEntry("ca", caCertificate);
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        keyStore.store(outputStream, "changeit".toCharArray());
+        keyStore.store(outputStream, trustStorePassword.toCharArray());
         return outputStream.toByteArray();
+    }
+
+    private String generateSecretHex(int byteCount) {
+        byte[] bytes = new byte[byteCount];
+        SECURE_RANDOM.nextBytes(bytes);
+        return HexFormat.of().formatHex(bytes);
     }
 }

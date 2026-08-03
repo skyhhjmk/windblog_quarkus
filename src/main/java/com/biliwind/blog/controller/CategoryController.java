@@ -9,6 +9,7 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
+import io.quarkus.panache.common.Page;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -55,22 +56,28 @@ public class CategoryController {
         String lang = languageContext.getLang();
         String safeKeyword = safe(keyword);
 
-        List<Category> allCategories = Category.listAll();
-        List<CategoryListItem> filtered = allCategories.stream()
-                .filter(c -> matchesKeyword(c, safeKeyword, lang))
-                .map(c -> toCategoryListItem(c, lang))
-                .sorted((a, b) -> a.path.compareToIgnoreCase(b.path))
-                .toList();
+        PanacheQuery<Category> categoryQuery;
+        if (safeKeyword.isBlank()) {
+            categoryQuery = Category.find("order by path");
+        } else {
+            String pattern = "%" + safeKeyword.toLowerCase(Locale.ROOT) + "%";
+            categoryQuery = Category.find(
+                    "lower(cast(name as String)) like ?1 or lower(cast(description as String)) like ?1 "
+                            + "or lower(slug) like ?1 or lower(path) like ?1 order by path",
+                    pattern);
+        }
 
-        long totalCount = filtered.size();
+        long totalCount = categoryQuery.count();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
         if (currentPage > totalPages) {
             currentPage = totalPages;
         }
 
-        int fromIndex = Math.max(0, (currentPage - 1) * PAGE_SIZE);
-        int toIndex = Math.min(filtered.size(), fromIndex + PAGE_SIZE);
-        List<CategoryListItem> pageItems = filtered.subList(fromIndex, toIndex);
+        List<Category> categories = categoryQuery.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
+        java.util.Map<Long, Long> childCounts = loadChildCounts(categories);
+        List<CategoryListItem> pageItems = categories.stream()
+                .map(category -> toCategoryListItem(category, lang, childCounts.getOrDefault(category.id, 0L)))
+                .toList();
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
         return template
@@ -93,9 +100,11 @@ public class CategoryController {
     @Path("/{slug}")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance detail(@PathParam("slug") String slug,
+                                   @QueryParam("page") @DefaultValue("1") Integer page,
                                    @Context HttpHeaders httpHeaders) {
         String normalizedSlug = normalizeSlug(slug);
         String lang = languageContext.getLang();
+        int currentPage = page == null || page < 1 ? 1 : page;
 
         Category entity = Category.find("slug", normalizedSlug).firstResult();
         if (entity == null) {
@@ -110,8 +119,16 @@ public class CategoryController {
                 + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3) "
                 + "order by publishedAt desc nulls last, createdAt desc";
         PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%");
-        List<Post> posts = query.list(); // For now, list all. We could add pagination later.
-        List<CategoryPostItem> postItems = posts.stream().map(post -> toCategoryPostItem(post, lang)).toList();
+        long postCount = query.count();
+        int totalPages = postCount == 0 ? 1 : (int) Math.ceil((double) postCount / PAGE_SIZE);
+        if (currentPage > totalPages) {
+            currentPage = totalPages;
+        }
+        List<Post> posts = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
+        java.util.Map<Long, List<TagItem>> tagsByPost = loadTagsByPost(posts, lang);
+        List<CategoryPostItem> postItems = posts.stream()
+                .map(post -> toCategoryPostItem(post, lang, tagsByPost.getOrDefault(post.id, List.of())))
+                .toList();
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
         return template
@@ -120,16 +137,20 @@ public class CategoryController {
                 .data("pageTitle", "Category - " + resolveCategoryName(entity, lang))
                 .data("navPath", "~/windblog / category / " + entity.slug)
                 .data("totalCount", childItems.size())
-                .data("postCount", postItems.size())
-                .data("currentPage", 1)
-                .data("totalPages", 1)
+                .data("postCount", postCount)
+                .data("currentPage", currentPage)
+                .data("totalPages", totalPages)
+                .data("hasPrevPage", currentPage > 1)
+                .data("hasNextPage", currentPage < totalPages)
+                .data("prevPageUrl", buildCategoryDetailUrl(entity.slug, Math.max(1, currentPage - 1)))
+                .data("nextPageUrl", buildCategoryDetailUrl(entity.slug, Math.min(totalPages, currentPage + 1)))
                 .data("currentCategory", toCategoryDetailItem(entity, lang))
                 .data("breadcrumbs", buildBreadcrumbs(entity, lang))
                 .data("children", childItems)
                 .data("posts", postItems);
     }
 
-    private CategoryPostItem toCategoryPostItem(Post post, String lang) {
+    private CategoryPostItem toCategoryPostItem(Post post, String lang, List<TagItem> tags) {
         String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
         if (title == null || title.isBlank()) {
@@ -139,10 +160,6 @@ public class CategoryController {
             summary = "暂无摘要";
         }
         
-        List<TagItem> tags = PostTag.<PostTag>find("post", post).stream()
-                .map(pt -> new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, lang), pt.tag.slug))
-                .toList();
-
         OffsetDateTime date = post.publishedAt != null ? post.publishedAt : post.createdAt;
         return new CategoryPostItem(post.slug, title, summary, formatDate(date), 
                 post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", tags);
@@ -150,10 +167,27 @@ public class CategoryController {
 
     public record TagItem(String name, String slug) {}
 
+    private java.util.Map<Long, List<TagItem>> loadTagsByPost(List<Post> posts, String lang) {
+        if (posts.isEmpty()) {
+            return java.util.Map.of();
+        }
+        List<Long> postIds = posts.stream().map(post -> post.id).toList();
+        java.util.Map<Long, List<TagItem>> tagsByPost = new java.util.HashMap<>();
+        List<PostTag> postTags = PostTag.find("post.id in ?1", postIds).list();
+        for (PostTag postTag : postTags) {
+            tagsByPost.computeIfAbsent(postTag.post.id, ignored -> new ArrayList<>())
+                    .add(new TagItem(LanguageHelper.resolveLocalizedValue(postTag.tag.name, lang), postTag.tag.slug));
+        }
+        return tagsByPost;
+    }
+
     private CategoryListItem toCategoryListItem(Category category, String lang) {
+        return toCategoryListItem(category, lang, Category.count("parent.id", category.id));
+    }
+
+    private CategoryListItem toCategoryListItem(Category category, String lang, long childCount) {
         String name = resolveCategoryName(category, lang);
         String description = resolveCategoryDescription(category, lang);
-        long childCount = Category.count("parent.id", category.id);
         return new CategoryListItem(
                 category.slug,
                 name,
@@ -163,6 +197,22 @@ public class CategoryController {
                 category.postCount,
                 formatDate(category.createdAt)
         );
+    }
+
+    private java.util.Map<Long, Long> loadChildCounts(List<Category> categories) {
+        if (categories.isEmpty()) {
+            return java.util.Map.of();
+        }
+        List<Long> categoryIds = categories.stream().map(category -> category.id).toList();
+        java.util.Map<Long, Long> childCounts = new java.util.HashMap<>();
+        List<Object[]> rows = Category.getEntityManager()
+                .createQuery("select parent.id, count(id) from Category where parent.id in ?1 group by parent.id", Object[].class)
+                .setParameter(1, categoryIds)
+                .getResultList();
+        for (Object[] row : rows) {
+            childCounts.put((Long) row[0], ((Number) row[1]).longValue());
+        }
+        return childCounts;
     }
 
     private CategoryDetailItem toCategoryDetailItem(Category category, String lang) {
@@ -250,6 +300,11 @@ public class CategoryController {
             url.append("page=").append(page);
         }
         return url.toString();
+    }
+
+    private String buildCategoryDetailUrl(String slug, int page) {
+        String url = "/category/" + urlEncode(slug);
+        return page > 1 ? url + "?page=" + page : url;
     }
 
     private String urlEncode(String value) {

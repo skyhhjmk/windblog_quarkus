@@ -134,7 +134,7 @@ public class LocalFsStorageClass implements StorageClass {
 
     @Override
     public String getSignedUrl(String storagePath, Duration expiration) {
-        return getPublicUrl(storagePath);
+        return null;
     }
 
     @Override

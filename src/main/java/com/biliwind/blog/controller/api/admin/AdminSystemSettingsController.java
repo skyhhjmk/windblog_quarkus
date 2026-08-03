@@ -3,6 +3,7 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.model.SystemSetting;
 import com.biliwind.blog.model.SystemSettingHistory;
+import com.biliwind.blog.controller.api.admin.dto.SystemSettingView;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.biliwind.blog.service.SafeModeWatchdog;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,6 +16,8 @@ import io.vertx.ext.web.RoutingContext;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import io.quarkus.panache.common.Page;
+import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
@@ -22,6 +25,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 @Path("/api/admin/settings")
 @Produces(MediaType.APPLICATION_JSON)
@@ -56,14 +60,25 @@ public class AdminSystemSettingsController {
     @GET
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "获取所有设置项")
-    public Response getAllSettings(@QueryParam("group") String group) {
-        List<SystemSetting> settings;
+    public Response getAllSettings(@QueryParam("group") String group,
+                                   @QueryParam("page") @DefaultValue("1") int page,
+                                   @QueryParam("pageSize") @DefaultValue("50") int pageSize) {
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, Math.min(pageSize, 100));
+        PanacheQuery<SystemSetting> query;
         if (group != null && !group.isEmpty()) {
-            settings = SystemSetting.list("groupName", group);
+            query = SystemSetting.find("groupName", group);
         } else {
-            settings = SystemSetting.listAll();
+            query = SystemSetting.findAll();
         }
-        return Response.ok(Map.of("success", true, "data", settings)).build();
+        long total = query.count();
+        List<SystemSetting> settings = query.page(Page.of(safePage - 1, safePageSize)).list();
+        List<SystemSettingView> views = new ArrayList<>();
+        for (SystemSetting setting : settings) {
+            views.add(toView(setting));
+        }
+        return Response.ok(Map.of("success", true, "data", views,
+                "page", safePage, "pageSize", safePageSize, "total", total)).build();
     }
 
     @GET
@@ -76,7 +91,7 @@ public class AdminSystemSettingsController {
             return Response.status(Response.Status.NOT_FOUND)
                     .entity(Map.of("success", false, "message", "配置项不存在")).build();
         }
-        return Response.ok(Map.of("success", true, "data", setting)).build();
+        return Response.ok(Map.of("success", true, "data", toView(setting))).build();
     }
 
     @PUT
@@ -103,6 +118,7 @@ public class AdminSystemSettingsController {
         }
 
         JsonNode newValue = mapper.valueToTree(configValueObj);
+        newValue = mergeSecretValues(setting.configKey, setting.configValue, newValue);
         Object reasonObj = body.get("reason");
         String reason = null;
         if (reasonObj != null) {
@@ -140,7 +156,7 @@ public class AdminSystemSettingsController {
                 sanitizeForAudit(key, setting.configValue),
                 sanitizeForAudit(key, newValue));
 
-        return Response.ok(Map.of("success", true, "message", "配置已更新，进入3分钟验证期", "data", setting)).build();
+        return Response.ok(Map.of("success", true, "message", "配置已更新，进入3分钟验证期", "data", toView(setting))).build();
     }
 
     @POST
@@ -181,9 +197,29 @@ public class AdminSystemSettingsController {
     @Path("/{key}/history")
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "获取配置变更历史")
-    public Response getHistory(@PathParam("key") String key) {
-        List<SystemSettingHistory> history = SystemSettingHistory.list("configKey", key);
-        return Response.ok(Map.of("success", true, "data", history)).build();
+    public Response getHistory(@PathParam("key") String key,
+                               @QueryParam("page") @DefaultValue("1") int page,
+                               @QueryParam("pageSize") @DefaultValue("50") int pageSize) {
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, Math.min(pageSize, 100));
+        PanacheQuery<SystemSettingHistory> query = SystemSettingHistory.find(
+                "configKey = ?1 order by createdAt desc", key);
+        long total = query.count();
+        List<SystemSettingHistory> history = query.page(Page.of(safePage - 1, safePageSize)).list();
+        List<Map<String, Object>> safeHistory = new ArrayList<>();
+        for (SystemSettingHistory item : history) {
+            Map<String, Object> safeItem = new HashMap<>();
+            safeItem.put("id", item.id);
+            safeItem.put("configKey", item.configKey);
+            safeItem.put("configValue", maskSecrets(item.configKey, item.configValue));
+            safeItem.put("version", item.version);
+            safeItem.put("operatorId", item.operatorId);
+            safeItem.put("changeReason", item.changeReason);
+            safeItem.put("createdAt", item.createdAt);
+            safeHistory.add(safeItem);
+        }
+        return Response.ok(Map.of("success", true, "data", safeHistory,
+                "page", safePage, "pageSize", safePageSize, "total", total)).build();
     }
 
     @POST
@@ -207,7 +243,7 @@ public class AdminSystemSettingsController {
             throw new WebApplicationException("Setting is currently frozen", Response.Status.CONFLICT);
         }
 
-        JsonNode newValue = mapper.valueToTree(valueObj);
+        JsonNode newValue = mergeSecretValues(setting.configKey, setting.configValue, mapper.valueToTree(valueObj));
 
         // 记录历史
         SystemSettingHistory history = new SystemSettingHistory();
@@ -231,8 +267,8 @@ public class AdminSystemSettingsController {
         watchdog.watch(key, 3);
 
         auditService.log("system_setting", String.valueOf(setting.id), "audit_apply",
-                Map.of("key", key, "value", history.configValue, "version", history.version),
-                Map.of("key", key, "value", newValue, "version", setting.version));
+                Map.of("key", key, "value", maskSecrets(key, history.configValue), "version", history.version),
+                Map.of("key", key, "value", maskSecrets(key, newValue), "version", setting.version));
 
         return Response.ok(Map.of("success", true, "message", "已应用配置并进入验证期")).build();
     }
@@ -282,5 +318,77 @@ public class AdminSystemSettingsController {
 
     private boolean isSensitiveKey(String key) {
         return key.contains("key") || key.contains("secret") || key.contains("password") || key.contains("token");
+    }
+
+    private SystemSettingView toView(SystemSetting setting) {
+        boolean secret = containsSecret(setting.configKey, setting.configValue);
+        return new SystemSettingView(setting.id, setting.configKey,
+                maskSecrets(setting.configKey, setting.configValue), setting.configType,
+                setting.groupName, setting.uiSchema, setting.description, setting.version,
+                setting.isFrozen, secret, setting.createdAt, setting.updatedAt);
+    }
+
+    private boolean containsSecret(String key, JsonNode value) {
+        if (isSensitiveKey(key.toLowerCase())) {
+            return true;
+        }
+        if (value == null) {
+            return false;
+        }
+        if (value.isObject()) {
+            java.util.Iterator<String> fields = value.fieldNames();
+            while (fields.hasNext()) {
+                String field = fields.next().toLowerCase();
+                if (isSensitiveKey(field) || containsSecret(field, value.get(field))) {
+                    return true;
+                }
+            }
+        } else if (value.isArray()) {
+            for (JsonNode item : value) {
+                if (containsSecret(key, item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private JsonNode maskSecrets(String key, JsonNode value) {
+        if (value == null) {
+            return null;
+        }
+        if (isSensitiveKey(key.toLowerCase())) {
+            return mapper.getNodeFactory().textNode("***REDACTED***");
+        }
+        if (!value.isObject()) {
+            if (value.isArray()) {
+                com.fasterxml.jackson.databind.node.ArrayNode result = mapper.createArrayNode();
+                for (JsonNode item : value) {
+                    result.add(maskSecrets(key, item));
+                }
+                return result;
+            }
+            return value.deepCopy();
+        }
+        ObjectNode result = mapper.createObjectNode();
+        value.fields().forEachRemaining(field -> result.set(field.getKey(), maskSecrets(field.getKey(), field.getValue())));
+        return result;
+    }
+
+    private JsonNode mergeSecretValues(String key, JsonNode current, JsonNode submitted) {
+        if (submitted == null || submitted.isNull()) {
+            return current == null ? mapper.createObjectNode() : current.deepCopy();
+        }
+        if (isSensitiveKey(key.toLowerCase())) {
+            return submitted.isTextual() && (submitted.asText().isBlank() || submitted.asText().equals("***REDACTED***"))
+                    ? current.deepCopy() : submitted.deepCopy();
+        }
+        if (!submitted.isObject() || current == null || !current.isObject()) {
+            return submitted.deepCopy();
+        }
+        ObjectNode merged = (ObjectNode) current.deepCopy();
+        submitted.fields().forEachRemaining(field -> merged.set(field.getKey(),
+                mergeSecretValues(field.getKey(), current.get(field.getKey()), field.getValue())));
+        return merged;
     }
 }

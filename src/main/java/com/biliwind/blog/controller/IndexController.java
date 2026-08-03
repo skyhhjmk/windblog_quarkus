@@ -4,12 +4,6 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
-import com.biliwind.blog.model.Category;
-import com.biliwind.blog.model.Post;
-import com.biliwind.blog.model.PostStatus;
-import com.biliwind.blog.model.PostTag;
-import io.quarkus.hibernate.orm.panache.PanacheQuery;
-import io.quarkus.panache.common.Page;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -28,7 +22,6 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -38,9 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class IndexController {
 
     private static final int PAGE_SIZE = 10;
-    private static final long LOCAL_CACHE_TTL_MILLIS = 3000L;
     private static final long RENDERED_PAGE_CACHE_TTL_MILLIS = 1000L;
-    private static final ConcurrentHashMap<String, LocalIndexPageCache> LOCAL_INDEX_PAGE_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, RenderedPageCache> RENDERED_PAGE_CACHE = new ConcurrentHashMap<>();
 
     @Inject
@@ -55,7 +46,7 @@ public class IndexController {
     LanguageContext languageContext;
 
     @Inject
-    com.biliwind.blog.common.CacheService cacheService;
+    com.biliwind.blog.service.PublicCacheRefreshService publicCacheRefreshService;
 
     @Inject
     RegionContext regionContext;
@@ -80,20 +71,21 @@ public class IndexController {
 
         String language = languageContext.getLang();
         String currentRegion = regionContext.getCurrentRegion().getCode();
-        String cacheKey = com.biliwind.blog.common.CacheService.Keys.indexPage(subPage, language + ":" + currentRegion);
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
-        String renderedPageCacheKey = buildRenderedPageCacheKey(cacheKey, pjaxRequest);
+        String renderedPageCacheKey = buildRenderedPageCacheKey(
+                "index:v2:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
 
         String cachedHtml = getRenderedPageHtml(renderedPageCacheKey);
         if (cachedHtml != null) {
             return buildHtmlResponse(cachedHtml);
         }
 
-        IndexPageCache pageCache = getIndexPageCache(cacheKey, subPage, language, currentRegion);
+        com.biliwind.blog.service.PublicCacheRefreshService.PublicIndexPageSnapshot pageCache =
+                publicCacheRefreshService.findPublishedIndexPage(subPage, PAGE_SIZE, language, currentRegion);
 
-        long totalPostsCount = pageCache.totalPostsCount;
-        long totalPages = pageCache.totalPages;
-        List<IndexPostItem> postItems = pageCache.postItems;
+        long totalPostsCount = pageCache.totalPostsCount();
+        long totalPages = pageCache.totalPages();
+        List<IndexPostItem> postItems = toIndexItems(pageCache.posts(), language);
 
         Template template;
         if (pjaxRequest) {
@@ -158,163 +150,48 @@ public class IndexController {
                 .build();
     }
 
-    private IndexPageCache getIndexPageCache(String cacheKey, int subPage, String language, String currentRegion) {
-        long now = System.currentTimeMillis();
-        LocalIndexPageCache localCache = LOCAL_INDEX_PAGE_CACHE.get(cacheKey);
-        if (localCache != null) {
-            if (localCache.expiresAtMillis > now) {
-                return localCache.pageCache;
-            }
-        }
+    private List<IndexPostItem> toIndexItems(
+            List<com.biliwind.blog.service.PublicCacheRefreshService.PublicPostListSnapshot> snapshots,
+            String language) {
+        List<IndexPostItem> result = new ArrayList<>();
+        for (com.biliwind.blog.service.PublicCacheRefreshService.PublicPostListSnapshot snapshot : snapshots) {
+            String title = LanguageHelper.resolveLocalizedValue(snapshot.title(), language);
+            String summary = LanguageHelper.resolveLocalizedValue(snapshot.summary(), language);
 
-        synchronized (LOCAL_INDEX_PAGE_CACHE) {
-            now = System.currentTimeMillis();
-            localCache = LOCAL_INDEX_PAGE_CACHE.get(cacheKey);
-            if (localCache != null) {
-                if (localCache.expiresAtMillis > now) {
-                    return localCache.pageCache;
+            if (title == null || title.isBlank()) {
+                title = snapshot.slug();
+            }
+
+            if (summary == null || summary.isBlank()) {
+                summary = "暂无摘要";
+            }
+
+            List<TagItem> tags = new ArrayList<>();
+            for (com.biliwind.blog.service.PublicCacheRefreshService.PublicTagSnapshot tag : snapshot.tags()) {
+                String tagName = LanguageHelper.resolveLocalizedValue(tag.name(), language);
+                if (tagName == null || tagName.isBlank()) {
+                    tagName = tag.slug();
                 }
+                TagItem tagItem = new TagItem(tagName, tag.slug());
+                tags.add(tagItem);
             }
 
-            IndexPageCache pageCache = loadIndexPageCache(cacheKey, subPage, language, currentRegion);
-            LocalIndexPageCache nextLocalCache = new LocalIndexPageCache(pageCache, now + LOCAL_CACHE_TTL_MILLIS);
-            LOCAL_INDEX_PAGE_CACHE.put(cacheKey, nextLocalCache);
-            return pageCache;
-        }
-    }
-
-    private IndexPageCache loadIndexPageCache(String cacheKey, int subPage, String language, String currentRegion) {
-        Optional<IndexPageCache> cached = Optional.empty();
-        if (subPage <= 5) {
-            cached = cacheService.get(cacheKey, IndexPageCache.class);
-        }
-
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        IndexPageCache pageCache = queryIndexPageCache(subPage, language, currentRegion);
-
-        if (subPage <= 5) {
-            cacheService.set(cacheKey, pageCache, java.time.Duration.ofMinutes(30));
-        }
-
-        return pageCache;
-    }
-
-    private IndexPageCache queryIndexPageCache(int subPage, String language, String currentRegion) {
-        Map<String, Object> parameters = Map.of(
-                "status", PostStatus.PUBLISHED,
-                "regionPattern", "%\"" + currentRegion + "\"%"
-        );
-
-        PanacheQuery<Post> postQuery = Post.find(
-                "status = :status and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern) order by publishedAt desc nulls last, createdAt desc",
-                parameters
-        );
-
-        long totalPostsCount = postQuery.count();
-        List<Post> posts = postQuery.page(Page.of(subPage - 1, PAGE_SIZE)).list();
-
-        List<Long> postIds = new ArrayList<>();
-        for (Post post : posts) {
-            postIds.add(post.id);
-        }
-
-        Map<Long, List<PostTag>> tagsMap = new java.util.HashMap<>();
-        if (!postIds.isEmpty()) {
-            List<PostTag> allTags = PostTag.find("post.id in ?1", postIds).list();
-            for (PostTag postTag : allTags) {
-                Long postId = postTag.post.id;
-                List<PostTag> tagsForPost = tagsMap.get(postId);
-                if (tagsForPost == null) {
-                    tagsForPost = new ArrayList<>();
-                    tagsMap.put(postId, tagsForPost);
-                }
-                tagsForPost.add(postTag);
+            int aiSummaryStatusValue = 0;
+            if (snapshot.aiSummaryStatus() != null) {
+                aiSummaryStatusValue = snapshot.aiSummaryStatus().intValue();
             }
-        }
 
-        long totalPages;
-        if (totalPostsCount == 0) {
-            totalPages = 1;
-        } else {
-            totalPages = (long) Math.ceil((double) totalPostsCount / PAGE_SIZE);
-        }
-
-        List<IndexPostItem> postItems = new ArrayList<>();
-        for (Post post : posts) {
-            List<PostTag> tagsForPost = tagsMap.get(post.id);
-            if (tagsForPost == null) {
-                tagsForPost = new ArrayList<>();
+            String categoryName = LanguageHelper.resolveLocalizedValue(snapshot.categoryName(), language);
+            if (categoryName == null || categoryName.isBlank()) {
+                categoryName = "未分类";
             }
-            IndexPostItem postItem = toIndexItem(post, language, tagsForPost);
-            postItems.add(postItem);
+            String categorySlug = snapshot.categorySlug() == null ? "uncategorized" : snapshot.categorySlug();
+            result.add(new IndexPostItem(
+                    snapshot.slug(), title, summary, snapshot.aiSummary(), aiSummaryStatusValue,
+                    snapshot.publishedAt(), snapshot.createdAt(), categoryName, categorySlug,
+                    snapshot.authorName(), tags));
         }
-
-        return new IndexPageCache(postItems, totalPostsCount, totalPages);
-    }
-
-    private IndexPostItem toIndexItem(Post post, String language, List<PostTag> postTags) {
-        String title = LanguageHelper.resolveLocalizedValue(post.title, language);
-        String summary = LanguageHelper.resolveLocalizedValue(post.summary, language);
-
-        if (title == null) {
-            title = post.slug;
-        } else if (title.isBlank()) {
-            title = post.slug;
-        }
-
-        if (summary == null) {
-            summary = "暂无摘要";
-        } else if (summary.isBlank()) {
-            summary = "暂无摘要";
-        }
-
-        Category category = post.category;
-        String categoryName;
-        if (category != null) {
-            categoryName = LanguageHelper.resolveLocalizedValue(category.name, language);
-        } else {
-            categoryName = "未分类";
-        }
-
-        List<TagItem> tags = new ArrayList<>();
-        for (PostTag postTag : postTags) {
-            String tagName = LanguageHelper.resolveLocalizedValue(postTag.tag.name, language);
-            TagItem tagItem = new TagItem(tagName, postTag.tag.slug);
-            tags.add(tagItem);
-        }
-
-        int aiSummaryStatusValue = 0;
-        if (post.aiSummaryStatus != null) {
-            aiSummaryStatusValue = post.aiSummaryStatus.intValue();
-        }
-
-        String authorName = "Unknown";
-        if (post.user != null) {
-            authorName = post.user.username;
-        }
-
-        String categorySlug = "uncategorized";
-        if (category != null) {
-            categorySlug = category.slug;
-        }
-
-        return new IndexPostItem(
-                post.id,
-                post.slug,
-                title,
-                summary,
-                post.aiSummary,
-                aiSummaryStatusValue,
-                post.publishedAt,
-                post.createdAt,
-                categoryName,
-                categorySlug,
-                authorName,
-                tags
-        );
+        return result;
     }
 
     @TemplateData
@@ -322,7 +199,6 @@ public class IndexController {
 
     @TemplateData
     public record IndexPostItem(
-            Long id,
             String slug,
             String title,
             String summary,
@@ -334,19 +210,6 @@ public class IndexController {
             String categorySlug,
             String authorName,
             List<TagItem> tags
-    ) {
-    }
-
-    private record IndexPageCache(
-            List<IndexPostItem> postItems,
-            long totalPostsCount,
-            long totalPages
-    ) {
-    }
-
-    private record LocalIndexPageCache(
-            IndexPageCache pageCache,
-            long expiresAtMillis
     ) {
     }
 

@@ -10,19 +10,21 @@
 
     // Global variables (will be initialized from data attributes)
     let config = {
-        postId: 0,
+        postRef: '',
         postPrice: 0,
         hasPurchased: false
     };
     let buyButtonListenerBound = false;
     let repostButtonListenerBound = false;
+    let passwordFormListenerBound = false;
 
     function initPostPremium() {
+        initPasswordForms();
         const container = document.getElementById('post-content-section');
         if (!container) return;
 
         // Initialize config from data attributes
-        config.postId = parseInt(container.dataset.postId) || 0;
+        config.postRef = container.dataset.postRef || '';
         config.postPrice = parseFloat(container.dataset.postPrice) || 0;
         config.hasPurchased = container.dataset.hasPurchased === 'true';
 
@@ -30,6 +32,46 @@
         initRepostLicenseButton();
         checkAuthorization();
         initBlockManager();
+    }
+
+    function initPasswordForms() {
+        if (passwordFormListenerBound) {
+            return;
+        }
+        passwordFormListenerBound = true;
+        document.addEventListener('submit', async function (event) {
+            const form = event.target.closest('form[data-password-unlock-form="true"]');
+            if (!form) {
+                return;
+            }
+            event.preventDefault();
+            const submitButton = form.querySelector('button[type="submit"]');
+            if (window.setLoading && submitButton) {
+                window.setLoading(submitButton, true, {text: '验证中...'});
+            }
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-XSRF-TOKEN': getCsrfToken()
+                    },
+                    body: new URLSearchParams(new FormData(form)),
+                    credentials: 'same-origin'
+                });
+                if (response.ok && response.url) {
+                    window.location.assign(response.url);
+                    return;
+                }
+                await window.alert('密码错误或请求已失效');
+            } catch (error) {
+                await window.alert('验证失败，请稍后重试');
+            } finally {
+                if (window.setLoading && submitButton) {
+                    window.setLoading(submitButton, false, {text: '解锁内容'});
+                }
+            }
+        });
     }
 
     // Initialize purchase button event listeners (using delegation)
@@ -42,11 +84,11 @@
             const target = e.target.closest('.buy-post-btn');
             if (target) {
                 e.preventDefault();
-                const pid = target.dataset.postId || config.postId;
+                const postRef = target.dataset.postRef || config.postRef;
                 const pPrice = target.dataset.price || config.postPrice;
                 const bId = target.dataset.blockId;
 
-                await buyCurrentPost(pid, pPrice, target, bId);
+                await buyCurrentPost(postRef, pPrice, target, bId);
             }
         });
     }
@@ -65,11 +107,6 @@
 
             event.preventDefault();
 
-            if (button.dataset.loggedIn !== 'true') {
-                await window.alert('请先登录后再申请转载授权');
-                return;
-            }
-
             const targetUrl = await window.prompt('请输入转载页面 URL', 'https://');
             if (!targetUrl) {
                 return;
@@ -84,7 +121,7 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        postId: Number(button.dataset.postId),
+                        postSlug: button.dataset.postRef,
                         targetUrl: targetUrl
                     })
                 });
@@ -112,11 +149,10 @@
 
     // Check authorization status and load content if needed
     function checkAuthorization() {
-        const loggedIn = !!getCookie('user_token');
         const hasButtons = document.querySelectorAll('.buy-post-btn').length > 0;
 
-        if (loggedIn && hasButtons) {
-            // Already logged in: show verification state and try to pull content
+        if (hasButtons || config.postPrice > 0) {
+            // The auth cookie is HttpOnly; the protected endpoint is the authority for the current user.
             document.querySelectorAll('.buy-post-btn').forEach(btn => {
                 if (window.setLoading) {
                     window.setLoading(btn, true, {text: '验证授权中...'});
@@ -124,16 +160,16 @@
             });
             loadFullPostContent();
         } else {
-            // Not logged in or no blocks: check local record or initial purchase status
-            const hasLocalRecord = localStorage.getItem('purchased_' + config.postId);
-            if (hasLocalRecord || config.hasPurchased) {
+            // Free posts without protected blocks do not need a user-specific request.
+            const hasLocalRecord = localStorage.getItem('purchased_' + config.postRef);
+            if (hasLocalRecord) {
                 loadFullPostContent();
             }
         }
     }
 
     // Purchase article or block
-    async function buyCurrentPost(postId, price, button, blockId) {
+    async function buyCurrentPost(postRef, price, button, blockId) {
         const confirmMsg = blockId ? '确认解锁该内容区块吗？' : '确认使用 ' + price + ' 积分购买并解锁这篇文章吗？';
         const confirmed = await window.confirm(confirmMsg);
         if (!confirmed) return;
@@ -143,7 +179,7 @@
         }
 
         try {
-            let url = '/api/user/post/buy/' + postId + '?price=' + price;
+            let url = '/api/user/post/buy/' + encodeURIComponent(postRef) + '?price=' + price;
             if (blockId) url += '&blockId=' + encodeURIComponent(blockId);
 
             const response = await fetch(url, {
@@ -188,7 +224,7 @@
     // Load full or partial content
     async function loadFullPostContent(unlockedBlockId) {
         try {
-            const response = await fetch('/api/user/post/blocks/' + config.postId, {
+            const response = await fetch('/api/user/post/blocks/' + encodeURIComponent(config.postRef), {
                 method: 'GET',
                 headers: {
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -309,7 +345,7 @@
         document.querySelectorAll('.buy-post-btn').forEach(btn => btn.remove());
 
         // Persist locally for better UX on refresh (optional but recommended)
-        localStorage.setItem('purchased_' + config.postId, 'true');
+        localStorage.setItem('purchased_' + config.postRef, 'true');
     }
 
     // Helpers
@@ -484,7 +520,7 @@
                 
                 wrapper.innerHTML = `
                     <label class="block-checkbox-label" for="${uniqueId}">${labelText}</label>
-                    <input type="checkbox" id="${uniqueId}" class="level-toggle-checkbox" data-level="${lvl}" style="accent-color: var(--color-accent, #06b6d4);" />
+                    <input type="checkbox" id="${uniqueId}" class="level-toggle-checkbox accent-color-accent" data-level="${lvl}" />
                 `;
                 levelContainer.appendChild(wrapper);
                 
@@ -510,7 +546,7 @@
                     const uniqueId = 'chk-group-' + grp;
                     wrapper.innerHTML = `
                         <label class="block-checkbox-label" for="${uniqueId}">组: ${grp}</label>
-                        <input type="checkbox" id="${uniqueId}" class="group-toggle-checkbox" data-group="${grp}" style="accent-color: var(--color-accent, #06b6d4);" />
+                        <input type="checkbox" id="${uniqueId}" class="group-toggle-checkbox accent-color-accent" data-group="${grp}" />
                     `;
                     groupContainer.appendChild(wrapper);
                     

@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller;
 
 import com.biliwind.blog.model.Media;
+import com.biliwind.blog.model.PostMedia;
 import com.biliwind.blog.service.MediaAccessService;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
@@ -13,6 +14,7 @@ import jakarta.ws.rs.core.UriInfo;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.nio.file.Files;
+import java.util.List;
 
 @Path("/uploads")
 public class UploadFileController {
@@ -39,11 +41,16 @@ public class UploadFileController {
 
         try {
             String storageKeyCandidate = extractStorageKey(fileName);
-            Media media = Media.find("storageKey = ?1 AND deletedAt IS NULL", storageKeyCandidate).firstResult();
+            Media media = findMediaForStoragePath(fileName, storageKeyCandidate);
 
             // 软删除防绕过：数据库中不存在或已软删除的文件，一律拒绝访问，
             // 不允许因 media 为 null 就跳过权限检查直接读取本地物理文件。
             if (media == null) {
+                throw new NotFoundException();
+            }
+
+            long protectedAttachmentReferences = PostMedia.count("media.id = ?1 and usageType = 3", media.id);
+            if (protectedAttachmentReferences > 0) {
                 throw new NotFoundException();
             }
 
@@ -98,6 +105,38 @@ public class UploadFileController {
             return base + ".webp";
         }
         return fileName;
+    }
+
+    private Media findMediaForStoragePath(String fileName, String storageKeyCandidate) {
+        Media exact = Media.find(
+                "storageKey = ?1 AND deletedAt IS NULL", storageKeyCandidate).firstResult();
+        if (exact != null) {
+            return exact;
+        }
+
+        String variantBase = extractGeneratedVariantBase(fileName);
+        if (variantBase == null) {
+            return null;
+        }
+
+        List<Media> candidates = Media.find(
+                "storageKey like ?1 AND deletedAt IS NULL", variantBase + ".%")
+                .range(0, 1)
+                .list();
+        if (candidates.size() != 1) {
+            return null;
+        }
+        return candidates.get(0);
+    }
+
+    static String extractGeneratedVariantBase(String fileName) {
+        String[] suffixes = {"_placeholder.jpg", "_cover.jpg", "_p.jpg", ".webp"};
+        for (String suffix : suffixes) {
+            if (fileName.endsWith(suffix) && fileName.length() > suffix.length()) {
+                return fileName.substring(0, fileName.length() - suffix.length());
+            }
+        }
+        return null;
     }
 
     private boolean isSameRequestUrl(String targetUrl, UriInfo uriInfo) {

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    <script>
+    <script nonce="{cspNonce}">
         window.i18n = {
             reply: "回复",
             loading_comments: "正在加载评论...",
@@ -55,7 +55,7 @@
     {/if}
 
     {#if jsonLd.or(null)}
-        <script type="application/ld+json">
+        <script type="application/ld+json" nonce="{cspNonce}">
             {jsonLd.raw}
 
         </script>
@@ -69,9 +69,11 @@
     <!-- 本地化 Font Awesome，避免运行时依赖外部 CDN -->
     <link rel="stylesheet" href="/assets/vendor/fontawesome/css/all.min.css"/>
 
+    <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js"></script>
+
     <!-- 本地化 Tailwind CDN 运行时脚本，保持现有模板写法不变 -->
     <script src="/assets/vendor/tailwind/tailwind-cdn.min.js"></script>
-    <script>
+    <script nonce="{cspNonce}">
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -93,7 +95,7 @@
             }
         }
     </script>
-    <script>
+    <script nonce="{cspNonce}">
         (function() {
             const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
             if (theme === 'light') {

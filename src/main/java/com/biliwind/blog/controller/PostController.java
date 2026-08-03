@@ -9,7 +9,6 @@ import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
-import com.biliwind.blog.service.storage.VariantType;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -19,6 +18,7 @@ import jakarta.ws.rs.core.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Path("/")
 public class PostController {
@@ -39,9 +39,6 @@ public class PostController {
     Template postContentTemplate;
 
     @Inject
-    com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
-
-    @Inject
     LanguageContext languageContext;
 
     @Inject
@@ -54,9 +51,6 @@ public class PostController {
     com.biliwind.blog.service.ConfigManager configManager;
 
     @Inject
-    com.biliwind.blog.service.storage.StorageService storageService;
-
-    @Inject
     com.biliwind.blog.service.MediaAccessService mediaAccessService;
 
     @Inject
@@ -67,6 +61,12 @@ public class PostController {
 
     @Inject
     com.biliwind.blog.service.link.ArticleExternalLinkService articleExternalLinkService;
+
+    @Inject
+    com.biliwind.blog.service.PublicContentSanitizer publicContentSanitizer;
+
+    @Inject
+    com.biliwind.blog.service.PublicCacheRefreshService publicCacheRefreshService;
 
     @GET
     @Path("/post/{slug}")
@@ -103,80 +103,57 @@ public class PostController {
 
         String currentRegion = regionContext.getCurrentRegion().getCode();
 
-        // 核心过滤逻辑: visibilityRegions 为空或者是包含当前区域
-        Post postEntity = Post.find(
-                "slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?3)",
-                slug, PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%"
-        ).firstResult();
-
-        if (postEntity == null) {
+        Optional<com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot> snapshotResult =
+                publicCacheRefreshService.findPublishedSnapshot(slug, currentRegion);
+        if (snapshotResult.isEmpty()) {
             throw new NotFoundException("Post not found: " + slug);
         }
-
-        if (postEntity.visibility == 1) {
-            throw new NotFoundException("Post is private");
-        }
+        com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot =
+                snapshotResult.get();
 
         String resolvedLang = languageContext.getLang();
 
         // 计算 ETag 逻辑。使用显式 if/else，禁止三目
-        java.time.OffsetDateTime lastUpdated = postEntity.updatedAt;
+        java.time.OffsetDateTime lastUpdated = snapshot.updatedAt();
         if (lastUpdated == null) {
-            lastUpdated = postEntity.createdAt;
+            lastUpdated = snapshot.publishedAt();
         }
         if (lastUpdated == null) {
             lastUpdated = java.time.OffsetDateTime.now();
         }
 
         long epoch = lastUpdated.toEpochSecond();
-        String etagValue = postEntity.id.toString() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion;
+        String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion;
         EntityTag etag = new EntityTag(etagValue);
+        boolean protectedPage = snapshot.visibility() == 2;
 
         // 评估客户端提供的 If-None-Match 首部
-        Response.ResponseBuilder responseBuilder = request.evaluatePreconditions(etag);
-        if (responseBuilder != null) {
-            CacheControl cacheControl = new CacheControl();
-            cacheControl.setMaxAge(60); // 缓存 60 秒
-            return responseBuilder.cacheControl(cacheControl).build();
-        }
-
-        String localizedTitle =
-                LanguageHelper.resolveLocalizedValue(postEntity.title, resolvedLang);
-
-        String localizedContent =
-                resolveContent(postEntity.publishedRevision, resolvedLang);
-
-        // Check if user is logged in
-        Long currentUserId = resolveUserIdFromCookie(httpHeaders);
-
-        long postPrice = postAccessService.getPostPrice(postEntity);
-        int freeLines = postAccessService.getFreeLines(postEntity);
-        long maxPointsPaid = postAccessService.getMaxPointsPaid(currentUserId, postEntity.id);
-
-        // 作者直接绕过购买检查
-        boolean isAuthor = false;
-        if (currentUserId != null) {
-            if (postEntity.user != null) {
-                if (currentUserId.equals(postEntity.user.id)) {
-                    isAuthor = true;
-                }
+        if (!protectedPage) {
+            Response.ResponseBuilder responseBuilder = request.evaluatePreconditions(etag);
+            if (responseBuilder != null) {
+                CacheControl cacheControl = new CacheControl();
+                cacheControl.setMaxAge(60); // 缓存 60 秒
+                return responseBuilder.cacheControl(cacheControl)
+                        .header("Vary", "Accept-Language, Cookie")
+                        .build();
             }
         }
 
-        // 安全处理：渲染重构。为了支持 CDN 缓存静态 HTML 且减轻后端渲染压力，
-        // 初始下发的 HTML 统一使用剔除保密内容的“安全预览版”，在后端通过 Redis 对此版本进行深度缓存。
-        // 对于已经登录且具有查看权限的用户，前端将通过 AJAX 动态请求真实内容并覆盖渲染。
-        localizedContent = postAccessService.getCachedPreviewContent(postEntity, resolvedLang, localizedContent, postPrice);
+        String localizedTitle = LanguageHelper.resolveLocalizedValue(snapshot.title(), resolvedLang);
+        String localizedContent = resolveSnapshotContent(snapshot, resolvedLang);
 
-        PostBodyView postBody = resolvePostBody(postEntity.renderType, localizedContent);
+        long postPrice = snapshot.postPrice();
+        PostBodyView postBody = resolvePostBody(snapshot.renderType(), localizedContent);
         if (postBody.html()) {
-            String rewrittenPostBody = affiliateContentRenderService.rewriteCommercialLinks(postEntity, postBody.body());
+            // Affiliate token issuance is intentionally kept off the public read model;
+            // the source entity is loaded only when active commercial links exist.
+            String rewrittenPostBody = affiliateContentRenderService.rewriteCommercialLinks(
+                    snapshot.postId(), postBody.body());
             rewrittenPostBody = articleExternalLinkService.rewriteArticleExternalLinks(rewrittenPostBody);
             postBody = new PostBodyView(rewrittenPostBody, true, postBody.renderType());
         }
 
-        String localizedAiSummary =
-                LanguageHelper.resolveLocalizedValue(postEntity.aiSummary, resolvedLang);
+        String localizedAiSummary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), resolvedLang);
 
         Template template = null;
         if (PjaxHelper.isPjaxRequest(httpHeaders)) {
@@ -185,48 +162,28 @@ public class PostController {
             template = postTemplate;
         }
 
-        // 全站买断判定：只依赖作者身份或明确的全文购买记录，不用积分比较
-        boolean hasPurchased = false;
-        if (isAuthor) {
-            hasPurchased = true;
-        }
-        if (hasPurchased == false) {
-            if (postAccessService.hasPurchasedPost(currentUserId, postEntity.id)) {
-                hasPurchased = true;
+        List<TagItem> postTags = new java.util.ArrayList<>();
+        if (snapshot.tags() != null) {
+            for (com.biliwind.blog.service.PublicCacheRefreshService.PublicTagSnapshot tag : snapshot.tags()) {
+                postTags.add(new TagItem(LanguageHelper.resolveLocalizedValue(tag.name(), resolvedLang), tag.slug()));
             }
         }
 
-        List<PostTag> rawPostTags = PostTag.find("post", postEntity).list();
-        List<TagItem> postTags = new java.util.ArrayList<>();
-        for (PostTag pt : rawPostTags) {
-            postTags.add(new TagItem(LanguageHelper.resolveLocalizedValue(pt.tag.name, resolvedLang), pt.tag.slug));
-        }
-
-        List<PostMedia> rawPostMedia = PostMedia.list("post.id = ?1", postEntity.id);
         List<AttachmentView> attachments = new java.util.ArrayList<>();
-        for (PostMedia pm : rawPostMedia) {
-            if (pm.usageType == 3) { // 3 = 附件
-                if (!mediaAccessService.canAccess(pm.media, regionContext.getCurrentRegion())) {
+        if (snapshot.attachments() != null) {
+            for (com.biliwind.blog.service.PublicCacheRefreshService.PublicAttachmentSnapshot attachment
+                    : snapshot.attachments()) {
+                if (!isAttachmentVisible(attachment, currentRegion)) {
                     continue;
                 }
-                String attachmentUrl = "";
-                if (hasPurchased) {
-                    attachmentUrl = storageService.getBestSignedUrl(pm.media, VariantType.ORIGINAL, java.time.Duration.ofMinutes(10));
-                    if (attachmentUrl == null) {
-                        attachmentUrl = pm.media.url;
-                    }
-                }
-                long bytes = 0;
-                if (pm.media.size != null) {
-                    bytes = pm.media.size;
-                }
-                String formattedSize = "";
+                long bytes = attachment.size() == null ? 0L : attachment.size();
+                String formattedSize;
                 if (bytes < 1024 * 1024) {
                     formattedSize = (bytes / 1024) + " KB";
                 } else {
                     formattedSize = String.format("%.2f MB", bytes / (1024.0 * 1024.0));
                 }
-                attachments.add(new AttachmentView(pm.media.fileName, attachmentUrl, formattedSize));
+                attachments.add(new AttachmentView(attachment.fileName(), "", formattedSize));
             }
         }
 
@@ -234,52 +191,46 @@ public class PostController {
         if (displayTitle == null) {
             displayTitle = slug;
         }
-        String seoTitle = resolveSeoTitle(postEntity, displayTitle);
-        String pageDescription = resolvePageDescription(postEntity, localizedAiSummary, localizedContent, resolvedLang);
+        String seoTitle = resolveSeoTitle(snapshot, displayTitle);
+        String pageDescription = resolvePageDescription(snapshot, localizedAiSummary, localizedContent, resolvedLang);
 
         int aiSummaryStatusVal = 0;
-        if (postEntity.aiSummaryStatus != null) {
-            aiSummaryStatusVal = postEntity.aiSummaryStatus.intValue();
+        if (snapshot.aiSummaryStatus() != null) {
+            aiSummaryStatusVal = snapshot.aiSummaryStatus().intValue();
         }
-
-        String authorName = "Unknown";
-        if (postEntity.user != null) {
-            authorName = postEntity.user.username;
+        String authorName = snapshot.authorName();
+        if (authorName == null || authorName.isBlank()) {
+            authorName = "Unknown";
         }
 
         String authorAvatar = "/static/img/avatar-default.png";
-        if (postEntity.user != null) {
-            authorAvatar = "https://ui-avatars.com/api/?name=" + postEntity.user.username;
-        }
 
         String renderTypeName = null;
         if (postBody.renderType() != null) {
             renderTypeName = postBody.renderType().name();
         }
 
-        String postCategory = "未分类";
-        if (postEntity.category != null) {
-            postCategory = LanguageHelper.resolveLocalizedValue(postEntity.category.name, resolvedLang);
+        String postCategory = LanguageHelper.resolveLocalizedValue(snapshot.categoryName(), resolvedLang);
+        if (postCategory == null || postCategory.isBlank()) {
+            postCategory = "未分类";
         }
-
-        String postCategorySlug = "uncategorized";
-        if (postEntity.category != null) {
-            postCategorySlug = postEntity.category.slug;
+        String postCategorySlug = snapshot.categorySlug();
+        if (postCategorySlug == null || postCategorySlug.isBlank()) {
+            postCategorySlug = "uncategorized";
         }
 
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
-                .data("postId", postEntity.id)
                 .data("postSlug", slug)
                 .data("postTitle", displayTitle)
                 .data("pageTitle", seoTitle)
                 .data("pageDescription", pageDescription)
-                .data("pageKeywords", postEntity.seoKeywords)
+                .data("pageKeywords", snapshot.seoKeywords())
                 .data("aiSummary", localizedAiSummary)
                 .data("aiSummaryStatus", aiSummaryStatusVal)
                 .data("postBody", postBody.body())
                 .data("postBodyHtml", postBody.html())
-                .data("publishedAt", postEntity.publishedAt)
+                .data("publishedAt", snapshot.publishedAt())
                 .data("authorName", authorName)
                 .data("authorAvatar", authorAvatar)
                 .data("postRenderType", renderTypeName)
@@ -287,24 +238,30 @@ public class PostController {
                 .data("postCategory", postCategory)
                 .data("postCategorySlug", postCategorySlug)
                 .data("postPrice", postPrice)
-                .data("hasPurchased", hasPurchased)
-                .data("repostUserLoggedIn", currentUserId != null)
+                // This page is public-cacheable. User-specific state and download tickets
+                // are loaded only by the no-store protected-content endpoint.
+                .data("hasPurchased", false)
                 .data("postTags", postTags)
-                .data("contentDeclarations", resolveContentDeclarationLabels(postEntity.contentDeclarations))
+                .data("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
                 .data("attachments", attachments)
-                .data("relatedStoreItems", resolveRelatedStoreItems(postEntity))
-                .data("repostOriginalUrl", repostLicenseService.buildPostUrl(postEntity))
+                .data("relatedStoreItems", snapshot.relatedStoreItems())
+                .data("repostOriginalUrl", repostLicenseService.buildPostUrl(slug))
                 .data("canonicalUrl", buildCanonicalUrl(slug))
-                .data("ogData", buildOgData(postEntity, seoTitle, pageDescription, resolvedLang))
-                .data("jsonLd", buildJsonLd(postEntity, seoTitle, pageDescription, resolvedLang));
+                .data("ogData", buildOgData(slug, seoTitle, pageDescription))
+                .data("jsonLd", buildJsonLd(snapshot, seoTitle, pageDescription, slug));
 
-        CacheControl cacheControl = new CacheControl();
-        cacheControl.setMaxAge(60); // 缓存 60 秒
-
-        return Response.ok(templateInstance)
-                .tag(etag)
-                .cacheControl(cacheControl)
-                .build();
+        Response.ResponseBuilder responseBuilder = Response.ok(templateInstance)
+                .header("Vary", "Accept-Language, Cookie");
+        if (protectedPage) {
+            responseBuilder.header("Cache-Control", "no-store")
+                    .header("Pragma", "no-cache")
+                    .header("Expires", "0");
+        } else {
+            CacheControl cacheControl = new CacheControl();
+            cacheControl.setMaxAge(60); // 缓存 60 秒
+            responseBuilder.tag(etag).cacheControl(cacheControl);
+        }
+        return responseBuilder.build();
     }
 
     private List<String> resolveContentDeclarationLabels(List<String> declarationCodes) {
@@ -329,22 +286,25 @@ public class PostController {
         return baseUrl + "/post/" + slug;
     }
 
-    private String resolveSeoTitle(Post post, String displayTitle) {
-        if (post.seoTitle != null && !post.seoTitle.isBlank()) {
-            return post.seoTitle.trim();
+    private String resolveSeoTitle(
+            com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
+            String displayTitle) {
+        if (snapshot.seoTitle() != null && !snapshot.seoTitle().isBlank()) {
+            return snapshot.seoTitle().trim();
         }
         return displayTitle;
     }
 
-    private String resolvePageDescription(Post post,
+    private String resolvePageDescription(
+                                          com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
                                           String localizedAiSummary,
                                           String localizedContent,
                                           String language) {
-        if (post.seoDescription != null && !post.seoDescription.isBlank()) {
-            return post.seoDescription.trim();
+        if (snapshot.seoDescription() != null && !snapshot.seoDescription().isBlank()) {
+            return snapshot.seoDescription().trim();
         }
 
-        String localizedSummary = LanguageHelper.resolveLocalizedValue(post.summary, language);
+        String localizedSummary = LanguageHelper.resolveLocalizedValue(snapshot.summary(), language);
         if (localizedSummary != null && !localizedSummary.isBlank()) {
             return limitDescription(localizedSummary);
         }
@@ -353,7 +313,7 @@ public class PostController {
             return limitDescription(localizedAiSummary);
         }
 
-        String searchableContent = SearchContentHelper.toSearchableText(localizedContent, post.renderType);
+        String searchableContent = SearchContentHelper.toSearchableText(localizedContent, snapshot.renderType());
         return limitDescription(searchableContent);
     }
 
@@ -368,12 +328,12 @@ public class PostController {
         return normalizedDescription.substring(0, 160);
     }
 
-    private java.util.Map<String, String> buildOgData(Post post, String title, String summary, String lang) {
+    private java.util.Map<String, String> buildOgData(String slug, String title, String summary) {
         java.util.Map<String, String> og = new java.util.HashMap<>();
         og.put("og:title", title);
         og.put("og:description", summary != null ? summary : "");
         og.put("og:type", "article");
-        og.put("og:url", buildCanonicalUrl(post.slug));
+        og.put("og:url", buildCanonicalUrl(slug));
 
         // Try to find a featured image
         String imageUrl = configManager.getString("appearance", "logo_url", "/logo.png");
@@ -388,7 +348,11 @@ public class PostController {
         return og;
     }
 
-    private String buildJsonLd(Post post, String title, String summary, String lang) {
+    private String buildJsonLd(
+            com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
+            String title,
+            String summary,
+            String slug) {
         try {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             com.fasterxml.jackson.databind.node.ObjectNode root = mapper.createObjectNode();
@@ -396,13 +360,13 @@ public class PostController {
             root.put("@type", "BlogPosting");
             root.put("headline", title);
             root.put("description", summary != null ? summary : "");
-            root.put("url", buildCanonicalUrl(post.slug));
-            root.put("datePublished", post.publishedAt != null ? post.publishedAt.toString() : "");
-            root.put("dateModified", post.updatedAt != null ? post.updatedAt.toString() : "");
+            root.put("url", buildCanonicalUrl(slug));
+            root.put("datePublished", snapshot.publishedAt() != null ? snapshot.publishedAt().toString() : "");
+            root.put("dateModified", snapshot.updatedAt() != null ? snapshot.updatedAt().toString() : "");
 
             com.fasterxml.jackson.databind.node.ObjectNode author = root.putObject("author");
             author.put("@type", "Person");
-            author.put("name", post.user != null ? post.user.username : "Unknown");
+            author.put("name", snapshot.authorName() == null ? "Unknown" : snapshot.authorName());
 
             com.fasterxml.jackson.databind.node.ObjectNode publisher = root.putObject("publisher");
             publisher.put("@type", "Organization");
@@ -415,18 +379,6 @@ public class PostController {
         } catch (Exception e) {
             return "{}";
         }
-    }
-
-    private Long resolveUserIdFromCookie(HttpHeaders headers) {
-        jakarta.ws.rs.core.Cookie cookie = headers.getCookies().get("user_token");
-        if (cookie == null || cookie.getValue() == null || cookie.getValue().isBlank()) {
-            return null;
-        }
-        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified = tokenVerifier.verify(cookie.getValue());
-        if (verified == null) {
-            return null;
-        }
-        return verified.uid();
     }
 
     public record TagItem(String name, String slug) {}
@@ -501,35 +453,53 @@ public class PostController {
             case MARKDOWN, FLUTTER_MARKDOWN_PLUS ->
                     new PostBodyView(MarkdownHelper.toHtml(content), true, effective);
             case VDITOR ->
-                    new PostBodyView(content, false, effective);
+                    new PostBodyView(publicContentSanitizer.sanitize(content), true, effective);
             case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL, TUTORIAL_BLOCK ->
-                    new PostBodyView(content, true, effective);
+                    new PostBodyView(publicContentSanitizer.sanitize(content), true, effective);
         };
     }
 
-    private List<com.biliwind.blog.model.StoreItem> resolveRelatedStoreItems(Post post) {
-        if (post.extraInfo == null) return java.util.Collections.emptyList();
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode node = mapper.convertValue(post.extraInfo, com.fasterxml.jackson.databind.JsonNode.class);
-            if (node.has("related_store_items") && node.get("related_store_items").isArray()) {
-                java.util.List<Long> ids = new java.util.ArrayList<>();
-                for (com.fasterxml.jackson.databind.JsonNode idNode : node.get("related_store_items")) {
-                    ids.add(idNode.asLong());
-                }
-                if (!ids.isEmpty()) {
-                    return com.biliwind.blog.model.StoreItem.list("id in ?1", ids);
-                }
-            }
-        } catch (Exception e) {
-            // ignore
+    private String resolveSnapshotContent(
+            com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
+            String language) {
+        if (snapshot.previewContent() == null) {
+            return "";
         }
-        return java.util.Collections.emptyList();
+        String content = snapshot.previewContent().get(language);
+        if (content != null) {
+            return content;
+        }
+        return LanguageHelper.resolveLocalizedValue(snapshot.previewContent(), language);
+    }
+
+    private boolean isAttachmentVisible(
+            com.biliwind.blog.service.PublicCacheRefreshService.PublicAttachmentSnapshot attachment,
+            String regionCode) {
+        if (containsRegion(attachment.hiddenRegions(), regionCode)) {
+            return false;
+        }
+        List<String> visibleRegions = attachment.visibilityRegions();
+        if (visibleRegions == null || visibleRegions.isEmpty()) {
+            return true;
+        }
+        return containsRegion(visibleRegions, "GLOBAL") || containsRegion(visibleRegions, regionCode);
+    }
+
+    private boolean containsRegion(List<String> regions, String expected) {
+        if (regions == null || expected == null) {
+            return false;
+        }
+        for (String region : regions) {
+            if (region != null && expected.equalsIgnoreCase(region.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private record PostBodyView(String body, boolean html, PostRenderType renderType) {}
 
-    public record AttachmentView(String fileName, String url, String formattedSize) {
+    public record AttachmentView(String fileName, String downloadUrl, String formattedSize) {
     }
 
 }

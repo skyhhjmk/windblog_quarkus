@@ -6,6 +6,7 @@ import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.arc.Unremovable;
+import io.quarkus.panache.common.Page;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -37,6 +38,8 @@ public class StorageService {
     @Inject
     @Channel("storage-sync-tasks")
     Instance<Emitter<StorageSyncMessage>> syncEmitter;
+    @Inject
+    com.biliwind.blog.service.OutboxEventService outboxEventService;
     private StorageClass primaryProvider;
 
     @PostConstruct
@@ -292,7 +295,20 @@ public class StorageService {
         for (VariantType variant : variants) {
             StorageSyncMessage message = new StorageSyncMessage(
                     media.id, storageClassName, variant.name(), 0);
-            syncEmitter.get().send(message);
+            try {
+                outboxEventService.enqueue(
+                        "STORAGE_SYNC:" + media.id + ":" + storageClassName + ":" + variant.name(),
+                        "STORAGE_SYNC",
+                        "MEDIA",
+                        media.id.toString(),
+                        Map.of("mediaId", media.id,
+                                "storageClassName", storageClassName,
+                                "variantType", variant.name(),
+                                "retryCount", 0),
+                        null);
+            } catch (Exception exception) {
+                syncEmitter.get().send(message);
+            }
         }
     }
 
@@ -322,9 +338,20 @@ public class StorageService {
     }
 
     public void scheduleSyncForAllPending() {
-        List<Media> allMedia = Media.listAll();
-        for (Media media : allMedia) {
-            scheduleSyncForMedia(media.id);
+        final int batchSize = 200;
+        long lastMediaId = 0L;
+        while (true) {
+            List<Media> mediaBatch = Media.find(
+                            "deletedAt is null and id > ?1 order by id", lastMediaId)
+                    .page(Page.ofSize(batchSize))
+                    .list();
+            if (mediaBatch.isEmpty()) {
+                return;
+            }
+            for (Media media : mediaBatch) {
+                scheduleSyncForMedia(media.id);
+                lastMediaId = media.id;
+            }
         }
     }
 

@@ -6,6 +6,7 @@
     const pageSize = 10;
     let hasMore = true;
     const commentIndex = new Map();
+    let expandListenerBound = false;
 
     function ready(fn) {
         if (document.readyState !== 'loading') fn();
@@ -107,7 +108,7 @@
                     </div>
                 `;
                 expandBtnHtml = `
-                    <button type="button" class="expand-replies-btn" onclick="window.toggleReplies(${node.id}, this)">
+                    <button type="button" class="expand-replies-btn" data-comment-id="${node.id}">
                         展开 ${hidden.length} 条回复
                     </button>
                 `;
@@ -366,6 +367,14 @@
 
     ready(() => {
         initComments();
+        if (!expandListenerBound) {
+            document.addEventListener('click', (event) => {
+                const button = event.target.closest('.expand-replies-btn');
+                if (!button) return;
+                window.toggleReplies(button.dataset.commentId, button);
+            });
+            expandListenerBound = true;
+        }
         document.addEventListener('pjax:complete', initComments);
     });
 })();

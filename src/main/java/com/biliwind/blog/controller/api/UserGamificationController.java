@@ -15,7 +15,6 @@ import jakarta.ws.rs.core.Response;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Path("/api/user")
 @Produces(MediaType.APPLICATION_JSON)
@@ -80,14 +79,30 @@ public class UserGamificationController {
 
         List<UserBackpackItem> backpack = storeService.getUserBackpack(userId);
 
+        List<Long> storeItemIds = new java.util.ArrayList<>();
+        for (UserBackpackItem item : backpack) {
+            if (item.storeItemId != null) {
+                storeItemIds.add(item.storeItemId);
+            }
+        }
+        Map<Long, com.biliwind.blog.model.StoreItem> storeItemsById = new HashMap<>();
+        if (!storeItemIds.isEmpty()) {
+            List<com.biliwind.blog.model.StoreItem> storeItems =
+                    com.biliwind.blog.model.StoreItem.find("id in ?1", storeItemIds).list();
+            for (com.biliwind.blog.model.StoreItem storeItem : storeItems) {
+                storeItemsById.put(storeItem.id, storeItem);
+            }
+        }
+
         // 组装返回数据，包含背包物品的详情
-        List<Map<String, Object>> backpackDetails = backpack.stream().map(item -> {
+        List<Map<String, Object>> backpackDetails = new java.util.ArrayList<>();
+        for (UserBackpackItem item : backpack) {
             Map<String, Object> map = new HashMap<>();
             map.put("id", item.id);
             map.put("storeItemId", item.storeItemId);
             map.put("acquiredAt", item.acquiredAt);
 
-            com.biliwind.blog.model.StoreItem sItem = com.biliwind.blog.model.StoreItem.findById(item.storeItemId);
+            com.biliwind.blog.model.StoreItem sItem = storeItemsById.get(item.storeItemId);
             if (sItem != null) {
                 map.put("name", sItem.name);
                 map.put("rarity", sItem.rarity);
@@ -95,8 +110,8 @@ public class UserGamificationController {
                 map.put("description", sItem.description);
                 map.put("extraInfo", sItem.extraInfo);
             }
-            return map;
-        }).collect(Collectors.toList());
+            backpackDetails.add(map);
+        }
 
         Map<String, Object> data = new HashMap<>();
         data.put("level", user.level);

@@ -6,8 +6,10 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class AliyunOssStorageClassMockTest {
@@ -69,5 +71,10 @@ public class AliyunOssStorageClassMockTest {
         );
         provider.initialize(config2);
         assertTrue(provider.supportsVariant("video/mp4", "original"));
+    }
+
+    @Test
+    void shouldNotFallbackToPublicUrlWhenSigningFails() {
+        assertNull(provider.getSignedUrl("protected/file.bin", Duration.ofMinutes(5)));
     }
 }

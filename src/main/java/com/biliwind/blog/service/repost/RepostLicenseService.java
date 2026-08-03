@@ -184,11 +184,18 @@ public class RepostLicenseService {
     }
 
     public String buildPostUrl(Post post) {
+        if (post == null) {
+            return buildPostUrl("");
+        }
+        return buildPostUrl(post.slug);
+    }
+
+    public String buildPostUrl(String slug) {
         String baseUrl = publicSiteUrl;
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
-        return baseUrl + "/post/" + post.slug;
+        return baseUrl + "/post/" + slug;
     }
 
     public String buildGoUrl(String rawToken) {

@@ -1,6 +1,8 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.context.AdminRequestContext;
+import com.biliwind.blog.model.User;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -12,6 +14,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.ext.Provider;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.security.Principal;
 import java.util.List;
@@ -33,6 +36,9 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
     @Inject
     AdminRequestContext adminRequestContext;
 
+    @ConfigProperty(name = "quarkus.swagger-ui.always-include", defaultValue = "false")
+    boolean documentationEnabled;
+
     @Override
     public void filter(ContainerRequestContext requestContext) {
         // Bypass all OPTIONS requests for CORS preflight
@@ -44,9 +50,13 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
         if (!path.startsWith("/api/admin")) {
             return;
         }
-        if (path.equals("/api/admin/auth/login")
-                || path.startsWith("/api/admin/docs")
-                || path.startsWith("/api/admin/openapi")) {
+        if (path.equals("/api/admin/auth/login")) {
+            return;
+        }
+        if (path.startsWith("/api/admin/docs") || path.startsWith("/api/admin/openapi")) {
+            if (!documentationEnabled) {
+                requestContext.abortWith(Response.status(Response.Status.NOT_FOUND).build());
+            }
             return;
         }
 
@@ -73,18 +83,29 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
             abort(requestContext, Response.Status.UNAUTHORIZED, "Token 校验失败");
             return;
         }
-        if (!verified.isAdmin()) {
+        User currentUser = User.find("id = ?1 and deletedAt is null", verified.uid()).firstResult();
+        if (currentUser == null || currentUser.status != 1) {
+            abort(requestContext, Response.Status.UNAUTHORIZED, "管理员账号已禁用或不存在");
+            return;
+        }
+        boolean currentIsAdmin = RoleConstant.ADMIN.equals(currentUser.roleName)
+                || RoleConstant.SUPER_ADMIN.equals(currentUser.roleName);
+        if (!currentIsAdmin) {
             abort(requestContext, Response.Status.FORBIDDEN, "没有管理员权限");
             return;
         }
+        boolean currentIsSuperAdmin = RoleConstant.SUPER_ADMIN.equals(currentUser.roleName);
+        String currentRoleName = currentUser.roleName == null || currentUser.roleName.isBlank()
+                ? verified.roleName() : currentUser.roleName;
+        SecurityContext originalSecurityContext = requestContext.getSecurityContext();
         adminRequestContext.setUserId(verified.uid());
-        adminRequestContext.setUsername(verified.username());
-        adminRequestContext.setRoleName(verified.roleName());
-        adminRequestContext.setIsSuperAdmin(verified.isSuperAdmin());
+        adminRequestContext.setUsername(currentUser.username);
+        adminRequestContext.setRoleName(currentRoleName);
+        adminRequestContext.setIsSuperAdmin(currentIsSuperAdmin);
         requestContext.setProperty(REQUEST_USER_ID_KEY, verified.uid());
-        requestContext.setProperty(REQUEST_USERNAME_KEY, verified.username());
-        requestContext.setProperty(REQUEST_ROLE_NAME_KEY, verified.roleName());
-        requestContext.setProperty(REQUEST_IS_SUPER_ADMIN_KEY, verified.isSuperAdmin());
+        requestContext.setProperty(REQUEST_USERNAME_KEY, currentUser.username);
+        requestContext.setProperty(REQUEST_ROLE_NAME_KEY, currentRoleName);
+        requestContext.setProperty(REQUEST_IS_SUPER_ADMIN_KEY, currentIsSuperAdmin);
 
         // Set SecurityContext to support @RolesAllowed
         requestContext.setSecurityContext(new SecurityContext() {
@@ -96,15 +117,15 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
             @Override
             public boolean isUserInRole(String role) {
                 // If the user is super admin, allow all roles
-                if (verified.isSuperAdmin()) return true;
-                if (verified.roleName() == null) return false;
-                return role.equalsIgnoreCase(verified.roleName()) || 
-                       role.equalsIgnoreCase("admin") && verified.isAdmin();
+                if (currentIsSuperAdmin) return true;
+                if (currentRoleName == null) return false;
+                return role.equalsIgnoreCase(currentRoleName)
+                        || role.equalsIgnoreCase("admin") && currentIsAdmin;
             }
 
             @Override
             public boolean isSecure() {
-                return requestContext.getSecurityContext().isSecure();
+                return originalSecurityContext != null && originalSecurityContext.isSecure();
             }
 
             @Override

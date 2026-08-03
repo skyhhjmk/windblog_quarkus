@@ -23,6 +23,18 @@ public class AffiliateContentRenderService {
     @Inject
     RepostLicenseService repostLicenseService;
 
+    public String rewriteCommercialLinks(Long postId, String html) {
+        if (postId == null || html == null || html.isBlank()) {
+            return html;
+        }
+        List<AffiliateLink> affiliateLinks = AffiliateLink.list("status = 1");
+        if (affiliateLinks == null || affiliateLinks.isEmpty()) {
+            return html;
+        }
+        Post post = Post.findById(postId);
+        return rewriteCommercialLinks(post, html, affiliateLinks);
+    }
+
     public String rewriteCommercialLinks(Post post, String html) {
         if (post == null) {
             return html;
@@ -36,6 +48,13 @@ public class AffiliateContentRenderService {
             return html;
         }
 
+        return rewriteCommercialLinks(post, html, affiliateLinks);
+    }
+
+    private String rewriteCommercialLinks(Post post, String html, List<AffiliateLink> affiliateLinks) {
+        if (post == null) {
+            return html;
+        }
         Document document = Jsoup.parseBodyFragment(html);
         Elements anchors = document.select("a[href]");
         for (Element anchor : anchors) {

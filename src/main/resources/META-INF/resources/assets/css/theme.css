@@ -49,6 +49,55 @@
     --space-xl: 6rem;
 }
 
+/* Dynamic values are applied through data attributes and CSSOM, not HTML style attributes. */
+.exp-progress-bar {
+    width: 0%;
+}
+
+.backpack-item-shell {
+    --backpack-rarity: var(--accent);
+    box-shadow: inset 0 0 10px color-mix(in srgb, var(--backpack-rarity) 12%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--backpack-rarity) 32%, transparent);
+}
+
+.backpack-item-shell [data-backpack-rarity-background="true"] {
+    background-color: var(--backpack-rarity);
+}
+
+.backpack-item-shell [data-backpack-rarity-color="true"] {
+    color: var(--backpack-rarity);
+}
+
+.accent-color-accent {
+    accent-color: var(--color-accent, #06b6d4);
+}
+
+.post-correction-warning-icon {
+    display: inline;
+    margin-top: -2px;
+}
+
+.tracking-text {
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.copy-tracking-text-button {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    font-size: 14px;
+}
+
+.vditor-progress-bar {
+    width: 0%;
+}
+
+#historyModal.show .modal-container {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+}
+
 .light {
     /* Light Theme Overrides */
     --bg: #f9fafb;

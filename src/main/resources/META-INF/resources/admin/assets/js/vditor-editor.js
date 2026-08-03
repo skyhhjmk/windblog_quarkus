@@ -177,7 +177,7 @@ const VditorEditor = {
                     <span id="vditor-progress-percent" class="text-sm font-bold text-blue-600">0%</span>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div id="vditor-progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    <div id="vditor-progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300 vditor-progress-bar"></div>
                 </div>
             </div>
         `;
