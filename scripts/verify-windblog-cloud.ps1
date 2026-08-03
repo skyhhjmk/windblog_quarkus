@@ -5,6 +5,8 @@ param(
 
     [string] $ComposeFile = "docker-compose.yml",
 
+    [string] $ComposeEnvFile = "",
+
     [switch] $SkipComposeCheck,
 
     [switch] $AllowHttpForLocalTest,
@@ -225,13 +227,24 @@ $checks.Add("download ticket denied and uncached")
 
 if (-not $SkipComposeCheck) {
     Assert-Condition (Test-Path -LiteralPath $ComposeFile) "Compose 文件不存在：$ComposeFile"
-    $composeJson = docker compose -f $ComposeFile config --format json | ConvertFrom-Json
+    $composeArguments = @()
+    if (-not [string]::IsNullOrWhiteSpace($ComposeEnvFile)) {
+        Assert-Condition (Test-Path -LiteralPath $ComposeEnvFile) "Compose 环境文件不存在：$ComposeEnvFile"
+        $composeArguments += @("--env-file", $ComposeEnvFile)
+    }
+    $composeArguments += @("-f", $ComposeFile, "config", "--format", "json")
+    $composeJson = docker compose @composeArguments | ConvertFrom-Json
     $expectedTargetPorts = @{
-        db = 5432
-        redis = 6379
-        rabbitmq = 5672
-        elasticsearch = 9200
-        kibana = 5601
+        db = @(5432)
+        redis = @(6379)
+        rabbitmq = @(5672)
+        elasticsearch = @(9200)
+        kibana = @(5601)
+    }
+    if ($null -ne $composeJson.services.'edge-db') {
+        $expectedTargetPorts['edge-db'] = @(5432)
+        $expectedTargetPorts['edge-redis'] = @(6379)
+        $expectedTargetPorts['edge-node'] = @(8081, 9001)
     }
     foreach ($serviceName in $expectedTargetPorts.Keys) {
         $service = $composeJson.services.$serviceName
@@ -241,13 +254,14 @@ if (-not $SkipComposeCheck) {
         $ports = @($service.ports)
         Assert-Condition ($ports.Count -gt 0) `
             "服务 $serviceName 未映射宿主机端口；请确认 *_HOST_PORT 配置。"
-        $targetPort = [int]$expectedTargetPorts[$serviceName]
-        $targetMapping = @($ports | Where-Object { [int]$_.target -eq $targetPort })
-        Assert-Condition ($targetMapping.Count -gt 0) `
-            "服务 $serviceName 未暴露目标端口 $targetPort。"
-        foreach ($mapping in $targetMapping) {
-            Assert-Condition ([int]$mapping.published -ge 1 -and [int]$mapping.published -le 65535) `
-                "服务 $serviceName 的宿主机端口无效：$($mapping.published)。"
+        foreach ($targetPort in $expectedTargetPorts[$serviceName]) {
+            $targetMapping = @($ports | Where-Object { [int]$_.target -eq [int]$targetPort })
+            Assert-Condition ($targetMapping.Count -gt 0) `
+                "服务 $serviceName 未暴露目标端口 $targetPort。"
+            foreach ($mapping in $targetMapping) {
+                Assert-Condition ([int]$mapping.published -ge 1 -and [int]$mapping.published -le 65535) `
+                    "服务 $serviceName 的宿主机端口无效：$($mapping.published)。"
+            }
         }
     }
     $checks.Add("compose exposed services")

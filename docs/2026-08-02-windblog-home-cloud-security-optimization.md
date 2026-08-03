@@ -29,7 +29,8 @@
 > 边缘同步接收端不再将公开 JSON 直接反序列化为实体；首次同步使用白名单字段和显式主键插入，并保留本地删除/处理错误状态。
 > 边缘 Compose 也已将 edge PostgreSQL/Redis 及边缘 HTTP/gRPC 端口改为可配置宿主机映射；Redis 暴露前必须提供强密码，
 > 默认绑定地址仍需由防火墙、VPN 或来源 allowlist 约束；生产边缘环境可用
-> `scripts/validate-windblog-production-env.ps1 -Edge -EnvFile .env.edge` 单独预检。
+> `scripts/validate-windblog-production-env.ps1 -Edge -EnvFile .env.edge` 单独预检，云验收脚本也支持
+> `-ComposeFile docker-compose.edge.yml -ComposeEnvFile .env.edge` 检查边缘端口。
 > 生产启动的默认 secret 检查不再受告警开关绕过，生产环境预检也强制 `SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=true`，示例文件不再放置可误用的固定 Elasticsearch/Kibana 凭据。
 > 管理 API 的 CORS `OPTIONS` 预检在 Bearer 授权过滤链中明确放行。密码保护文章即使价格为 0 也只生成锁定预览，带有效票据的文章页从已发布版本读取全文。媒体保护判定不再依赖 `usageType = 3`，正文媒体被密码/付费文章引用时同样不进入公共上传路径、缓存或边缘公开同步。生产启动和预检均拒绝 `ELASTICSEARCH_SSL_TRUST_ALL=true`，并要求 `ELASTICSEARCH_SSL_VERIFY=full`。下载审计新增票据创建到下载的 `ticketAgeMillis`，覆盖用户和管理员原图入口；AI、媒体和链接 endpoint 现在共享网络地址分类规则；同一下载票据新增十分钟请求预算，Redis 故障时仍使用有界本地保护；按主体/IP 的十分钟窗口新增 403/404 比率检测，至少累计 20 次且错误率达到 80% 时进入 429 降级，Redis 故障时仍使用有界本地保护；本地降级窗口上限为 4096 条并定时清理，有效票据的资源错配也计入 404 行为分母，受保护下载拒绝响应统一 `no-store`；边缘回源写请求体默认限制为 10 MiB，并在边缘读取和主节点执行器两侧再次校验，配置超出 1–64 MiB 范围时生产启动拒绝；管理动作按资源前缀精确映射，导入异常消息脱敏并限长，`/api/user/post/*` 的错误和重定向也统一禁止缓存，生产预检校验所有宿主机服务端口。
 > 管理端登录和数据库导入页面不再预填 `admin/admin` 或 `postgres/postgres`，必须由操作员显式输入凭据；
