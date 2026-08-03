@@ -61,6 +61,30 @@ function Require-Value {
     }
 }
 
+function Require-Port {
+    param([string] $Name, [int] $Default)
+    $value = Get-EffectiveValue $Name
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $value = [string]$Default
+    }
+    $port = 0
+    if (-not [int]::TryParse($value, [ref]$port) -or $port -lt 1 -or $port -gt 65535) {
+        $errors.Add("$Name 必须是 1 到 65535 的端口")
+    }
+}
+
+function Require-ByteLimit {
+    param([string] $Name, [long] $Default, [long] $Minimum, [long] $Maximum)
+    $value = Get-EffectiveValue $Name
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $value = [string]$Default
+    }
+    $bytes = 0L
+    if (-not [long]::TryParse($value, [ref]$bytes) -or $bytes -lt $Minimum -or $bytes -gt $Maximum) {
+        $errors.Add("$Name 必须在 $Minimum 到 $Maximum 字节之间")
+    }
+}
+
 function Test-PublicHttpsUrl {
     param([string] $Value)
 
@@ -198,6 +222,14 @@ Require-Value "GRPC_SERVER_CLIENT_AUTH" "required"
 Require-Value "GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK" "false"
 Require-Value "WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED" "true"
 Require-Value "WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED" "true"
+Require-Port "POSTGRES_HOST_PORT" 5432
+Require-Port "REDIS_HOST_PORT" 6379
+Require-Port "RABBITMQ_HOST_PORT" 5672
+Require-Port "RABBITMQ_MANAGEMENT_HOST_PORT" 15672
+Require-Port "ELASTICSEARCH_HOST_PORT" 9200
+Require-Port "KIBANA_HOST_PORT" 5601
+Require-Port "CLAMAV_HOST_PORT" 3310
+Require-ByteLimit "WINDBLOG_EDGE_MAX_ROUTED_BODY_BYTES" 10485760 1 67108864
 
 if ($errors.Count -gt 0) {
     $message = ($errors | ForEach-Object { "- $_" }) -join [Environment]::NewLine
