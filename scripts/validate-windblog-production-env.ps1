@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string] $EnvFile = (Join-Path (Get-Location) ".env")
+    [string] $EnvFile = (Join-Path (Get-Location) ".env"),
+    [switch] $Edge
 )
 
 $ErrorActionPreference = "Stop"
@@ -97,6 +98,13 @@ function Require-ByteLimit {
     }
 }
 
+function Require-TextValue {
+    param([string] $Name)
+    if ([string]::IsNullOrWhiteSpace((Get-EffectiveValue $Name))) {
+        $errors.Add("$Name 不能为空")
+    }
+}
+
 function Test-PublicHttpsUrl {
     param([string] $Value)
 
@@ -181,6 +189,28 @@ function Test-PublicHttpsUrl {
         return $false
     }
     return $true
+}
+
+if ($Edge) {
+    Require-TextValue "EDGE_DB_USER"
+    Add-MissingOrWeakSecret "EDGE_DB_PASSWORD"
+    Require-TextValue "EDGE_DB_NAME"
+    Require-TextValue "EDGE_DATASOURCE_URL"
+    Add-MissingOrWeakSecret "EDGE_REDIS_PASSWORD"
+    Require-TextValue "EDGE_REDIS_URL"
+    Require-Port "EDGE_DB_PORT" 5434
+    Require-Port "EDGE_REDIS_PORT" 6381
+    Require-Port "EDGE_APP_HTTP_PORT" 8081
+    Require-Port "EDGE_GRPC_PORT" 9001
+    Require-IpAddress "EDGE_HOST_BIND_IP" "0.0.0.0"
+
+    if ($errors.Count -gt 0) {
+        $message = ($errors | ForEach-Object { "- $_" }) -join [Environment]::NewLine
+        throw "WindBlog 边缘生产环境预检失败：$([Environment]::NewLine)$message"
+    }
+
+    Write-Output "WindBlog edge production environment validation passed."
+    return
 }
 
 Add-MissingOrWeakSecret "POSTGRES_PASSWORD"
