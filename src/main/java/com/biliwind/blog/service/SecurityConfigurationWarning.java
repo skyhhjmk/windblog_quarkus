@@ -180,7 +180,7 @@ public class SecurityConfigurationWarning {
 
     private void checkDefault(String environmentName, String actualValue, String defaultValue) {
         if (defaultValue.equals(actualValue)) {
-            if (shouldFailStartup()) {
+            if (shouldFailStartup() && failOnDefaultSecretsInProd) {
                 throw new IllegalStateException("生产环境禁止使用默认安全配置：" + environmentName);
             }
             LOG.warnf("高风险配置：%s 正在使用默认值，请在生产环境中通过环境变量修改", environmentName);
