@@ -2,6 +2,7 @@ package com.biliwind.blog.service.edge;
 
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -501,7 +502,8 @@ public class EdgeDataSyncService {
                     @Override
                     public void accept(Throwable error) {
                         log.error("Failed to push {} {} to node {}", entityType, entityId, node.nodeId, error);
-                        updateSyncRecord(syncRecordId, "FAILED", error.getMessage());
+                        updateSyncRecord(syncRecordId, "FAILED",
+                                SensitiveMessageSanitizer.sanitize(error.getMessage()));
                     }
                 }
         );
@@ -592,7 +594,8 @@ public class EdgeDataSyncService {
                         self.get().performPublicFullSyncInternal(id, force);
                     } catch (Exception e) {
                         log.error("Unhandled error in full sync thread for node {}: {}", id, e.getMessage(), e);
-                        syncProgressMap.put(id, new SyncProgress(0, 0, "FAILED", "Internal error: " + e.getMessage()));
+                        syncProgressMap.put(id, new SyncProgress(0, 0, "FAILED",
+                                "Internal error: " + SensitiveMessageSanitizer.sanitize(e.getMessage())));
                     }
                 });
     }
@@ -653,7 +656,7 @@ public class EdgeDataSyncService {
             syncProgressMap.put(nodeId, new SyncProgress(
                     current == null ? 0 : current.total(),
                     current == null ? 0 : current.processed(),
-                    "FAILED", exception.getMessage()));
+                    "FAILED", SensitiveMessageSanitizer.sanitize(exception.getMessage())));
         }
     }
 
