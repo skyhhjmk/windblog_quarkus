@@ -43,21 +43,21 @@ function Get-HeaderValue {
 function Invoke-CloudRequest {
     param(
         [Uri] $Uri,
-        [hashtable] $Headers = @{}
+        [hashtable] $RequestHeaders = @{}
     )
 
     $request = [System.Net.HttpWebRequest]::Create($Uri)
     $request.Method = "GET"
     $request.Timeout = $TimeoutSeconds * 1000
     $request.AllowAutoRedirect = $false
-    foreach ($header in $Headers.GetEnumerator()) {
+    foreach ($header in $RequestHeaders.GetEnumerator()) {
         $request.Headers[$header.Key] = [string]$header.Value
     }
 
     try {
         $response = [System.Net.HttpWebResponse]$request.GetResponse()
         $statusCode = [int]$response.StatusCode
-        $headers = $response.Headers
+        $responseHeaders = $response.Headers
         $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
         try {
             $body = $reader.ReadToEnd()
@@ -67,7 +67,7 @@ function Invoke-CloudRequest {
         }
         return [pscustomobject]@{
             StatusCode = $statusCode
-            Headers = $headers
+            Headers = $responseHeaders
             Body = $body
         }
     } catch [System.Net.WebException] {
@@ -76,7 +76,7 @@ function Invoke-CloudRequest {
         }
         $response = [System.Net.HttpWebResponse]$_.Exception.Response
         $statusCode = [int]$response.StatusCode
-        $headers = $response.Headers
+        $responseHeaders = $response.Headers
         $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
         try {
             $body = $reader.ReadToEnd()
@@ -86,7 +86,7 @@ function Invoke-CloudRequest {
         }
         return [pscustomobject]@{
             StatusCode = $statusCode
-            Headers = $headers
+            Headers = $responseHeaders
             Body = $body
         }
     }
