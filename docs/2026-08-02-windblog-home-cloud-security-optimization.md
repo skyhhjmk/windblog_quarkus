@@ -38,6 +38,7 @@
 > AI、邮件、Elasticsearch、存储和边缘 worker 的异常消息也统一限长脱敏后再进入日志、SSE、死信、审计或边缘协议。
 > 三类兼容 AI provider 的流式和非流式响应现在都使用 8 MiB 有界读取，超限会取消上游订阅并失败。
 > 当前本地 Quarkus 实例对首页连续 305 次 GET 实测为 300 次 `200`、5 次 `429`，命中首页默认 300 次/分钟预算；多节点 Redis、CDN/WAF 限流仍需现场验证。
+> 当前 Docker Desktop 的 Compose 展示虽包含 `[::]` 端口行，但本机 `::1` 对 PostgreSQL、Redis、Elasticsearch、Kibana 均连接失败；IPv6 不能据此视为已启用，仍需宿主机/路由器现场验收。
 > 真实 CDN、代理、多节点和家庭网络验收仍未完成。
 
 ## 1. 目标与结论
