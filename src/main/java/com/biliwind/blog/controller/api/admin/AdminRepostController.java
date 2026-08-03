@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.security.SafeExternalHttpService;
 import com.biliwind.blog.service.edge.DataSyncEvent;
@@ -220,7 +221,9 @@ public class AdminRepostController {
             );
             return Response.ok(evidence).build();
         } catch (Exception exception) {
-            return Response.status(Response.Status.BAD_GATEWAY).entity(message("检测失败：" + exception.getMessage())).build();
+            return Response.status(Response.Status.BAD_GATEWAY)
+                    .entity(message("检测失败：" + SensitiveMessageSanitizer.sanitize(exception.getMessage())))
+                    .build();
         }
     }
 

@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.*;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.*;
@@ -317,7 +318,8 @@ public class AdminLinkController {
 
             return new LinkMetaResponse(title, description, icon);
         } catch (Exception e) {
-            throw new WebApplicationException("Failed to parse URL metadata: " + e.getMessage(), 400);
+            throw new WebApplicationException("Failed to parse URL metadata: "
+                    + SensitiveMessageSanitizer.sanitize(e.getMessage()), 400);
         }
     }
 

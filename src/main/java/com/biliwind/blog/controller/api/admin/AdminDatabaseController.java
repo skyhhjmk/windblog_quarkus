@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import io.agroal.api.AgroalDataSource;
 import io.quarkus.liquibase.LiquibaseFactory;
 import jakarta.annotation.security.RolesAllowed;
@@ -57,7 +58,7 @@ public class AdminDatabaseController {
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
-            error.put("message", "数据库迁移失败：" + e.getMessage());
+            error.put("message", "数据库迁移失败：" + SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(error).build();
         }
     }
@@ -90,7 +91,7 @@ public class AdminDatabaseController {
         } catch (SQLException e) {
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
-            error.put("message", "数据库种子数据添加失败：" + e.getMessage());
+            error.put("message", "数据库种子数据添加失败：" + SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(error).build();
         }
     }

@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.DeadLetterMessage;
 import com.biliwind.blog.service.ReliableAiTaskService;
 import com.biliwind.blog.service.ReliableInfrastructureTaskService;
@@ -217,7 +218,7 @@ public class AdminDeadLetterApi {
         } catch (Exception e) {
             log.error("重试死信消息失败，id={}", id, e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(Map.of("success", false, "message", "重试失败：" + e.getMessage()))
+                    .entity(Map.of("success", false, "message", "重试失败：" + SensitiveMessageSanitizer.sanitize(e.getMessage())))
                     .build();
         }
     }

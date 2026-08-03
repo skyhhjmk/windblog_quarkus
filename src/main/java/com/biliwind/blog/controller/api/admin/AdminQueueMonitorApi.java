@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -85,7 +86,8 @@ public class AdminQueueMonitorApi {
                         info.put("description", desc);
                         queues.add(info);
                     } catch (Exception e) {
-                        log.warn("无法获取队列信息: {}, error: {}", name, e.getMessage());
+                        log.warn("无法获取队列信息: {}, error: {}", name,
+                                SensitiveMessageSanitizer.sanitize(e.getMessage()));
                     }
                 }
             }
@@ -100,7 +102,7 @@ public class AdminQueueMonitorApi {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(Map.of(
                             "success", false,
-                            "message", "获取队列信息失败：" + e.getMessage()
+                            "message", "获取队列信息失败：" + SensitiveMessageSanitizer.sanitize(e.getMessage())
                     )).build();
         }
     }
@@ -143,7 +145,7 @@ public class AdminQueueMonitorApi {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(Map.of(
                             "success", false,
-                            "message", "获取队列详情失败：" + e.getMessage()
+                            "message", "获取队列详情失败：" + SensitiveMessageSanitizer.sanitize(e.getMessage())
                     )).build();
         }
     }
@@ -236,7 +238,7 @@ public class AdminQueueMonitorApi {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(Map.of(
                             "success", false,
-                            "message", "推送消息失败：" + e.getMessage()
+                            "message", "推送消息失败：" + SensitiveMessageSanitizer.sanitize(e.getMessage())
                     )).build();
         }
     }

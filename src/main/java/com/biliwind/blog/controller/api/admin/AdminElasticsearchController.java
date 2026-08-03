@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchConnectionManager;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchIndexService;
@@ -60,7 +61,8 @@ public class AdminElasticsearchController {
                 "enabled", connectionStatus.enabled(),
                 "hosts", connectionStatus.hosts(),
                 "status", connectionStatus.status(),
-                "lastError", connectionStatus.lastError() != null ? connectionStatus.lastError() : ""
+                "lastError", connectionStatus.lastError() != null
+                        ? SensitiveMessageSanitizer.sanitize(connectionStatus.lastError()) : ""
         ));
         result.put("postSearch", Map.of(
                 "connectionAvailable", postSearchStatus.connectionAvailable(),
@@ -111,7 +113,8 @@ public class AdminElasticsearchController {
                 "enabled", connectionStatus.enabled(),
                 "hosts", connectionStatus.hosts(),
                 "status", connectionStatus.status(),
-                "lastError", connectionStatus.lastError() != null ? connectionStatus.lastError() : ""
+                "lastError", connectionStatus.lastError() != null
+                        ? SensitiveMessageSanitizer.sanitize(connectionStatus.lastError()) : ""
         ));
 
         try {
@@ -124,7 +127,7 @@ public class AdminElasticsearchController {
         } catch (Exception e) {
             result.put("postSearchHealth", Map.of(
                     "status", "error",
-                    "message", e.getMessage()
+                    "message", SensitiveMessageSanitizer.sanitize(e.getMessage())
             ));
         }
 
@@ -167,12 +170,12 @@ public class AdminElasticsearchController {
         } catch (ElasticsearchPostSearchService.ElasticsearchUnavailableException e) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .entity(Map.of(
-                            "error", e.getMessage(),
+                            "error", SensitiveMessageSanitizer.sanitize(e.getMessage()),
                             "status", "unavailable"
                     ))
                     .build();
         } catch (Exception e) {
-            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+            return Response.serverError().entity(Map.of("error", SensitiveMessageSanitizer.sanitize(e.getMessage()))).build();
         }
     }
 
@@ -204,12 +207,12 @@ public class AdminElasticsearchController {
         } catch (ElasticsearchPostSearchService.ElasticsearchUnavailableException e) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .entity(Map.of(
-                            "error", e.getMessage(),
+                            "error", SensitiveMessageSanitizer.sanitize(e.getMessage()),
                             "status", "unavailable"
                     ))
                     .build();
         } catch (Exception e) {
-            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+            return Response.serverError().entity(Map.of("error", SensitiveMessageSanitizer.sanitize(e.getMessage()))).build();
         }
     }
 
@@ -258,14 +261,14 @@ public class AdminElasticsearchController {
         } catch (ElasticsearchPostSearchService.ElasticsearchUnavailableException e) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .entity(Map.of(
-                            "error", e.getMessage(),
+                            "error", SensitiveMessageSanitizer.sanitize(e.getMessage()),
                             "status", "unavailable",
                             "message", "搜索功能已回退到数据库搜索",
                             "fallback", true
                     ))
                     .build();
         } catch (Exception e) {
-            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+            return Response.serverError().entity(Map.of("error", SensitiveMessageSanitizer.sanitize(e.getMessage()))).build();
         }
     }
 
@@ -314,7 +317,7 @@ public class AdminElasticsearchController {
         } catch (Exception e) {
             return Response.serverError().entity(Map.of(
                     "success", false,
-                    "error", e.getMessage()
+                    "error", SensitiveMessageSanitizer.sanitize(e.getMessage())
             )).build();
         }
     }
@@ -353,7 +356,7 @@ public class AdminElasticsearchController {
         } catch (Exception e) {
             return Response.serverError().entity(Map.of(
                     "success", false,
-                    "error", e.getMessage()
+                    "error", SensitiveMessageSanitizer.sanitize(e.getMessage())
             )).build();
         }
     }
@@ -390,7 +393,7 @@ public class AdminElasticsearchController {
                     "totalCount", count
             )).build();
         } catch (Exception e) {
-            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+            return Response.serverError().entity(Map.of("error", SensitiveMessageSanitizer.sanitize(e.getMessage()))).build();
         }
     }
 
@@ -445,7 +448,7 @@ public class AdminElasticsearchController {
         } catch (Exception exception) {
             return Response.serverError().entity(Map.of(
                     "success", false,
-                    "message", exception.getMessage()
+                    "message", SensitiveMessageSanitizer.sanitize(exception.getMessage())
             )).build();
         }
     }
@@ -470,7 +473,7 @@ public class AdminElasticsearchController {
         } catch (Exception exception) {
             return Response.serverError().entity(Map.of(
                     "success", false,
-                    "message", exception.getMessage()
+                    "message", SensitiveMessageSanitizer.sanitize(exception.getMessage())
             )).build();
         }
     }
@@ -504,7 +507,7 @@ public class AdminElasticsearchController {
         } catch (Exception exception) {
             return Response.serverError().entity(Map.of(
                     "success", false,
-                    "message", exception.getMessage()
+                    "message", SensitiveMessageSanitizer.sanitize(exception.getMessage())
             )).build();
         }
     }
