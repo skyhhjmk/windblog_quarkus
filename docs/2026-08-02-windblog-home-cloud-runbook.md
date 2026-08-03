@@ -172,6 +172,14 @@ $env:WINDBLOG_IT_DB_NAME = 'windblog'
 
 该脚本只证明同一 Redis 上的两个本地 JVM 共享公开阅读计数，不替代跨主机、边缘撤销状态、真实网络和 CDN 验收。
 
+数据库热点路径可在维护窗口使用容器内客户端复核；脚本会在事务回滚中测试 Outbox 领取，不会改变事件状态：
+
+```powershell
+.\scripts\verify-windblog-hot-paths.ps1 -DbContainer postgresdb -DbUser postgres -DbName postgres
+```
+
+脚本输出的本地耗时仅用于回归阈值，生产应保存真实数据量下的执行计划和首次建索引锁表记录。
+
 ## 备份与恢复
 
 目标是 3-2-1：主机在线数据、同机或外接加密备份、异地/云端加密备份。数据库备份应包含
