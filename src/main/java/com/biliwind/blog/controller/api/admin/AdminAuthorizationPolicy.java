@@ -54,6 +54,9 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/settings") && !"GET".equals(method)) {
             return true;
         }
+        if (path.startsWith("/api/admin/outbox") && !"GET".equals(method)) {
+            return true;
+        }
         if (path.startsWith("/api/admin/permissions/roles") && !"GET".equals(method)) {
             return true;
         }
@@ -183,6 +186,12 @@ public final class AdminAuthorizationPolicy {
         }
         if (path.startsWith("/api/admin/security/media-download-events")) {
             return "media.download_audit.read";
+        }
+        if (path.startsWith("/api/admin/outbox") && path.endsWith("/replay")) {
+            return "outbox.replay";
+        }
+        if (path.startsWith("/api/admin/outbox")) {
+            return "GET".equals(method) ? "outbox.read" : "outbox.write";
         }
         if (path.startsWith("/api/admin/queues") && path.endsWith("/publish")) {
             return "queue.publish";

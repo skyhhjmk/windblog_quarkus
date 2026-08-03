@@ -107,6 +107,9 @@ class AdminAuthorizationPolicyTest {
         assertEquals("store.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/store").action());
         assertEquals("system.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/system/monitor").action());
         assertEquals("user.write", AdminAuthorizationPolicy.decide("PUT", "/api/admin/users/7").action());
+        assertEquals("outbox.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/outbox").action());
+        assertEquals("outbox.replay", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/outbox/7/replay").action());
     }
 
     @Test
@@ -117,6 +120,8 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/dead-letters/7/retry").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-campaigns"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/users/7/wallet/check-in-reward"));
+        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/outbox/7/replay").superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/outbox/7/replay"));
         assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/categories"));
     }
 }
