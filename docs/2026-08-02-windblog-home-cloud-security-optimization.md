@@ -136,8 +136,9 @@ Quarkus REST + Qute SSR
 #### P0-3 外部媒体导入曾存在 SSRF 防护旁路
 
 当前状态：媒体、链接监测和 AI 请求已使用共享公网地址分类与安全请求边界；主源码不再包含
-`HttpURLConnection`、自动重定向或 `allowLocalNetwork` 请求字段。AI Java HttpClient 的 DNS pinning、真实 DNS
-变化和外部 allowlist 仍需单独运行验收。
+`HttpURLConnection`、自动重定向或 `allowLocalNetwork` 请求字段。共享 `SafeExternalHttpService` 已在每次请求中
+固定通过公网校验的 DNS 地址；AI 仍使用 JDK `HttpClient`，目前需要继续补齐原生 DNS pinning，并对真实 DNS
+变化和外部 allowlist 单独运行验收。
 
 影响：DNS 重绑定、重定向到内网、超大响应、协议边界和本地网络访问策略不一致。即使只有超级管理员能触发，也不能把内部网络读取能力做成普通请求字段。
 
