@@ -22,6 +22,7 @@ RabbitMQ 管理端 15672、Elasticsearch 9200 和 Kibana 5601；可用 `*_HOST_P
 
 - `ADMIN_JWT_SECRET`、`USER_JWT_SECRET`、`SECURITY_EVENT_HASH_SECRET`（事件密钥至少 32 字符）；
 - `ADMIN_INIT_PASSWORD`（仅首次初始化使用，随后关闭 `ADMIN_INIT_ENABLED`）；
+- `SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=true`，禁止通过关闭告警绕过默认凭据启动保护；
 - `COOKIE_SECURE=true`、`WINDBLOG_SITE_PUBLIC_URL=https://...`；
 - 明确的 `CORS_ORIGINS`，且 `CORS_ALLOW_CREDENTIALS=false`；
 - 非 guest 的 RabbitMQ 用户密码、PostgreSQL 用户/数据库/密码、Redis/Elasticsearch 密码；

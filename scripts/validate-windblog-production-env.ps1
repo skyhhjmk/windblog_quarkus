@@ -185,6 +185,7 @@ if ([string]::IsNullOrWhiteSpace($corsOrigins) -or $corsOrigins.Contains("*")) {
 }
 
 Require-Value "COOKIE_SECURE" "true"
+Require-Value "SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD" "true"
 Require-Value "SECURITY_HEADERS_CSP_ENFORCE" "true"
 Require-Value "SECURITY_HEADERS_HSTS_ENABLED" "true"
 Require-Value "SECURITY_HEADERS_CSP_TRUSTED_TYPES_ENABLED" "true"
