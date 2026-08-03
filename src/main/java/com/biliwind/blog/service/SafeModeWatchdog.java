@@ -7,6 +7,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import jakarta.annotation.PreDestroy;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.health.HealthCheck;
 import org.eclipse.microprofile.health.HealthCheckResponse;
@@ -20,7 +21,11 @@ import java.util.concurrent.TimeUnit;
 public class SafeModeWatchdog {
 
     private static final Logger LOG = Logger.getLogger(SafeModeWatchdog.class);
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "windblog-safe-mode-watchdog");
+        thread.setDaemon(true);
+        return thread;
+    });
     @Inject
     Instance<HealthCheck> healthChecks;
     @Inject
@@ -77,6 +82,19 @@ public class SafeModeWatchdog {
             LOG.infof("Rolled back %s to version %d", setting.configKey, setting.version);
         } else {
             LOG.errorf("Rollback failed for %s: no history found!", setting.configKey);
+        }
+    }
+
+    @PreDestroy
+    void shutdown() {
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException exception) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 }
