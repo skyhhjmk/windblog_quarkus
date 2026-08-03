@@ -85,4 +85,38 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.requiresStepUp(
                 "POST", "/api/admin/repost/tokens/7/revoke"));
     }
+
+    @Test
+    void shouldMapManagedResourcePrefixesToStableActions() {
+        assertEquals("auth.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/auth/me").action());
+        assertEquals("audit_logs.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/audit-logs").action());
+        assertEquals("category.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/categories").action());
+        assertEquals("comment.write", AdminAuthorizationPolicy.decide("PUT", "/api/admin/comments/7").action());
+        assertEquals("email_channels.write", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/email-channels").action());
+        assertEquals("email_campaigns.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/email-campaigns").action());
+        assertEquals("email_templates.write", AdminAuthorizationPolicy.decide(
+                "PUT", "/api/admin/email-templates/7").action());
+        assertEquals("elasticsearch.write", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/elasticsearch/rebuild").action());
+        assertEquals("image_processing.write", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/storage/image-processing/configs/test").action());
+        assertEquals("link.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/links").action());
+        assertEquals("region.delete", AdminAuthorizationPolicy.decide("DELETE", "/api/admin/regions/7").action());
+        assertEquals("store.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/store").action());
+        assertEquals("system.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/system/monitor").action());
+        assertEquals("user.write", AdminAuthorizationPolicy.decide("PUT", "/api/admin/users/7").action());
+    }
+
+    @Test
+    void shouldKeepSensitiveResourceWritesBehindExplicitStepUpOrSuperAdmin() {
+        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/settings/site.confirm").superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/permissions/roles/ADMIN").superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/database/seed").superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/dead-letters/7/retry").superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-campaigns"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/users/7/wallet/check-in-reward"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/categories"));
+    }
 }

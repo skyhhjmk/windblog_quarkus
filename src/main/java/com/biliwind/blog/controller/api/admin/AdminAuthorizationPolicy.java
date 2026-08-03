@@ -164,6 +164,7 @@ public final class AdminAuthorizationPolicy {
             case "tags" -> "tag";
             case "comments" -> "comment";
             case "regions" -> "region";
+            case "links" -> "link";
             case "email-channels" -> "email_channels";
             case "email-campaigns" -> "email_campaigns";
             case "email-deliveries" -> "email_deliveries";
