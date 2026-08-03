@@ -3,10 +3,10 @@ package com.biliwind.blog.service.edge;
 import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.model.Media;
-import com.biliwind.blog.model.PostMedia;
 import com.biliwind.blog.model.StorageClassEntity;
 import com.biliwind.blog.service.security.CertificateRenewalService;
 import com.biliwind.blog.service.security.EdgeCertificateInstaller;
+import com.biliwind.blog.service.PostAccessService;
 import com.biliwind.blog.service.storage.StorageClass;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
@@ -64,6 +64,9 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
     @Inject
     EdgeCertificateInstaller edgeCertificateInstaller;
+
+    @Inject
+    PostAccessService postAccessService;
 
     @Inject
     com.biliwind.blog.service.link.DistributedLinkProbeService distributedLinkProbeService;
@@ -370,7 +373,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                 .setVersion(media.version != null ? media.version : 1);
 
         if (media.storageClasses != null) {
-            boolean protectedMedia = PostMedia.count("media.id = ?1 and usageType = 3", media.id) > 0;
+            boolean protectedMedia = postAccessService.hasProtectedMediaReference(media.id);
             // Get all possible variants
             for (VariantType vt : VariantType.values()) {
                 if (protectedMedia && (vt == VariantType.ORIGINAL || vt == VariantType.RAW)) {
@@ -427,8 +430,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                             if (media == null) {
                                 multi = Multi.createFrom().failure(new Exception("Media not found: " + req.getMediaId()));
                             } else {
-                                boolean protectedMedia = PostMedia.count(
-                                        "media.id = ?1 and usageType = 3", media.id) > 0;
+                                boolean protectedMedia = postAccessService.hasProtectedMediaReference(media.id);
                                 String requestedVariant = req.getVariantType();
                                 if (protectedMedia && ("ORIGINAL".equalsIgnoreCase(requestedVariant)
                                         || "RAW".equalsIgnoreCase(requestedVariant))) {

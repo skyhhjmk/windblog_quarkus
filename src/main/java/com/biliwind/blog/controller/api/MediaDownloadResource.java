@@ -82,7 +82,9 @@ public class MediaDownloadResource {
         }
         Media media = Media.find("id = ?1 and deletedAt is null", mediaId).firstResult();
         PostMedia relation = media == null ? null : PostMedia.find(
-                "media.id = ?1 and post.id = ?2 and usageType = 3", media.id, ticket.postId).firstResult();
+                "select relation from PostMedia relation join fetch relation.post "
+                        + "where relation.media.id = ?1 and relation.post.id = ?2",
+                media.id, ticket.postId).firstResult();
         if (relation == null) {
             downloadAuditService.recordDenied(ticket.postId, mediaId, ticket.id, userId,
                     resolveClientIp(headers), headers.getHeaderString("User-Agent"),

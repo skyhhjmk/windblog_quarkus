@@ -6,6 +6,7 @@ import com.biliwind.blog.model.PostMedia;
 import com.biliwind.blog.service.ContentAccessTicketService;
 import com.biliwind.blog.service.MediaDownloadAuditService;
 import com.biliwind.blog.service.MediaDownloadRiskService;
+import com.biliwind.blog.service.PostAccessService;
 import com.biliwind.blog.service.security.ClientIpResolver;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
@@ -48,6 +49,9 @@ public class AdminMediaDownloadResource {
     StorageService storageService;
 
     @Inject
+    PostAccessService postAccessService;
+
+    @Inject
     ClientIpResolver clientIpResolver;
 
     @Inject
@@ -69,8 +73,10 @@ public class AdminMediaDownloadResource {
         }
         Media media = Media.find("id = ?1 and deletedAt is null", mediaId).firstResult();
         PostMedia relation = media == null ? null : PostMedia.find(
-                "media.id = ?1 and post.id = ?2 and usageType = 3", media.id, ticket.postId).firstResult();
-        if (relation == null) {
+                "select relation from PostMedia relation join fetch relation.post "
+                        + "where relation.media.id = ?1 and relation.post.id = ?2",
+                media.id, ticket.postId).firstResult();
+        if (relation == null || !postAccessService.isProtectedMediaReference(relation)) {
             downloadAuditService.recordDenied(ticket.postId, mediaId, ticket.id, adminId,
                     resolveClientIp(), userAgent, referer, "TICKET_RESOURCE_MISMATCH");
             return notFound();

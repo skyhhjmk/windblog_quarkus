@@ -197,9 +197,8 @@ public class PublicCacheRefreshService {
             if (media.storageKey == null) {
                 return;
             }
-            boolean protectedAttachment = PostMedia.count(
-                    "media.id = ?1 and usageType = 3", media.id) > 0;
-            if ("DELETE".equals(action) || media.deletedAt != null || protectedAttachment) {
+            boolean protectedMedia = postAccessService.hasProtectedMediaReference(media.id);
+            if ("DELETE".equals(action) || media.deletedAt != null || protectedMedia) {
                 cacheService.delete(CacheService.Keys.mediaMeta(media.storageKey));
             } else {
                 cacheService.set(CacheService.Keys.mediaMeta(media.storageKey), toPublicMediaSnapshot(media), Duration.ofHours(1));

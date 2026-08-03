@@ -39,8 +39,10 @@ public class MediaAccessPolicy {
             return new Decision(false, "REGION_DENIED");
         }
         PostMedia relation = PostMedia.find(
-                "media.id = ?1 and post.id = ?2 and usageType = 3", media.id, post.id).firstResult();
-        if (relation == null) {
+                "select relation from PostMedia relation join fetch relation.post "
+                        + "where relation.media.id = ?1 and relation.post.id = ?2",
+                media.id, post.id).firstResult();
+        if (relation == null || !postAccessService.isProtectedMediaReference(relation)) {
             return new Decision(false, "MEDIA_NOT_ATTACHED");
         }
         if (!postAccessPolicy.isAuthor(post, userId) && !postAccessService.hasPurchasedPost(userId, post.id)) {

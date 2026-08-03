@@ -34,6 +34,9 @@ public class AdminMediaController {
     MediaManagementService mediaService;
 
     @Inject
+    com.biliwind.blog.service.PostAccessService postAccessService;
+
+    @Inject
     com.biliwind.blog.service.MediaReferenceRebuildService mediaReferenceRebuildService;
 
     @Inject
@@ -204,9 +207,17 @@ public class AdminMediaController {
         if (media == null) {
             throw new NotFoundException("媒体不存在");
         }
-        com.biliwind.blog.model.PostMedia protectedReference =
+        com.biliwind.blog.model.PostMedia protectedReference = null;
+        List<com.biliwind.blog.model.PostMedia> references =
                 com.biliwind.blog.model.PostMedia.find(
-                        "media.id = ?1 and usageType = 3", id).firstResult();
+                        "select relation from PostMedia relation join fetch relation.post "
+                                + "where relation.media.id = ?1", id).list();
+        for (com.biliwind.blog.model.PostMedia reference : references) {
+            if (postAccessService.isProtectedMediaReference(reference)) {
+                protectedReference = reference;
+                break;
+            }
+        }
         if (protectedReference == null || protectedReference.post == null) {
             throw new NotFoundException("该媒体没有受保护原图引用");
         }

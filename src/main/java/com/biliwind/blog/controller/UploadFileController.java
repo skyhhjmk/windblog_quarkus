@@ -1,8 +1,8 @@
 package com.biliwind.blog.controller;
 
 import com.biliwind.blog.model.Media;
-import com.biliwind.blog.model.PostMedia;
 import com.biliwind.blog.service.MediaAccessService;
+import com.biliwind.blog.service.PostAccessService;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
 import jakarta.inject.Inject;
@@ -29,6 +29,9 @@ public class UploadFileController {
     MediaAccessService mediaAccessService;
 
     @Inject
+    PostAccessService postAccessService;
+
+    @Inject
     com.biliwind.blog.context.RegionContext regionContext;
 
     @GET
@@ -49,8 +52,7 @@ public class UploadFileController {
                 throw new NotFoundException();
             }
 
-            long protectedAttachmentReferences = PostMedia.count("media.id = ?1 and usageType = 3", media.id);
-            if (protectedAttachmentReferences > 0) {
+            if (postAccessService.hasProtectedMediaReference(media.id)) {
                 throw new NotFoundException();
             }
 

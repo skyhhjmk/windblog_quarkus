@@ -63,6 +63,59 @@ public class PostAccessService {
         return post.visibility == 2;
     }
 
+    /**
+     * A post with any non-public visibility or a positive full-article price
+     * must not expose its media through the public upload path.
+     */
+    public boolean isProtectedPost(Post post) {
+        if (post == null) {
+            return false;
+        }
+        return post.visibility != 0 || getPostPrice(post) > 0;
+    }
+
+    /**
+     * Keep the historical attachment marker protected while also covering
+     * inline images and other media references in protected posts.
+     */
+    public boolean isProtectedMediaReference(PostMedia reference) {
+        if (reference == null) {
+            return false;
+        }
+        return reference.usageType == 3 || isProtectedPost(reference.post);
+    }
+
+    public boolean hasProtectedMediaReference(Long mediaId) {
+        if (mediaId == null) {
+            return false;
+        }
+        java.util.List<PostMedia> references = PostMedia.find(
+                "select relation from PostMedia relation join fetch relation.post "
+                        + "where relation.media.id = ?1", mediaId).list();
+        for (PostMedia reference : references) {
+            if (isProtectedMediaReference(reference)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public java.util.List<PostMedia> findProtectedMediaReferences(Long postId) {
+        if (postId == null) {
+            return java.util.List.of();
+        }
+        java.util.List<PostMedia> references = PostMedia.find(
+                "select relation from PostMedia relation join fetch relation.post "
+                        + "where relation.post.id = ?1", postId).list();
+        java.util.List<PostMedia> protectedReferences = new java.util.ArrayList<>();
+        for (PostMedia reference : references) {
+            if (isProtectedMediaReference(reference)) {
+                protectedReferences.add(reference);
+            }
+        }
+        return protectedReferences;
+    }
+
     public boolean verifyPassword(Post post, String submittedPassword) {
         if (submittedPassword == null && post.password == null) {
             return true;
@@ -573,8 +626,7 @@ public class PostAccessService {
         if (content == null || content.isBlank() || postId == null) {
             return content;
         }
-        java.util.List<PostMedia> references = PostMedia.list(
-                "post.id = ?1 and usageType = 3", postId);
+        java.util.List<PostMedia> references = findProtectedMediaReferences(postId);
         String rewritten = content;
         java.util.Map<Long, String> replacementByMedia = new java.util.HashMap<>();
         for (PostMedia reference : references) {

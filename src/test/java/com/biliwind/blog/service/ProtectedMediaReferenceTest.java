@@ -77,4 +77,55 @@ class ProtectedMediaReferenceTest {
         assertFalse(authorized.contains(media.url));
         assertTrue(authorized.contains("/api/media/download/"));
     }
+
+    @Test
+    @Transactional
+    void shouldProtectInlineMediaReferencedByPasswordPost() {
+        String suffix = Long.toString(System.nanoTime());
+        Post post = new Post();
+        post.slug = "password-inline-media-" + suffix;
+        post.title = Map.of("zh-cn", "密码文章正文媒体");
+        post.status = PostStatus.PUBLISHED;
+        post.visibility = 2;
+        post.renderType = com.biliwind.blog.model.PostRenderType.MARKDOWN;
+        post.password = "hashed-password";
+        post.user = User.find("status = 1").firstResult();
+        post.createdAt = OffsetDateTime.now();
+        post.updatedAt = post.createdAt;
+        post.persist();
+
+        Media media = new Media();
+        media.storageKey = "password-inline-" + suffix + ".jpg";
+        media.url = "/uploads/" + media.storageKey;
+        media.mediaType = 0;
+        media.mimeType = "image/jpeg";
+        media.size = 10L;
+        media.storageClasses = Map.of("local", Map.of("status", "READY"));
+        media.version = 0;
+        media.createdAt = OffsetDateTime.now();
+        media.updatedAt = media.createdAt;
+        media.persist();
+
+        PostMedia relation = new PostMedia();
+        relation.id = new PostMediaId(post.id, media.id);
+        relation.post = post;
+        relation.media = media;
+        relation.usageType = 0;
+        relation.persist();
+
+        String content = "![private] (" + media.url + ")";
+        String preview = postAccessService.getPreviewOnlyContent(
+                content, 0, false, post.id, 0, null);
+
+        assertFalse(preview.contains(media.url));
+        assertTrue(postAccessService.hasProtectedMediaReference(media.id));
+
+        post.visibility = 0;
+        post.extraInfo = Map.of("points_price", 10);
+        String paidPreview = postAccessService.getPreviewOnlyContent(
+                content, 0, true, post.id, 10, null);
+
+        assertFalse(paidPreview.contains(media.url));
+        assertTrue(postAccessService.hasProtectedMediaReference(media.id));
+    }
 }

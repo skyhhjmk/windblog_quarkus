@@ -88,6 +88,9 @@ public class MediaManagementService {
     @Inject
     EdgeWriteGuard edgeWriteGuard;
 
+    @Inject
+    PostAccessService postAccessService;
+
     private Path uploadRoot;
     private String normalizedPublicPath;
 
@@ -1045,7 +1048,7 @@ public class MediaManagementService {
         if (references != null) {
             referencedBy = references.size();
             for (PostMedia reference : references) {
-                if (reference.usageType == 3) {
+                if (postAccessService.isProtectedMediaReference(reference)) {
                     protectedMedia = true;
                     break;
                 }

@@ -155,7 +155,7 @@ public class EdgeDataSyncService {
         if ("UPSERT".equals(action)) {
             Media media = Media.findById(mediaId);
             if (media == null) return;
-            if (PostMedia.count("media.id = ?1 and usageType = 3", mediaId) > 0) {
+            if (postAccessService.hasProtectedMediaReference(mediaId)) {
                 broadcastSync("MEDIA", "DELETE", mediaId.toString(), "{}");
                 return;
             }
@@ -660,14 +660,12 @@ public class EdgeDataSyncService {
     @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
     public PublicFullSyncCounts loadPublicFullSyncCounts() {
         long publicMediaCount = entityManager.createQuery(
-                        "select count(media.id) from Media media where media.deletedAt is null "
-                                + "and not exists (select relation.id from PostMedia relation "
-                                + "where relation.media = media and relation.usageType = 3)",
+                        "select count(media.id) from Media media where media.deletedAt is null",
                         Long.class)
                 .getSingleResult();
         long revokedMediaCount = entityManager.createQuery(
                         "select count(distinct media.id) from PostMedia relation join relation.media media "
-                                + "where relation.usageType = 3", Long.class)
+                                + "where media.deletedAt is not null", Long.class)
                 .getSingleResult();
         long revokedPostCount = entityManager.createQuery(
                         "select count(post.id) from Post post where post.deletedAt is not null "
@@ -712,22 +710,26 @@ public class EdgeDataSyncService {
         if ("MEDIA".equals(entityType)) {
             List<Media> mediaBatch = entityManager.createQuery(
                             "select media from Media media where media.deletedAt is null "
-                                    + "and media.id > :afterId and not exists (select relation.id from PostMedia relation "
-                                    + "where relation.media = media and relation.usageType = 3) order by media.id",
+                                    + "and media.id > :afterId order by media.id",
                             Media.class)
                     .setParameter("afterId", afterId)
                     .setMaxResults(safeLimit)
                     .getResultList();
             for (Media media : mediaBatch) {
-                items.add(new FullSyncItem("MEDIA", upsertAction, media.id.toString(),
-                        writePayload(buildPublicMediaNode(media)), 15));
+                if (postAccessService.hasProtectedMediaReference(media.id)) {
+                    items.add(new FullSyncItem("MEDIA", "DELETE", media.id.toString(), "{}", 15));
+                } else {
+                    items.add(new FullSyncItem("MEDIA", upsertAction, media.id.toString(),
+                            writePayload(buildPublicMediaNode(media)), 15));
+                }
             }
             return items;
         }
         if ("MEDIA_REVOKED".equals(entityType)) {
-            List<Long> mediaIds = entityManager.createQuery(
-                            "select distinct media.id from PostMedia relation join relation.media media "
-                                    + "where relation.usageType = 3 and media.id > :afterId order by media.id",
+                List<Long> mediaIds = entityManager.createQuery(
+                        "select distinct media.id from PostMedia relation join relation.media media "
+                                + "where media.deletedAt is not null "
+                                + "and media.id > :afterId order by media.id",
                             Long.class)
                     .setParameter("afterId", afterId)
                     .setMaxResults(safeLimit)
