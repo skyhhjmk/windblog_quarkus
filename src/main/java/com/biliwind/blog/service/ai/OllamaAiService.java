@@ -96,7 +96,7 @@ public class OllamaAiService implements AiService {
                     .build();
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("Ollama 调用失败，code=" + response.statusCode());
@@ -200,7 +200,7 @@ public class OllamaAiService implements AiService {
                     .build();
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), req,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("Ollama 审核失败，HTTP " + response.statusCode());
@@ -294,7 +294,7 @@ public class OllamaAiService implements AiService {
                         });
                 } else {
                     AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), req,
-                            HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                            AiHttpClientHelper.boundedStringBodyHandler())
                             .whenComplete((res, err) -> {
                                 if (err != null) {
                                     emitter.fail(err);
@@ -332,7 +332,7 @@ public class OllamaAiService implements AiService {
                     .build();
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             log.warn("获取 Ollama 模型列表失败: " + response.statusCode());

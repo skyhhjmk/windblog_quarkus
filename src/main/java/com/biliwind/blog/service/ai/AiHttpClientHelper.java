@@ -7,15 +7,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Flow;
 
 /**
  * AI 专用 HTTP 客户端服务类。
@@ -27,6 +32,7 @@ public class AiHttpClientHelper {
 
     // 设置 60 秒连接超时
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
+    private static final int MAX_NON_STREAM_RESPONSE_BYTES = 8 * 1024 * 1024;
 
     // 默认的 HttpClient（直连并且遵循系统 JVM 启动参数代理）
     private static final HttpClient defaultClient = HttpClient.newBuilder()
@@ -136,6 +142,19 @@ public class AiHttpClientHelper {
         return client.sendAsync(request, bodyHandler);
     }
 
+    static HttpResponse.BodyHandler<String> boundedStringBodyHandler() {
+        return boundedStringBodyHandler(MAX_NON_STREAM_RESPONSE_BYTES);
+    }
+
+    static HttpResponse.BodyHandler<String> boundedStringBodyHandler(int maxBytes) {
+        if (maxBytes <= 0 || maxBytes > 64 * 1024 * 1024) {
+            throw new IllegalArgumentException("AI 响应大小限制无效");
+        }
+        return responseInfo -> HttpResponse.BodySubscribers.mapping(
+                new BoundedByteArraySubscriber(maxBytes),
+                bytes -> new String(bytes, StandardCharsets.UTF_8));
+    }
+
     static void validateRequest(HttpRequest request) {
         if (request == null || request.uri() == null) {
             throw new IllegalArgumentException("AI 请求地址不能为空");
@@ -189,5 +208,67 @@ public class AiHttpClientHelper {
             }
         }
         return false;
+    }
+
+    private static final class BoundedByteArraySubscriber
+            implements HttpResponse.BodySubscriber<byte[]> {
+
+        private final int maxBytes;
+        private final ByteArrayOutputStream output = new ByteArrayOutputStream();
+        private final CompletableFuture<byte[]> body = new CompletableFuture<>();
+        private int receivedBytes;
+        private Flow.Subscription subscription;
+
+        private BoundedByteArraySubscriber(int maxBytes) {
+            this.maxBytes = maxBytes;
+        }
+
+        @Override
+        public java.util.concurrent.CompletionStage<byte[]> getBody() {
+            return body;
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            if (subscription == null) {
+                body.completeExceptionally(new IllegalArgumentException("AI 响应订阅无效"));
+                return;
+            }
+            this.subscription = subscription;
+            subscription.request(1);
+        }
+
+        @Override
+        public void onNext(List<ByteBuffer> buffers) {
+            if (body.isDone()) {
+                return;
+            }
+            try {
+                for (ByteBuffer buffer : buffers) {
+                    int remaining = buffer.remaining();
+                    if (remaining > maxBytes - receivedBytes) {
+                        throw new IllegalArgumentException("AI 响应内容超过限制");
+                    }
+                    byte[] bytes = new byte[remaining];
+                    buffer.get(bytes);
+                    output.write(bytes, 0, bytes.length);
+                    receivedBytes = receivedBytes + remaining;
+                }
+                subscription.request(1);
+            } catch (RuntimeException exception) {
+                subscription.cancel();
+                body.completeExceptionally(exception);
+            }
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            body.completeExceptionally(throwable);
+        }
+
+        @Override
+        public void onComplete() {
+            body.complete(output.toByteArray());
+        }
     }
 }

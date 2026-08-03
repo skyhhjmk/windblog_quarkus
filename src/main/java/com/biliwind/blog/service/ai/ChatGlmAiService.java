@@ -78,7 +78,7 @@ public class ChatGlmAiService implements AiService {
             HttpRequest request = buildRequest(config, payload);
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("ChatGLM 调用失败，HTTP " + response.statusCode());
@@ -191,7 +191,7 @@ public class ChatGlmAiService implements AiService {
         try {
             HttpRequest httpRequest = buildRequest(config, payload);
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), httpRequest,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("ChatGLM 审核调用失败，HTTP " + response.statusCode());
@@ -300,7 +300,7 @@ public class ChatGlmAiService implements AiService {
                         });
                 } else {
                     AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), httpRequest,
-                            HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                            AiHttpClientHelper.boundedStringBodyHandler())
                             .whenComplete((res, err) -> {
                                 if (err != null) {
                                     emitter.fail(err);

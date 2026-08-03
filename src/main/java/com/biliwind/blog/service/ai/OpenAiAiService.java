@@ -85,7 +85,7 @@ public class OpenAiAiService implements AiService {
             attachApiKeyHeader(builder, config);
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("OpenAI 调用失败，HTTP " + response.statusCode());
@@ -187,7 +187,7 @@ public class OpenAiAiService implements AiService {
             attachApiKeyHeader(builder, config);
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("OpenAI 审核调用失败，HTTP " + response.statusCode());
@@ -328,7 +328,7 @@ public class OpenAiAiService implements AiService {
                         });
                 } else {
                     AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                            HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                            AiHttpClientHelper.boundedStringBodyHandler())
                             .whenComplete((res, err) -> {
                                 if (err != null) {
                                     emitJson(emitter, "error", "[接口调用超时或异常]: " + safeError(err));
@@ -391,7 +391,7 @@ public class OpenAiAiService implements AiService {
             attachApiKeyHeader(builder, config);
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             LOG.warn("获取 OpenAI 模型列表失败，HTTP " + response.statusCode());
