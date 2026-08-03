@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.UserCheckIn;
 import com.biliwind.blog.model.UserWallet;
 import com.biliwind.blog.model.WalletTransaction;
@@ -91,7 +92,8 @@ public class UserWalletApiController {
             )).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("success", false, "message", e.getMessage()))
+                    .entity(Map.of("success", false,
+                            "message", SensitiveMessageSanitizer.sanitize(e.getMessage())))
                     .build();
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)

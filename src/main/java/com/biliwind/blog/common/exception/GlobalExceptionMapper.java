@@ -2,6 +2,7 @@ package com.biliwind.blog.common.exception;
 
 import com.biliwind.blog.common.dto.ErrorResponse;
 import com.biliwind.blog.common.helper.RsaHelper;
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.vertx.core.http.HttpServerRequest;
@@ -52,25 +53,25 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         // 识别异常类型并设置状态码和消息
         if (exception instanceof ConflictException) {
             status = Response.Status.CONFLICT;
-            message = exception.getMessage();
+            message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
             errorType = "ConflictError";
         } else if (exception instanceof ConcurrentModificationException) {
             status = Response.Status.CONFLICT;
-            message = exception.getMessage();
+            message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
             errorType = "ConcurrentUpdateError";
         } else if (exception instanceof BadRequestException) {
             status = Response.Status.BAD_REQUEST;
-            message = exception.getMessage();
+            message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
             errorType = "BadRequestError";
         } else if (exception instanceof jakarta.validation.ConstraintViolationException) {
             status = Response.Status.BAD_REQUEST;
-            message = exception.getMessage();
+            message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
             errorType = "ValidationError";
         } else if (exception instanceof WebApplicationException) {
             WebApplicationException webEx = (WebApplicationException) exception;
             Response webExResponse = webEx.getResponse();
             status = Response.Status.fromStatusCode(webExResponse.getStatus());
-            message = exception.getMessage();
+            message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
             if (message == null) {
                 message = "请求处理失败";
             } else if (message.isEmpty()) {

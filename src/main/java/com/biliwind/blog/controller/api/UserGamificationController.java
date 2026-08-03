@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.model.UserBackpackItem;
 import com.biliwind.blog.service.PostAccessService;
@@ -43,7 +44,9 @@ public class UserGamificationController {
             postAccessService.buyPost(userId, postId, null, null);
             return Response.ok(Map.of("success", true, "message", "购买成功")).build();
         } catch (Exception e) {
-            return Response.status(Response.Status.BAD_REQUEST).entity(Map.of("success", false, "message", e.getMessage())).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(Map.of(
+                    "success", false,
+                    "message", SensitiveMessageSanitizer.sanitize(e.getMessage()))).build();
         }
     }
 
@@ -60,7 +63,9 @@ public class UserGamificationController {
             storeService.buyStoreItem(userId, itemId);
             return Response.ok(Map.of("success", true, "message", "购买成功")).build();
         } catch (Exception e) {
-            return Response.status(Response.Status.BAD_REQUEST).entity(Map.of("success", false, "message", e.getMessage())).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(Map.of(
+                    "success", false,
+                    "message", SensitiveMessageSanitizer.sanitize(e.getMessage()))).build();
         }
     }
 
