@@ -178,7 +178,9 @@ try {
         Invoke-DockerRabbit @("delete_user", $smokeUser)
     } catch {
     }
-    if (Test-Path -LiteralPath $trustStorePath) {
-        Remove-Item -LiteralPath $trustStorePath -Force -ErrorAction SilentlyContinue
+    foreach ($temporaryFile in @($trustStorePath, $stdoutPath, $stderrPath)) {
+        if (Test-Path -LiteralPath $temporaryFile) {
+            Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
+        }
     }
 }

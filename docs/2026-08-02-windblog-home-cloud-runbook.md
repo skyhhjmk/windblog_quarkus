@@ -123,7 +123,7 @@ $env:WINDBLOG_IT_DB_NAME = 'windblog'
 ```
 
 该脚本只在本地 Docker RabbitMQ 中创建临时强密码用户，并从现有 CA truststore 生成临时强密码副本；
-它会启动独立 HTTP/gRPC 端口、执行云验收，然后停止应用并删除临时 RabbitMQ 用户和 truststore。
+它会启动独立 HTTP/gRPC 端口、执行云验收，然后停止应用并删除临时 RabbitMQ 用户、truststore 和标准输出/错误日志。
 它不替代真实 HTTPS、CDN、反向代理或家庭网络验收。
 
 ## 外网入口自动化验收
