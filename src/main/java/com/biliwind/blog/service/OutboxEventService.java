@@ -83,6 +83,12 @@ public class OutboxEventService {
     @ConfigProperty(name = "windblog.outbox.lease-duration", defaultValue = "15M")
     Duration leaseDuration;
 
+    @ConfigProperty(name = "windblog.outbox.max-pending-events", defaultValue = "100000")
+    int maxPendingEvents;
+
+    @ConfigProperty(name = "windblog.outbox.retention-days", defaultValue = "14")
+    int retentionDays;
+
     @Transactional
     public void enqueue(String eventKey, String eventType, String aggregateType, String aggregateId,
                         Map<String, Object> payload, String traceId) {
@@ -92,6 +98,13 @@ public class OutboxEventService {
         OutboxEvent existing = OutboxEvent.find("eventKey", eventKey).firstResult();
         if (existing != null) {
             return;
+        }
+        Number pendingCount = (Number) entityManager.createNativeQuery(
+                "select count(*) from outbox_events where status in ('PENDING', 'IN_FLIGHT')")
+                .getSingleResult();
+        if (pendingCount.longValue() >= effectiveMaxPendingEvents()) {
+            securityMetricsService.increment("outbox.rejected", "pending_limit");
+            throw new IllegalStateException("outbox 待处理事件已达到配置上限");
         }
         OutboxEvent event = new OutboxEvent();
         event.eventKey = eventKey;
@@ -119,8 +132,11 @@ public class OutboxEventService {
                 return;
             }
             processedEvents = processedEvents + 1;
-            OutboxEvent event = OutboxEvent.findById(eventId);
+            OutboxEvent event = OutboxEvent.find(
+                    "id = ?1 and lockOwner = ?2 and status = 'IN_FLIGHT' and lockedUntil > ?3",
+                    eventId, owner, OffsetDateTime.now()).firstResult();
             if (event == null) {
+                securityMetricsService.increment("outbox.skipped", "lease_lost");
                 continue;
             }
             try {
@@ -133,6 +149,21 @@ public class OutboxEventService {
                 log.warnf("outbox event dispatch failed, id=%d, type=%s", eventId, event.eventType);
             }
         }
+    }
+
+    @Scheduled(every = "1h", identity = "outbox-retention")
+    @Transactional
+    void purgeRetainedEvents() {
+        if (retentionDays < 1) {
+            return;
+        }
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(retentionDays);
+        entityManager.createNativeQuery(
+                        "delete from outbox_events "
+                                + "where status in ('PUBLISHED', 'FAILED') and created_at < ?1")
+                .setParameter(1, cutoff)
+                .executeUpdate();
+        refreshMetrics();
     }
 
     @Transactional
@@ -278,6 +309,10 @@ public class OutboxEventService {
             return null;
         }
         return error.length() <= 1000 ? error : error.substring(0, 1000);
+    }
+
+    private long effectiveMaxPendingEvents() {
+        return Math.max(1000L, Math.min(maxPendingEvents, 1_000_000L));
     }
 
     private String resolveTraceId(String requestedTraceId) {

@@ -48,6 +48,12 @@ public class EmailDeliveryService {
     @ConfigProperty(name = "windblog.mail.delivery.lease-duration", defaultValue = "5M")
     java.time.Duration deliveryLeaseDuration;
 
+    @ConfigProperty(name = "windblog.mail.max-pending-deliveries", defaultValue = "100000")
+    int maxPendingDeliveries;
+
+    @ConfigProperty(name = "windblog.mail.delivery.retention-days", defaultValue = "90")
+    int deliveryRetentionDays;
+
     @ConfigProperty(name = "windblog.mail.smtp.connect-timeout", defaultValue = "10S")
     java.time.Duration smtpConnectTimeout;
 
@@ -99,6 +105,12 @@ public class EmailDeliveryService {
     @Transactional
     public void persistQueuedDelivery(String scenario, String recipientAddress, String subject,
                                      String resolvedHtml, Long channelGroupId, Long channelId) {
+        Number pendingCount = (Number) EmailDelivery.getEntityManager().createNativeQuery(
+                "select count(*) from email_deliveries where status = 'PENDING'")
+                .getSingleResult();
+        if (pendingCount.longValue() >= effectiveMaxPendingDeliveries()) {
+            throw new IllegalStateException("邮件待发送队列已达到配置上限");
+        }
         EmailDelivery delivery = new EmailDelivery();
         delivery.scenario = scenario;
         delivery.recipientAddress = recipientAddress;
@@ -126,13 +138,29 @@ public class EmailDeliveryService {
                 return;
             }
             processedDeliveries = processedDeliveries + 1;
-            EmailDelivery delivery = EmailDelivery.findById(deliveryId);
+            EmailDelivery delivery = EmailDelivery.find(
+                    "id = ?1 and lockOwner = ?2 and lockedUntil > ?3",
+                    deliveryId, owner, OffsetDateTime.now()).firstResult();
             if (delivery == null) {
                 continue;
             }
             DeliveryOutcome outcome = sendDelivery(delivery);
             self.get().completeDelivery(delivery.id, owner, outcome);
         }
+    }
+
+    @Scheduled(every = "1h", identity = "email-delivery-retention")
+    @Transactional
+    void purgeRetainedDeliveries() {
+        if (deliveryRetentionDays < 1) {
+            return;
+        }
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(deliveryRetentionDays);
+        EmailDelivery.getEntityManager().createNativeQuery(
+                        "delete from email_deliveries "
+                                + "where status in ('SENT', 'FAILED') and created_at < ?1")
+                .setParameter(1, cutoff)
+                .executeUpdate();
     }
 
     @Transactional
@@ -205,6 +233,10 @@ public class EmailDeliveryService {
             return fallbackMillis;
         }
         return Math.max(1000L, duration.toMillis());
+    }
+
+    private long effectiveMaxPendingDeliveries() {
+        return Math.max(1000L, Math.min(maxPendingDeliveries, 1_000_000L));
     }
 
     @Transactional
