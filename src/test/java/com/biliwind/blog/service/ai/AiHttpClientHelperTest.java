@@ -3,6 +3,7 @@ package com.biliwind.blog.service.ai;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.net.InetAddress;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -14,10 +15,34 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiHttpClientHelperTest {
+
+    @Test
+    void shouldKeepValidatedAiAddressesPinnedPerHost() throws Exception {
+        AiPinnedHttpClient.ValidatedDnsResolver resolver =
+                new AiPinnedHttpClient.ValidatedDnsResolver("example.com", host -> false);
+        InetAddress address = InetAddress.getByAddress(
+                "example.com", new byte[]{93, (byte) 184, (byte) 216, 34});
+
+        resolver.pin("example.com", new InetAddress[]{address});
+
+        assertArrayEquals(new InetAddress[]{address}, resolver.resolve("example.com"));
+        assertThrows(IllegalArgumentException.class, () -> resolver.resolve("other.example"));
+    }
+
+    @Test
+    void shouldRejectUnvalidatedPrivateAiAddressWhenPinning() throws Exception {
+        AiPinnedHttpClient.ValidatedDnsResolver resolver =
+                new AiPinnedHttpClient.ValidatedDnsResolver("example.com", host -> false);
+        InetAddress privateAddress = InetAddress.getByName("127.0.0.1");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> resolver.pin("example.com", new InetAddress[]{privateAddress}));
+    }
 
     @Test
     void shouldRejectPrivateAiRequestBeforeOpeningConnection() {

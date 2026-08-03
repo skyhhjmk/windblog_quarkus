@@ -35,27 +35,24 @@ public class AiHttpClientHelper {
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
     private static final int MAX_NON_STREAM_RESPONSE_BYTES = 8 * 1024 * 1024;
 
-    // 默认的 HttpClient（直连并且遵循系统 JVM 启动参数代理）
-    private static final HttpClient defaultClient = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .proxy(ProxySelector.getDefault())
-            .build();
+    // 直连客户端在每次请求前固定已验证的 DNS 地址。
+    private static final AiPinnedHttpClient defaultClient =
+            AiPinnedHttpClient.direct(null, AiHttpClientHelper::isExplicitlyAllowed);
 
     // 缓存不同代理设置的 HttpClient 实例，避免重复创建线程和连接池消耗系统资源
-    private static final ConcurrentHashMap<String, HttpClient> clientCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, AiPinnedHttpClient> clientCache = new ConcurrentHashMap<>();
 
-    public static HttpClient getClient(AiProviderConfig config, ObjectMapper objectMapper) {
+    public static AiPinnedHttpClient getClient(AiProviderConfig config, ObjectMapper objectMapper) {
         validateConfiguredEndpoint(config);
         // 如果配置为空或无扩展配置，默认降级使用无代理的 client
         if (config == null) {
             return defaultClient;
         }
         if (config.config == null) {
-            return defaultClient;
+            return directClient(config);
         }
         if (config.config.isBlank()) {
-            return defaultClient;
+            return directClient(config);
         }
 
         try {
@@ -67,7 +64,7 @@ public class AiHttpClientHelper {
             }
 
             if (proxyEnabled == false) {
-                return defaultClient;
+                return directClient(config);
             }
 
             String proxyType = "HTTP";
@@ -87,14 +84,14 @@ public class AiHttpClientHelper {
 
             // 过滤空的主机或无效端口，降级为直连客户端
             if (proxyHost.isBlank()) {
-                return defaultClient;
+                return directClient(config);
             }
             if (proxyPort <= 0) {
-                return defaultClient;
+                return directClient(config);
             }
 
             String cacheKey = proxyType + ":" + proxyHost + ":" + proxyPort;
-            HttpClient cached = clientCache.get(cacheKey);
+            AiPinnedHttpClient cached = clientCache.get(cacheKey);
             if (cached != null) {
                 return cached;
             }
@@ -123,24 +120,51 @@ public class AiHttpClientHelper {
                 builder.proxy(ProxySelector.getDefault());
             }
 
-            HttpClient newClient = builder.build();
-            HttpClient existing = clientCache.putIfAbsent(cacheKey, newClient);
+            AiPinnedHttpClient newClient = AiPinnedHttpClient.jdk(builder.build());
+            AiPinnedHttpClient existing = clientCache.putIfAbsent(cacheKey, newClient);
             if (existing != null) {
                 return existing;
             }
             return newClient;
         } catch (Exception e) {
             log.error("解析 AI 代理配置异常，降级使用默认直连客户端", e);
-            return defaultClient;
+            return directClient(config);
         }
     }
 
+    public static <T> CompletableFuture<HttpResponse<T>> sendAsync(
+            AiPinnedHttpClient client,
+            HttpRequest request,
+            HttpResponse.BodyHandler<T> bodyHandler) {
+        if (!client.isDirect()) {
+            validateRequest(request);
+        }
+        return client.sendAsync(request, bodyHandler);
+    }
+
+    /** 保留测试和旧调用方使用 JDK 客户端时的输入校验契约。 */
     public static <T> CompletableFuture<HttpResponse<T>> sendAsync(
             HttpClient client,
             HttpRequest request,
             HttpResponse.BodyHandler<T> bodyHandler) {
         validateRequest(request);
         return client.sendAsync(request, bodyHandler);
+    }
+
+    private static AiPinnedHttpClient directClient(AiProviderConfig config) {
+        String host = "";
+        if (config != null && config.endpoint != null && !config.endpoint.isBlank()) {
+            host = URI.create(config.endpoint.trim()).getHost();
+        }
+        String cacheKey = "direct:" + (host == null ? "" : host.toLowerCase());
+        AiPinnedHttpClient cached = clientCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        AiPinnedHttpClient created = AiPinnedHttpClient.direct(host,
+                AiHttpClientHelper::isExplicitlyAllowed);
+        AiPinnedHttpClient existing = clientCache.putIfAbsent(cacheKey, created);
+        return existing == null ? created : existing;
     }
 
     static HttpResponse.BodyHandler<String> boundedStringBodyHandler() {
