@@ -5,38 +5,57 @@ volumes:
   elasticsearch-data:
   kibana-data:
   filebeat-config:  # Filebeat 配置文件卷（可选）
+  clamav-data:
 
 services:
   db:
     container_name: postgresdb
     image: postgres:18
     restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\"" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
     volumes:
       - postgres-data:/var/lib/postgresql
-    environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - target: 5432
+        published: "${POSTGRES_HOST_PORT:-5432}"
+        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_USER: ${POSTGRES_USER:-windblog}
+      POSTGRES_DB: ${POSTGRES_DB:-windblog}
+    expose:
+      - "5432"
 
   # 新增 Redis 服务
   redis:
     container_name: redis
     image: redis:8-alpine
     restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,30 +63,48 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes --bind 0.0.0.0
+      - target: 6379
+        published: "${REDIS_HOST_PORT:-6379}"
+        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+    expose:
+      - "6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    command: ["redis-server", "--appendonly", "yes", "--bind", "0.0.0.0", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
 
   rabbitmq:
     container_name: rabbitmq
     image: rabbitmq:4.2.5-management-alpine
     restart: unless-stopped
     hostname: rabbitmq
+    cpus: "1.0"
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: 30m
+        max-file: "5"
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER must be set}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS must be set}
       # RABBITMQ_ERLANG_COOKIE: "my_secret_cookie"
+    expose:
+      - "5672"
+      - "15672"
     ports:
-      # AMQP 协议端口
-      - "5672:5672"
-      # HTTP 管理界面端口
-      - "15672:15672"
+      - target: 5672
+        published: "${RABBITMQ_HOST_PORT:-5672}"
+        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+      - target: 15672
+        published: "${RABBITMQ_MANAGEMENT_HOST_PORT:-15672}"
+        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
     networks:
       - app-network
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       # - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
-      test: [ "CMD", "rabbitmq-diagnostics", "check_running" ]
+      test: [ "CMD-SHELL", "rabbitmqctl authenticate_user \"$${RABBITMQ_DEFAULT_USER}\" \"$${RABBITMQ_DEFAULT_PASS}\"" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -81,6 +118,13 @@ services:
       dockerfile: Dockerfile
     image: windblog-elasticsearch:9.3.2-ik
     restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 3g
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
     environment:
       # 单节点模式
       discovery.type: single-node
@@ -93,19 +137,19 @@ services:
       # 节点名称
       node.name: windblog-node-1
       # 认证密钥（从环境变量读取）
-      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}
+    expose:
+      - "9200"
     ports:
-      # HTTP API 端口（供宿主机上的 Quarkus 应用访问）
-      # Windows 当前环境中 9200 位于 excluded port range，改用 19200 避免宿主机无法绑定
-      - "19200:9200"
-      # Transport 端口
-      - "9300:9300"
+      - target: 9200
+        published: "${ELASTICSEARCH_HOST_PORT:-9200}"
+        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
     networks:
       - app-network
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
-      test: [ "CMD-SHELL", "curl -kf -u elastic:${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1" ]
+      test: [ "CMD-SHELL", "curl -kf -u elastic:\"$${ELASTIC_PASSWORD}\" http://localhost:9200/_cluster/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -116,26 +160,36 @@ services:
     container_name: kibana
     image: elastic.1ms.run/kibana/kibana:9.3.2
     restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: 30m
+        max-file: "5"
     environment:
       # 连接 Elasticsearch（使用 HTTPS）
       ELASTICSEARCH_HOSTS: "http://elasticsearch:9200"
       # Elasticsearch 认证（使用 kibana_system 服务账户）
-      ELASTICSEARCH_SERVICEACCOUNTTOKEN: ${KIBANA_SERVICE_ACCOUNT_TOKEN}
+      ELASTICSEARCH_SERVICEACCOUNTTOKEN: ${KIBANA_SERVICE_ACCOUNT_TOKEN:?KIBANA_SERVICE_ACCOUNT_TOKEN must be set}
       # 启用 xpack 安全
       xpack.security.enabled: "true"
       # 语言设置
       I18N_LOCALE: zh-CN
       # Kibana 加密密钥（用于加密 session 等敏感数据）
-      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY:?KIBANA_ENCRYPTION_KEY must be set}
       # Kibana 服务器密钥（用于生成和验证 JWT）
-      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_KEY}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_KEY:?KIBANA_REPORTING_KEY must be set}
       # 启用 SSL（可选，开发环境可禁用）
       # SERVER_SSL_ENABLED: "true"
       # SERVER_SSL_CERTIFICATE: /usr/share/kibana/config/certs/kibana.crt
       # SERVER_SSL_KEY: /usr/share/kibana/config/certs/kibana.key
+    expose:
+      - "5601"
     ports:
-      # HTTP 端口
-      - "5601:5601"
+      - target: 5601
+        published: "${KIBANA_HOST_PORT:-5601}"
+        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
     networks:
       - app-network
     volumes:
@@ -156,6 +210,13 @@ services:
     image: elastic.1ms.run/beats/filebeat:9.3.2
     restart: unless-stopped
     user: root  # 需要 root 权限读取日志文件
+    cpus: "0.5"
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
     networks:
       - app-network
     volumes:
@@ -172,13 +233,41 @@ services:
       elasticsearch:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "filebeat", "test", "output" ]
+      test: [ "CMD", "filebeat", "test", "output", "--strict.perms=false" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
     # 使用 --strict.perms=false 跳过权限检查（Windows Docker 挂载文件权限问题）
     command: [ "filebeat", "-e", "--strict.perms=false" ]
+
+  clamav:
+    container_name: clamav
+    image: clamav/clamav:stable
+    profiles:
+      - security
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: 30m
+        max-file: "5"
+    networks:
+      - app-network
+    volumes:
+      - clamav-data:/var/lib/clamav
+    ports:
+      - target: 3310
+        published: "${CLAMAV_HOST_PORT:-3310}"
+        host_ip: "${CLAMAV_HOST_BIND_IP:-127.0.0.1}"
+    healthcheck:
+      test: [ "CMD-SHELL", "clamdscan --ping 1 --wait /etc/hostname >/dev/null || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
 
 networks:
   app-network:
