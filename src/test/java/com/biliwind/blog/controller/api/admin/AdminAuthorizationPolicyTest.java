@@ -49,6 +49,14 @@ class AdminAuthorizationPolicyTest {
     }
 
     @Test
+    void shouldKeepImageProcessingActionsSeparateFromStorageActions() {
+        assertEquals("image_processing.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/storage/image-processing/configs").action());
+        assertEquals("image_processing.write", AdminAuthorizationPolicy.decide(
+                "PUT", "/api/admin/storage/image-processing/configs").action());
+    }
+
+    @Test
     void shouldProtectFinancialEmailAndSystemSideEffects() {
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/users/7/wallet/adjust")
                 .action().equals("wallet.write"));

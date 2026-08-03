@@ -141,11 +141,14 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/database")) {
             return "database";
         }
-        if (path.startsWith("/api/admin/storage")) {
-            return "storage";
-        }
         if (path.startsWith("/api/admin/permissions")) {
             return "permissions";
+        }
+        if (path.startsWith("/api/admin/storage/image-processing")) {
+            return "image_processing";
+        }
+        if (path.startsWith("/api/admin/storage")) {
+            return "storage";
         }
         String remainder = path.substring("/api/admin".length());
         int slash = remainder.indexOf('/', 1);

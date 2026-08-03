@@ -73,6 +73,7 @@ public class MediaDownloadResource {
         ContentAccessTicket ticket = ticketService.requireMediaTicket(
                 token, userId, headers.getHeaderString("X-Device-Id"));
         if (ticket == null) {
+            downloadRiskService.recordClientAttempt(userId, resolveClientIp(headers), 404);
             return noStore(Response.Status.NOT_FOUND);
         }
 

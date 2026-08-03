@@ -65,10 +65,12 @@ public class AdminMediaDownloadResource {
         Long adminId = adminRequestContext.getUserId();
         ContentAccessTicket ticket = ticketService.consumeAdminMediaDownloadTicket(token, adminId);
         if (ticket == null) {
+            downloadRiskService.recordClientAttempt(adminId, resolveClientIp(), 404);
             return notFound();
         }
         Long mediaId = resolveMediaId(ticket);
         if (mediaId == null || ticket.postId == null) {
+            downloadRiskService.recordClientAttempt(adminId, resolveClientIp(), 404);
             return notFound();
         }
         Media media = Media.find("id = ?1 and deletedAt is null", mediaId).firstResult();
