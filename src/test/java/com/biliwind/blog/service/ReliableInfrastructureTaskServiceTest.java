@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -24,13 +25,14 @@ class ReliableInfrastructureTaskServiceTest {
     @Transactional
     void shouldPersistDelayedStorageRetryInOutbox() {
         OffsetDateTime before = OffsetDateTime.now();
+        long mediaId = UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;
         StorageSyncMessage task = new StorageSyncMessage(
-                880001L, "archive", "WEBP", 2);
+                mediaId, "archive", "WEBP", 2);
 
         reliableInfrastructureTaskService.enqueueStorageSync(task, Duration.ofMinutes(2));
 
         OutboxEvent event = OutboxEvent.find(
-                "eventKey", "STORAGE_REPLAY:880001:archive:WEBP:2").firstResult();
+                "eventKey", "STORAGE_REPLAY:" + mediaId + ":archive:WEBP:2").firstResult();
         assertNotNull(event);
         assertEquals("STORAGE_SYNC", event.eventType);
         assertEquals("archive", event.payload.get("storageClassName"));
