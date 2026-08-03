@@ -1,7 +1,7 @@
 # WindBlog 家用云优先博客系统：炫技、成本、安全与反盗取改造建议
 
-> 审计日期：2026-08-02  
-> 审计范围：当前工作树 `D:\codes\windblog_quarkus`，包含 Quarkus 后端、`admin-flutter` 管理端、Liquibase 迁移、Docker 编排、边缘节点和转载追踪链路。  
+> 审计日期：2026-08-02
+> 审计范围：当前工作树 `D:\codes\windblog_quarkus`，包含 Quarkus 后端、`admin-flutter` 管理端、Liquibase 迁移、Docker 编排、边缘节点和转载追踪链路。
 > 文档性质：源码证据驱动的架构与重构建议，不代表其中的建议已经实现。
 >
 > 部署决策覆盖：基础服务需要对宿主机暴露可配置端口，Compose 默认暴露 PostgreSQL、Redis、RabbitMQ、
