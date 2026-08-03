@@ -20,6 +20,8 @@
 
 > 数据库热点路径已补充 `102-add-home-cloud-hot-path-indexes.sql`，覆盖公开文章分页、修订、媒体引用、
 > 评论、受保护票据、下载审计和 outbox 领取查询；真实生产执行计划和迁移锁表时间仍需现场确认。
+> 管理端受保护原图已补充一次性 `ADMIN_MEDIA_DOWNLOAD` 票据入口，要求 `media.download_original` 权限、step-up、
+> 幂等键和下载审计；浏览器必须在管理 Bearer 会话下使用该票据。
 
 ## 1. 目标与结论
 

@@ -20,6 +20,7 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -193,6 +194,30 @@ public class AdminMediaController {
         return mediaService.toDto(media, List.of());
     }
 
+    @POST
+    @Path("/{id}/original-download-ticket")
+    @Transactional
+    @Operation(summary = "签发受保护原图的一次性下载票据")
+    public Map<String, Object> issueOriginalDownloadTicket(@PathParam("id") Long id) {
+        User operator = mustFindOperator();
+        Media media = Media.find("id = ?1 and deletedAt is null", id).firstResult();
+        if (media == null) {
+            throw new NotFoundException("媒体不存在");
+        }
+        com.biliwind.blog.model.PostMedia protectedReference =
+                com.biliwind.blog.model.PostMedia.find(
+                        "media.id = ?1 and usageType = 3", id).firstResult();
+        if (protectedReference == null || protectedReference.post == null) {
+            throw new NotFoundException("该媒体没有受保护原图引用");
+        }
+        com.biliwind.blog.service.ContentAccessTicketService.IssuedTicket ticket =
+                contentAccessTicketService.issueAdminMediaDownloadTicket(
+                        media.id, protectedReference.post.id, operator.id, Duration.ofMinutes(2));
+        return Map.of(
+                "downloadPath", "/api/admin/media/download/" + ticket.token(),
+                "expiresAt", ticket.expiresAt());
+    }
+
 
     private User mustFindOperator() {
         Long userId = adminRequestContext.getUserId();
@@ -215,6 +240,9 @@ public class AdminMediaController {
 
     @Inject
     com.biliwind.blog.service.storage.StorageService storageService;
+
+    @Inject
+    com.biliwind.blog.service.ContentAccessTicketService contentAccessTicketService;
 
     private List<String> validateStorageClassNames(List<String> storageClassNames) {
         java.util.ArrayList<String> validNames = new java.util.ArrayList<>();

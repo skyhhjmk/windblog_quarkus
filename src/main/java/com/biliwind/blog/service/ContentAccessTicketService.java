@@ -40,6 +40,12 @@ public class ContentAccessTicketService {
     }
 
     @Transactional
+    public IssuedTicket issueAdminMediaDownloadTicket(Long mediaId, Long postId, Long adminId,
+                                                      Duration lifetime) {
+        return issue("ADMIN", adminId, postId, "ADMIN_MEDIA_DOWNLOAD:" + mediaId, lifetime, null);
+    }
+
+    @Transactional
     public String issueMediaDownloadPath(Long mediaId, Long postId, Long userId, Duration lifetime) {
         return issueMediaDownloadPath(mediaId, postId, userId, lifetime, null);
     }
@@ -98,6 +104,31 @@ public class ContentAccessTicketService {
             return null;
         }
         ticket.lastUsedAt = OffsetDateTime.now();
+        return ticket;
+    }
+
+    @Transactional
+    public ContentAccessTicket consumeAdminMediaDownloadTicket(String rawToken, Long adminId) {
+        if (rawToken == null || rawToken.isBlank() || adminId == null) {
+            return null;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        ContentAccessTicket ticket = ContentAccessTicket.find(
+                "tokenHash = ?1 and subjectType = ?2 and subjectId = ?3 "
+                        + "and scope like ?4 and revokedAt is null and expiresAt > ?5 and keyVersion = ?6",
+                hash(rawToken), "ADMIN", adminId, "ADMIN_MEDIA_DOWNLOAD:%", now,
+                currentKeyVersion()).firstResult();
+        if (ticket == null || !ticket.scope.startsWith("ADMIN_MEDIA_DOWNLOAD:")) {
+            return null;
+        }
+        long consumed = ContentAccessTicket.update(
+                "revokedAt = ?1, lastUsedAt = ?1 where id = ?2 and revokedAt is null",
+                now, ticket.id);
+        if (consumed != 1L) {
+            return null;
+        }
+        ticket.revokedAt = now;
+        ticket.lastUsedAt = now;
         return ticket;
     }
 

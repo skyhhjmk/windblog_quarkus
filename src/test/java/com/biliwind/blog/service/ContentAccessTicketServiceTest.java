@@ -58,4 +58,15 @@ class ContentAccessTicketServiceTest {
         assertTrue(version > 0);
         assertNull(ticketService.requireMediaTicket(issued.token(), 3002L));
     }
+
+    @Test
+    @Transactional
+    void shouldConsumeAdminMediaTicketOnlyOnceForIssuingAdmin() {
+        ContentAccessTicketService.IssuedTicket issued = ticketService.issueAdminMediaDownloadTicket(
+                1003L, 2003L, 3003L, Duration.ofMinutes(2));
+
+        assertNotNull(ticketService.consumeAdminMediaDownloadTicket(issued.token(), 3003L));
+        assertNull(ticketService.consumeAdminMediaDownloadTicket(issued.token(), 3003L));
+        assertNull(ticketService.consumeAdminMediaDownloadTicket(issued.token(), 3004L));
+    }
 }

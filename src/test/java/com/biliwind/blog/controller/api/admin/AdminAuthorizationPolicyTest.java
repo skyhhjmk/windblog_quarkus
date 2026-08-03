@@ -2,6 +2,7 @@ package com.biliwind.blog.controller.api.admin;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -19,6 +20,12 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.decide("GET", "/api/admin/media").action().equals("media.read"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/posts/1/publish").action().equals("post.publish"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/queues/1/publish").action().equals("queue.publish"));
+        assertEquals("media.download_original",
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/media/7/original-download-ticket").action());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/media/7/original-download-ticket"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey(
+                "POST", "/api/admin/media/7/original-download-ticket"));
         assertTrue(AdminAuthorizationPolicy.decide("GET", "/api/admin/users").action().equals("user.read"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/storage/edge-nodes/node-a/sync").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/security/content-access-tickets/rotate-key").superAdminOnly());

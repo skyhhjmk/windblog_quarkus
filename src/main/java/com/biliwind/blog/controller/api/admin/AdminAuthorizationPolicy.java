@@ -70,6 +70,9 @@ public final class AdminAuthorizationPolicy {
         if (isHighRiskOperationalAction(method, path)) {
             return true;
         }
+        if ("media.download_original".equals(action)) {
+            return true;
+        }
         if ("GET".equals(method)) {
             return false;
         }
@@ -165,6 +168,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static String actionFor(String method, String path, String resource) {
+        if (path.endsWith("/original-download-ticket")) {
+            return "media.download_original";
+        }
         if (path.startsWith("/api/admin/security/content-access-tickets")) {
             return "security.ticket.rotate";
         }
