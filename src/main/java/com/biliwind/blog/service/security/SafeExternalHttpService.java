@@ -88,8 +88,9 @@ public class SafeExternalHttpService {
     }
 
     private ExternalHttpResponse executeGet(URI uri, String userAgent, int maxResponseBytes) {
+        InetAddress[] pinnedAddresses = resolvePublicAddresses(uri.getHost());
         PoolingHttpClientConnectionManager connectionManager = PoolingHttpClientConnectionManagerBuilder.create()
-                .setDnsResolver(new PublicAddressDnsResolver())
+                .setDnsResolver(new PinnedPublicAddressDnsResolver(uri.getHost(), pinnedAddresses))
                 .build();
         RequestConfig requestConfig = RequestConfig.custom()
                 .setConnectTimeout(Timeout.ofSeconds(5))
@@ -209,16 +210,28 @@ public class SafeExternalHttpService {
     public record HeaderValue(String name, String value) {
     }
 
-    private class PublicAddressDnsResolver implements DnsResolver {
+    static DnsResolver createPinnedPublicAddressDnsResolver(String host, InetAddress[] addresses) {
+        return new PinnedPublicAddressDnsResolver(host, addresses);
+    }
+
+    static final class PinnedPublicAddressDnsResolver implements DnsResolver {
+        private final String pinnedHost;
+        private final InetAddress[] pinnedAddresses;
+
+        private PinnedPublicAddressDnsResolver(String host, InetAddress[] addresses) {
+            if (host == null || host.isBlank() || addresses == null || addresses.length == 0) {
+                throw new IllegalArgumentException("DNS 固定参数无效");
+            }
+            this.pinnedHost = host;
+            this.pinnedAddresses = addresses.clone();
+        }
+
         @Override
         public InetAddress[] resolve(String host) throws UnknownHostException {
-            try {
-                return resolvePublicAddresses(host);
-            } catch (IllegalArgumentException exception) {
-                UnknownHostException unknownHostException = new UnknownHostException("拒绝非公网地址");
-                unknownHostException.initCause(exception);
-                throw unknownHostException;
+            if (!pinnedHost.equalsIgnoreCase(host)) {
+                throw new UnknownHostException("拒绝解析未固定的外部主机");
             }
+            return pinnedAddresses.clone();
         }
 
         @Override

@@ -1,14 +1,17 @@
 package com.biliwind.blog.service.security;
 
-import org.junit.jupiter.api.Test;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.message.BasicHeader;
-
 import java.io.ByteArrayInputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.message.BasicHeader;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SafeExternalHttpServiceTest {
 
@@ -49,5 +52,15 @@ class SafeExternalHttpServiceTest {
         assertThrows(IllegalArgumentException.class, () ->
                 SafeExternalHttpService.readLimitedStream(
                         new ByteArrayInputStream(body), -1, 4));
+    }
+
+    @Test
+    void shouldPinValidatedAddressesToTheRequestedHost() throws Exception {
+        InetAddress[] addresses = {InetAddress.getByName("93.184.216.34")};
+        org.apache.hc.client5.http.DnsResolver resolver =
+                SafeExternalHttpService.createPinnedPublicAddressDnsResolver("example.com", addresses);
+
+        assertArrayEquals(addresses, resolver.resolve("example.com"));
+        assertThrows(UnknownHostException.class, () -> resolver.resolve("attacker.example"));
     }
 }
