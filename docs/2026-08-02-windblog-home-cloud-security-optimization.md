@@ -207,8 +207,8 @@ AdminAuthentication → AdminAuthorization(resource, action) → DomainPolicy �
 缺口：
 
 - 这套链路主要保护“转载授权/短链”，不是所有文章 HTML、原图和附件下载。
-- `GoRedirectService.java:26` 使用 `HashMap` 保存限流窗口，`isRateLimited` 只在单 JVM 生效，多个实例/边缘节点可绕过；并发访问也不是线程安全的。
-- `GoRedirectService.java:238-247` 直接读取 `X-Forwarded-For`/`X-Real-IP`，没有复用 `ClientIpResolver` 的可信代理网段判断，攻击者可伪造来源 IP。
+- `GoRedirectService` 已改用共享 `SecurityRateLimitService`，并发/多实例限流仍需真实 Redis 集群验收。
+- `GoRedirectService` 已改用 `ClientIpResolver` 的可信代理网段判断；真实反向代理头链仍需现场验证。
 - 只依赖 Referer、UA、`X-Device-Risk-Id` 不足以证明请求合法；这些头可以被脚本伪造或浏览器隐私策略省略。
 - `robots.txt` 的 `Allow: /` 只是爬虫礼貌协议，不能保护资源。
 
