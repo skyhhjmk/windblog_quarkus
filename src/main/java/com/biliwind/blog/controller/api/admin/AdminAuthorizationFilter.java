@@ -33,6 +33,10 @@ public class AdminAuthorizationFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
+        if ("OPTIONS".equalsIgnoreCase(requestContext.getMethod())) {
+            return;
+        }
+
         String path = requestContext.getUriInfo().getPath();
         if (path == null || path.isBlank()) {
             return;
