@@ -48,6 +48,8 @@ RabbitMQ 管理端 15672、Elasticsearch 9200 和 Kibana 5601；可用 `*_HOST_P
 - `POSTGRES_HOST_PORT`、`REDIS_HOST_PORT`、`RABBITMQ_HOST_PORT`、
   `RABBITMQ_MANAGEMENT_HOST_PORT`、`ELASTICSEARCH_HOST_PORT`、`KIBANA_HOST_PORT`
   可用于避开宿主机端口冲突；端口开放不等于允许公网访问。
+- `WINDBLOG_EDGE_MAX_ROUTED_BODY_BYTES` 控制边缘回源写请求体，默认 10 MiB；生产预检要求其处于
+  1–64 MiB 范围，边缘过滤器和主节点执行器都会拒绝超限请求。
 - `WINDBLOG_CONTENT_ALLOWED_MEDIA_HOSTS` 配置公开文章允许加载的媒体/CDN 域名，多个域名用逗号分隔；
   未列入的外链图片会在公开渲染时移除，避免博客变成任意图片代理。
 - `SECURITY_HEADERS_CSP_IMG_SOURCES` 和 `SECURITY_HEADERS_CSP_CONNECT_SOURCES` 只填写明确的 HTTPS
