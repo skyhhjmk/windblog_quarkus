@@ -120,6 +120,9 @@ public class SecurityConfigurationWarning {
     }
 
     void validateProductionConfiguration() {
+        if (failOnDefaultSecretsInProd && usesDefaultSecret()) {
+            throw new IllegalStateException("生产环境禁止使用默认安全配置");
+        }
         if (!cookieSecure) {
             throw new IllegalStateException("生产环境必须启用 cookie.secure=true");
         }
@@ -293,6 +296,13 @@ public class SecurityConfigurationWarning {
         String normalized = value.toLowerCase();
         return normalized.contains("change-me") || normalized.contains("password")
                 || normalized.contains("secret");
+    }
+
+    private boolean usesDefaultSecret() {
+        return DEFAULT_ADMIN_JWT_SECRET.equals(adminJwtSecret)
+                || DEFAULT_USER_JWT_SECRET.equals(userJwtSecret)
+                || DEFAULT_ADMIN_INIT_PASSWORD.equals(adminInitPassword)
+                || "windblog-dev-event-hash-secret".equals(eventHashSecret);
     }
 
     private boolean isBlank(String value) {

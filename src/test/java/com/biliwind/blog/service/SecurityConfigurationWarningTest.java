@@ -74,6 +74,20 @@ class SecurityConfigurationWarningTest {
     }
 
     @Test
+    void shouldRejectDefaultSecretEvenWhenWarningsAreDisabled() {
+        SecurityConfigurationWarning warning = validPrimaryConfiguration();
+        warning.adminInitPassword = "admin";
+        warning.warnDefaultSecrets = false;
+        warning.failOnDefaultSecretsInProd = true;
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                warning::validateProductionConfiguration);
+
+        assertTrue(exception.getMessage().contains("默认安全配置"));
+    }
+
+    @Test
     void shouldRejectPrivateOrCredentialBearingPublicUrls() {
         SecurityConfigurationWarning privateAddress = validPrimaryConfiguration();
         privateAddress.publicUrl = "https://192.168.1.20";
@@ -122,6 +136,8 @@ class SecurityConfigurationWarningTest {
         warning.corsOrigins = "https://admin.example.com";
         warning.rabbitmqUsername = "windblog";
         warning.rabbitmqPassword = "rabbit-value-that-is-longer-than-32";
+        warning.adminInitPassword = "initial-admin-password-that-is-long";
+        warning.failOnDefaultSecretsInProd = true;
         warning.eventHashSecret = "event-hash-value-that-is-longer-than-32";
         warning.adminJwtSecret = "admin-jwt-value-that-is-longer-than-32";
         warning.userJwtSecret = "user-jwt-value-that-is-longer-than-32";
