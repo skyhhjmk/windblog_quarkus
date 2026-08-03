@@ -20,15 +20,24 @@ public class EsSyncDeadLetterConsumer {
     TempDataService tempDataService;
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+    @Inject
+    EsSyncMessageDecoder esSyncMessageDecoder;
 
     @Incoming("es-sync-tasks-dlq-in")
     @Transactional
-    public void consume(EsSyncTask task) {
+    public void consume(org.eclipse.microprofile.reactive.messaging.Message<?> message) {
         if (nodeRoleService.isEdgeNode()) {
             log.debug("当前节点是边缘节点，忽略 ES 死信同步任务");
             return;
         }
 
+        EsSyncTask task;
+        try {
+            task = esSyncMessageDecoder.decode(message.getPayload());
+        } catch (Exception exception) {
+            log.error("ES 死信同步消息无法解码，丢弃该消息", exception);
+            return;
+        }
         log.errorf("收到 ES 同步死信任务: postId=%d, action=%s", task.postId(), task.actionType());
 
         JsonNode payload = tempDataService.createSyncTaskPayload(task.postId(), task.actionType());

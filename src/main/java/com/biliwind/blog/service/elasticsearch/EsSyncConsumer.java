@@ -24,17 +24,25 @@ public class EsSyncConsumer {
     PostLifecycleListener lifecycleListener;
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+    @Inject
+    EsSyncMessageDecoder esSyncMessageDecoder;
 
     @Incoming("es-sync-tasks-in")
     @Blocking
     @Transactional
-    public CompletionStage<Void> consume(Message<EsSyncTask> message) {
+    public CompletionStage<Void> consume(Message<?> message) {
         if (nodeRoleService.isEdgeNode()) {
             log.debug("当前节点是边缘节点，忽略 ES 同步任务");
             return message.ack();
         }
 
-        EsSyncTask task = message.getPayload();
+        EsSyncTask task;
+        try {
+            task = esSyncMessageDecoder.decode(message.getPayload());
+        } catch (Exception exception) {
+            log.error("ES 同步消息无法解码，拒绝该消息", exception);
+            return message.nack(exception);
+        }
         log.infof("收到 ES 同步任务: postId=%d, action=%s", task.postId(), task.actionType());
 
         try {
