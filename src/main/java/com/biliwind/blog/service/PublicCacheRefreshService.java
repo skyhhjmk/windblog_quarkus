@@ -231,6 +231,10 @@ public class PublicCacheRefreshService {
         return post.visibility == 0 || post.visibility == 2;
     }
 
+    static boolean requiresProtectedPreview(Post post, long postPrice) {
+        return postPrice > 0 || (post != null && post.visibility == 2);
+    }
+
     private boolean isVisibleInRegion(List<String> visibilityRegions, String regionCode) {
         if (visibilityRegions == null || visibilityRegions.isEmpty()) {
             return true;
@@ -252,10 +256,11 @@ public class PublicCacheRefreshService {
         Map<String, String> previewByLanguage = new LinkedHashMap<>();
         if (post.publishedRevision != null && post.publishedRevision.contentMarkdown != null) {
             long postPrice = postAccessService.getPostPrice(post);
+            boolean contentRequiresUnlock = requiresProtectedPreview(post, postPrice);
             int freeLines = postAccessService.getFreeLines(post);
             for (Map.Entry<String, String> entry : post.publishedRevision.contentMarkdown.entrySet()) {
                 previewByLanguage.put(entry.getKey(), postAccessService.getPreviewOnlyContent(
-                        entry.getValue(), freeLines, postPrice > 0, post.id, postPrice, null));
+                        entry.getValue(), freeLines, contentRequiresUnlock, post.id, postPrice, null));
             }
         }
         String categorySlug = post.category == null ? null : post.category.slug;

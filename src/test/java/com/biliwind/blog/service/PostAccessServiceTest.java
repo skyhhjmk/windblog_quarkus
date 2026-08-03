@@ -143,6 +143,16 @@ class PostAccessServiceTest {
     }
 
     @Test
+    void shouldKeepPasswordProtectedContentOutOfPreview() {
+        String secretContent = "password-only-content-" + UUID.randomUUID();
+
+        String preview = postAccessService.getPreviewOnlyContent(
+                secretContent, 0, true, 123L, 0L, null);
+
+        assertFalse(preview.contains(secretContent));
+    }
+
+    @Test
     @Transactional
     void shouldRejectLowerClientPriceAndRecordServerBlockPrice() {
         User user = createTestUser();

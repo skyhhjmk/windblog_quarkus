@@ -9,6 +9,7 @@ import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.PostAccessPolicy;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -43,6 +44,12 @@ public class PostController {
 
     @Inject
     com.biliwind.blog.service.PostAccessService postAccessService;
+
+    @Inject
+    com.biliwind.blog.service.PostAccessPolicy postAccessPolicy;
+
+    @Inject
+    com.biliwind.blog.common.security.UserTokenVerifier userTokenVerifier;
 
     @Inject
     RegionContext regionContext;
@@ -140,7 +147,25 @@ public class PostController {
         }
 
         String localizedTitle = LanguageHelper.resolveLocalizedValue(snapshot.title(), resolvedLang);
+        Long requestUserId = resolveUserId(httpHeaders);
+        String deviceId = httpHeaders.getHeaderString("X-Device-Id");
         String localizedContent = resolveSnapshotContent(snapshot, resolvedLang);
+        boolean hasPurchased = false;
+        if (protectedPage) {
+            Post protectedPost = Post.find(
+                    "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                    snapshot.postId(), PostStatus.PUBLISHED).firstResult();
+            PostAccessPolicy.Decision access = postAccessPolicy.evaluate(
+                    protectedPost, requestUserId, null,
+                    readPasswordTicket(httpHeaders, snapshot.postId()), deviceId);
+            if (access.allowed() && protectedPost != null) {
+                localizedContent = resolveContent(protectedPost.publishedRevision, resolvedLang);
+                boolean author = postAccessPolicy.isAuthor(protectedPost, requestUserId);
+                hasPurchased = author || postAccessService.hasPurchasedPost(requestUserId, protectedPost.id);
+                localizedContent = postAccessService.rewriteProtectedMediaReferences(
+                        protectedPost.id, localizedContent, requestUserId, hasPurchased, deviceId);
+            }
+        }
 
         long postPrice = snapshot.postPrice();
         PostBodyView postBody = resolvePostBody(snapshot.renderType(), localizedContent);
@@ -238,9 +263,9 @@ public class PostController {
                 .data("postCategory", postCategory)
                 .data("postCategorySlug", postCategorySlug)
                 .data("postPrice", postPrice)
-                // This page is public-cacheable. User-specific state and download tickets
-                // are loaded only by the no-store protected-content endpoint.
-                .data("hasPurchased", false)
+                // Public pages use the read model; protected pages are no-store and may
+                // render authorized content loaded from the published revision.
+                .data("hasPurchased", hasPurchased)
                 .data("postTags", postTags)
                 .data("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
                 .data("attachments", attachments)
@@ -470,6 +495,27 @@ public class PostController {
             return content;
         }
         return LanguageHelper.resolveLocalizedValue(snapshot.previewContent(), language);
+    }
+
+    private String readPasswordTicket(HttpHeaders headers, Long postId) {
+        if (headers == null || postId == null) {
+            return null;
+        }
+        Cookie cookie = headers.getCookies().get("post_access_ticket_" + postId);
+        return cookie == null ? null : cookie.getValue();
+    }
+
+    private Long resolveUserId(HttpHeaders headers) {
+        if (headers == null) {
+            return null;
+        }
+        Cookie cookie = headers.getCookies().get("user_token");
+        if (cookie == null || cookie.getValue() == null || cookie.getValue().isBlank()) {
+            return null;
+        }
+        com.biliwind.blog.common.security.UserTokenVerifier.VerifiedToken verified =
+                userTokenVerifier.verify(cookie.getValue());
+        return verified == null ? null : verified.uid();
     }
 
     private boolean isAttachmentVisible(
