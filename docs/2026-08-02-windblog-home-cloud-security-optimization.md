@@ -27,6 +27,7 @@
 > AI、ES 和存储同步的消费重试/死信重放也统一写入 outbox，不再在容量或数据库异常时偷偷绕过租约直接发 RabbitMQ。
 > 管理端新增 outbox 安全元数据查询和 traceId/status/eventType 过滤；FAILED 事件只能由超级管理员通过 step-up 与幂等键重放，
 > 重放动作写入审计，响应不返回原始 payload。
+> 管理端已新增 Outbox 审计页面，支持分页筛选、错误摘要和 FAILED 重放确认；原始 payload 不在 UI 展示。
 > RabbitMQ 适配器交付的 Buffer/JSON 载荷现在由存储同步和 ES 同步消费者显式解码并校验，避免运行时类型强转异常。
 > 边缘同步接收端不再将公开 JSON 直接反序列化为实体；首次同步使用白名单字段和显式主键插入，并保留本地删除/处理错误状态。
 > 边缘 Compose 也已将 edge PostgreSQL/Redis 及边缘 HTTP/gRPC 端口改为可配置宿主机映射；Redis 暴露前必须提供强密码，
