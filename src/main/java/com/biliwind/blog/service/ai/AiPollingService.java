@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.ai;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.AiConfigType;
 import com.biliwind.blog.model.AiPollingAlgorithm;
 import com.biliwind.blog.model.AiProviderConfig;
@@ -162,7 +163,8 @@ public class AiPollingService {
         return aiManager.executeSummarize(cfg, content)
                 .handle((res, ex) -> {
                     if (ex != null) {
-                        log.warn("轮询节点 " + cfg.name + " 失败: " + ex.getMessage());
+                        log.warn("轮询节点 {} 失败: {}", cfg.name,
+                                SensitiveMessageSanitizer.sanitize(ex.getMessage()));
                         return tryNodesForSummarize(nodes, startIdx, retryCount + 1, content);
                     }
                     return CompletableFuture.completedStage(res);
@@ -186,7 +188,8 @@ public class AiPollingService {
         return aiManager.executeModerate(cfg, prompt, content)
                 .handle((res, ex) -> {
                     if (ex != null) {
-                        log.warn("轮询节点 " + cfg.name + " 审核失败: " + ex.getMessage());
+                        log.warn("轮询节点 {} 审核失败: {}", cfg.name,
+                                SensitiveMessageSanitizer.sanitize(ex.getMessage()));
                         return tryNodesForModerate(nodes, startIdx, retryCount + 1, prompt, content);
                     }
                     return CompletableFuture.completedStage(res);

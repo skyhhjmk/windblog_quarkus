@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.ai;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.DeadLetterMessage;
 import io.vertx.core.json.JsonObject;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -45,7 +46,8 @@ public class DeadLetterConsumer {
         try {
             task = message.getPayload().mapTo(AiSummaryTask.class);
         } catch (Exception e) {
-            logMqError(ERROR_MARK, "死信JsonObject反序列化失败: %s", e.getMessage());
+            logMqError(ERROR_MARK, "死信JsonObject反序列化失败: %s",
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return message.ack();
         }
 
@@ -65,7 +67,8 @@ public class DeadLetterConsumer {
             logMqWarn(WARN_MARK, "死信消息已处理，postId=%d", task.postId());
             return message.ack().toCompletableFuture();
         } catch (Exception e) {
-            logMqError(ERROR_MARK, "处理死信消息时发生异常，postId=%d, error=%s", task.postId(), e.getMessage(), e);
+            logMqError(ERROR_MARK, "处理死信消息时发生异常，postId=%d, error=%s", task.postId(),
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()), e);
             return message.nack(e);
         }
     }
@@ -81,7 +84,8 @@ public class DeadLetterConsumer {
         try {
             task = message.getPayload().mapTo(AiAuditTask.class);
         } catch (Exception e) {
-            logMqError(ERROR_MARK, "审核死信JsonObject反序列化失败: %s", e.getMessage());
+            logMqError(ERROR_MARK, "审核死信JsonObject反序列化失败: %s",
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return message.ack();
         }
 
@@ -102,7 +106,7 @@ public class DeadLetterConsumer {
             return message.ack().toCompletableFuture();
         } catch (Exception e) {
             logMqError(ERROR_MARK, "处理审核死信消息时发生异常，commentId=%d, error=%s",
-                    task.commentId(), e.getMessage(), e);
+                    task.commentId(), SensitiveMessageSanitizer.sanitize(e.getMessage()), e);
             return message.nack(e);
         }
     }

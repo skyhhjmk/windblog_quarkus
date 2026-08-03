@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.edge;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
@@ -62,7 +63,7 @@ public class PrimaryRoutedHttpExecutor {
                     502,
                     Map.of("Content-Type", "application/json"),
                     ("{\"success\":false,\"message\":\"主节点执行写请求失败\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                    exception.getMessage()
+                    SensitiveMessageSanitizer.sanitize(exception.getMessage())
             );
         }
     }

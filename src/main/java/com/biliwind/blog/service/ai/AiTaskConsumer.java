@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.ai;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.Post;
 import io.smallrye.reactive.messaging.annotations.Blocking;
 import io.smallrye.reactive.messaging.rabbitmq.IncomingRabbitMQMetadata;
@@ -80,7 +81,8 @@ public class AiTaskConsumer {
         try {
             task = message.getPayload().mapTo(AiSummaryTask.class);
         } catch (Exception deserializeEx) {
-            log.error("{} 反序列化消息失败: {}", MQ_TAG, deserializeEx.getMessage());
+            log.error("{} 反序列化消息失败: {}", MQ_TAG,
+                    SensitiveMessageSanitizer.sanitize(deserializeEx.getMessage()));
             return safeAck(message);
         }
 
@@ -110,7 +112,8 @@ public class AiTaskConsumer {
             return safeAck(message);
 
         } catch (Exception ex) {
-            log.error("{} AI 处理失败，postId={}, error={}", MQ_TAG, task.postId(), ex.getMessage());
+            log.error("{} AI 处理失败，postId={}, error={}", MQ_TAG, task.postId(),
+                    SensitiveMessageSanitizer.sanitize(ex.getMessage()));
             return handleRetryOrDeadLetter(message, task, currentRetryCount, allowedMaxRetries, ex);
         }
     }
@@ -129,7 +132,8 @@ public class AiTaskConsumer {
         try {
             task = message.getPayload().mapTo(AiAuditTask.class);
         } catch (Exception deserializeEx) {
-            log.error("{} 反序列化审核消息失败: {}", MQ_TAG, deserializeEx.getMessage());
+            log.error("{} 反序列化审核消息失败: {}", MQ_TAG,
+                    SensitiveMessageSanitizer.sanitize(deserializeEx.getMessage()));
             return safeAck(message);
         }
 
@@ -158,7 +162,8 @@ public class AiTaskConsumer {
             return safeAck(message);
 
         } catch (Exception ex) {
-            log.error("{} AI 审核失败，commentId={}, error={}", MQ_TAG, task.commentId(), ex.getMessage());
+            log.error("{} AI 审核失败，commentId={}, error={}", MQ_TAG, task.commentId(),
+                    SensitiveMessageSanitizer.sanitize(ex.getMessage()));
             return handleRetryOrDeadLetterAudit(message, task, currentRetryCount, allowedMaxRetries, ex);
         }
     }
@@ -199,7 +204,8 @@ public class AiTaskConsumer {
                     auditLog.entityType = "comment";
                     auditLog.entityId = task.commentId().toString();
                     auditLog.action = "ai_moderation_retry";
-                    auditLog.extInfo = Map.of("retryCount", nextRetryCount, "error", ex.getMessage());
+                    auditLog.extInfo = Map.of("retryCount", nextRetryCount, "error",
+                            SensitiveMessageSanitizer.sanitize(ex.getMessage()));
                     auditLog.persist();
                 });
 
@@ -223,7 +229,7 @@ public class AiTaskConsumer {
                 auditLog.entityType = "comment";
                 auditLog.entityId = task.commentId().toString();
                 auditLog.action = "ai_moderation_failed";
-                auditLog.extInfo = Map.of("error", ex.getMessage());
+                auditLog.extInfo = Map.of("error", SensitiveMessageSanitizer.sanitize(ex.getMessage()));
                 auditLog.persist();
             });
 
@@ -444,7 +450,7 @@ public class AiTaskConsumer {
         try {
             return message.ack();
         } catch (Exception e) {
-            log.error("{} ACK 失败: {}", MQ_TAG, e.getMessage());
+            log.error("{} ACK 失败: {}", MQ_TAG, SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return java.util.concurrent.CompletableFuture.completedFuture(null);
         }
     }
@@ -453,7 +459,7 @@ public class AiTaskConsumer {
         try {
             return message.nack(reason);
         } catch (Exception e) {
-            log.error("{} NACK 失败，改为 ACK: {}", MQ_TAG, e.getMessage());
+            log.error("{} NACK 失败，改为 ACK: {}", MQ_TAG, SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return safeAck(message);
         }
     }

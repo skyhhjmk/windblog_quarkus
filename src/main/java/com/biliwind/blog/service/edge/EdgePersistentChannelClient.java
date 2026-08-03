@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.edge;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.google.protobuf.ByteString;
@@ -301,7 +302,7 @@ public class EdgePersistentChannelClient {
             );
         } catch (Exception exception) {
             resultBuilder.setSuccess(false);
-            resultBuilder.setMessage(exception.getMessage());
+            resultBuilder.setMessage(SensitiveMessageSanitizer.sanitize(exception.getMessage()));
             LOGGER.error("安装边缘节点新证书失败: {}", renewalMessage.getRenewalId(), exception);
         }
 

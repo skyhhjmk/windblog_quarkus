@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.edge;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.edge.EdgeNodeService;
 import com.biliwind.blog.edge.EdgeServiceProto.*;
 import com.biliwind.blog.model.Media;
@@ -209,7 +210,7 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
             resultBuilder.setMessage("新证书文件已安装");
         } catch (Exception exception) {
             resultBuilder.setSuccess(false);
-            resultBuilder.setMessage(exception.getMessage());
+            resultBuilder.setMessage(SensitiveMessageSanitizer.sanitize(exception.getMessage()));
             log.error("安装边缘节点新证书失败: {}", renewalMessage.getRenewalId(), exception);
         }
 

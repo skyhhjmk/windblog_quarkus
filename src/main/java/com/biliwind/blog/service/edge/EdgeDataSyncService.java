@@ -144,7 +144,7 @@ public class EdgeDataSyncService {
             try {
                 payload = objectMapper.writeValueAsString(buildPublicCategoryNode(category));
             } catch (Exception e) {
-                log.error("Failed to serialize category: {}", e.getMessage());
+                log.error("Failed to serialize category: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
                 return;
             }
         }
@@ -163,7 +163,7 @@ public class EdgeDataSyncService {
             try {
                 payload = objectMapper.writeValueAsString(buildPublicMediaNode(media));
             } catch (Exception e) {
-                log.error("Failed to serialize media: {}", e.getMessage());
+                log.error("Failed to serialize media: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
                 return;
             }
         }
@@ -253,7 +253,7 @@ public class EdgeDataSyncService {
             try {
                 payload = objectMapper.writeValueAsString(buildPublicTagNode(tag));
             } catch (Exception e) {
-                log.error("Failed to serialize tag: {}", e.getMessage());
+                log.error("Failed to serialize tag: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
                 return;
             }
         }
@@ -282,7 +282,7 @@ public class EdgeDataSyncService {
 
                 payload = objectMapper.writeValueAsString(bundle);
             } catch (Exception e) {
-                log.error("Failed to serialize post bundle: {}", e.getMessage());
+                log.error("Failed to serialize post bundle: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
                 return;
             }
         }
@@ -535,7 +535,8 @@ public class EdgeDataSyncService {
                         if (response.getSuccess()) {
                             return true;
                         } else {
-                            log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId, response.getMessage());
+                            log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId,
+                                    SensitiveMessageSanitizer.sanitize(response.getMessage()));
                             return false;
                         }
                     })
@@ -593,7 +594,8 @@ public class EdgeDataSyncService {
                     try {
                         self.get().performPublicFullSyncInternal(id, force);
                     } catch (Exception e) {
-                        log.error("Unhandled error in full sync thread for node {}: {}", id, e.getMessage(), e);
+                        log.error("Unhandled error in full sync thread for node {}: {}", id,
+                                SensitiveMessageSanitizer.sanitize(e.getMessage()), e);
                         syncProgressMap.put(id, new SyncProgress(0, 0, "FAILED",
                                 "Internal error: " + SensitiveMessageSanitizer.sanitize(e.getMessage())));
                     }
@@ -921,7 +923,8 @@ public class EdgeDataSyncService {
                             if (response.getSuccess()) {
                                 return true;
                             } else {
-                                log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId, response.getMessage());
+                                log.error("Node {} rejected {} {}: {}", node.nodeId, entityType, entityId,
+                                        SensitiveMessageSanitizer.sanitize(response.getMessage()));
                                 return false;
                             }
                         })

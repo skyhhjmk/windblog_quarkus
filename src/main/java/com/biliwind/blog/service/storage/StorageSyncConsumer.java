@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.storage;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -72,11 +73,13 @@ public class StorageSyncConsumer {
         if (nextRetryCount >= MAX_RETRY_COUNT) {
             log.error("同步达到最大重试次数，进行 NACK 进入死信队列: mediaId={}, provider={}, variant={}",
                     msg.mediaId(), msg.storageClassName(), msg.variantType());
-            return message.nack(new RuntimeException("Max retries reached: " + errorReason));
+            return message.nack(new RuntimeException("Max retries reached: "
+                    + SensitiveMessageSanitizer.sanitize(errorReason)));
         } else {
             long delaySeconds = calculateRetryDelaySeconds(nextRetryCount);
             log.warn("同步失败，{} 秒后准备第 {} 次重试: mediaId={}, provider={}, reason={}",
-                    delaySeconds, nextRetryCount, msg.mediaId(), msg.storageClassName(), errorReason);
+                    delaySeconds, nextRetryCount, msg.mediaId(), msg.storageClassName(),
+                    SensitiveMessageSanitizer.sanitize(errorReason));
             StorageSyncMessage retryMsg = new StorageSyncMessage(
                     msg.mediaId(), msg.storageClassName(), msg.variantType(), nextRetryCount);
             return sendRetryAfterDelay(message, retryMsg, delaySeconds);

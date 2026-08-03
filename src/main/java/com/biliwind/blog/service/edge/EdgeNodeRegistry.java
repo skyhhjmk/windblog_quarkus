@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.edge;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.biliwind.blog.model.EdgeConnectionType;
@@ -51,7 +52,8 @@ public class EdgeNodeRegistry {
                     try {
                         entry.channel.shutdownNow();
                     } catch (Exception e) {
-                        log.error("Failed to shutdown channel for disabled node {}: {}", nodeId, e.getMessage());
+                        log.error("Failed to shutdown channel for disabled node {}: {}", nodeId,
+                                SensitiveMessageSanitizer.sanitize(e.getMessage()));
                     }
                 }
             }
@@ -174,7 +176,8 @@ public class EdgeNodeRegistry {
                                     node.nodeId, entry.grpcAddress, grpcAddress);
                             entry.channel.shutdownNow();
                         } catch (Exception ex) {
-                            log.error("Error shutting down legacy channel for node {}: {}", node.nodeId, ex.getMessage());
+                            log.error("Error shutting down legacy channel for node {}: {}", node.nodeId,
+                                    SensitiveMessageSanitizer.sanitize(ex.getMessage()));
                         }
                     }
                     io.grpc.ManagedChannel newChannel = channelFactory.createChannel(grpcAddress, node.nodeId);
@@ -245,7 +248,8 @@ public class EdgeNodeRegistry {
             try {
                 entry.channel.shutdownNow();
             } catch (Exception e) {
-                log.error("Failed to shutdown channel during application shutdown: {}", e.getMessage());
+                log.error("Failed to shutdown channel during application shutdown: {}",
+                        SensitiveMessageSanitizer.sanitize(e.getMessage()));
             }
         }
         channelCache.clear();
