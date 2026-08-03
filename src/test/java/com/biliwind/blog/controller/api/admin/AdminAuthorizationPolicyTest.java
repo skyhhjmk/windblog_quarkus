@@ -61,4 +61,20 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/system/decrypt-error"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/system/sync-cluster-keys"));
     }
+
+    @Test
+    void shouldKeepResourceActionsScopedToTheirOwnEndpoints() {
+        assertEquals("edge.revoke_certificate", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/edge-nodes/node-a/revoke-certificate").action());
+        assertEquals("dead_letter.replay", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/dead-letters/7/retry").action());
+        assertEquals("email_deliveries.retry", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/email-deliveries/7/retry").action());
+        assertEquals("media.retry", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/media/7/retry").action());
+        assertEquals("repost.revoke", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/repost/tokens/7/revoke").action());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/repost/tokens/7/revoke"));
+    }
 }

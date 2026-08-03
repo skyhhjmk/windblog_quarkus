@@ -97,6 +97,9 @@ public final class AdminAuthorizationPolicy {
         if ("POST".equals(method) && path.equals("/api/admin/email-campaigns")) {
             return true;
         }
+        if (path.startsWith("/api/admin/repost/") && path.endsWith("/revoke")) {
+            return "POST".equals(method);
+        }
         return path.equals("/api/admin/system/decrypt-error")
                 || path.equals("/api/admin/system/sync-cluster-keys");
     }
@@ -194,11 +197,21 @@ public final class AdminAuthorizationPolicy {
                 && (path.contains("issue-certificate") || path.endsWith("/generate"))) {
             return "edge.issue_certificate";
         }
-        if (path.contains("revoke")) {
+        if (isEdgeCertificatePath(path) && path.contains("revoke")) {
             return "edge.revoke_certificate";
         }
-        if (path.contains("/retry") || path.endsWith("/retry-batch")) {
+        if (isDeadLetterPath(path) && (path.contains("/retry") || path.endsWith("/retry-batch"))) {
             return "dead_letter.replay";
+        }
+        if (path.startsWith("/api/admin/email-deliveries/") && path.endsWith("/retry")) {
+            return "email_deliveries.retry";
+        }
+        if (path.startsWith("/api/admin/media/")
+                && (path.endsWith("/retry") || path.endsWith("/batch-retry"))) {
+            return "media.retry";
+        }
+        if (path.startsWith("/api/admin/repost/") && path.endsWith("/revoke")) {
+            return "repost.revoke";
         }
         if (path.startsWith("/api/admin/import")) {
             return "database.import";
@@ -216,6 +229,17 @@ public final class AdminAuthorizationPolicy {
             return resource + ".delete";
         }
         return resource + ".write";
+    }
+
+    private static boolean isEdgeCertificatePath(String path) {
+        return path.startsWith("/api/admin/edge-nodes")
+                || path.startsWith("/api/admin/storage/edge-nodes")
+                || path.startsWith("/api/admin/node/certificate");
+    }
+
+    private static boolean isDeadLetterPath(String path) {
+        return path.startsWith("/api/admin/dead-letters")
+                || path.startsWith("/api/admin/storage/dead-letter");
     }
 
     private static String normalizeMethod(String method) {
