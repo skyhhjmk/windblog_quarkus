@@ -35,7 +35,7 @@ public class RedisHealthCheck implements HealthCheck {
                     .build();
         } catch (Exception e) {
             return builder.down()
-                    .withData("error", e.getMessage())
+                    .withData("error", "Redis 连接不可用")
                     .build();
         }
     }

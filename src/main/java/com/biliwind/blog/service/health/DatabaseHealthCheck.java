@@ -27,7 +27,7 @@ public class DatabaseHealthCheck implements HealthCheck {
             return builder.up().build();
         } catch (Exception e) {
             return builder.down()
-                    .withData("error", e.getMessage())
+                    .withData("error", "数据库连接不可用")
                     .build();
         }
     }

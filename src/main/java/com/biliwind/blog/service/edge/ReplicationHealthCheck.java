@@ -37,7 +37,7 @@ public class ReplicationHealthCheck implements HealthCheck {
             return responseBuilder.build();
         } catch (Exception e) {
             log.error("Failed to check replication status", e);
-            return responseBuilder.down().withData("error", e.getMessage()).build();
+            return responseBuilder.down().withData("error", "复制状态检查失败").build();
         }
     }
 
