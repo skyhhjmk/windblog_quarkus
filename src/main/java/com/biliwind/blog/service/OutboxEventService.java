@@ -9,6 +9,7 @@ import com.biliwind.blog.service.ai.AiTaskProducer;
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.scheduler.Scheduled;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -35,6 +36,7 @@ import java.util.concurrent.TimeoutException;
 @ApplicationScoped
 public class OutboxEventService {
     private static final Logger log = Logger.getLogger(OutboxEventService.class);
+    private volatile boolean shuttingDown;
 
     @Inject
     EntityManager entityManager;
@@ -127,14 +129,26 @@ public class OutboxEventService {
 
     @Scheduled(every = "5s", identity = "outbox-dispatcher")
     void dispatchPendingEvents() {
-        if (!enabled) {
+        if (!enabled || shuttingDown) {
             return;
         }
         String owner = UUID.randomUUID().toString();
         int processedEvents = 0;
         int cycleLimit = Math.max(1, Math.min(maxEventsPerCycle, 1000));
         while (processedEvents < cycleLimit) {
-            Long eventId = claimNext(owner);
+            if (shuttingDown) {
+                return;
+            }
+            Long eventId;
+            try {
+                eventId = claimNext(owner);
+            } catch (RuntimeException exception) {
+                if (shuttingDown) {
+                    return;
+                }
+                log.warn("outbox event claim failed", exception);
+                return;
+            }
             if (eventId == null) {
                 return;
             }
@@ -161,7 +175,7 @@ public class OutboxEventService {
     @Scheduled(every = "1h", identity = "outbox-retention")
     @Transactional
     void purgeRetainedEvents() {
-        if (retentionDays < 1) {
+        if (retentionDays < 1 || shuttingDown) {
             return;
         }
         OffsetDateTime cutoff = OffsetDateTime.now().minusDays(retentionDays);
@@ -316,6 +330,11 @@ public class OutboxEventService {
             return null;
         }
         return error.length() <= 1000 ? error : error.substring(0, 1000);
+    }
+
+    @PreDestroy
+    void shutdown() {
+        shuttingDown = true;
     }
 
     private long effectiveMaxPendingEvents() {
