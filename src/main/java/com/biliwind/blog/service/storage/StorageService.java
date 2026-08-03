@@ -2,19 +2,15 @@ package com.biliwind.blog.service.storage;
 
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageClassEntity;
-import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.arc.Unremovable;
 import io.quarkus.panache.common.Page;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
-import org.eclipse.microprofile.reactive.messaging.Channel;
-import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,9 +31,6 @@ public class StorageService {
     StorageConfigProtector storageConfigProtector;
     @Inject
     EntityManager entityManager;
-    @Inject
-    @Channel("storage-sync-tasks")
-    Instance<Emitter<StorageSyncMessage>> syncEmitter;
     @Inject
     com.biliwind.blog.service.OutboxEventService outboxEventService;
     private StorageClass primaryProvider;
@@ -293,8 +286,6 @@ public class StorageService {
             return;
         }
         for (VariantType variant : variants) {
-            StorageSyncMessage message = new StorageSyncMessage(
-                    media.id, storageClassName, variant.name(), 0);
             try {
                 outboxEventService.enqueue(
                         "STORAGE_SYNC:" + media.id + ":" + storageClassName + ":" + variant.name(),
@@ -307,7 +298,8 @@ public class StorageService {
                                 "retryCount", 0),
                         null);
             } catch (Exception exception) {
-                syncEmitter.get().send(message);
+                log.error("存储同步任务写入 outbox 失败，不绕过队列容量和租约直接发布", exception);
+                throw new IllegalStateException("存储同步任务写入 outbox 失败", exception);
             }
         }
     }

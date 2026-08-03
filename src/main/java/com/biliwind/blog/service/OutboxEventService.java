@@ -92,6 +92,12 @@ public class OutboxEventService {
     @Transactional
     public void enqueue(String eventKey, String eventType, String aggregateType, String aggregateId,
                         Map<String, Object> payload, String traceId) {
+        enqueue(eventKey, eventType, aggregateType, aggregateId, payload, traceId, Duration.ZERO);
+    }
+
+    @Transactional
+    public void enqueue(String eventKey, String eventType, String aggregateType, String aggregateId,
+                        Map<String, Object> payload, String traceId, Duration delay) {
         if (!enabled) {
             return;
         }
@@ -113,7 +119,8 @@ public class OutboxEventService {
         event.aggregateId = aggregateId;
         event.payload = payload;
         event.traceId = resolveTraceId(traceId);
-        event.availableAt = OffsetDateTime.now();
+        Duration effectiveDelay = delay == null || delay.isNegative() ? Duration.ZERO : delay;
+        event.availableAt = OffsetDateTime.now().plus(effectiveDelay);
         event.createdAt = event.availableAt;
         event.persist();
     }

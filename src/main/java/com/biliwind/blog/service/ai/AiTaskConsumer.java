@@ -27,7 +27,7 @@ public class AiTaskConsumer {
     private static final long TASK_TIMEOUT_SECONDS = 60;
 
     @Inject
-    AiTaskProducer taskProducer;
+    com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
 
     @Inject
     AiManager aiManager;
@@ -190,7 +190,8 @@ public class AiTaskConsumer {
             int nextRetryCount = currentRetryCount + 1;
             log.warn("{} 审核重试 {}/{}，commentId={}", MQ_TAG, nextRetryCount, allowedMaxRetries, task.commentId());
             try {
-                taskProducer.sendAuditTask(new AiAuditTask(task.commentId(), task.content(), nextRetryCount));
+                reliableAiTaskService.enqueueAudit(
+                        new AiAuditTask(task.commentId(), task.content(), nextRetryCount));
 
                 // 记录重试日志
                 io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
@@ -257,7 +258,8 @@ public class AiTaskConsumer {
             int nextRetryCount = currentRetryCount + 1;
             log.warn("{} 重试 {}/{}，postId={}", MQ_TAG, nextRetryCount, allowedMaxRetries, task.postId());
             try {
-                taskProducer.sendSummaryTask(task.postId(), task.content(), task.priority(), nextRetryCount, task.performedBy());
+                reliableAiTaskService.enqueueSummary(new AiSummaryTask(
+                        task.postId(), task.content(), task.priority(), nextRetryCount, task.performedBy()));
                 return safeAck(message);
             } catch (Exception sendEx) {
                 log.error("{} 重新发布任务失败，进行 NACK，postId={}", MQ_TAG, task.postId(), sendEx);

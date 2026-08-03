@@ -2,18 +2,16 @@ package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.model.DeadLetterMessage;
 import com.biliwind.blog.service.ai.AiSummaryTask;
-import com.biliwind.blog.service.ai.AiTaskProducer;
+import com.biliwind.blog.service.ReliableAiTaskService;
+import com.biliwind.blog.service.ReliableInfrastructureTaskService;
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import com.biliwind.blog.service.elasticsearch.EsSyncTask;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.eclipse.microprofile.reactive.messaging.Channel;
-import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
@@ -31,15 +29,11 @@ public class AdminDeadLetterController {
     private static final Logger log = Logger.getLogger(AdminDeadLetterController.class);
 
     @Inject
-    AiTaskProducer aiTaskProducer;
+    ReliableAiTaskService reliableAiTaskService;
 
     @Inject
-    @Channel("storage-sync-tasks")
-    Instance<Emitter<StorageSyncMessage>> syncEmitter;
+    ReliableInfrastructureTaskService reliableInfrastructureTaskService;
 
-    @Inject
-    @Channel("es-sync-tasks")
-    Instance<Emitter<EsSyncTask>> esSyncEmitter;
 
     @GET
     public Response listMessages(
@@ -89,7 +83,7 @@ public class AdminDeadLetterController {
 
                 Long userId = 1L; 
                 AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
-                aiTaskProducer.sendSummaryTask(task);
+                reliableAiTaskService.enqueueSummary(task);
 
                 message.markAsProcessed("通过兼容接口手动重试 AI 摘要 - 已重新发送");
                 log.info("已通过兼容接口重试 AI 死信消息，id=" + id);
@@ -102,7 +96,7 @@ public class AdminDeadLetterController {
                 String variantType = (String) content.get("variantType");
 
                 StorageSyncMessage syncMsg = new StorageSyncMessage(mediaId, storageClassName, variantType, 0);
-                syncEmitter.get().send(syncMsg);
+                reliableInfrastructureTaskService.enqueueStorageSync(syncMsg);
 
                 message.markAsProcessed("通过兼容接口手动重试存储同步 - 已重新发送");
                 log.info("已通过兼容接口重试存储同步死信消息，id=" + id);
@@ -111,7 +105,7 @@ public class AdminDeadLetterController {
                 String actionType = (String) content.get("actionType");
 
                 EsSyncTask esTask = new EsSyncTask(postId, actionType);
-                esSyncEmitter.get().send(esTask);
+                reliableInfrastructureTaskService.enqueueEsSync(esTask);
 
                 message.markAsProcessed("通过兼容接口手动重试 ES 同步 - 已重新发送");
                 log.info("已通过兼容接口重试 ES 同步死信消息，id=" + id);
@@ -126,7 +120,7 @@ public class AdminDeadLetterController {
                     String variantType = (String) content.get("variantType");
 
                     StorageSyncMessage syncMsg = new StorageSyncMessage(mediaId, storageClassName, variantType, 0);
-                    syncEmitter.get().send(syncMsg);
+                    reliableInfrastructureTaskService.enqueueStorageSync(syncMsg);
 
                     message.markAsProcessed("通过兼容接口手动重试存储同步(兼容) - 已重新发送");
                 } else if (content.containsKey("postId") && content.containsKey("content")) {
@@ -138,7 +132,7 @@ public class AdminDeadLetterController {
 
                     Long userId = 1L;
                     AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
-                    aiTaskProducer.sendSummaryTask(task);
+                    reliableAiTaskService.enqueueSummary(task);
 
                     message.markAsProcessed("通过兼容接口手动重试 AI 摘要(兼容) - 已重新发送");
                 } else if (content.containsKey("postId") && content.containsKey("actionType")) {
@@ -146,7 +140,7 @@ public class AdminDeadLetterController {
                     String actionType = (String) content.get("actionType");
 
                     EsSyncTask esTask = new EsSyncTask(postId, actionType);
-                    esSyncEmitter.get().send(esTask);
+                    reliableInfrastructureTaskService.enqueueEsSync(esTask);
 
                     message.markAsProcessed("通过兼容接口手动重试 ES 同步(兼容) - 已重新发送");
                 } else {

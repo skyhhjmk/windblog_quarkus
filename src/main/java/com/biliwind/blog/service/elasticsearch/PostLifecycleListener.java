@@ -3,10 +3,8 @@ package com.biliwind.blog.service.elasticsearch;
 import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
-import com.biliwind.blog.service.TempDataService;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
-import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -31,9 +29,6 @@ public class PostLifecycleListener {
 
     @Inject
     ElasticsearchConnectionManager connectionManager;
-
-    @Inject
-    TempDataService tempDataService;
 
     @Inject
     CacheService cacheService;
@@ -154,9 +149,9 @@ public class PostLifecycleListener {
                     null);
             log.infof("ES 同步任务已写入 outbox: postId=%d, action=%s", postId, actionType);
         } catch (Exception e) {
-            log.errorf("写入 ES outbox 失败，保存到 temp_data 表: %d, 错误: %s", postId, e.getMessage());
-            JsonNode payload = tempDataService.createSyncTaskPayload(postId, actionType);
-            tempDataService.save("es_sync_task", postId.toString(), payload);
+            log.errorf("写入 ES outbox 失败，不绕过统一 worker 直接发布: %d, 错误: %s",
+                    postId, e.getMessage());
+            throw new IllegalStateException("写入 ES outbox 失败", e);
         }
     }
 

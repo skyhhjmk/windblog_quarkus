@@ -1,10 +1,10 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.model.DeadLetterMessage;
+import com.biliwind.blog.service.ReliableAiTaskService;
+import com.biliwind.blog.service.ReliableInfrastructureTaskService;
 import com.biliwind.blog.service.ai.AiSummaryTask;
-import com.biliwind.blog.service.ai.AiTaskProducer;
 import io.quarkus.panache.common.Sort;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -33,17 +33,11 @@ public class AdminDeadLetterApi {
     private static final Logger log = LoggerFactory.getLogger(AdminDeadLetterApi.class);
 
     @Inject
-    AiTaskProducer aiTaskProducer;
+    ReliableAiTaskService reliableAiTaskService;
 
     @Inject
-    @org.eclipse.microprofile.reactive.messaging.Channel("storage-sync-tasks")
-    Instance<org.eclipse.microprofile.reactive.messaging.Emitter<com.biliwind.blog.service.storage.dto.StorageSyncMessage>>
-            storageSyncEmitter;
+    ReliableInfrastructureTaskService reliableInfrastructureTaskService;
 
-    @Inject
-    @org.eclipse.microprofile.reactive.messaging.Channel("es-sync-tasks")
-    Instance<org.eclipse.microprofile.reactive.messaging.Emitter<com.biliwind.blog.service.elasticsearch.EsSyncTask>>
-            esSyncEmitter;
 
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
@@ -142,7 +136,7 @@ public class AdminDeadLetterApi {
 
                 Long userId = adminRequestContext.getUserId();
                 AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
-                aiTaskProducer.sendSummaryTask(task);
+                reliableAiTaskService.enqueueSummary(task);
 
                 message.markAsProcessed("手动重试 AI 摘要 - 已重新发送");
                 log.info("已重试 AI 死信消息，id={}, postId={}", id, postId);
@@ -157,7 +151,7 @@ public class AdminDeadLetterApi {
                 com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                         new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
                                 mediaId, storageClassName, variantType, 0);
-                storageSyncEmitter.get().send(syncMsg);
+                reliableInfrastructureTaskService.enqueueStorageSync(syncMsg);
 
                 message.markAsProcessed("手动重试存储同步 - 已重新发送");
                 log.info("已重试存储同步死信消息，id={}, mediaId={}", id, mediaId);
@@ -167,7 +161,7 @@ public class AdminDeadLetterApi {
 
                 com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
                         new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
-                esSyncEmitter.get().send(esTask);
+                reliableInfrastructureTaskService.enqueueEsSync(esTask);
 
                 message.markAsProcessed("手动重试 ES 同步 - 已重新发送");
                 log.info("已重试 ES 同步死信消息，id={}, postId={}", id, postId);
@@ -184,7 +178,7 @@ public class AdminDeadLetterApi {
                     com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                             new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
                                     mediaId, storageClassName, variantType, 0);
-                    storageSyncEmitter.get().send(syncMsg);
+                    reliableInfrastructureTaskService.enqueueStorageSync(syncMsg);
 
                     message.markAsProcessed("手动重试存储同步(兼容) - 已重新发送");
                 } else if (content.containsKey("postId") && content.containsKey("content")) {
@@ -196,7 +190,7 @@ public class AdminDeadLetterApi {
 
                     Long userId = adminRequestContext.getUserId();
                     AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
-                    aiTaskProducer.sendSummaryTask(task);
+                    reliableAiTaskService.enqueueSummary(task);
 
                     message.markAsProcessed("手动重试 AI 摘要(兼容) - 已重新发送");
                 } else if (content.containsKey("postId") && content.containsKey("actionType")) {
@@ -205,7 +199,7 @@ public class AdminDeadLetterApi {
 
                     com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
                             new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
-                    esSyncEmitter.get().send(esTask);
+                    reliableInfrastructureTaskService.enqueueEsSync(esTask);
 
                     message.markAsProcessed("手动重试 ES 同步(兼容) - 已重新发送");
                 } else {
@@ -260,7 +254,7 @@ public class AdminDeadLetterApi {
 
                     Long userId = adminRequestContext.getUserId();
                     AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
-                    aiTaskProducer.sendSummaryTask(task);
+                    reliableAiTaskService.enqueueSummary(task);
 
                     message.markAsProcessed("批量重试 AI - 已重新发送");
                     successCount = successCount + 1;
@@ -275,7 +269,7 @@ public class AdminDeadLetterApi {
                     com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                             new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
                                     mediaId, storageClassName, variantType, 0);
-                    storageSyncEmitter.get().send(syncMsg);
+                    reliableInfrastructureTaskService.enqueueStorageSync(syncMsg);
 
                     message.markAsProcessed("批量重试同步 - 已重新发送");
                     successCount = successCount + 1;
@@ -285,7 +279,7 @@ public class AdminDeadLetterApi {
 
                     com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
                             new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
-                    esSyncEmitter.get().send(esTask);
+                    reliableInfrastructureTaskService.enqueueEsSync(esTask);
 
                     message.markAsProcessed("批量重试 ES 同步 - 已重新发送");
                     successCount = successCount + 1;
@@ -302,7 +296,7 @@ public class AdminDeadLetterApi {
                         com.biliwind.blog.service.storage.dto.StorageSyncMessage syncMsg =
                                 new com.biliwind.blog.service.storage.dto.StorageSyncMessage(
                                         mediaId, storageClassName, variantType, 0);
-                        storageSyncEmitter.get().send(syncMsg);
+                        reliableInfrastructureTaskService.enqueueStorageSync(syncMsg);
 
                         message.markAsProcessed("批量重试同步(兼容) - 已重新发送");
                         successCount = successCount + 1;
@@ -315,7 +309,7 @@ public class AdminDeadLetterApi {
 
                         Long userId = adminRequestContext.getUserId();
                         AiSummaryTask task = new AiSummaryTask(postId, postContent, priority, userId);
-                        aiTaskProducer.sendSummaryTask(task);
+                        reliableAiTaskService.enqueueSummary(task);
 
                         message.markAsProcessed("批量重试 AI(兼容) - 已重新发送");
                         successCount = successCount + 1;
@@ -325,7 +319,7 @@ public class AdminDeadLetterApi {
 
                         com.biliwind.blog.service.elasticsearch.EsSyncTask esTask =
                                 new com.biliwind.blog.service.elasticsearch.EsSyncTask(postId, actionType);
-                        esSyncEmitter.get().send(esTask);
+                        reliableInfrastructureTaskService.enqueueEsSync(esTask);
 
                         message.markAsProcessed("批量重试 ES(兼容) - 已重新发送");
                         successCount = successCount + 1;

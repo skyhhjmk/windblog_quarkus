@@ -2,34 +2,26 @@ package com.biliwind.blog.service.storage;
 
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 @ApplicationScoped
 public class StorageSyncConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(StorageSyncConsumer.class);
     private static final int MAX_RETRY_COUNT = 3;
-    private static final ScheduledExecutorService RETRY_SCHEDULER = Executors.newSingleThreadScheduledExecutor();
-
     @Inject
     StorageService storageService;
 
     @Inject
-    @Channel("storage-sync-tasks")
-    Instance<Emitter<StorageSyncMessage>> syncEmitter;
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     @Inject
-    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+    com.biliwind.blog.service.ReliableInfrastructureTaskService reliableInfrastructureTaskService;
 
     @Incoming("storage-sync-in")
     @Acknowledgment(Acknowledgment.Strategy.MANUAL)
@@ -93,25 +85,12 @@ public class StorageSyncConsumer {
     private CompletionStage<Void> sendRetryAfterDelay(Message<StorageSyncMessage> message,
                                                       StorageSyncMessage retryMessage,
                                                       long delaySeconds) {
-        CompletableFuture<Void> retryFuture = new CompletableFuture<>();
-        RETRY_SCHEDULER.schedule(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    syncEmitter.get().send(retryMessage);
-                    message.ack().whenComplete((ignoredResult, ackError) -> {
-                        if (ackError != null) {
-                            retryFuture.completeExceptionally(ackError);
-                        } else {
-                            retryFuture.complete(null);
-                        }
-                    });
-                } catch (Exception e) {
-                    message.nack(e);
-                    retryFuture.completeExceptionally(e);
-                }
-            }
-        }, delaySeconds, TimeUnit.SECONDS);
-        return retryFuture;
+        try {
+            reliableInfrastructureTaskService.enqueueStorageSync(
+                    retryMessage, java.time.Duration.ofSeconds(Math.max(1L, delaySeconds)));
+            return message.ack();
+        } catch (Exception exception) {
+            return message.nack(exception);
+        }
     }
 }
