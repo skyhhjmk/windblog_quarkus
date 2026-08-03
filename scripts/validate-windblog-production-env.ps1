@@ -73,6 +73,18 @@ function Require-Port {
     }
 }
 
+function Require-IpAddress {
+    param([string] $Name, [string] $Default)
+    $value = Get-EffectiveValue $Name
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $value = $Default
+    }
+    $ipAddress = $null
+    if (-not [System.Net.IPAddress]::TryParse($value.Trim(), [ref]$ipAddress)) {
+        $errors.Add("$Name 必须是有效的 IPv4 或 IPv6 地址")
+    }
+}
+
 function Require-ByteLimit {
     param([string] $Name, [long] $Default, [long] $Minimum, [long] $Maximum)
     $value = Get-EffectiveValue $Name
@@ -229,6 +241,8 @@ Require-Port "RABBITMQ_MANAGEMENT_HOST_PORT" 15672
 Require-Port "ELASTICSEARCH_HOST_PORT" 9200
 Require-Port "KIBANA_HOST_PORT" 5601
 Require-Port "CLAMAV_HOST_PORT" 3310
+Require-IpAddress "WINDBLOG_HOST_BIND_IP" "0.0.0.0"
+Require-IpAddress "CLAMAV_HOST_BIND_IP" "127.0.0.1"
 Require-ByteLimit "WINDBLOG_EDGE_MAX_ROUTED_BODY_BYTES" 10485760 1 67108864
 
 if ($errors.Count -gt 0) {
