@@ -271,7 +271,8 @@ public class ImportService {
                 if (!filePath.startsWith("/")) discoveryMap.put("/" + filePath, fullUrl);
             }
         } catch (SQLException e) {
-            emit("info", "读取 media 表失败，将仅依赖文章内容分析: " + e.getMessage(), null);
+            String safeMessage = sanitizeErrorMessage(e.getMessage());
+            emit("info", "读取 media 表失败，将仅依赖文章内容分析: " + safeMessage, null);
         }
 
         // 2. 从 posts 表中通过内容分析发现
@@ -288,7 +289,8 @@ public class ImportService {
             String fullUrl = entry.getKey();
             List<String> refPaths = entry.getValue();
 
-            emit("info", "同步媒体资源: " + fullUrl, null);
+            String safeUrl = sanitizeErrorMessage(fullUrl);
+            emit("info", "同步媒体资源: " + safeUrl, null);
             try {
                 Media m = mediaService.importFromUrl(operator, fullUrl);
                 // 将所有关联的引用路径都指向新 URL
@@ -297,8 +299,9 @@ public class ImportService {
                 }
                 ctx.urlMap().put(fullUrl, m.url);
             } catch (Exception e) {
-                emit("error", "同步失败，创建占位记录: " + fullUrl, e.getMessage());
-                Media failedMedia = mediaService.markAsImportFailed(operator, fullUrl, e.getMessage());
+                String safeMessage = sanitizeErrorMessage(e.getMessage());
+                emit("error", "同步失败，创建占位记录: " + safeUrl, safeMessage);
+                Media failedMedia = mediaService.markAsImportFailed(operator, fullUrl, safeMessage);
                 for (String path : refPaths) {
                     ctx.urlMap().put(path, failedMedia.url);
                 }
@@ -476,12 +479,14 @@ public class ImportService {
         ctx.retryQueue().clear();
 
         for (DownloadTask task : currentQueue) {
-            emit("info", "重试下载: " + task.sourceUrl, null);
+            String safeUrl = sanitizeErrorMessage(task.sourceUrl);
+            emit("info", "重试下载: " + safeUrl, null);
             try {
                 Media m = mediaService.importFromUrl(operator, task.sourceUrl);
                 ctx.urlMap().put(task.sourceUrl, m.url);
             } catch (Exception e) {
-                emit("error", "重试仍然失败: " + task.sourceUrl, e.getMessage());
+                String safeMessage = sanitizeErrorMessage(e.getMessage());
+                emit("error", "重试仍然失败: " + safeUrl, safeMessage);
                 // 最终失败时，resolveAndDownload 已创建失败记录，直接使用已有记录的 URL
                 ctx.urlMap().put(task.sourceUrl, task.sourceUrl);
             }
@@ -544,7 +549,8 @@ public class ImportService {
                 }
             }
         } catch (SQLException e) {
-            emit("info", "未找到旧系统的用户表 (wa_users)，将跳过作者映射: " + e.getMessage(), null);
+            emit("info", "未找到旧系统的用户表 (wa_users)，将跳过作者映射: "
+                    + sanitizeErrorMessage(e.getMessage()), null);
         }
     }
 
@@ -599,7 +605,8 @@ public class ImportService {
                 }
             }
         } catch (SQLException e) {
-            emit("info", "处理分类关联时跳过 (可能表不存在): " + e.getMessage(), null);
+            emit("info", "处理分类关联时跳过 (可能表不存在): "
+                    + sanitizeErrorMessage(e.getMessage()), null);
         }
 
         // 2. 迁移标签关联 (post_tag)
@@ -630,7 +637,8 @@ public class ImportService {
                 }
             }
         } catch (SQLException e) {
-            emit("info", "处理标签关联时跳过 (可能表不存在): " + e.getMessage(), null);
+            emit("info", "处理标签关联时跳过 (可能表不存在): "
+                    + sanitizeErrorMessage(e.getMessage()), null);
         }
 
         // 3. 迁移作者关联 (post_author)
@@ -742,7 +750,7 @@ public class ImportService {
                 count++;
             }
         } catch (SQLException e) {
-            emit("error", "导入评论失败: " + e.getMessage(), null);
+            emit("error", "导入评论失败: " + sanitizeErrorMessage(e.getMessage()), null);
         }
         return count;
     }
@@ -957,7 +965,8 @@ public class ImportService {
                 return m.url;
             } catch (Exception e) {
                 // 下载失败时立即创建失败占位记录，避免后续重复尝试
-                Media failedMedia = mediaService.markAsImportFailed(operator, fullUrl, e.getMessage());
+                Media failedMedia = mediaService.markAsImportFailed(
+                        operator, fullUrl, sanitizeErrorMessage(e.getMessage()));
                 ctx.urlMap().put(url, failedMedia.url);
                 ctx.urlMap().put(fullUrl, failedMedia.url);
                 return failedMedia.url;

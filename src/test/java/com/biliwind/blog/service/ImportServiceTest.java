@@ -25,4 +25,14 @@ class ImportServiceTest {
         assertTrue(message.length() <= 503);
         assertTrue(message.endsWith("..."));
     }
+
+    @Test
+    void shouldRedactCredentialsWhenAnImportUrlIsIncludedInAnEvent() {
+        String message = ImportService.sanitizeErrorMessage(
+                "同步媒体资源: https://sync-user:sync-secret@assets.example/file.png?token=url-token");
+
+        assertFalse(message.contains("sync-secret"));
+        assertFalse(message.contains("url-token"));
+        assertTrue(message.contains("[REDACTED]"));
+    }
 }
