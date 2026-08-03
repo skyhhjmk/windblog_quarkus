@@ -25,6 +25,7 @@ RabbitMQ 管理端 15672、Elasticsearch 9200 和 Kibana 5601；可用 `*_HOST_P
 - `SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=true`，禁止通过关闭告警绕过默认凭据启动保护；
 - `COOKIE_SECURE=true`、`WINDBLOG_SITE_PUBLIC_URL=https://...`；
 - 明确的 `CORS_ORIGINS`，且 `CORS_ALLOW_CREDENTIALS=false`；
+- `ELASTICSEARCH_SSL_TRUST_ALL=false`，生产禁止信任全部 Elasticsearch TLS 证书；
 - 非 guest 的 RabbitMQ 用户密码、PostgreSQL 用户/数据库/密码、Redis/Elasticsearch 密码；
 - `SWAGGER_UI_ENABLED=false`，生产启用强制 CSP 和 gRPC mTLS 证书。
 - `GRPC_SERVER_CERTIFICATE`、`GRPC_SERVER_KEY`、`GRPC_SERVER_TRUST_STORE`、
