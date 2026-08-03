@@ -123,11 +123,61 @@ public class ClientIpResolver {
         if (value == null || value.isBlank()) {
             return null;
         }
+        String normalized = value.trim();
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        if (!isAddressLiteral(normalized)) {
+            return null;
+        }
         try {
-            return InetAddress.getByName(value.trim());
+            return InetAddress.getByName(normalized);
         } catch (Exception exception) {
             return null;
         }
+    }
+
+    static boolean isAddressLiteral(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim();
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        if (normalized.indexOf(':') >= 0) {
+            for (int index = 0; index < normalized.length(); index = index + 1) {
+                char current = normalized.charAt(index);
+                boolean hex = current >= '0' && current <= '9'
+                        || current >= 'a' && current <= 'f'
+                        || current >= 'A' && current <= 'F';
+                if (!hex && current != ':' && current != '.') {
+                    return false;
+                }
+            }
+            return true;
+        }
+        String[] octets = normalized.split("\\.", -1);
+        if (octets.length != 4) {
+            return false;
+        }
+        for (String octet : octets) {
+            if (octet.isEmpty() || octet.length() > 3) {
+                return false;
+            }
+            int valuePart = 0;
+            for (int index = 0; index < octet.length(); index = index + 1) {
+                char current = octet.charAt(index);
+                if (current < '0' || current > '9') {
+                    return false;
+                }
+                valuePart = valuePart * 10 + current - '0';
+            }
+            if (valuePart > 255) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public record ClientIpResolution(String clientIp, String remoteIp, String headerValue, boolean trustedProxy, String message) {
