@@ -7,11 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.eclipse.microprofile.reactive.messaging.Channel;
-import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.jboss.logging.Logger;
 
 import java.util.List;
@@ -26,11 +23,10 @@ public class TempDataService {
     ObjectMapper mapper;
 
     @Inject
-    @Channel("es-sync-tasks")
-    Instance<Emitter<EsSyncTask>> esSyncEmitter;
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     @Inject
-    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+    ReliableInfrastructureTaskService reliableInfrastructureTaskService;
 
     @Transactional
     public void save(String type, String target, JsonNode payload) {
@@ -76,8 +72,8 @@ public class TempDataService {
 
                 if (ES_SYNC_TASK_TYPE.equals(type)) {
                     EsSyncTask syncTask = parseEsSyncTask(task.payload);
-                    esSyncEmitter.get().send(syncTask);
-                    log.infof("任务重试成功，已发送到 RabbitMQ: id=%d, target=%s", task.id, task.target);
+                    reliableInfrastructureTaskService.enqueueEsSync(syncTask);
+                    log.infof("任务重试成功，已写入 ES outbox: id=%d, target=%s", task.id, task.target);
                 }
 
                 task.status = "completed";

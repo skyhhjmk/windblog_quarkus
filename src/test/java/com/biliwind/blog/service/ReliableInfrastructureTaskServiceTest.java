@@ -1,6 +1,7 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.OutboxEvent;
+import com.biliwind.blog.service.elasticsearch.EsSyncTask;
 import com.biliwind.blog.service.storage.dto.StorageSyncMessage;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -37,5 +38,20 @@ class ReliableInfrastructureTaskServiceTest {
         assertEquals("STORAGE_SYNC", event.eventType);
         assertEquals("archive", event.payload.get("storageClassName"));
         assertTrue(event.availableAt.isAfter(before.plusSeconds(60)));
+    }
+
+    @Test
+    @Transactional
+    void shouldPersistEsRetryInOutbox() {
+        long postId = UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;
+
+        reliableInfrastructureTaskService.enqueueEsSync(new EsSyncTask(postId, "UPDATE"));
+
+        OutboxEvent event = OutboxEvent.find(
+                "eventKey", "ES_REPLAY:" + postId + ":UPDATE").firstResult();
+        assertNotNull(event);
+        assertEquals("ES_SYNC", event.eventType);
+        assertEquals(postId, ((Number) event.payload.get("postId")).longValue());
+        assertEquals("UPDATE", event.payload.get("action"));
     }
 }
