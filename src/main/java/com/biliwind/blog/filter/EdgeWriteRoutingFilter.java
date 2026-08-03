@@ -13,6 +13,7 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -25,6 +26,9 @@ import java.util.Map;
 @Priority(Priorities.USER)
 @ApplicationScoped
 public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
+
+    @ConfigProperty(name = "windblog.edge.max-routed-body-bytes", defaultValue = "10485760")
+    long maxRoutedBodyBytes;
 
     @Inject
     NodeRoleService nodeRoleService;
@@ -55,7 +59,16 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
             return;
         }
 
-        byte[] requestBody = readRequestBody(requestContext);
+        byte[] requestBody;
+        try {
+            requestBody = readRequestBody(requestContext);
+        } catch (RequestBodyTooLargeException exception) {
+            requestContext.abortWith(Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE)
+                    .type(MediaType.APPLICATION_JSON_TYPE)
+                    .entity(Map.of("success", false, "message", "边缘回源请求体超过限制"))
+                    .build());
+            return;
+        }
         RoutedHttpExchange.Request routedRequest = new RoutedHttpExchange.Request(
                 requestContext.getMethod(),
                 path,
@@ -105,19 +118,38 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
         }
 
         try {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int readLength = inputStream.read(buffer);
-            while (readLength >= 0) {
-                outputStream.write(buffer, 0, readLength);
-                readLength = inputStream.read(buffer);
-            }
-            byte[] body = outputStream.toByteArray();
+            byte[] body = readLimitedBody(inputStream, maxRoutedBodyBytes);
             requestContext.setEntityStream(new ByteArrayInputStream(body));
             return body;
+        } catch (RequestBodyTooLargeException exception) {
+            throw exception;
         } catch (Exception exception) {
             return new byte[0];
         }
+    }
+
+    static byte[] readLimitedBody(InputStream inputStream, long maxBytes) throws java.io.IOException {
+        if (inputStream == null || maxBytes <= 0) {
+            throw new IllegalArgumentException("边缘回源请求体限制无效");
+        }
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        long totalBytes = 0L;
+        int readLength = inputStream.read(buffer);
+        while (readLength >= 0) {
+            if (readLength > 0) {
+                totalBytes = totalBytes + readLength;
+                if (totalBytes > maxBytes) {
+                    throw new RequestBodyTooLargeException();
+                }
+                outputStream.write(buffer, 0, readLength);
+            }
+            readLength = inputStream.read(buffer);
+        }
+        return outputStream.toByteArray();
+    }
+
+    private static class RequestBodyTooLargeException extends RuntimeException {
     }
 
     private Map<String, String> collectHeaders(ContainerRequestContext requestContext) {

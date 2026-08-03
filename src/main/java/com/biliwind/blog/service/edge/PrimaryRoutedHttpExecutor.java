@@ -23,6 +23,9 @@ public class PrimaryRoutedHttpExecutor {
     @ConfigProperty(name = "quarkus.http.port", defaultValue = "8080")
     int httpPort;
 
+    @ConfigProperty(name = "windblog.edge.max-routed-body-bytes", defaultValue = "10485760")
+    long maxRoutedBodyBytes;
+
     public RoutedHttpExchange.Response execute(RoutedHttpExchange.Request routedRequest) {
         try {
             URI uri = buildUri(routedRequest);
@@ -34,6 +37,14 @@ public class PrimaryRoutedHttpExecutor {
             byte[] requestBody = routedRequest.body();
             if (requestBody == null) {
                 requestBody = new byte[0];
+            }
+            if (requestBody.length > maxRoutedBodyBytes) {
+                return new RoutedHttpExchange.Response(
+                        413,
+                        Map.of("Content-Type", "application/json"),
+                        "{\"success\":false,\"message\":\"回源请求体超过限制\"}"
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                        "routed request body too large");
             }
 
             requestBuilder.method(routedRequest.method(), HttpRequest.BodyPublishers.ofByteArray(requestBody));

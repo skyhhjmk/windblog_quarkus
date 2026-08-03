@@ -114,6 +114,9 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "windblog.media.virus-scan.required", defaultValue = "false")
     boolean mediaVirusScanRequired;
 
+    @ConfigProperty(name = "windblog.edge.max-routed-body-bytes", defaultValue = "10485760")
+    long edgeMaxRoutedBodyBytes;
+
     void onStart(@Observes StartupEvent ignored) {
         if (warnDefaultSecrets) {
             checkDefault("ADMIN_JWT_SECRET", adminJwtSecret, DEFAULT_ADMIN_JWT_SECRET);
@@ -184,6 +187,9 @@ public class SecurityConfigurationWarning {
         }
         if (grpcClientPlaintextFallbackAllowed) {
             throw new IllegalStateException("生产环境禁止 gRPC 客户端回退到明文连接");
+        }
+        if (edgeMaxRoutedBodyBytes < 1 || edgeMaxRoutedBodyBytes > 64L * 1024L * 1024L) {
+            throw new IllegalStateException("边缘回源请求体上限必须在 1 到 64 MiB 之间");
         }
         if (!isEdgeNode() && (!mediaVirusScanRequired || !mediaVirusScanEnabled)) {
             throw new IllegalStateException("生产环境必须启用并强制执行媒体病毒扫描，未扫描文件不得进入媒体处理链路");

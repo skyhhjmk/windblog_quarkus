@@ -52,6 +52,18 @@ class SecurityConfigurationWarningTest {
     }
 
     @Test
+    void shouldRejectInvalidEdgeRoutedBodyLimit() {
+        SecurityConfigurationWarning warning = validPrimaryConfiguration();
+        warning.edgeMaxRoutedBodyBytes = 0;
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                warning::validateProductionConfiguration);
+
+        assertTrue(exception.getMessage().contains("边缘回源请求体上限"));
+    }
+
+    @Test
     void shouldRejectInsecureCookieAndNonHttpsPublicUrl() {
         SecurityConfigurationWarning insecureCookie = validPrimaryConfiguration();
         insecureCookie.cookieSecure = false;
@@ -183,6 +195,7 @@ class SecurityConfigurationWarningTest {
         warning.grpcClientPlaintextFallbackAllowed = false;
         warning.mediaVirusScanEnabled = true;
         warning.mediaVirusScanRequired = true;
+        warning.edgeMaxRoutedBodyBytes = 10L * 1024L * 1024L;
         return warning;
     }
 }
