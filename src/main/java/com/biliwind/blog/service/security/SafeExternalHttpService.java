@@ -16,8 +16,6 @@ import org.apache.hc.core5.util.Timeout;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.net.Inet6Address;
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -84,18 +82,8 @@ public class SafeExternalHttpService {
         } catch (Exception exception) {
             throw new IllegalArgumentException("外部地址格式无效");
         }
-        String scheme = uri.getScheme();
-        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-            throw new IllegalArgumentException("只允许 HTTP 或 HTTPS 外部地址");
-        }
-        if (uri.getUserInfo() != null) {
-            throw new IllegalArgumentException("外部地址不允许携带用户信息");
-        }
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) {
-            throw new IllegalArgumentException("外部地址缺少主机名");
-        }
-        resolvePublicAddresses(host);
+        ExternalHttpEndpointPolicy.validateHttpUri(uri, "外部地址");
+        ExternalHttpEndpointPolicy.requirePublicAddresses(uri.getHost());
         return uri;
     }
 
@@ -194,95 +182,13 @@ public class SafeExternalHttpService {
     }
 
     private InetAddress[] resolvePublicAddresses(String host) {
-        try {
-            InetAddress[] addresses = InetAddress.getAllByName(host);
-            if (addresses.length == 0) {
-                throw new IllegalArgumentException("外部地址无法解析");
-            }
-            for (InetAddress address : addresses) {
-                if (!isPublicAddress(address)) {
-                    throw new IllegalArgumentException("不允许访问非公网地址");
-                }
-            }
-            return addresses;
-        } catch (IllegalArgumentException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalArgumentException("外部地址无法解析");
-        }
-    }
-
-    private boolean isPublicAddress(InetAddress address) {
-        if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()) {
-            return false;
-        }
-        if (address.isSiteLocalAddress() || address.isMulticastAddress()) {
-            return false;
-        }
-        if (address instanceof Inet6Address) {
-            byte[] bytes = address.getAddress();
-            int firstByte = bytes[0] & 255;
-            if ((firstByte & 254) == 252 || firstByte == 255
-                    || (firstByte == 32 && (bytes[1] & 255) == 1
-                    && (bytes[2] & 255) == 13 && (bytes[3] & 255) == 184)) {
-                return false;
-            }
-            if (isIpv4MappedAddress(bytes)) {
-                byte[] mappedIpv4 = new byte[]{bytes[12], bytes[13], bytes[14], bytes[15]};
-                return !isSpecialIpv4Address(mappedIpv4);
+        InetAddress[] addresses = ExternalHttpEndpointPolicy.resolveAddresses(host);
+        for (InetAddress address : addresses) {
+            if (!ExternalHttpEndpointPolicy.isPublicAddress(address)) {
+                throw new IllegalArgumentException("不允许访问非公网地址");
             }
         }
-        if (address instanceof Inet4Address && isSpecialIpv4Address(address.getAddress())) {
-            return false;
-        }
-        return true;
-    }
-
-    private boolean isSpecialIpv4Address(byte[] bytes) {
-        if (bytes == null || bytes.length != 4) {
-            return true;
-        }
-        int first = bytes[0] & 255;
-        int second = bytes[1] & 255;
-        int third = bytes[2] & 255;
-        if (first == 0 || first == 10 || first == 127 || first >= 224) {
-            return true;
-        }
-        if (first == 100 && second >= 64 && second <= 127) {
-            return true;
-        }
-        if (first == 169 && second == 254) {
-            return true;
-        }
-        if (first == 172 && second >= 16 && second <= 31) {
-            return true;
-        }
-        if (first == 192 && (second == 0 || second == 168)) {
-            return true;
-        }
-        if (first == 192 && second == 2) {
-            return true;
-        }
-        if (first == 198 && (second == 18 || second == 19)) {
-            return true;
-        }
-        if (first == 198 && second == 51 && third == 100) {
-            return true;
-        }
-        return first == 203 && second == 0 && third == 113;
-    }
-
-    private boolean isIpv4MappedAddress(byte[] bytes) {
-        if (bytes == null || bytes.length != 16 || (bytes[10] & 255) != 255
-                || (bytes[11] & 255) != 255) {
-            return false;
-        }
-        for (int index = 0; index < 10; index++) {
-            if (bytes[index] != 0) {
-                return false;
-            }
-        }
-        return true;
+        return addresses;
     }
 
     public record ExternalHttpResponse(int statusCode, byte[] body, List<HeaderValue> headers) {
