@@ -32,10 +32,11 @@
 > 后端管理员、用户错误响应、健康检查和边缘同步失败状态统一经过敏感信息脱敏；管理员 `X-Request-Id`
 > 只接受安全字符格式并可关联 outbox/审计。公开首页、文章/分类/标签和搜索入口新增按可信客户端 IP 的
 > Redis/本地降级请求预算，超限返回 429 且不缓存；outbox 调度器新增 shutdown 闸门，避免应用关闭时继续使用已销毁的事务会话。
-> 后端全量回归为 69 个报告、302 个测试，0 failure/error/skip；
+> 后端全量回归为 69 个报告、304 个测试，0 failure/error/skip；
 > 生产预检同时校验基础服务宿主机端口及 Compose `host_ip` 的 IPv4/IPv6 格式。
 > 本地 security profile 已完成 ClamAV clamd ping 与 `/etc/hostname` 实际扫描，结果为 `OK`；生产媒体上传仍需用真实样本和生产病毒库验收。
 > AI、邮件、Elasticsearch、存储和边缘 worker 的异常消息也统一限长脱敏后再进入日志、SSE、死信、审计或边缘协议。
+> 三类兼容 AI provider 的非流式响应现在通过 8 MiB 有界订阅读取，超限会取消上游订阅并失败。
 > 真实 CDN、代理、多节点和家庭网络验收仍未完成。
 
 ## 1. 目标与结论
