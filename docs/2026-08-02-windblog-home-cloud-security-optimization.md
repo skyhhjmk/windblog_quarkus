@@ -50,6 +50,7 @@
 > 当前 Docker Desktop 的 Compose 展示虽包含 `[::]` 端口行，但本机 `::1` 对 PostgreSQL、Redis、Elasticsearch、Kibana 均连接失败；IPv6 不能据此视为已启用，仍需宿主机/路由器现场验收。
 > 本次复核中 IPv4 宿主机端口 `5432/6379/5672/15672/9200/5601/3310` 均可达；本地 Quarkus readiness 唯一 DOWN 项为 Elasticsearch，原因是持久化系统设置仍指向旧的 `127.0.0.1:19200`，而当前 Compose 端口为 9200，需在 Elasticsearch 设置 UI 更新并触发重载。
 > 更新并确认 Elasticsearch 设置后，readiness 已恢复 200 且 ES check 为 UP；本地 8080 仍是 dev profile，云验收脚本在 CSP 强制检查处停止，因为 dev profile 只发送 Report-Only，不能替代生产 profile/反向代理验收。
+> 新增 `scripts/verify-windblog-production-smoke.ps1` 后，本地打包 JVM 的 prod profile 已在独立端口通过完整云验收；临时 RabbitMQ 用户和 gRPC truststore 均在脚本结束时清理。
 > 真实 CDN、代理、多节点和家庭网络验收仍未完成。
 
 ## 1. 目标与结论

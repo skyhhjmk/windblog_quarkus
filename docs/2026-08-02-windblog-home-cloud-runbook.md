@@ -110,6 +110,17 @@ $env:WINDBLOG_IT_DB_NAME = 'windblog'
 
 该回归仍使用打包镜像和容器网络；它不能替代生产证书、CDN、反向代理、边缘回源和恢复演练。
 
+若需要在本机验证真正的 `prod` profile，可先完成普通打包，再运行：
+
+```powershell
+.\mvnw.cmd -q -DskipTests package
+.\scripts\verify-windblog-production-smoke.ps1
+```
+
+该脚本只在本地 Docker RabbitMQ 中创建临时强密码用户，并从现有 CA truststore 生成临时强密码副本；
+它会启动独立 HTTP/gRPC 端口、执行云验收，然后停止应用并删除临时 RabbitMQ 用户和 truststore。
+它不替代真实 HTTPS、CDN、反向代理或家庭网络验收。
+
 ## 外网入口自动化验收
 
 部署到真实 CDN/边缘/反向代理后，在不把 token 或 secret 写入命令行的前提下运行：
