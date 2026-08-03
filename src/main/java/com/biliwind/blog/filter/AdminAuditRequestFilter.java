@@ -39,10 +39,8 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
             return;
         }
 
-        String requestId = resolveHeaderValue(requestContext, REQUEST_ID_HEADER_NAME);
-        if (isBlank(requestId)) {
-            requestId = UUID.randomUUID().toString();
-        }
+        String requestId = resolveRequestId(
+                resolveHeaderValue(requestContext, REQUEST_ID_HEADER_NAME));
 
         String requestMethod = requestContext.getMethod();
         String clientIp = resolveClientIp(requestContext);
@@ -75,6 +73,13 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
             return "unknown";
         }
         return clientIpResolver.resolve(routingContext).clientIp();
+    }
+
+    static String resolveRequestId(String candidate) {
+        if (candidate != null && candidate.matches("[A-Za-z0-9._-]{1,64}")) {
+            return candidate;
+        }
+        return UUID.randomUUID().toString();
     }
 
     private String resolveHeaderValue(ContainerRequestContext requestContext, String headerName) {
