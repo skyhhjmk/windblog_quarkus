@@ -43,11 +43,13 @@ function Get-HeaderValue {
 function Invoke-CloudRequest {
     param(
         [Uri] $Uri,
+        [ValidateSet("GET", "OPTIONS")]
+        [string] $Method = "GET",
         [hashtable] $RequestHeaders = @{}
     )
 
     $request = [System.Net.HttpWebRequest]::Create($Uri)
-    $request.Method = "GET"
+    $request.Method = $Method
     $request.Timeout = $TimeoutSeconds * 1000
     $request.AllowAutoRedirect = $false
     foreach ($header in $RequestHeaders.GetEnumerator()) {
@@ -178,7 +180,9 @@ Assert-Condition ($null -eq $exposedHeaders -or $exposedHeaders -notmatch "(?i)(
     "CORS 暴露了 Set-Cookie。"
 $checks.Add("security headers")
 
-$corsProbe = Invoke-CloudRequest (Join-CloudUri $baseUri "") @{ Origin = "https://windblog-cors-probe.invalid" }
+$corsProbe = Invoke-CloudRequest (Join-CloudUri $baseUri "") -RequestHeaders @{
+    Origin = "https://windblog-cors-probe.invalid"
+}
 $allowOrigin = $corsProbe.Headers.Get("Access-Control-Allow-Origin")
 Assert-Condition ($allowOrigin -ne "https://windblog-cors-probe.invalid" -and $allowOrigin -ne "*") `
     "CORS 接受了未配置的 probe origin。"
@@ -186,6 +190,20 @@ $allowCredentials = $corsProbe.Headers.Get("Access-Control-Allow-Credentials")
 Assert-Condition ($allowCredentials -ne "true") `
     "CORS 对未配置的 probe origin 返回了 credentials=true。"
 $checks.Add("cors deny probe")
+
+$corsPreflight = Invoke-CloudRequest (Join-CloudUri $baseUri "api/user/post/content") -Method "OPTIONS" -RequestHeaders @{
+    Origin = "https://windblog-cors-probe.invalid"
+    "Access-Control-Request-Method" = "POST"
+    "Access-Control-Request-Headers" = "content-type,x-xsrf-token"
+}
+$preflightAllowOrigin = $corsPreflight.Headers.Get("Access-Control-Allow-Origin")
+Assert-Condition ($preflightAllowOrigin -ne "https://windblog-cors-probe.invalid" -and
+        $preflightAllowOrigin -ne "*") `
+    "CORS OPTIONS 预检接受了未配置的 probe origin。"
+$preflightAllowCredentials = $corsPreflight.Headers.Get("Access-Control-Allow-Credentials")
+Assert-Condition ($preflightAllowCredentials -ne "true") `
+    "CORS OPTIONS 预检对未配置的 probe origin 返回了 credentials=true。"
+$checks.Add("cors preflight deny probe")
 
 $docs = Invoke-CloudRequest (Join-CloudUri $baseUri "api/admin/docs")
 Assert-Condition ($docs.StatusCode -eq 404) `
