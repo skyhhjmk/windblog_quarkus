@@ -38,6 +38,21 @@ if ($template -match '\$\{[A-Z0-9_]+\}') {
     throw "Nginx 模板仍有未替换变量。"
 }
 
+function Assert-TemplateContains {
+    param([string] $Text, [string] $Pattern, [string] $Reason)
+
+    if ($Text -notmatch $Pattern) {
+        throw "Nginx 模板缺少安全约束：$Reason"
+    }
+}
+
+Assert-TemplateContains $template 'client_max_body_size\s+10m;' '请求体上限'
+Assert-TemplateContains $template 'set_real_ip_from\s+10\.0\.0\.0/8;' '可信代理网段'
+Assert-TemplateContains $template '(?s)location\s+\^~\s+/q/.*?allow\s+10\.0\.0\.0/8;.*?deny\s+all;' '管理健康端点 allowlist'
+Assert-TemplateContains $template '(?s)location\s+\^~\s+/api/admin/.*?allow\s+10\.0\.0\.0/8;.*?deny\s+all;' '管理 API allowlist'
+Assert-TemplateContains $template '(?s)location\s+\^~\s+/api/media/download/.*?proxy_buffering\s+off;.*?proxy_no_cache\s+1;.*?Cache-Control\s+"no-store"' '受保护下载禁缓存'
+Assert-TemplateContains $template 'limit_req_zone\s+\$binary_remote_addr' '公开请求限流'
+
 $temporaryConfig = Join-Path ([System.IO.Path]::GetTempPath()) ("windblog-edge-" + [Guid]::NewGuid().ToString('N') + '.conf')
 try {
     [System.IO.File]::WriteAllText($temporaryConfig, $template, [System.Text.UTF8Encoding]::new($false))
