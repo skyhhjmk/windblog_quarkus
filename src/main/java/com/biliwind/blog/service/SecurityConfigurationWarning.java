@@ -78,6 +78,9 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "elasticsearch.ssl-trust-all", defaultValue = "false")
     boolean elasticsearchSslTrustAll;
 
+    @ConfigProperty(name = "elasticsearch.ssl-verify", defaultValue = "full")
+    String elasticsearchSslVerify;
+
     @ConfigProperty(name = "admin.init.enabled", defaultValue = "false")
     boolean adminInitializationEnabled;
 
@@ -163,6 +166,9 @@ public class SecurityConfigurationWarning {
         }
         if (elasticsearchSslTrustAll) {
             throw new IllegalStateException("生产环境禁止 Elasticsearch 信任全部 TLS 证书");
+        }
+        if (!"full".equalsIgnoreCase(elasticsearchSslVerify)) {
+            throw new IllegalStateException("生产环境必须启用 Elasticsearch 完整 TLS 证书校验");
         }
         if (adminInitializationEnabled) {
             throw new IllegalStateException("生产环境必须关闭 ADMIN_INIT_ENABLED");

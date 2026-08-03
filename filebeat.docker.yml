@@ -80,7 +80,7 @@ output.elasticsearch:
   password: "${ELASTICSEARCH_PASSWORD:-}"
   
   # SSL/TLS 配置
-  ssl.verification_mode: "${ELASTICSEARCH_SSL_VERIFY:-none}"
+  ssl.verification_mode: "${ELASTICSEARCH_SSL_VERIFY:-full}"
   
   # 直接写入项目初始化脚本创建的写别名
   index: "windblog-logs"

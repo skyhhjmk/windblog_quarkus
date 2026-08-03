@@ -86,6 +86,18 @@ class SecurityConfigurationWarningTest {
     }
 
     @Test
+    void shouldRejectIncompleteElasticsearchTlsVerificationInProduction() {
+        SecurityConfigurationWarning warning = validPrimaryConfiguration();
+        warning.elasticsearchSslVerify = "none";
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                warning::validateProductionConfiguration);
+
+        assertTrue(exception.getMessage().contains("完整 TLS"));
+    }
+
+    @Test
     void shouldRejectDefaultSecretEvenWhenWarningsAreDisabled() {
         SecurityConfigurationWarning warning = validPrimaryConfiguration();
         warning.adminInitPassword = "admin";
@@ -160,6 +172,7 @@ class SecurityConfigurationWarningTest {
         warning.cspImageSources = "none";
         warning.cspConnectSources = "none";
         warning.corsCredentialsAllowed = false;
+        warning.elasticsearchSslVerify = "full";
         warning.adminInitializationEnabled = false;
         warning.nodeRole = "primary";
         warning.grpcServerClientAuth = "required";
