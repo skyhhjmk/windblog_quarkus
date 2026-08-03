@@ -2,7 +2,7 @@
 
 > 审计日期：2026-08-02
 > 审计范围：当前工作树 `D:\codes\windblog_quarkus`，包含 Quarkus 后端、`admin-flutter` 管理端、Liquibase 迁移、Docker 编排、边缘节点和转载追踪链路。
-> 文档性质：源码证据驱动的架构与重构建议，不代表其中的建议已经实现。
+> 文档性质：源码证据驱动的原始架构与重构建议；下方“实现状态”记录本轮已落地内容，未勾选项仍需运行时验收。
 >
 > 部署决策覆盖：基础服务需要对宿主机暴露可配置端口，Compose 默认暴露 PostgreSQL、Redis、RabbitMQ、
 > Elasticsearch 和 Kibana 的常用端口。这里的“对外”指宿主机/管理网可访问，不代表允许直接暴露互联网；
