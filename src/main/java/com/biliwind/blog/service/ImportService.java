@@ -109,10 +109,25 @@ public class ImportService {
             emit("end", "全部导入任务完成", null);
             return new ImportResult(true, "导入完成", categories, tags, posts, links, comments);
         } catch (Exception e) {
-            log.error("导入发生错误: " + e.getMessage(), e);
-            emit("error", "导入发生错误: " + e.getMessage(), e.toString());
-            return new ImportResult(false, "导入失败: " + e.getMessage(), 0, 0, 0, 0, 0);
+            String safeMessage = sanitizeErrorMessage(e.getMessage());
+            log.error("导入发生错误: " + safeMessage + " (" + e.getClass().getSimpleName() + ")");
+            emit("error", "导入发生错误: " + safeMessage, safeMessage);
+            return new ImportResult(false, "导入失败: " + safeMessage, 0, 0, 0, 0, 0);
         }
+    }
+
+    static String sanitizeErrorMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return "未知导入错误";
+        }
+        String sanitized = message
+                .replaceAll("(?i)(password|passwd|pwd|secret|token|api[_-]?key)(\\s*[=:]\\s*)[^\\s&;,)}]+",
+                        "$1$2[REDACTED]")
+                .replaceAll("(?i)(//[^/\\s:@]+):([^/@\\s]+)@", "$1:[REDACTED]@");
+        if (sanitized.length() > 500) {
+            return sanitized.substring(0, 500) + "...";
+        }
+        return sanitized;
     }
 
     private int importCategories(Connection conn, ImportContext ctx) throws SQLException {
