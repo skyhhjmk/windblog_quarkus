@@ -14,7 +14,8 @@
 > 边缘公开白名单批次同步及接收端显式字段映射、基础服务可配置宿主机端口。生产 CSP 已加入 Trusted Types 默认净化策略，公开
 > 动态 HTML 不再使用内联 style 属性；密码保护读链路只接受解锁后短期票据，受保护页面和下载均禁止共享缓存，
 > 实际下载流也有单文件字节上限；Redis 可用时下载请求数、字节预算和并发租约使用分布式计数，Redis 故障时
-> 有界降级到本地保护；用户中心背包列表改为批量加载。仍未把真实 CDN、反向代理、ClamAV、
+> 有界降级到本地保护；用户中心背包列表改为批量加载；管理图像/视频处理 API 使用独立的
+> `image_processing` resource/action；无效用户/管理员下载票据也进入 403/404 行为检测分母。仍未把真实 CDN、反向代理、ClamAV、
 > 多节点一致性、IPv6、磁盘满和 3-2-1 备份恢复演练的结果虚构为已完成；仓库已提供强制 GPG 加密备份和隔离恢复验证脚本，
 > 但这些项目必须在真实部署环境继续验收。
 
@@ -83,13 +84,10 @@ Quarkus REST + Qute SSR
 
 ### 3.1 P0：付费内容和内部网络
 
-#### P0-1 文章密码会进入明文 Cookie，且密码 Cookie 没有真正的访问票据语义
+#### P0-1 文章密码曾进入明文 Cookie，且密码 Cookie 没有真正的访问票据语义
 
-证据：
-
-- `src/main/java/com/biliwind/blog/controller/api/UserPostContentController.java:273-287` 的注释和实现明确从 `post_pw_{postId}` Cookie 读取用户上次验证的明文密码，再交给 `PostAccessService.verifyPassword`。
-- `Post` 实体的 `password` 字段只保存哈希是正确方向，但明文会在浏览器 Cookie、代理日志、导出 Cookie、浏览器备份和潜在 XSS 场景中扩散。
-- `PostPasswordFilter` 只解析 `X-Post-Password` header；页面过滤器与安全内容 API 的授权方式不一致。
+当前状态：已移除 `post_pw_{postId}` 明文 Cookie 和受保护读链路的明文密码兼容分支。密码只在
+`/api/user/post/password/{postId}` 或表单端点提交，成功后签发数据库保存摘要的短期票据；页面、区块、购买和媒体下载统一通过 `PostAccessPolicy`/票据校验。
 
 建议：
 
@@ -98,14 +96,10 @@ Quarkus REST + Qute SSR
 3. 页面、PJAX、`/api/user/post/content`、`/blocks`、购买接口和附件下载统一调用 `PostAccessPolicy`，不要继续分别判断 header/Cookie。
 4. 明文兼容迁移完成后，删除对明文文章密码的 `PasswordHasher.matches` 兼容分支和相关历史数据；无法迁移的文章标记为需重设。
 
-#### P0-2 付费附件可能退化为公开 URL，Local FS 的“签名 URL”并不签名
+#### P0-2 付费附件曾可能退化为公开 URL，Local FS 的“签名 URL”并不签名
 
-证据：
-
-- `PostController.java:214-216` 先取 `getBestSignedUrl`，失败后回退到 `pm.media.url`。
-- `UserPostContentController.java:104-112` 和 `:184-192` 在购买后直接返回 `pm.media.url`。
-- `LocalFsStorageClass.java` 的 `getSignedUrl` 直接返回 `getPublicUrl`，本地存储不存在授权签名。
-- `application.properties:265-266` 为 `/uploads/*` 设置了 30 天公开缓存；`UploadFileController.java:77` 对本地文件返回一年 `immutable` 缓存。
+当前状态：公开文章 read model 只返回附件名称和大小；受保护正文中的媒体引用改写为短期
+`/api/media/download/{ticket}`，管理原图使用一次性管理票据。Local FS 和对象存储的授权失败均不回退到公开 URL，流式下载统一 `no-store` 并受字节上限保护。
 
 影响：只要资源路径可猜、从 HTML/接口/Referer 泄露或被复制，付费附件和原图可以绕过购买检查直接下载。对家用云而言，这还会把原图下载和盗链流量全部打到家庭上行。
 
@@ -120,13 +114,11 @@ Quarkus REST + Qute SSR
 
 `StorageClass` 接口应拆成 `publicAssetUrl` 与 `authorizedDownloadUrl`；Local FS 不能伪装成 signed URL，必须由 Quarkus 流式代理校验票据，或在反向代理层使用内部重定向。任何授权失败都不能回退到 `media.url`。
 
-#### P0-3 外部媒体导入存在 SSRF 防护旁路
+#### P0-3 外部媒体导入曾存在 SSRF 防护旁路
 
-证据：
-
-- `SafeExternalHttpService.java:25-190` 是相对完整的公网请求实现，限制 scheme、解析地址、拒绝非公网、关闭自动重定向并限制 1 MiB 响应。
-- 但 `MediaManagementService.java:581-629` 仍自行使用 `HttpURLConnection`，重复解析 URL，`setInstanceFollowRedirects(true)`，并在每次循环前调用较弱的 `MediaSecurityHelper.isPrivateOrLoopbackAddress`。
-- `AdminImportApiController.java:39-50` 接收超级管理员可控的 `ImportRequest`；DTO `AdminImportDtos.java:28-32` 直接暴露 `allowLocalNetwork`。
+当前状态：媒体、链接监测和 AI 请求已使用共享公网地址分类与安全请求边界；主源码不再包含
+`HttpURLConnection`、自动重定向或 `allowLocalNetwork` 请求字段。AI Java HttpClient 的 DNS pinning、真实 DNS
+变化和外部 allowlist 仍需单独运行验收。
 
 影响：DNS 重绑定、重定向到内网、超大响应、协议边界和本地网络访问策略不一致。即使只有超级管理员能触发，也不能把内部网络读取能力做成普通请求字段。
 
@@ -141,12 +133,9 @@ Quarkus REST + Qute SSR
 
 #### P1-1 CORS、Cookie 和 Swagger 默认不适合公网
 
-证据：
-
-- `application.properties:87` 的 `cookie.secure=false`，用户认证 Cookie 与 CSRF Cookie 会在非 HTTPS 配置下工作。
-- `:249-256` 全局启用 CORS，开发环境接受任意来源，生产默认来源为 localhost，同时允许 credentials，并暴露 `Set-Cookie`。
-- `:90-93` `quarkus.swagger-ui.always-include=true`，管理文档路径由 `AdminJwtAuthFilter.java:47-50` 明确豁免认证。
-- `SecurityHeadersFilter.java` 使用 `Content-Security-Policy-Report-Only`，且允许 `unsafe-inline`，不是强制 CSP。
+当前状态：开发/测试 profile 仍允许本地便利配置，但普通生产启动和预检会拒绝不安全 Cookie、
+localhost/通配 CORS、全局 credentials、公开 Swagger、非强制 CSP/HSTS、未启用 Trusted Types 和不安全 CSP source；
+生产 CSP 使用 nonce 和显式 origin allowlist。真实反向代理头、TLS 和缓存行为仍需现场验收。
 
 建议：
 
@@ -158,7 +147,7 @@ Quarkus REST + Qute SSR
 
 #### P1-2 管理 API 虽有统一 JWT 过滤器，但权限模型仍不够显式
 
-`AdminJwtAuthFilter` 统一拦截 `/api/admin/*` 是好基础，但多数控制器只靠 `adminRequestContext` 是否有用户、`isSuperAdmin` 或局部 `mustFindOperator()` 判断。OpenAPI 的 `@SecurityRequirement` 只是文档元数据，不是授权执行器。
+`AdminJwtAuthFilter` 统一拦截 `/api/admin/*`，其后的 `AdminAuthorizationFilter` 已按 resource/action、超级管理员、step-up、幂等键和审计执行；OpenAPI 的 `@SecurityRequirement` 仍只是文档元数据，不是授权执行器。
 
 建议建立：
 
@@ -170,12 +159,7 @@ AdminAuthentication → AdminAuthorization(resource, action) → DomainPolicy �
 
 #### P1-3 敏感实体/设置/同步 payload 有泄露面
 
-证据：
-
-- `User.java` 的 `password` 是 public 字段且没有 `@JsonIgnore`。
-- 边缘同步当前只携带文章对作者的 ID 引用，不再同步完整 `User` 实体；但 `User` 的 `password` 仍是 public 字段，未来新增直接实体序列化时仍有回归风险。
-- `AdminSystemSettingsController` 当前已通过 `SystemSettingView`、递归敏感字段掩码和设置/历史分页返回，仍需继续保持新增设置字段的脱敏回归测试；边缘同步不接收设置 secret。
-- `AiProviderConfigDtos` 有脱敏逻辑，说明项目已经意识到问题，但设置、用户同步和若干实体没有统一 DTO 边界。
+当前状态：`User.password` 已使用 `@JsonIgnore`；用户公开/同步、媒体管理、系统设置、AI 配置和边缘同步均使用白名单视图或显式字段映射。设置和导入异常已递归/按键脱敏并限长，新增字段仍需持续补序列化回归测试。
 
 建议：
 
@@ -186,7 +170,9 @@ AdminAuthentication → AdminAuthorization(resource, action) → DomainPolicy �
 
 #### P1-4 文章 HTML/富文本能力与 CSP 不匹配
 
-`MarkdownHelper.java:16-46` 使用 Jsoup 过滤是正确方向，但允许 `style`、`div`、`svg`、`button` 和大量 `data-*` 属性；`PostRenderType` 还支持 HTML、Vditor、Quill 等非 Markdown 路径。强制 CSP 尚未开启，且当前 CSP 允许内联脚本/样式。
+`MarkdownHelper`、`PublicContentSanitizer` 和评论净化器对公开内容执行白名单清洗，移除 style、事件属性、SVG
+和不允许的外链图片，并统一补充链接安全属性；生产 CSP 已强制执行 nonce、Trusted Types 和显式媒体/连接 origin。
+不同富文本渲染类型仍需用真实浏览器对完整 payload 矩阵验收。
 
 建议把渲染内容分为三档：
 
