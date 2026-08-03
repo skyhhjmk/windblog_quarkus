@@ -173,4 +173,21 @@ class MarkdownHelperTest {
         assertTrue(html.contains("data-block-id=\"block-"));
         assertTrue(html.contains("踩坑记录在这里"));
     }
+
+    @Test
+    void shouldRemoveMarkdownHtmlScriptStyleSvgAndUnsafeImagePayloads() {
+        String markdown = "<script>alert(1)</script><div style=\"background:url(https://evil.example)\">text</div>\n\n"
+                + "<svg onload=alert(1)><path /></svg>\n\n"
+                + "![x](data:image/svg+xml;base64,AAAA)\n\n"
+                + "[bad](javascript:alert(1))";
+
+        String html = MarkdownHelper.toHtml(markdown);
+
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("<script"));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("style="));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("onload"));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("data:image"));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("javascript:"));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("evil.example"));
+    }
 }
