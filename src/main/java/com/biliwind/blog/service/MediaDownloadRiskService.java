@@ -26,6 +26,7 @@ public class MediaDownloadRiskService {
     private static final int SUBJECT_PER_MINUTE = 30;
     private static final int IP_PER_MINUTE = 60;
     private static final int SUBJECT_PER_TEN_MINUTES = 120;
+    private static final int TICKET_PER_TEN_MINUTES = 24;
     private static final long SUBJECT_BYTES_PER_TEN_MINUTES = 2L * 1024L * 1024L * 1024L;
     private static final long IP_BYTES_PER_TEN_MINUTES = 4L * 1024L * 1024L * 1024L;
     private static final long ARTICLE_BYTES_PER_TEN_MINUTES = 1L * 1024L * 1024L * 1024L;
@@ -52,12 +53,25 @@ public class MediaDownloadRiskService {
     }
 
     public Decision check(Long subjectId, Long postId, String clientIp, Long estimatedBytes) {
+        return check(subjectId, postId, clientIp, estimatedBytes, null);
+    }
+
+    public Decision check(Long subjectId, Long postId, String clientIp,
+                          Long estimatedBytes, Long ticketId) {
         if (estimatedBytes != null && estimatedBytes > maxSingleDownloadBytes) {
             securityMetricsService.increment("download.denied", "SIZE_LIMIT");
             return new Decision(false, "SIZE_LIMIT", 300);
         }
         String subjectKey = subjectId == null ? "anonymous" : String.valueOf(subjectId);
         String ipKey = digest(clientIp == null || clientIp.isBlank() ? "unknown" : clientIp);
+
+        if (ticketId != null && !allow(
+                "media-download:ticket:" + digest(String.valueOf(ticketId)) + ":ten-minutes",
+                TICKET_PER_TEN_MINUTES,
+                LONG_WINDOW)) {
+            securityMetricsService.increment("download.denied", "TICKET_BEHAVIOR_LIMIT");
+            return new Decision(false, "TICKET_BEHAVIOR_LIMIT", 600);
+        }
 
         if (estimatedBytes != null && estimatedBytes > 0) {
             if (!allowWeighted("media-download:subject:" + subjectKey + ":bytes:ten-minutes",

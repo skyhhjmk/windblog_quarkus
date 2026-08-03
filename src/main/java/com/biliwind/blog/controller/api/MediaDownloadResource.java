@@ -93,7 +93,7 @@ public class MediaDownloadResource {
         }
         String clientIp = resolveClientIp(headers);
         MediaDownloadRiskService.Decision risk = downloadRiskService.check(
-                userId, ticket.postId, clientIp, media.size);
+                userId, ticket.postId, clientIp, media.size, ticket.id);
         if (!risk.allowed()) {
             downloadAuditService.recordDenied(ticket, media.id,
                     clientIp, headers.getHeaderString("User-Agent"), headers.getHeaderString("Referer"),

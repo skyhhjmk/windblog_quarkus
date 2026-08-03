@@ -84,7 +84,7 @@ public class AdminMediaDownloadResource {
 
         String clientIp = resolveClientIp();
         MediaDownloadRiskService.Decision risk = downloadRiskService.check(
-                adminId, ticket.postId, clientIp, media.size);
+                adminId, ticket.postId, clientIp, media.size, ticket.id);
         if (!risk.allowed()) {
             downloadAuditService.recordDenied(ticket, media.id,
                     clientIp, userAgent, referer, risk.reason());

@@ -51,4 +51,36 @@ class MediaDownloadRiskServiceTest {
             availableField.setBoolean(cacheService, originalAvailability);
         }
     }
+
+    @Test
+    void shouldLimitRapidReuseOfOneDownloadTicketWhenRedisIsUnavailable() throws Exception {
+        Field availableField = CacheService.class.getDeclaredField("redisAvailable");
+        availableField.setAccessible(true);
+        boolean originalAvailability = availableField.getBoolean(cacheService);
+        availableField.setBoolean(cacheService, true);
+
+        Field valueCommandsField = CacheService.class.getDeclaredField("valueCommands");
+        valueCommandsField.setAccessible(true);
+        Object originalValueCommands = valueCommandsField.get(cacheService);
+        valueCommandsField.set(cacheService, null);
+
+        try {
+            Long subjectId = Math.abs(UUID.randomUUID().getMostSignificantBits());
+            Long ticketId = Math.abs(UUID.randomUUID().getMostSignificantBits());
+            String clientIp = "ticket-reuse-" + UUID.randomUUID();
+
+            for (int attempt = 0; attempt < 24; attempt++) {
+                assertTrue(riskService.check(subjectId, 8801L, clientIp, null, ticketId).allowed());
+            }
+
+            MediaDownloadRiskService.Decision denied = riskService.check(
+                    subjectId, 8801L, clientIp, null, ticketId);
+
+            assertEquals("TICKET_BEHAVIOR_LIMIT", denied.reason());
+            assertEquals(600, denied.retryAfterSeconds());
+        } finally {
+            valueCommandsField.set(cacheService, originalValueCommands);
+            availableField.setBoolean(cacheService, originalAvailability);
+        }
+    }
 }
