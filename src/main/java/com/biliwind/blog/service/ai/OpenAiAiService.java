@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.ai;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.AiProviderConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -87,7 +88,7 @@ public class OpenAiAiService implements AiService {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
-                            throw new RuntimeException("OpenAI 调用失败: " + response.statusCode() + " " + response.body());
+                            throw new RuntimeException("OpenAI 调用失败，HTTP " + response.statusCode());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
@@ -189,7 +190,7 @@ public class OpenAiAiService implements AiService {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
-                            throw new RuntimeException("OpenAI 审核调用失败: " + response.statusCode() + " " + response.body());
+                            throw new RuntimeException("OpenAI 审核调用失败，HTTP " + response.statusCode());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
@@ -213,7 +214,8 @@ public class OpenAiAiService implements AiService {
 
                             return res;
                         } catch (Exception e) {
-                            LOG.error("解析 OpenAI 审核响应失败: " + response.body(), e);
+                            LOG.error("解析 OpenAI 审核响应失败: "
+                                    + SensitiveMessageSanitizer.sanitize(response.body()), e);
                             AiResult fallback = new AiResult();
                             fallback.isSafe = true;
                             fallback.errorMessage = "解析 AI 响应失败，默认通过";
@@ -273,7 +275,7 @@ public class OpenAiAiService implements AiService {
                             HttpResponse.BodyHandlers.ofLines())
                         .whenComplete((res, err) -> {
                             if (err != null) {
-                                emitJson(emitter, "error", "[接口调用超时或异常]: " + err.getMessage());
+                                emitJson(emitter, "error", "[接口调用超时或异常]: " + safeError(err));
                                 emitter.complete();
                                 return;
                             }
@@ -285,7 +287,8 @@ public class OpenAiAiService implements AiService {
                                     bodyText = sb.toString();
                                 } catch (Exception ignored) {
                                 }
-                                emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]: " + bodyText);
+                                emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]: "
+                                        + SensitiveMessageSanitizer.sanitize(bodyText));
                                 emitter.complete();
                                 return;
                             }
@@ -328,12 +331,12 @@ public class OpenAiAiService implements AiService {
                             HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                             .whenComplete((res, err) -> {
                                 if (err != null) {
-                                    emitJson(emitter, "error", "[接口调用超时或异常]: " + err.getMessage());
+                                    emitJson(emitter, "error", "[接口调用超时或异常]: " + safeError(err));
                                     emitter.complete();
                                     return;
                                 }
                                 if (res.statusCode() >= 400) {
-                                    emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]: " + res.body());
+                                    emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]");
                                     emitter.complete();
                                     return;
                                 }
@@ -343,16 +346,23 @@ public class OpenAiAiService implements AiService {
                                     emitJson(emitter, "content", text);
                                     emitter.complete();
                                 } catch (Exception e) {
-                                    emitJson(emitter, "error", "[解析响应异常]: " + e.getMessage());
+                                    emitJson(emitter, "error", "[解析响应异常]: " + safeError(e));
                                     emitter.complete();
                                 }
                             });
                 }
             } catch (Exception e) {
-                emitJson(emitter, "error", "[请求发送异常]: " + e.getMessage());
+                emitJson(emitter, "error", "[请求发送异常]: " + safeError(e));
                 emitter.complete();
             }
         });
+    }
+
+    private String safeError(Throwable throwable) {
+        if (throwable == null) {
+            return "未知错误";
+        }
+        return SensitiveMessageSanitizer.sanitize(throwable.getMessage());
     }
 
     @Override
@@ -384,7 +394,7 @@ public class OpenAiAiService implements AiService {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
-                            LOG.warn("获取 OpenAI 模型列表失败: " + response.statusCode() + " " + response.body());
+                            LOG.warn("获取 OpenAI 模型列表失败，HTTP " + response.statusCode());
                             return List.of();
                         }
                         try {

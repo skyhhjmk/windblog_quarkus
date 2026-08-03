@@ -203,7 +203,7 @@ public class OllamaAiService implements AiService {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
-                            throw new RuntimeException("Ollama 审核失败: " + response.statusCode() + " " + response.body());
+                            throw new RuntimeException("Ollama 审核失败，HTTP " + response.statusCode());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
@@ -301,7 +301,7 @@ public class OllamaAiService implements AiService {
                                     return;
                                 }
                                 if (res.statusCode() >= 400) {
-                                    emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode() + ", body=" + res.body()));
+                                    emitter.fail(new RuntimeException("API 调用失败，HTTP " + res.statusCode()));
                                     return;
                                 }
                                 try {

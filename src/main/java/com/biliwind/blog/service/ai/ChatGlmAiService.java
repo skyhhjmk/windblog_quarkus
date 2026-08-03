@@ -81,7 +81,7 @@ public class ChatGlmAiService implements AiService {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
-                            throw new RuntimeException("ChatGLM 调用失败: " + response.statusCode() + " " + response.body());
+                            throw new RuntimeException("ChatGLM 调用失败，HTTP " + response.statusCode());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
@@ -194,7 +194,7 @@ public class ChatGlmAiService implements AiService {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
-                            throw new RuntimeException("ChatGLM 审核调用失败: " + response.statusCode() + " " + response.body());
+                            throw new RuntimeException("ChatGLM 审核调用失败，HTTP " + response.statusCode());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
@@ -307,7 +307,7 @@ public class ChatGlmAiService implements AiService {
                                     return;
                                 }
                                 if (res.statusCode() >= 400) {
-                                    emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode() + ", body=" + res.body()));
+                                    emitter.fail(new RuntimeException("API 调用失败，HTTP " + res.statusCode()));
                                     return;
                                 }
                                 try {

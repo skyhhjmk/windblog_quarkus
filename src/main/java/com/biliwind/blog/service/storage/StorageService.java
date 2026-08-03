@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.storage;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageClassEntity;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -419,7 +420,7 @@ public class StorageService {
         } catch (Exception e) {
             log.error("Storage sync failed for mediaId={}, provider={}, variant={}",
                     mediaId, storageClassName, variant.name(), e);
-            return new SyncResult(false, e.getMessage());
+            return new SyncResult(false, SensitiveMessageSanitizer.sanitize(e.getMessage()));
         }
     }
 

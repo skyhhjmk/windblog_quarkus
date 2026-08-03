@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.OutboxEvent;
 import com.biliwind.blog.context.AdminAuditRequestContext;
 import com.biliwind.blog.service.elasticsearch.EsSyncTask;
@@ -165,7 +166,7 @@ public class OutboxEventService {
                 markPublished(eventId, owner);
                 securityMetricsService.increment("outbox.published", event.eventType);
             } catch (Exception exception) {
-                markFailed(eventId, owner, exception.getMessage());
+                markFailed(eventId, owner, SensitiveMessageSanitizer.sanitize(exception.getMessage()));
                 securityMetricsService.increment("outbox.failed", event.eventType);
                 log.warnf("outbox event dispatch failed, id=%d, type=%s", eventId, event.eventType);
             }

@@ -1,8 +1,8 @@
 package com.biliwind.blog.service.edge;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
-import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -1048,10 +1048,11 @@ public class EdgeDataSyncService {
         if (errorMessage == null) {
             return null;
         }
-        if (errorMessage.length() <= 1000) {
-            return errorMessage;
+        String sanitized = SensitiveMessageSanitizer.sanitize(errorMessage);
+        if (sanitized.length() <= 1000) {
+            return sanitized;
         }
-        return errorMessage.substring(0, 1000);
+        return sanitized.substring(0, 1000);
     }
 
     private boolean containsSecret(String key, JsonNode value) {

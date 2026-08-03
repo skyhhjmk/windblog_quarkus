@@ -517,7 +517,8 @@ public class MediaManagementService {
                 return media;
             } catch (Exception exception) {
                 transactionalSelf.updateProcessingStatus(media.id, "FAILED", 0,
-                        "媒体处理任务入队失败: " + exception.getMessage());
+                        "媒体处理任务入队失败: "
+                                + SensitiveMessageSanitizer.sanitize(exception.getMessage()));
                 throw new IllegalStateException("媒体处理任务入队失败", exception);
             }
         }
@@ -570,7 +571,8 @@ public class MediaManagementService {
                     mediaId, detachedMedia.width, detachedMedia.height, metadata, generatedVariants);
         } catch (Exception exception) {
             Log.error("媒体处理失败: " + mediaId, exception);
-            selfProxy.get().updateProcessingStatus(mediaId, "FAILED", 0, exception.getMessage());
+            selfProxy.get().updateProcessingStatus(mediaId, "FAILED", 0,
+                    SensitiveMessageSanitizer.sanitize(exception.getMessage()));
             throw new IllegalStateException("媒体处理失败: " + mediaId, exception);
         }
     }
