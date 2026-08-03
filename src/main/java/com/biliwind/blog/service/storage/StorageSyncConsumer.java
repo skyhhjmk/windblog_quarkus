@@ -23,15 +23,24 @@ public class StorageSyncConsumer {
     @Inject
     com.biliwind.blog.service.ReliableInfrastructureTaskService reliableInfrastructureTaskService;
 
+    @Inject
+    StorageSyncMessageDecoder storageSyncMessageDecoder;
+
     @Incoming("storage-sync-in")
     @Acknowledgment(Acknowledgment.Strategy.MANUAL)
     @io.smallrye.reactive.messaging.annotations.Blocking
-    public CompletionStage<Void> consumeSyncTask(Message<StorageSyncMessage> message) {
+    public CompletionStage<Void> consumeSyncTask(Message<?> message) {
         if (nodeRoleService.isEdgeNode()) {
             log.info("从节点跳过存储同步消费");
             return message.ack();
         }
-        StorageSyncMessage msg = message.getPayload();
+        StorageSyncMessage msg;
+        try {
+            msg = storageSyncMessageDecoder.decode(message.getPayload());
+        } catch (Exception exception) {
+            log.error("存储同步消息无法解码，拒绝该消息", exception);
+            return message.nack(exception);
+        }
         log.info("开始处理存储同步: mediaId={}, provider={}, variant={}, retry={}",
                 msg.mediaId(), msg.storageClassName(), msg.variantType(), msg.retryCount());
 
@@ -57,7 +66,7 @@ public class StorageSyncConsumer {
         }
     }
 
-    private CompletionStage<Void> handleFailure(Message<StorageSyncMessage> message,
+    private CompletionStage<Void> handleFailure(Message<?> message,
                                                 StorageSyncMessage msg, String errorReason) {
         int nextRetryCount = msg.retryCount() + 1;
         if (nextRetryCount >= MAX_RETRY_COUNT) {
@@ -82,7 +91,7 @@ public class StorageSyncConsumer {
         return delaySeconds;
     }
 
-    private CompletionStage<Void> sendRetryAfterDelay(Message<StorageSyncMessage> message,
+    private CompletionStage<Void> sendRetryAfterDelay(Message<?> message,
                                                       StorageSyncMessage retryMessage,
                                                       long delaySeconds) {
         try {

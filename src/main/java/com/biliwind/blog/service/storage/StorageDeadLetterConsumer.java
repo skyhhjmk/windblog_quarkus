@@ -22,14 +22,23 @@ public class StorageDeadLetterConsumer {
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
+    @Inject
+    StorageSyncMessageDecoder storageSyncMessageDecoder;
+
     @Incoming("storage-sync-dlq")
     @Acknowledgment(Acknowledgment.Strategy.MANUAL)
     @jakarta.transaction.Transactional
-    public CompletionStage<Void> consumeDeadLetter(Message<StorageSyncMessage> message) {
+    public CompletionStage<Void> consumeDeadLetter(Message<?> message) {
         if (nodeRoleService.isEdgeNode()) {
             return message.ack();
         }
-        StorageSyncMessage msg = message.getPayload();
+        StorageSyncMessage msg;
+        try {
+            msg = storageSyncMessageDecoder.decode(message.getPayload());
+        } catch (Exception exception) {
+            Log.error("存储同步死信消息无法解码，拒绝该消息", exception);
+            return message.nack(exception);
+        }
         Log.warn("死信队列收到失败的同步任务: mediaId=" + msg.mediaId()
                 + ", provider=" + msg.storageClassName()
                 + ", variant=" + msg.variantType()
