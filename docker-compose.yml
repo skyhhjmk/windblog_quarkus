@@ -10,7 +10,7 @@ volumes:
 services:
   db:
     container_name: postgresdb
-    image: postgres:18
+    image: ${POSTGRES_IMAGE:-postgres:18}
     restart: unless-stopped
     cpus: "2.0"
     mem_limit: 2g
