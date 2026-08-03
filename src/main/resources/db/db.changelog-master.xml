@@ -103,4 +103,5 @@
     <include file="db/migration/100-add-content-access-ticket-device-hash.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/101-create-admin-revoked-tokens.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/102-add-home-cloud-hot-path-indexes.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/103-add-media-download-ticket-age.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

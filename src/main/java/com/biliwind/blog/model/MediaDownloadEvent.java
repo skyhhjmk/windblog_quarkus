@@ -38,6 +38,9 @@ public class MediaDownloadEvent extends PanacheEntityBase {
     @Column(name = "bytes_sent")
     public Long bytesSent;
 
+    @Column(name = "ticket_age_ms")
+    public Long ticketAgeMillis;
+
     @Column(nullable = false, length = 32)
     public String status;
 

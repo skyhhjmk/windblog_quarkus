@@ -77,7 +77,7 @@ public class AdminMediaDownloadResource {
                         + "where relation.media.id = ?1 and relation.post.id = ?2",
                 media.id, ticket.postId).firstResult();
         if (relation == null || !postAccessService.isProtectedMediaReference(relation)) {
-            downloadAuditService.recordDenied(ticket.postId, mediaId, ticket.id, adminId,
+            downloadAuditService.recordDenied(ticket, mediaId,
                     resolveClientIp(), userAgent, referer, "TICKET_RESOURCE_MISMATCH");
             return notFound();
         }
@@ -86,7 +86,7 @@ public class AdminMediaDownloadResource {
         MediaDownloadRiskService.Decision risk = downloadRiskService.check(
                 adminId, ticket.postId, clientIp, media.size);
         if (!risk.allowed()) {
-            downloadAuditService.recordDenied(ticket.postId, media.id, ticket.id, adminId,
+            downloadAuditService.recordDenied(ticket, media.id,
                     clientIp, userAgent, referer, risk.reason());
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
                     .header("Retry-After", risk.retryAfterSeconds())
@@ -96,7 +96,7 @@ public class AdminMediaDownloadResource {
         MediaDownloadRiskService.DownloadLease concurrencyLease =
                 downloadRiskService.tryAcquireConcurrency(adminId, ticket.postId, clientIp);
         if (concurrencyLease == null) {
-            downloadAuditService.recordDenied(ticket.postId, media.id, ticket.id, adminId,
+            downloadAuditService.recordDenied(ticket, media.id,
                     clientIp, userAgent, referer, "CONCURRENT_LIMIT");
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
                     .header("Retry-After", 60)

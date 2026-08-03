@@ -93,6 +93,7 @@ public class AdminMediaDownloadAuditController {
             item.put("subjectHash", event.subjectHash);
             item.put("referrerHash", event.referrerHash);
             item.put("bytesSent", event.bytesSent);
+            item.put("ticketAgeMillis", event.ticketAgeMillis);
             item.put("status", event.status);
             item.put("denyReason", event.denyReason);
             item.put("nodeId", event.nodeId);

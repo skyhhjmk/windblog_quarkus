@@ -12,6 +12,8 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.net.URI;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 
 @ApplicationScoped
 public class MediaDownloadAuditService {
@@ -33,9 +35,21 @@ public class MediaDownloadAuditService {
     @Transactional
     public void recordAllowed(ContentAccessTicket ticket, Long mediaId, String clientIp,
                               String userAgent, String referrer, Long bytesSent) {
+        Long ticketAgeMillis = calculateTicketAgeMillis(ticket, OffsetDateTime.now());
         record(ticket == null ? null : ticket.postId, mediaId, ticket == null ? null : ticket.id,
                 ticket == null ? null : ticket.subjectId, clientIp, userAgent, referrer,
-                bytesSent, "ALLOWED", null);
+                bytesSent, ticketAgeMillis, "ALLOWED", null);
+    }
+
+    @Transactional
+    public void recordDenied(ContentAccessTicket ticket, Long mediaId, String clientIp,
+                             String userAgent, String referrer, String denyReason) {
+        if (ticket == null) {
+            recordDenied(null, mediaId, null, null, clientIp, userAgent, referrer, denyReason);
+            return;
+        }
+        record(ticket.postId, mediaId, ticket.id, ticket.subjectId, clientIp, userAgent, referrer,
+                null, calculateTicketAgeMillis(ticket, OffsetDateTime.now()), "DENIED", denyReason);
     }
 
     @Transactional
@@ -48,19 +62,20 @@ public class MediaDownloadAuditService {
     public void recordDenied(Long postId, Long mediaId, Long ticketId, Long subjectId,
                              String clientIp, String userAgent, String referrer, String denyReason) {
         record(postId, mediaId, ticketId, subjectId, clientIp, userAgent, referrer,
-                null, "DENIED", denyReason);
+                null, null, "DENIED", denyReason);
     }
 
     @Transactional
     public void recordFailed(ContentAccessTicket ticket, Long mediaId, Long subjectId,
                              String clientIp, String userAgent, Long bytesSent, String reason) {
         record(ticket == null ? null : ticket.postId, mediaId, ticket == null ? null : ticket.id,
-                subjectId, clientIp, userAgent, null, bytesSent, "FAILED", reason);
+                subjectId, clientIp, userAgent, null, bytesSent,
+                calculateTicketAgeMillis(ticket, OffsetDateTime.now()), "FAILED", reason);
     }
 
     private void record(Long postId, Long mediaId, Long ticketId, Long subjectId,
                         String clientIp, String userAgent, String referrer, Long bytesSent,
-                        String status, String denyReason) {
+                        Long ticketAgeMillis, String status, String denyReason) {
         MediaDownloadEvent event = new MediaDownloadEvent();
         event.mediaId = mediaId;
         event.postId = postId;
@@ -70,6 +85,7 @@ public class MediaDownloadAuditService {
         event.userAgentHash = hash(userAgent);
         event.referrerHash = hashReferrer(referrer);
         event.bytesSent = bytesSent;
+        event.ticketAgeMillis = ticketAgeMillis;
         event.status = status;
         event.denyReason = denyReason;
         event.nodeId = nodeId;
@@ -78,6 +94,14 @@ public class MediaDownloadAuditService {
 
     public String hashSubject(Long userId) {
         return userId == null ? null : hash(String.valueOf(userId));
+    }
+
+    static Long calculateTicketAgeMillis(ContentAccessTicket ticket, OffsetDateTime now) {
+        if (ticket == null || ticket.createdAt == null || now == null) {
+            return null;
+        }
+        long ageMillis = Duration.between(ticket.createdAt, now).toMillis();
+        return Math.max(0L, ageMillis);
     }
 
     public String hashReferrer(String referrer) {

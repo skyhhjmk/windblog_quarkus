@@ -86,7 +86,7 @@ public class MediaDownloadResource {
                         + "where relation.media.id = ?1 and relation.post.id = ?2",
                 media.id, ticket.postId).firstResult();
         if (relation == null) {
-            downloadAuditService.recordDenied(ticket.postId, mediaId, ticket.id, userId,
+            downloadAuditService.recordDenied(ticket, mediaId,
                     resolveClientIp(headers), headers.getHeaderString("User-Agent"),
                     headers.getHeaderString("Referer"), "TICKET_RESOURCE_MISMATCH");
             return Response.status(Response.Status.NOT_FOUND).build();
@@ -95,7 +95,7 @@ public class MediaDownloadResource {
         MediaDownloadRiskService.Decision risk = downloadRiskService.check(
                 userId, ticket.postId, clientIp, media.size);
         if (!risk.allowed()) {
-            downloadAuditService.recordDenied(ticket.postId, media.id, ticket.id, userId,
+            downloadAuditService.recordDenied(ticket, media.id,
                     clientIp, headers.getHeaderString("User-Agent"), headers.getHeaderString("Referer"),
                     risk.reason());
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
@@ -106,7 +106,7 @@ public class MediaDownloadResource {
         MediaDownloadRiskService.DownloadLease concurrencyLease =
                 downloadRiskService.tryAcquireConcurrency(userId, ticket.postId, clientIp);
         if (concurrencyLease == null) {
-            downloadAuditService.recordDenied(ticket.postId, media.id, ticket.id, userId,
+            downloadAuditService.recordDenied(ticket, media.id,
                     clientIp, headers.getHeaderString("User-Agent"), headers.getHeaderString("Referer"),
                     "CONCURRENT_LIMIT");
             return Response.status(Response.Status.TOO_MANY_REQUESTS)
@@ -119,7 +119,7 @@ public class MediaDownloadResource {
                 media, post, userId, regionContext.getCurrentRegion());
         if (!access.allowed()) {
             downloadRiskService.releaseConcurrency(concurrencyLease);
-            downloadAuditService.recordDenied(ticket.postId, media.id, ticket.id, userId,
+            downloadAuditService.recordDenied(ticket, media.id,
                     clientIp, headers.getHeaderString("User-Agent"), headers.getHeaderString("Referer"),
                     access.reason());
             Response.Status status = "PURCHASE_REQUIRED".equals(access.reason())
