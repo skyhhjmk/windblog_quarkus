@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
@@ -637,7 +638,8 @@ public class SearchController {
             return new ElasticsearchResult(hits, searchResult.total(), true, false, true);
 
         } catch (ElasticsearchPostSearchService.ElasticsearchUnavailableException e) {
-            log.warnf("Elasticsearch 服务不可用，回退到数据库搜索: %s", e.getMessage());
+            log.warnf("Elasticsearch 服务不可用，回退到数据库搜索: %s",
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
         } catch (Exception e) {
             log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);

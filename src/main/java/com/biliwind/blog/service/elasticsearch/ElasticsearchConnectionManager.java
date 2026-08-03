@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.runtime.StartupEvent;
@@ -175,8 +176,9 @@ public class ElasticsearchConnectionManager {
                     return;
                 }
             } catch (Exception e) {
-                lastError.set(e.getMessage());
-                log.debugf("ElasticSearch connection attempt failed: %s", e.getMessage());
+                String safeMessage = SensitiveMessageSanitizer.sanitize(e.getMessage());
+                lastError.set(safeMessage);
+                log.debugf("ElasticSearch connection attempt failed: %s", safeMessage);
             }
 
             try {
@@ -202,7 +204,7 @@ public class ElasticsearchConnectionManager {
         try {
             recordHealthCheckResult(checkElasticsearchConnection(), null);
         } catch (Exception e) {
-            recordHealthCheckResult(false, e.getMessage());
+            recordHealthCheckResult(false, SensitiveMessageSanitizer.sanitize(e.getMessage()));
         }
     }
 

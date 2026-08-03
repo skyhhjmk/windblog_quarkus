@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.storage.StorageConfigProtector;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -216,7 +217,7 @@ public class EmailDeliveryService {
             delivery.channelId = channelId;
             return new DeliveryOutcome(channelId, null);
         } catch (Exception exception) {
-            return new DeliveryOutcome(channelId, exception.getMessage());
+            return new DeliveryOutcome(channelId, SensitiveMessageSanitizer.sanitize(exception.getMessage()));
         } finally {
             if (transport != null) {
                 try {

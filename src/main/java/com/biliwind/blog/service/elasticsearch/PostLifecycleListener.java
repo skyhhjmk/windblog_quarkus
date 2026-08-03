@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.elasticsearch;
 
 import com.biliwind.blog.common.CacheService;
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.service.edge.NodeRoleService;
@@ -74,7 +75,8 @@ public class PostLifecycleListener {
         try {
             processPostUpdate(event.getPostId());
         } catch (Exception e) {
-            log.errorf("同步文章到 Elasticsearch 失败: %d, 错误: %s", event.getPostId(), e.getMessage());
+            log.errorf("同步文章到 Elasticsearch 失败: %d, 错误: %s", event.getPostId(),
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
             sendToQueue(event.getPostId(), "UPDATE");
         }
     }
@@ -104,7 +106,8 @@ public class PostLifecycleListener {
             try {
                 postSearchService.deletePostIndex(postId);
             } catch (Exception e) {
-                log.errorf("删除不存在文章的索引失败（可忽略）: %d, 错误: %s", postId, e.getMessage());
+            log.errorf("删除不存在文章的索引失败（可忽略）: %d, 错误: %s", postId,
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
             }
             return;
         }
@@ -150,7 +153,7 @@ public class PostLifecycleListener {
             log.infof("ES 同步任务已写入 outbox: postId=%d, action=%s", postId, actionType);
         } catch (Exception e) {
             log.errorf("写入 ES outbox 失败，不绕过统一 worker 直接发布: %d, 错误: %s",
-                    postId, e.getMessage());
+                    postId, SensitiveMessageSanitizer.sanitize(e.getMessage()));
             throw new IllegalStateException("写入 ES outbox 失败", e);
         }
     }

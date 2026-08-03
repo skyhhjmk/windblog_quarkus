@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.annotation.PostConstruct;
@@ -98,7 +99,8 @@ public class ElasticsearchIndexService {
                 return;
             } catch (Exception e) {
                 attempt++;
-                log.error("[LOG INDEX] Failed to initialize log index (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage(), e);
+                log.error("[LOG INDEX] Failed to initialize log index (attempt " + attempt + "/"
+                        + maxRetries + "): " + SensitiveMessageSanitizer.sanitize(e.getMessage()), e);
                 log.error("[LOG INDEX] Exception type: " + e.getClass().getName());
                 if (attempt < maxRetries) {
                     try {
@@ -152,7 +154,8 @@ public class ElasticsearchIndexService {
                     }
                 }
             } catch (Exception e) {
-                log.warn("Error checking/deleting legacy template " + templateName + ": " + e.getMessage());
+                log.warn("Error checking/deleting legacy template " + templateName + ": "
+                        + SensitiveMessageSanitizer.sanitize(e.getMessage()));
             }
         }
     }
@@ -200,7 +203,7 @@ public class ElasticsearchIndexService {
         if (response.statusCode() == 200) {
             log.info("ILM policy created successfully");
         } else {
-            log.error("ILM policy creation failed: " + response.body());
+            log.error("ILM policy creation failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new RuntimeException("ILM policy creation failed: " + response.statusCode());
         }
     }
@@ -224,7 +227,7 @@ public class ElasticsearchIndexService {
         if (response.statusCode() == 200) {
             log.info("Index template created successfully");
         } else {
-            log.error("Index template creation failed: " + response.body());
+            log.error("Index template creation failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new RuntimeException("Index template creation failed: " + response.statusCode());
         }
     }
@@ -256,9 +259,9 @@ public class ElasticsearchIndexService {
         if (response.statusCode() == 200) {
             log.info("Initial index created successfully");
         } else if (response.statusCode() == 400) {
-            log.warn("Initial index may already exist: " + response.body());
+            log.warn("Initial index may already exist: " + SensitiveMessageSanitizer.sanitize(response.body()));
         } else {
-            log.error("Initial index creation failed: " + response.body());
+            log.error("Initial index creation failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new RuntimeException("Initial index creation failed: " + response.statusCode());
         }
     }

@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.SearchContentHelper;
@@ -87,7 +88,8 @@ public class ElasticsearchPostSearchService {
                 return;
             } catch (Exception e) {
                 attempt++;
-                log.error("[POST INDEX] Failed to initialize article index (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage(), e);
+                log.error("[POST INDEX] Failed to initialize article index (attempt " + attempt + "/"
+                        + maxRetries + "): " + SensitiveMessageSanitizer.sanitize(e.getMessage()), e);
                 log.error("[POST INDEX] Exception type: " + e.getClass().getName());
                 if (attempt < maxRetries) {
                     try {
@@ -190,7 +192,8 @@ public class ElasticsearchPostSearchService {
         if (response.statusCode() == 200) {
             log.info("ILM policy created successfully");
         } else {
-            log.warn("ILM policy creation failed or already exists: " + response.body());
+            log.warn("ILM policy creation failed or already exists: "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
         }
     }
 
@@ -336,7 +339,8 @@ public class ElasticsearchPostSearchService {
         if (response.statusCode() == 200) {
             log.info("Article index template created successfully");
         } else {
-            log.error("Article index template creation failed: " + response.body());
+            log.error("Article index template creation failed: "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new RuntimeException("Article index template creation failed: " + response.statusCode());
         }
     }
@@ -363,9 +367,11 @@ public class ElasticsearchPostSearchService {
         if (response.statusCode() == 200) {
             log.info("Initial article index created successfully");
         } else if (response.statusCode() == 400) {
-            log.warn("Initial article index may already exist: " + response.body());
+            log.warn("Initial article index may already exist: "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
         } else {
-            log.error("Initial article index creation failed: " + response.body());
+            log.error("Initial article index creation failed: "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new RuntimeException("Initial article index creation failed: " + response.statusCode());
         }
     }
@@ -417,7 +423,8 @@ public class ElasticsearchPostSearchService {
                 .build();
         HttpResponse<String> response = connectionManager.sendRequest(request);
         if (response.statusCode() != 200) {
-            throw new IllegalStateException("分词预览失败: " + response.body());
+            throw new IllegalStateException("分词预览失败: "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
         }
 
         List<String> tokens = new ArrayList<>();
@@ -543,7 +550,8 @@ public class ElasticsearchPostSearchService {
         if (response.statusCode() == 200 || response.statusCode() == 201) {
             log.infof("Article indexed successfully: %d", post.id);
         } else {
-            log.errorf("Article indexing failed: %d - %s", post.id, response.body());
+            log.errorf("Article indexing failed: %d - %s", post.id,
+                    SensitiveMessageSanitizer.sanitize(response.body()));
         }
     }
 
@@ -568,7 +576,8 @@ public class ElasticsearchPostSearchService {
         if (response.statusCode() == 200 || response.statusCode() == 404) {
             log.infof("Article index deleted successfully: %d", postId);
         } else {
-            log.errorf("Article index deletion failed: %d - %s", postId, response.body());
+            log.errorf("Article index deletion failed: %d - %s", postId,
+                    SensitiveMessageSanitizer.sanitize(response.body()));
         }
     }
 
@@ -675,7 +684,7 @@ public class ElasticsearchPostSearchService {
         if (response.statusCode() == 200) {
             return parseSearchResponse(response.body());
         } else {
-            log.error("Search failed: " + response.body());
+            log.error("Search failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new ElasticsearchUnavailableException("Search failed: " + response.statusCode());
         }
     }
@@ -726,7 +735,7 @@ public class ElasticsearchPostSearchService {
                 }
             }
         } else {
-            log.warn("Suggest failed: " + response.body());
+            log.warn("Suggest failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
         }
 
         return results;

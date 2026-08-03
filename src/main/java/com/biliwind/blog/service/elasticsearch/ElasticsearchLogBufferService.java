@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -151,7 +152,7 @@ public class ElasticsearchLogBufferService {
                 message,
                 loggerName,
                 threadName,
-                throwable != null ? throwable.getMessage() : null
+                throwable == null ? null : SensitiveMessageSanitizer.sanitize(throwable.getMessage())
         );
 
         // 只有连接就绪且标记为可发送时才直接发送
@@ -327,7 +328,8 @@ public class ElasticsearchLogBufferService {
         } catch (Exception e) {
             // 发送失败，将日志放回队列
             batch.forEach(logQueue::offer);
-            log.debugf("批量发送日志失败，已回退到队列: %s", e.getMessage());
+            log.debugf("批量发送日志失败，已回退到队列: %s",
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
         }
     }
 
@@ -352,11 +354,13 @@ public class ElasticsearchLogBufferService {
                 sentLogs.incrementAndGet();
                 return true;
             } else {
-                log.debugf("发送日志到 ElasticSearch 失败: %s", response.body());
+                log.debugf("发送日志到 ElasticSearch 失败: %s",
+                        SensitiveMessageSanitizer.sanitize(response.body()));
                 return false;
             }
         } catch (Exception e) {
-            log.debugf("发送日志到 ElasticSearch 失败: %s", e.getMessage());
+            log.debugf("发送日志到 ElasticSearch 失败: %s",
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
             return false;
         }
     }
@@ -382,7 +386,8 @@ public class ElasticsearchLogBufferService {
         var response = connectionManager.sendRequest(request);
 
         if (response.statusCode() != 200) {
-            throw new IOException("Bulk insert failed: " + response.body());
+            throw new IOException("Bulk insert failed: "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
         }
     }
 

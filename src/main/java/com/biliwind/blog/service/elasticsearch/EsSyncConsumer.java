@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.elasticsearch;
 
+import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import io.smallrye.reactive.messaging.annotations.Blocking;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -55,7 +56,8 @@ public class EsSyncConsumer {
             log.infof("ES 同步任务处理成功: %d", task.postId());
             return message.ack();
         } catch (Exception e) {
-            log.errorf("ES 同步任务处理失败: %d, 错误: %s. 消息将保留在队列中重试。", task.postId(), e.getMessage());
+            log.errorf("ES 同步任务处理失败: %d, 错误: %s. 消息将保留在队列中重试。", task.postId(),
+                    SensitiveMessageSanitizer.sanitize(e.getMessage()));
             // 返回 nack 以便 RabbitMQ 进行重试 (根据配置可能会进入死信队列或重新入队)
             return message.nack(e);
         }
