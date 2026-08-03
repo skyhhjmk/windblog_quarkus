@@ -119,11 +119,11 @@ class PostAccessServiceTest {
     }
 
     @Test
-    void shouldVerifyPasswordWhenBothAreNull() {
+    void shouldRejectPasswordWhenProtectedPostHashIsMissing() {
         Post post = new Post();
         post.password = null;
 
-        assertTrue(postAccessService.verifyPassword(post, null));
+        assertFalse(postAccessService.verifyPassword(post, null));
     }
 
     @Test

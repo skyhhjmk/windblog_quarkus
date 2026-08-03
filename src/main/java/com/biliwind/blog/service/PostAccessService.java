@@ -117,10 +117,8 @@ public class PostAccessService {
     }
 
     public boolean verifyPassword(Post post, String submittedPassword) {
-        if (submittedPassword == null && post.password == null) {
-            return true;
-        }
-        if (submittedPassword == null || post.password == null) {
+        if (post == null || submittedPassword == null || submittedPassword.isBlank()
+                || post.password == null || post.password.isBlank()) {
             return false;
         }
         return passwordHasher.matches(submittedPassword, post.password);
