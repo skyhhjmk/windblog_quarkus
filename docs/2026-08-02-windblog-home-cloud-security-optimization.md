@@ -23,6 +23,8 @@
 > `hnsw/vector` 索引定义处失败，原因是当前 `postgres:18` 容器缺少对应的 `vector` 动态库。此前的 427 文件结果保留为历史
 > 隔离演练证据，不能替代本次数据卷的最新备份验收。随后通过 `POSTGRES_IMAGE=pgvector/pgvector:pg18` 在不删除数据卷的前提下
 > 对齐运行镜像，数据库恢复 healthy；最新加密备份和隔离恢复已再次通过，数据库归档可读且 427 个媒体文件全部恢复。
+> 该次 `pg_dump` 仍提示 `reavita` 的 collation version 与当前容器操作系统不一致；这不影响归档读取校验，但生产维护窗口应先重建受影响对象，再执行
+> `ALTER DATABASE reavita REFRESH COLLATION VERSION`，并重新检查执行计划。
 
 > 数据库热点路径已补充 `102-add-home-cloud-hot-path-indexes.sql`，覆盖公开文章分页、修订、媒体引用、
 > 评论、受保护票据、下载审计和 outbox 领取查询；真实生产执行计划和迁移锁表时间仍需现场确认。
