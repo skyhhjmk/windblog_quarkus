@@ -200,12 +200,22 @@ $checks.Add("admin unauthorised")
 $downloadProbe = Invoke-CloudRequest (Join-CloudUri $baseUri "api/media/download/not-a-real-ticket")
 Assert-Condition ($downloadProbe.StatusCode -ge 400 -and $downloadProbe.StatusCode -lt 500) `
     "伪造媒体下载票据未被拒绝，实际 HTTP $($downloadProbe.StatusCode)。"
-$checks.Add("download ticket denied")
+$downloadCacheControl = Get-HeaderValue $downloadProbe "Cache-Control"
+Assert-Condition ($downloadCacheControl -match "(?i)(^|,|\s)no-store(\s|,|$)") `
+    "受保护下载拒绝响应未设置 Cache-Control: no-store。"
+$checks.Add("download ticket denied and uncached")
 
 if (-not $SkipComposeCheck) {
     Assert-Condition (Test-Path -LiteralPath $ComposeFile) "Compose 文件不存在：$ComposeFile"
     $composeJson = docker compose -f $ComposeFile config --format json | ConvertFrom-Json
-    foreach ($serviceName in @("db", "redis", "rabbitmq", "elasticsearch", "kibana")) {
+    $expectedTargetPorts = @{
+        db = 5432
+        redis = 6379
+        rabbitmq = 5672
+        elasticsearch = 9200
+        kibana = 5601
+    }
+    foreach ($serviceName in $expectedTargetPorts.Keys) {
         $service = $composeJson.services.$serviceName
         if ($null -eq $service) {
             continue
@@ -213,6 +223,14 @@ if (-not $SkipComposeCheck) {
         $ports = @($service.ports)
         Assert-Condition ($ports.Count -gt 0) `
             "服务 $serviceName 未映射宿主机端口；请确认 *_HOST_PORT 配置。"
+        $targetPort = [int]$expectedTargetPorts[$serviceName]
+        $targetMapping = @($ports | Where-Object { [int]$_.target -eq $targetPort })
+        Assert-Condition ($targetMapping.Count -gt 0) `
+            "服务 $serviceName 未暴露目标端口 $targetPort。"
+        foreach ($mapping in $targetMapping) {
+            Assert-Condition ([int]$mapping.published -ge 1 -and [int]$mapping.published -le 65535) `
+                "服务 $serviceName 的宿主机端口无效：$($mapping.published)。"
+        }
     }
     $checks.Add("compose exposed services")
 }
