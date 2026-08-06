@@ -34,6 +34,10 @@
 > 同日使用 `scripts/verify-windblog-edge-template.ps1` 在 `nginx:1.27-alpine` 容器中完成边缘模板 `nginx -t`，现代 HTTP/2 配置无弃用警告；真实证书、CDN 缓存、回源和 allowlist 仍需现场验证。
 > 同日使用 `scripts/verify-windblog-multi-node-smoke.ps1` 启动两个独立 prod JVM，共享 PostgreSQL/Redis 交替请求，得到 6 次 200、14 次 429；
 > Redis DB、Rabbit 临时账号、进程和临时文件均在结束时清理。该结果不代表跨主机或真实边缘节点一致性。
+> 2026-08-06 修复边缘同步测试夹具使用普通 `@Transactional` 导致共享开发库持久化的问题，改为 `@TestTransaction` 回滚；
+> 已清理历史 38 个 `edge-sync-user-*` 用户及其 38 篇 `edge-post-*` 测试文章，数据库复核匹配数量均为 0。新增
+> `scripts/cleanup-windblog-edge-test-fixtures.ps1`，默认只读、显式 `-Apply` 才清理，并在发现额外引用时保留用户并失败。
+> 隔离 HTTP 端口运行边缘同步窄测为 8 tests、0 failure/error/skip；随后全量后端回归为 248 tests、0 failure/error/skip。
 > 管理端受保护原图已补充一次性 `ADMIN_MEDIA_DOWNLOAD` 票据入口，要求 `media.download_original` 权限、step-up、
 > 幂等键和下载审计；浏览器必须在管理 Bearer 会话下使用该票据。
 > AI、ES 和存储同步的消费重试/死信重放也统一写入 outbox，不再在容量或数据库异常时偷偷绕过租约直接发 RabbitMQ。
