@@ -10,10 +10,10 @@ import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -42,7 +42,7 @@ class EdgeSyncDataApplyServiceTest {
     EntityManager entityManager;
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldRejectPrivateEntitiesBeforeDeserializingPayload() {
         String settingKey = "edge-sync-private-test-" + UUID.randomUUID();
         SyncDataRequest request = SyncDataRequest.newBuilder()
@@ -59,7 +59,7 @@ class EdgeSyncDataApplyServiceTest {
     }
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldUsePublicWhitelistForEveryFullSyncPayload() throws Exception {
         for (EdgeDataSyncService.FullSyncItem item : edgeDataSyncService.buildPublicFullSyncSnapshot(false)) {
             JsonNode payload = objectMapper.readTree(item.payload());
@@ -71,7 +71,7 @@ class EdgeSyncDataApplyServiceTest {
     }
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldReadFullSyncThroughBoundedKeysetBatch() {
         EdgeDataSyncService.PublicFullSyncCounts counts = edgeDataSyncService.loadPublicFullSyncCounts();
         assertTrue(counts.total() >= 0);
@@ -80,7 +80,7 @@ class EdgeSyncDataApplyServiceTest {
     }
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldApplyMediaThroughPublicWhitelistOnly() {
         Media media = new Media();
         media.storageKey = "edge-test-original";
@@ -144,7 +144,7 @@ class EdgeSyncDataApplyServiceTest {
     }
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldNotResurrectLocallyDeletedMediaFromPublicSnapshot() {
         Media media = new Media();
         media.storageKey = "edge-deleted-original";
@@ -179,7 +179,7 @@ class EdgeSyncDataApplyServiceTest {
     }
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldCreateNewMediaWithEmptyStorageClassMapWhenSnapshotOmitsIt() {
         long mediaId = 900_000_000L + UUID.randomUUID().getMostSignificantBits() % 100_000_000L;
         if (mediaId <= 0) {
@@ -210,7 +210,7 @@ class EdgeSyncDataApplyServiceTest {
     }
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldCreateNewTagAndCategoryWithSynchronizedIds() {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         long tagId = 910_000_000L + UUID.randomUUID().getMostSignificantBits() % 10_000_000L;
@@ -267,7 +267,7 @@ class EdgeSyncDataApplyServiceTest {
     }
 
     @Test
-    @Transactional
+    @TestTransaction
     void shouldCreateNewPostAndPublicRevisionWithoutPassword() {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         long postId = 920_000_000L + UUID.randomUUID().getMostSignificantBits() % 10_000_000L;

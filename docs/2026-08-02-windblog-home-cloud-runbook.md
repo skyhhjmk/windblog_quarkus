@@ -180,6 +180,16 @@ $env:WINDBLOG_IT_DB_NAME = 'windblog'
 
 脚本输出的本地耗时仅用于回归阈值，生产应保存真实数据量下的执行计划和首次建索引锁表记录。
 
+## 清理本地边缘同步测试夹具
+
+边缘同步测试会创建 `edge-sync-user-*` 和 `edge-post-*` 夹具。测试代码使用 `@TestTransaction` 回滚，避免新数据进入共享开发库；历史运行已经写入的数据必须先预览，再显式清理：
+
+```powershell
+.\scripts\cleanup-windblog-edge-test-fixtures.ps1 -DbContainer postgresdb -DbUser postgres -DbName postgres
+.\scripts\cleanup-windblog-edge-test-fixtures.ps1 -DbContainer postgresdb -DbUser postgres -DbName postgres -Apply
+```
+
+第一条命令只读列出匹配用户和文章；第二条命令在事务中删除匹配文章及其级联测试关联，并只删除不再被文章/版本引用的测试用户。脚本发现其他引用时会保留用户并失败，不会扩大删除范围。生产数据库不得运行此脚本。
 ## 备份与恢复
 
 目标是 3-2-1：主机在线数据、同机或外接加密备份、异地/云端加密备份。数据库备份应包含
