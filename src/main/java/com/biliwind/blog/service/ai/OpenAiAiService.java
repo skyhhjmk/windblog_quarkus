@@ -72,6 +72,64 @@ public class OpenAiAiService implements AiService {
                 });
     }
 
+    @Override
+    public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
+            String targetLanguage, Map<String, String> fields) {
+        if (!isConfigReady(config)) {
+            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置未就绪"));
+        }
+
+        try {
+            String prompt = buildTranslationPrompt(sourceLanguage, targetLanguage, fields);
+            Map<String, Object> payload = buildPayload(config, prompt, false);
+            payload.put("response_format", Map.of("type", "json_object"));
+            String bodyJson = objectMapper.writeValueAsString(payload);
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(resolveUri(config))
+                    .timeout(TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+            attachApiKeyHeader(builder, config);
+
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
+                    AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
+                        if (response.statusCode() >= 400) {
+                            throw new RuntimeException("OpenAI 翻译调用失败，HTTP " + response.statusCode());
+                        }
+                        try {
+                            JsonNode root = objectMapper.readTree(response.body());
+                            JsonNode translated = objectMapper.readTree(extractTextFromResponse(root));
+                            AiResult result = new AiResult();
+                            for (String field : fields.keySet()) {
+                                JsonNode value = translated.get(field);
+                                if (value == null || !value.isTextual()) {
+                                    throw new RuntimeException("AI 翻译结果缺少字段: " + field);
+                                }
+                                result.contents.put(field, value.asText());
+                            }
+                            return result;
+                        } catch (Exception e) {
+                            throw new RuntimeException("解析 OpenAI 翻译响应失败", e);
+                        }
+                    });
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private String buildTranslationPrompt(String sourceLanguage, String targetLanguage,
+            Map<String, String> fields) throws Exception {
+        Map<String, Object> input = new HashMap<>();
+        input.put("sourceLanguage", sourceLanguage);
+        input.put("targetLanguage", targetLanguage);
+        input.put("fields", fields);
+        String json = objectMapper.writeValueAsString(input);
+        return "你是专业技术文章译者。将输入文章字段从 sourceLanguage 翻译成 targetLanguage。"
+                + "只返回一个 JSON 对象，必须包含 fields 中的全部字段名，值必须是字符串。"
+                + "保留 Markdown 标题层级、列表、代码块、HTML、链接 URL、图片 URL 和 data-block-id 等标记，"
+                + "不要翻译代码、URL、属性值或标记，只翻译自然语言。不要添加解释。\n输入：" + json;
+    }
+
     private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String lang, String text) {
         try {
             URI uri = resolveUri(config);

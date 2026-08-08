@@ -73,6 +73,51 @@ public class ChatGlmAiService implements AiService {
                 });
     }
 
+    @Override
+    public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
+            String targetLanguage, Map<String, String> fields) {
+        if (!isConfigReady(config)) {
+            return CompletableFuture.failedFuture(new RuntimeException("ChatGLM 配置未就绪"));
+        }
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("sourceLanguage", sourceLanguage);
+            input.put("targetLanguage", targetLanguage);
+            input.put("fields", fields);
+            String prompt = "你是专业技术文章译者。请将以下 JSON 中 fields 的自然语言从 "
+                    + sourceLanguage + " 翻译为 " + targetLanguage
+                    + "，只返回包含全部原字段名的 JSON 对象。保留 Markdown、代码块、HTML、链接和图片 URL，"
+                    + "不要翻译代码、URL、属性值或标记，不要添加解释。\n"
+                    + objectMapper.writeValueAsString(input);
+            Map<String, Object> payload = buildPayload(config, prompt, false);
+            payload.put("response_format", Map.of("type", "json_object"));
+            HttpRequest request = buildRequest(config, payload);
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
+                    AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
+                if (response.statusCode() >= 400) {
+                    throw new RuntimeException("ChatGLM 翻译调用失败，HTTP " + response.statusCode());
+                }
+                try {
+                    JsonNode root = objectMapper.readTree(response.body());
+                    JsonNode translated = objectMapper.readTree(extractTextFromResponse(root));
+                    AiResult result = new AiResult();
+                    for (String field : fields.keySet()) {
+                        JsonNode value = translated.get(field);
+                        if (value == null || !value.isTextual()) {
+                            throw new RuntimeException("AI 翻译结果缺少字段: " + field);
+                        }
+                        result.contents.put(field, value.asText());
+                    }
+                    return result;
+                } catch (Exception e) {
+                    throw new RuntimeException("解析 ChatGLM 翻译响应失败", e);
+                }
+            });
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String lang, String text) {
         try {
             Map<String, Object> payload = buildPayload(config, buildPrompt(lang, text), false);

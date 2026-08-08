@@ -84,6 +84,17 @@ class AdminPostApiControllerIT {
     }
 
     @Test
+    void shouldRejectUnauthorizedTranslation() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"sourceLanguage\":\"zh-cn\",\"targetLanguage\":\"en-us\","
+                        + "\"title\":\"标题\",\"summary\":\"摘要\",\"contentMarkdown\":\"正文\"}")
+                .when().post("/api/admin/posts/1/translation")
+                .then()
+                .statusCode(401);
+    }
+
+    @Test
     void shouldRejectUnauthorizedAccessWithQueryParams() {
         given()
                 .when().get("/api/admin/posts?page=1&pageSize=10&status=1")

@@ -10,6 +10,15 @@ public interface AiService {
     CompletionStage<AiResult> summarize(com.biliwind.blog.model.AiProviderConfig config, Map<String, String> content);
 
     /**
+     * Translate structured article fields while preserving their names and markup.
+     */
+    default CompletionStage<AiResult> translate(com.biliwind.blog.model.AiProviderConfig config,
+            String sourceLanguage, String targetLanguage, Map<String, String> fields) {
+        return java.util.concurrent.CompletableFuture.failedFuture(
+                new UnsupportedOperationException("该 AI 提供商不支持文章翻译"));
+    }
+
+    /**
      * Moderate content using AI (e.g. for spam or toxic content).
      */
     CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String prompt, String content);

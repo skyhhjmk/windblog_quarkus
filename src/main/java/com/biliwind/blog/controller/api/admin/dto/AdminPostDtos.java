@@ -35,7 +35,7 @@ public final class AdminPostDtos {
                 List<String> contentDeclarations) {
         }
 
-        public record PostUpdateRequest(
+    public record PostUpdateRequest(
                         String slug,
                         Map<String, String> title,
                         Map<String, String> summary,
@@ -57,6 +57,22 @@ public final class AdminPostDtos {
                         List<Long> tagIds,
                         List<String> visibilityRegions,
                         List<String> contentDeclarations) {
+        }
+
+        public record PostTranslationRequest(
+                        String sourceLanguage,
+                        String targetLanguage,
+                        String title,
+                        String summary,
+                        String contentMarkdown) {
+        }
+
+        public record PostTranslationResponse(
+                        String sourceLanguage,
+                        String targetLanguage,
+                        String title,
+                        String summary,
+                        String contentMarkdown) {
         }
 
         public record AdminPostItem(

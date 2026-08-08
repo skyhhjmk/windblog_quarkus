@@ -8,6 +8,7 @@ import com.biliwind.blog.service.edge.PostSyncedEvent;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.event.Event;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -39,6 +40,9 @@ public class AdminPostApiController {
 
     @Inject
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
+
+    @Inject
+    com.biliwind.blog.service.ai.AiManager aiManager;
 
     @Inject
     MediaManagementService mediaService;
@@ -311,6 +315,55 @@ public class AdminPostApiController {
     }
 
     @POST
+    @Path("/{id}/translation")
+    @Transactional
+    @Blocking
+    @Operation(summary = "使用 AI 翻译文章内容")
+    @APIResponse(responseCode = "200", description = "翻译成功")
+    @APIResponse(responseCode = "400", description = "翻译参数或 AI 配置无效")
+    @APIResponse(responseCode = "404", description = "文章不存在")
+    public PostTranslationResponse translate(@PathParam("id") Long id, PostTranslationRequest request) {
+        Post post = mustFindPost(id);
+        if (request == null) {
+            throw badRequest("翻译请求不能为空");
+        }
+
+        String sourceLanguage = normalizeLanguage(request.sourceLanguage(), "sourceLanguage");
+        String targetLanguage = normalizeLanguage(request.targetLanguage(), "targetLanguage");
+        if (sourceLanguage.equals(targetLanguage)) {
+            throw badRequest("源语言和目标语言不能相同");
+        }
+        if (request.title() == null || request.title().isBlank()) {
+            throw badRequest("文章标题不能为空");
+        }
+        if (request.contentMarkdown() == null || request.contentMarkdown().isBlank()) {
+            throw badRequest("文章正文不能为空");
+        }
+
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("title", request.title());
+        fields.put("summary", request.summary() == null ? "" : request.summary());
+        fields.put("contentMarkdown", request.contentMarkdown());
+
+        try {
+            com.biliwind.blog.service.ai.AiResult result = aiManager
+                    .translate(sourceLanguage, targetLanguage, fields)
+                    .toCompletableFuture()
+                    .join();
+            String translatedTitle = requiredTranslation(result, "title");
+            String translatedSummary = requiredTranslation(result, "summary");
+            String translatedContent = requiredTranslation(result, "contentMarkdown");
+            auditService.log("post", post.id, "ai_translation", null,
+                    Map.of("sourceLanguage", sourceLanguage, "targetLanguage", targetLanguage));
+            return new PostTranslationResponse(sourceLanguage, targetLanguage,
+                    translatedTitle, translatedSummary, translatedContent);
+        } catch (java.util.concurrent.CompletionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
+        }
+    }
+
+    @POST
     @Path("/{id}/revisions/{revisionNumber}/publish")
     @Transactional
     @Operation(summary = "发布指定文章版本")
@@ -482,6 +535,32 @@ public class AdminPostApiController {
 
     private short statusCode(PostStatus status) {
         return status == null ? PostStatus.DRAFT.getCode() : status.getCode();
+    }
+
+    private String normalizeLanguage(String language, String fieldName) {
+        if (language == null || language.isBlank()) {
+            throw badRequest(fieldName + " 不能为空");
+        }
+        String normalized = language.trim().replace('_', '-').toLowerCase(Locale.ROOT);
+        if (!normalized.matches("^[a-z]{2,8}(?:-[a-z0-9]{2,8})*$")) {
+            throw badRequest(fieldName + " 必须是有效的语言代码");
+        }
+        return normalized;
+    }
+
+    private String requiredTranslation(com.biliwind.blog.service.ai.AiResult result, String field) {
+        if (result == null || result.contents == null || !result.contents.containsKey(field)) {
+            throw badRequest("AI 翻译结果缺少字段: " + field);
+        }
+        return result.contents.get(field);
+    }
+
+    private String safeErrorMessage(Throwable exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return "未知错误";
+        }
+        return message.length() > 300 ? message.substring(0, 300) : message;
     }
 
     private List<String> validateContentDeclarations(List<String> requestedDeclarations) {

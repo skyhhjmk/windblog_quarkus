@@ -29,6 +29,16 @@ public class MockAiService implements AiService {
     }
 
     @Override
+    public CompletionStage<AiResult> translate(com.biliwind.blog.model.AiProviderConfig config,
+            String sourceLanguage, String targetLanguage, Map<String, String> fields) {
+        AiResult result = new AiResult();
+        for (Map.Entry<String, String> entry : fields.entrySet()) {
+            result.contents.put(entry.getKey(), "AI Translation (" + targetLanguage + "): " + entry.getValue());
+        }
+        return CompletableFuture.completedStage(result);
+    }
+
+    @Override
     public CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String prompt, String content) {
         // Simple mock moderation: if content contains "spam", it's not safe
         boolean safe = true;

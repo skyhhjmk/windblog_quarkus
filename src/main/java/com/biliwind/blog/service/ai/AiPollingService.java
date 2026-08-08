@@ -85,6 +85,25 @@ public class AiPollingService {
         return tryNodesForSummarize(nodes, startIdx, 0, content);
     }
 
+    public CompletionStage<AiResult> translate(AiProviderConfig groupConfig, String sourceLanguage,
+            String targetLanguage, Map<String, String> fields) {
+        List<NodeInfo> nodes = extractNodes(groupConfig);
+        AiPollingAlgorithm algorithm = extractAlgorithm(groupConfig);
+        if (nodes.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中配置的节点列表为空"));
+        }
+
+        NodeInfo selected = pickNext(nodes, algorithm, groupConfig.id);
+        int startIndex = 0;
+        for (int i = 0; i < nodes.size(); i++) {
+            if (nodes.get(i).id().equals(selected.id())) {
+                startIndex = i;
+                break;
+            }
+        }
+        return tryNodesForTranslate(nodes, startIndex, 0, sourceLanguage, targetLanguage, fields);
+    }
+
     public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String prompt, String content) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
@@ -169,6 +188,31 @@ public class AiPollingService {
                     }
                     return CompletableFuture.completedStage(res);
                 }).thenCompose(s -> s);
+    }
+
+    private CompletionStage<AiResult> tryNodesForTranslate(List<NodeInfo> nodes, int startIndex, int retryCount,
+            String sourceLanguage, String targetLanguage, Map<String, String> fields) {
+        if (nodes.isEmpty() || retryCount >= nodes.size()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点调用翻译失败"));
+        }
+
+        int currentIndex = (startIndex + retryCount) % nodes.size();
+        NodeInfo selected = nodes.get(currentIndex);
+        AiProviderConfig config = configService.getById(selected.id()).orElse(null);
+        if (config == null || !config.enabled || config.type != AiConfigType.PROVIDER) {
+            return tryNodesForTranslate(nodes, startIndex, retryCount + 1, sourceLanguage, targetLanguage, fields);
+        }
+
+        return aiManager.executeTranslate(config, sourceLanguage, targetLanguage, fields)
+                .handle((result, error) -> {
+                    if (error != null) {
+                        log.warn("轮询节点 {} 翻译失败: {}", config.name,
+                                SensitiveMessageSanitizer.sanitize(error.getMessage()));
+                        return tryNodesForTranslate(nodes, startIndex, retryCount + 1,
+                                sourceLanguage, targetLanguage, fields);
+                    }
+                    return CompletableFuture.completedStage(result);
+                }).thenCompose(stage -> stage);
     }
 
     private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, int startIdx, int retryCount, String prompt, String content) {

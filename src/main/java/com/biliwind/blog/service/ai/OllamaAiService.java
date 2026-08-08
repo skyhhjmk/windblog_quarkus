@@ -74,6 +74,59 @@ public class OllamaAiService implements AiService {
                 });
     }
 
+    @Override
+    public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
+            String targetLanguage, Map<String, String> fields) {
+        if (!isConfigReady(config)) {
+            return CompletableFuture.failedFuture(new RuntimeException("Ollama 配置不可用"));
+        }
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("sourceLanguage", sourceLanguage);
+            input.put("targetLanguage", targetLanguage);
+            input.put("fields", fields);
+            String prompt = "Translate the natural language values in this JSON from " + sourceLanguage
+                    + " to " + targetLanguage + ". Return only a JSON object with the same field names."
+                    + " Preserve Markdown, code, HTML, URLs, image URLs and block IDs; do not translate markup or code.\n"
+                    + objectMapper.writeValueAsString(input);
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("model", chooseModel(config, "llama3"));
+            payload.put("prompt", prompt);
+            payload.put("format", "json");
+            payload.put("stream", false);
+            String bodyJson = objectMapper.writeValueAsString(payload);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(resolveUri(config, "/api/generate"))
+                    .timeout(TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
+                    .build();
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
+                    AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
+                if (response.statusCode() >= 400) {
+                    throw new RuntimeException("Ollama 翻译调用失败，code=" + response.statusCode());
+                }
+                try {
+                    JsonNode root = objectMapper.readTree(response.body());
+                    JsonNode translated = objectMapper.readTree(extractTextFromResponse(root));
+                    AiResult result = new AiResult();
+                    for (String field : fields.keySet()) {
+                        JsonNode value = translated.get(field);
+                        if (value == null || !value.isTextual()) {
+                            throw new RuntimeException("AI 翻译结果缺少字段: " + field);
+                        }
+                        result.contents.put(field, value.asText());
+                    }
+                    return result;
+                } catch (Exception e) {
+                    throw new RuntimeException("解析 Ollama 翻译响应失败", e);
+                }
+            });
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     /**
      * 异步调用 Ollama generate API，不阻塞当前线程
      */

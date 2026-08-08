@@ -105,6 +105,48 @@ public class AiManager {
         return executeModerate(best, prompt, content);
     }
 
+    public CompletionStage<AiResult> translate(String sourceLanguage, String targetLanguage,
+            Map<String, String> fields) {
+        List<AiProviderConfig> allConfigs = configService.listAll();
+        List<AiProviderConfig> configs = new ArrayList<>();
+        for (AiProviderConfig config : allConfigs) {
+            if (config.enabled) {
+                configs.add(config);
+            }
+        }
+
+        if (configs.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("当前没有任何已启用的 AI 配置"));
+        }
+
+        AiProviderConfig selected = null;
+        for (AiProviderConfig config : configs) {
+            if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                selected = config;
+                break;
+            }
+        }
+        if (selected == null) {
+            selected = configs.get(0);
+        }
+
+        return executeTranslate(selected, sourceLanguage, targetLanguage, fields);
+    }
+
+    public CompletionStage<AiResult> executeTranslate(AiProviderConfig config, String sourceLanguage,
+            String targetLanguage, Map<String, String> fields) {
+        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+            return pollingService.get().translate(config, sourceLanguage, targetLanguage, fields);
+        }
+
+        AiService service = findService(config);
+        if (service == null) {
+            return CompletableFuture.failedFuture(
+                    new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+        }
+        return service.translate(config, sourceLanguage, targetLanguage, fields);
+    }
+
     public CompletionStage<AiResult> executeSummarize(AiProviderConfig config, Map<String, String> content) {
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
             return pollingService.get().summarize(config, content);
@@ -150,4 +192,3 @@ public class AiManager {
         return svc.fetchModels(config);
     }
 }
-
