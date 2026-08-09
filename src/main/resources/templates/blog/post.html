@@ -3,6 +3,12 @@
 {pageTitle ?: postTitle ?: '文章详情'}
 {/title}
 
+{#head}
+{#if ampUrl.or(null)}
+    <link rel="amphtml" href="{ampUrl}"/>
+{/if}
+{/head}
+
 {#navPath}
 ~/windblog / post / {postSlug ?: '未知'}
 {/navPath}

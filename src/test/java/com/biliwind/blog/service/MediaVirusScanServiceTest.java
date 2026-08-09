@@ -53,6 +53,26 @@ class MediaVirusScanServiceTest {
         assertEquals(MediaVirusScanService.Status.UNAVAILABLE, result.status());
     }
 
+    @Test
+    void shouldRespondToClamAvPing() throws Exception {
+        try (ServerSocket server = new ServerSocket(0)) {
+            Thread probeThread = startFakeProbeServer(server, "PONG\0");
+
+            MediaVirusScanService service = new MediaVirusScanService();
+            service.enabled = true;
+            service.required = true;
+            service.host = "127.0.0.1";
+            service.port = server.getLocalPort();
+            service.timeout = Duration.ofSeconds(3);
+
+            MediaVirusScanService.ProbeResult result = service.probe();
+
+            probeThread.join(3000);
+            assertEquals(MediaVirusScanService.ProbeStatus.AVAILABLE, result.status());
+            assertEquals(true, result.available());
+        }
+    }
+
     private Thread startFakeClamAv(ServerSocket server, String response) {
         Thread scanner = new Thread(() -> {
             try (Socket socket = server.accept();
@@ -67,6 +87,21 @@ class MediaVirusScanServiceTest {
         });
         scanner.start();
         return scanner;
+    }
+
+    private Thread startFakeProbeServer(ServerSocket server, String response) {
+        Thread probe = new Thread(() -> {
+            try (Socket socket = server.accept()) {
+                socket.getInputStream().readNBytes(6);
+                OutputStream output = socket.getOutputStream();
+                output.write(response.getBytes(StandardCharsets.US_ASCII));
+                output.flush();
+            } catch (IOException exception) {
+                throw new IllegalStateException(exception);
+            }
+        });
+        probe.start();
+        return probe;
     }
 
     private void readInstream(DataInputStream input) throws IOException {

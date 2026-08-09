@@ -62,7 +62,7 @@ public class DeploymentPackageService {
     String eventHashSecret;
 
     @Inject
-    @ConfigProperty(name = "blog.url", defaultValue = "http://localhost:8080")
+    @ConfigProperty(name = "windblog.site.public-url", defaultValue = "http://localhost:8080")
     String blogUrl;
 
     @Inject

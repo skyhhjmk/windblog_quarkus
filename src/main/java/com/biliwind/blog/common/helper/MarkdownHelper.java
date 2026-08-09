@@ -104,7 +104,7 @@ public final class MarkdownHelper {
 
     private static String getBlogUrl() {
         return ConfigProvider.getConfig()
-                .getOptionalValue("blog.url", String.class)
+                .getOptionalValue("windblog.site.public-url", String.class)
                 .orElse("http://localhost:8080");
     }
 

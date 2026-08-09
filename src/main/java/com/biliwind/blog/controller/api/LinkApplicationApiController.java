@@ -2,7 +2,7 @@ package com.biliwind.blog.controller.api;
 
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkType;
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.PublicUrlService;
 import com.biliwind.blog.service.link.LinkApplicationRateLimitService;
 import com.biliwind.blog.service.link.LinkProbeResult;
 import com.biliwind.blog.service.link.LinkProbeService;
@@ -46,7 +46,7 @@ public class LinkApplicationApiController {
     LinkPublicTokenService linkPublicTokenService;
 
     @Inject
-    ConfigManager configManager;
+    PublicUrlService publicUrlService;
 
     @Inject
     ClientIpResolver clientIpResolver;
@@ -66,7 +66,7 @@ public class LinkApplicationApiController {
             throw new ClientErrorException("该站点已经申请或已存在", Response.Status.CONFLICT);
         }
 
-        String siteUrl = configManager.getString("site_info", "site_url", "");
+        String siteUrl = publicUrlService.getBaseUrl();
         LinkProbeResult probeResult = linkProbeService.probe(normalizedUrl, siteUrl);
         if (!probeResult.reachable()) {
             throw new ClientErrorException(

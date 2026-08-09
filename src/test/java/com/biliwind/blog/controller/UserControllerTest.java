@@ -41,4 +41,42 @@ class UserControllerTest {
                 .statusCode(200)
                 .body(containsString("name=\"redirect\" value=\"/\""));
     }
+
+    @Test
+    void shouldRenderPasswordRecoveryPage() {
+        given()
+                .when()
+                .get("/user/forgot-password")
+                .then()
+                .statusCode(200)
+                .body(containsString("找回密码"))
+                .body(containsString("forgotPasswordForm"));
+    }
+
+    @Test
+    void shouldRenderExpiredPasswordResetPageWithoutToken() {
+        given()
+                .when()
+                .get("/user/reset-password")
+                .then()
+                .statusCode(200)
+                .body(containsString("链接无效或已过期"));
+    }
+
+    @Test
+    void shouldRenderLegalPages() {
+        given()
+                .when()
+                .get("/terms")
+                .then()
+                .statusCode(200)
+                .body(containsString("用户协议"));
+
+        given()
+                .when()
+                .get("/privacy")
+                .then()
+                .statusCode(200)
+                .body(containsString("隐私政策"));
+    }
 }

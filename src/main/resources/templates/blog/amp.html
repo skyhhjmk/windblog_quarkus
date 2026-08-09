@@ -1,0 +1,45 @@
+<!doctype html>
+<html amp lang="{language ?: 'zh-CN'}">
+<head>
+    <meta charset="utf-8">
+    <script async src="https://cdn.ampproject.org/v0.js"></script>
+    <meta name="viewport" content="width=device-width,minimum-scale=1,initial-scale=1">
+    <link rel="canonical" href="{canonicalUrl}">
+    <title>{title}</title>
+    <meta name="description" content="{description ?: ''}">
+    <style amp-boilerplate>
+        body { -webkit-animation: -amp-start 8s steps(1,end) 0s 1 normal both; -moz-animation: -amp-start 8s steps(1,end) 0s 1 normal both; -ms-animation: -amp-start 8s steps(1,end) 0s 1 normal both; animation: -amp-start 8s steps(1,end) 0s 1 normal both }
+        @-webkit-keyframes -amp-start { from { visibility: hidden } to { visibility: visible } }
+        @-moz-keyframes -amp-start { from { visibility: hidden } to { visibility: visible } }
+        @-ms-keyframes -amp-start { from { visibility: hidden } to { visibility: visible } }
+        @-o-keyframes -amp-start { from { visibility: hidden } to { visibility: visible } }
+        @keyframes -amp-start { from { visibility: hidden } to { visibility: visible } }
+    </style>
+    <noscript><style amp-boilerplate>body { -webkit-animation: none; -moz-animation: none; -ms-animation: none; animation: none }</style></noscript>
+    <style amp-custom>
+        :root { color-scheme: light dark }
+        body { margin: 0; background: #f8fafc; color: #1e293b; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.75 }
+        main { max-width: 800px; margin: 0 auto; padding: 24px 20px 56px }
+        header { border-bottom: 1px solid #e2e8f0; margin-bottom: 28px; padding-bottom: 22px }
+        h1 { font-size: clamp(2rem, 7vw, 3rem); line-height: 1.15; margin: 0 0 12px }
+        p.meta { color: #64748b; font-size: .9rem; margin: 0 }
+        article { font-size: 1.08rem }
+        article a { color: #0369a1 }
+        article pre { overflow: auto; background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 8px }
+        article code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace }
+        article blockquote { border-left: 4px solid #38bdf8; margin-left: 0; padding-left: 16px; color: #475569 }
+        amp-img { display: block; margin: 20px 0 }
+        footer { border-top: 1px solid #e2e8f0; color: #64748b; font-size: .85rem; margin-top: 36px; padding-top: 18px }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <h1>{title}</h1>
+        <p class="meta">{publishedAt ?: ''}</p>
+    </header>
+    <article>{postBody.raw}</article>
+    <footer>这是 WindBlog 的轻量 AMP 页面 · <a href="{canonicalUrl}">返回标准页面</a></footer>
+</main>
+</body>
+</html>

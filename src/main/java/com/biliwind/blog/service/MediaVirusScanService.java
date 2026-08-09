@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -98,6 +99,54 @@ public class MediaVirusScanService {
         return required;
     }
 
+    /**
+     * Performs a bounded ClamAV PING without uploading or persisting a sample file.
+     * This is intentionally separate from media scanning so the admin page can
+     * verify the service without creating an audit or media record.
+     */
+    public ProbeResult probe() {
+        if (!enabled) {
+            return new ProbeResult(ProbeStatus.DISABLED, false, "病毒扫描未启用");
+        }
+
+        try (Socket socket = new Socket()) {
+            int timeoutMillis = probeTimeoutMillis();
+            socket.connect(new InetSocketAddress(host, port), timeoutMillis);
+            socket.setSoTimeout(timeoutMillis);
+            socket.getOutputStream().write("zPING\0".getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+
+            String response = readProbeResponse(socket.getInputStream());
+            if (response.contains("PONG")) {
+                return new ProbeResult(ProbeStatus.AVAILABLE, true, "ClamAV 已响应 PONG");
+            }
+            return new ProbeResult(ProbeStatus.UNAVAILABLE, false, "ClamAV 返回了无法识别的响应");
+        } catch (Exception exception) {
+            return new ProbeResult(ProbeStatus.UNAVAILABLE, false, "ClamAV 连接失败");
+        }
+    }
+
+    public Configuration getConfiguration() {
+        return new Configuration(enabled, required, host, port, timeout);
+    }
+
+    private int probeTimeoutMillis() {
+        long configuredMillis = timeout == null ? 3000L : timeout.toMillis();
+        return (int) Math.max(1000L, Math.min(configuredMillis, 3000L));
+    }
+
+    private String readProbeResponse(InputStream input) throws IOException {
+        StringBuilder response = new StringBuilder();
+        for (int index = 0; index < 32; index++) {
+            int value = input.read();
+            if (value < 0 || value == 0 || value == '\n' || value == '\r') {
+                break;
+            }
+            response.append((char) value);
+        }
+        return response.toString();
+    }
+
     public record ScanResult(Status status, String reason) {
         public boolean isClean() {
             return status == Status.CLEAN || status == Status.DISABLED;
@@ -109,5 +158,17 @@ public class MediaVirusScanService {
         INFECTED,
         UNAVAILABLE,
         DISABLED
+    }
+
+    public enum ProbeStatus {
+        AVAILABLE,
+        UNAVAILABLE,
+        DISABLED
+    }
+
+    public record ProbeResult(ProbeStatus status, boolean available, String message) {
+    }
+
+    public record Configuration(boolean enabled, boolean required, String host, int port, Duration timeout) {
     }
 }

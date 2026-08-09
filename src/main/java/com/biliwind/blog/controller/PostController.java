@@ -58,6 +58,12 @@ public class PostController {
     com.biliwind.blog.service.ConfigManager configManager;
 
     @Inject
+    com.biliwind.blog.service.PublicUrlService publicUrlService;
+
+    @Inject
+    com.biliwind.blog.service.AmpPageService ampPageService;
+
+    @Inject
     com.biliwind.blog.service.MediaAccessService mediaAccessService;
 
     @Inject
@@ -168,6 +174,10 @@ public class PostController {
         }
 
         long postPrice = snapshot.postPrice();
+        String ampUrl = null;
+        if (ampPageService.isEnabled() && snapshot.visibility() == 0 && postPrice <= 0) {
+            ampUrl = buildAmpUrl(slug, resolvedLang);
+        }
         PostBodyView postBody = resolvePostBody(snapshot.renderType(), localizedContent);
         if (postBody.html()) {
             // Affiliate token issuance is intentionally kept off the public read model;
@@ -272,6 +282,7 @@ public class PostController {
                 .data("relatedStoreItems", snapshot.relatedStoreItems())
                 .data("repostOriginalUrl", repostLicenseService.buildPostUrl(slug))
                 .data("canonicalUrl", buildCanonicalUrl(slug))
+                .data("ampUrl", ampUrl)
                 .data("ogData", buildOgData(slug, seoTitle, pageDescription))
                 .data("jsonLd", buildJsonLd(snapshot, seoTitle, pageDescription, slug));
 
@@ -304,11 +315,14 @@ public class PostController {
     }
 
     private String buildCanonicalUrl(String slug) {
-        String baseUrl = configManager.getString("site_info", "url", "http://localhost:8080");
-        if (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        return publicUrlService.buildPath("/post/" + slug);
+    }
+
+    private String buildAmpUrl(String slug, String language) {
+        if (LanguageConstant.DEFAULT_LANG.equalsIgnoreCase(language)) {
+            return publicUrlService.buildPath("/amp/post/" + slug);
         }
-        return baseUrl + "/post/" + slug;
+        return publicUrlService.buildPath("/" + language + "/amp/post/" + slug);
     }
 
     private String resolveSeoTitle(

@@ -39,6 +39,16 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
         responseContext.getHeaders().putSingle("Referrer-Policy", "strict-origin-when-cross-origin");
         responseContext.getHeaders().putSingle("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
         responseContext.getHeaders().putSingle("X-Frame-Options", "DENY");
+        if (isAmpRequest(requestContext)) {
+            responseContext.getHeaders().putSingle("Content-Security-Policy",
+                    "default-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
+                            + "script-src https://cdn.ampproject.org; style-src 'unsafe-inline'; "
+                            + "img-src 'self' https:; connect-src 'self'; font-src 'self' https:");
+            if (hstsEnabled) {
+                responseContext.getHeaders().putSingle("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+            }
+            return;
+        }
         String nonce = cspNonceContext.getNonce();
         String imageSources = appendConfiguredSources("'self'", cspImageSources);
         String connectSources = appendConfiguredSources("'self'", cspConnectSources);
@@ -52,6 +62,11 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
         if (hstsEnabled) {
             responseContext.getHeaders().putSingle("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         }
+    }
+
+    private boolean isAmpRequest(ContainerRequestContext requestContext) {
+        String path = requestContext.getUriInfo().getPath();
+        return path != null && (path.startsWith("amp/") || path.contains("/amp/"));
     }
 
     private String appendConfiguredSources(String base, String configuredSources) {

@@ -14,7 +14,10 @@ public class ConfigTemplateData {
     }
 
     public static String baseUrl() {
-        return configManager().getString("site_info", "url", "http://localhost:8080");
+        return PublicUrlService.normalize(
+                org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                        .getOptionalValue("windblog.site.public-url", String.class)
+                        .orElse("http://localhost:8080"));
     }
 
     public static String siteTitle() {

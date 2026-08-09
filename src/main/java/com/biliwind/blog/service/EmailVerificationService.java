@@ -11,26 +11,33 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Base64;
+import java.util.List;
 
 @ApplicationScoped
 public class EmailVerificationService {
     @Inject
     EmailDeliveryService emailDeliveryService;
     @Inject
-    ConfigManager configManager;
-    @Inject
     EmailTemplateRenderer emailTemplateRenderer;
+
+    @Inject
+    PublicUrlService publicUrlService;
 
     @Transactional
     public void sendVerification(User user) {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<EmailVerificationToken> activeTokens = EmailVerificationToken.list(
+                "userId = ?1 and consumedAt is null", user.id);
+        for (EmailVerificationToken activeToken : activeTokens) {
+            activeToken.consumedAt = now;
+        }
         String token = createToken();
         EmailVerificationToken verificationToken = new EmailVerificationToken();
         verificationToken.userId = user.id;
         verificationToken.tokenHash = hashToken(token);
-        verificationToken.expiresAt = OffsetDateTime.now().plusHours(24);
+        verificationToken.expiresAt = now.plusHours(24);
         verificationToken.persist();
-        String siteUrl = configManager.getString("site_info", "site_url", "http://localhost:8080");
-        String verificationUrl = siteUrl + "/user/verify-email?token=" + token;
+        String verificationUrl = publicUrlService.buildPath("/user/verify-email?token=" + token);
         String html = emailTemplateRenderer.render("验证邮箱", "您好，" + user.username + "：", "请在 24 小时内完成邮箱验证。", "验证邮箱", verificationUrl);
         emailDeliveryService.queue("REGISTRATION_VERIFICATION", user.email, "请验证您的邮箱", html);
     }

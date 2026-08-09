@@ -206,7 +206,7 @@
             const formData = new URLSearchParams();
             const inputs = form.querySelectorAll('input[name]');
             inputs.forEach(input => {
-                if (input.name !== 'confirmPassword' && (input.type !== 'checkbox' || input.checked)) {
+                if (input.type !== 'checkbox' || input.checked) {
                     formData.append(input.name, input.value);
                 }
             });
@@ -505,10 +505,116 @@
         bindLogout();
         bindLoginForm();
         bindRegisterForm();
+        bindForgotPasswordForm();
+        bindResendVerificationForm();
+        bindResetPasswordForm();
         bindUserWallet();
         bindBackpackItems();
         bindSubscriptions();
         applyDynamicPublicStyles();
+    }
+
+    function bindForgotPasswordForm() {
+        const form = document.getElementById('forgotPasswordForm');
+        const message = document.getElementById('forgotPasswordMessage');
+        if (!form) return;
+
+        form.onsubmit = async function (event) {
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            window.setLoading(button, true);
+            try {
+                const response = await fetch('/user/api/forgot-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-XSRF-TOKEN': window.getCsrfToken()
+                    },
+                    body: new URLSearchParams(new FormData(form)).toString()
+                });
+                const result = await response.json();
+                if (message) {
+                    message.textContent = result.message || '请求已提交';
+                    message.classList.remove('hidden');
+                }
+                window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error');
+            } catch (_) {
+                window.showToast(window.i18n.network_error || '网络错误，请稍后重试', 'error');
+            } finally {
+                window.setLoading(button, false);
+            }
+        };
+    }
+
+    function bindResetPasswordForm() {
+        const form = document.getElementById('resetPasswordForm');
+        const message = document.getElementById('resetPasswordMessage');
+        if (!form) return;
+
+        form.onsubmit = async function (event) {
+            event.preventDefault();
+            const password = form.querySelector('[name="password"]');
+            const confirmPassword = form.querySelector('[name="confirmPassword"]');
+            if (password && confirmPassword && password.value !== confirmPassword.value) {
+                if (message) {
+                    message.textContent = window.i18n.password_mismatch || '两次输入的密码不一致';
+                    message.classList.remove('hidden');
+                }
+                return;
+            }
+            const button = form.querySelector('button[type="submit"]');
+            window.setLoading(button, true);
+            try {
+                const response = await fetch('/user/api/reset-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-XSRF-TOKEN': window.getCsrfToken()
+                    },
+                    body: new URLSearchParams(new FormData(form)).toString()
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message || '密码重置失败');
+                window.showToast(result.message || '密码已重置', 'success');
+                window.setTimeout(() => {
+                    window.location.href = result.redirect || '/user/login';
+                }, 800);
+            } catch (error) {
+                if (message) {
+                    message.textContent = error.message || '密码重置失败';
+                    message.classList.remove('hidden');
+                }
+                window.showToast(error.message || '密码重置失败', 'error');
+            } finally {
+                window.setLoading(button, false);
+            }
+        };
+    }
+
+    function bindResendVerificationForm() {
+        const form = document.getElementById('resendVerificationForm');
+        if (!form) return;
+        form.onsubmit = async function (event) {
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            window.setLoading(button, true);
+            try {
+                const response = await fetch('/user/api/resend-verification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-XSRF-TOKEN': window.getCsrfToken()
+                    },
+                    body: new URLSearchParams(new FormData(form)).toString()
+                });
+                const result = await response.json();
+                window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error');
+            } catch (_) {
+                window.showToast(window.i18n.network_error || '网络错误，请稍后重试', 'error');
+            } finally {
+                window.setLoading(button, false);
+            }
+        };
     }
 
     function bindBackpackItems() {

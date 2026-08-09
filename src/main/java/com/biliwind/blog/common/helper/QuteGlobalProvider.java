@@ -57,7 +57,7 @@ public class QuteGlobalProvider {
     @TemplateGlobal
     public static String defaultCanonicalUrl() {
         String baseUrl = ConfigProvider.getConfig()
-                .getOptionalValue("blog.url", String.class)
+                .getOptionalValue("windblog.site.public-url", String.class)
                 .orElse("http://localhost:8080");
         while (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);

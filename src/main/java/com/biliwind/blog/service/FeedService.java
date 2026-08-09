@@ -7,7 +7,6 @@ import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Tag;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -26,8 +25,8 @@ public class FeedService {
     @Inject
     RegionContext regionContext;
 
-    @ConfigProperty(name = "blog.url")
-    String baseUrl;
+    @Inject
+    PublicUrlService publicUrlService;
 
     private static final DateTimeFormatter RFC_822_FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
     private static final DateTimeFormatter ISO_8601_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
@@ -47,10 +46,7 @@ public class FeedService {
     }
 
     public String getBaseUrl() {
-        if (baseUrl.endsWith("/")) {
-            return baseUrl.substring(0, baseUrl.length() - 1);
-        }
-        return baseUrl;
+        return publicUrlService.getBaseUrl();
     }
 
     public String getCurrentRfc822Date() {

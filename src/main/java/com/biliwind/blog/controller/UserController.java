@@ -27,7 +27,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -72,12 +74,31 @@ public class UserController {
     com.biliwind.blog.service.EmailVerificationService emailVerificationService;
 
     @Inject
+    com.biliwind.blog.service.PasswordResetService passwordResetService;
+
+    @Inject
     @Location("user/register.html")
     Template registerTemplate;
 
     @Inject
     @Location("user/register.content.html")
     Template registerContentTemplate;
+
+    @Inject
+    @Location("user/forgot-password.html")
+    Template forgotPasswordTemplate;
+
+    @Inject
+    @Location("user/forgot-password.content.html")
+    Template forgotPasswordContentTemplate;
+
+    @Inject
+    @Location("user/reset-password.html")
+    Template resetPasswordTemplate;
+
+    @Inject
+    @Location("user/reset-password.content.html")
+    Template resetPasswordContentTemplate;
 
     @Inject
     @Location("user/center.html")
@@ -141,6 +162,30 @@ public class UserController {
         return template
                 .data("language", languageContext.getLang())
                 .data("redirect", targetRedirect);
+    }
+
+    @GET
+    @Path("/forgot-password")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance forgotPasswordPage(@Context HttpHeaders headers) {
+        Template template = PjaxHelper.isPjaxRequest(headers)
+                ? forgotPasswordContentTemplate
+                : forgotPasswordTemplate;
+        return template.data("language", languageContext.getLang());
+    }
+
+    @GET
+    @Path("/reset-password")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance resetPasswordPage(@QueryParam("token") String token,
+                                               @Context HttpHeaders headers) {
+        Template template = PjaxHelper.isPjaxRequest(headers)
+                ? resetPasswordContentTemplate
+                : resetPasswordTemplate;
+        return template
+                .data("language", languageContext.getLang())
+                .data("token", token == null ? "" : token)
+                .data("valid", passwordResetService.isTokenValid(token));
     }
 
     @GET
@@ -242,6 +287,8 @@ public class UserController {
             @FormParam("username") @NotBlank @Size(min = 3, max = 20) String username,
             @FormParam("email") @NotBlank @Email String email,
             @FormParam("password") @NotBlank @Size(min = 6, max = 32) String password,
+            @FormParam("confirmPassword") String confirmPassword,
+            @FormParam("agreement") String agreement,
             @FormParam("subscribeArticleUpdates") String subscribeArticleUpdates,
             @FormParam("subscribePromotions") String subscribePromotions,
             @FormParam("redirect") String redirect) {
@@ -252,20 +299,34 @@ public class UserController {
                     .build();
         }
 
+        if (!"on".equalsIgnoreCase(agreement) && !"true".equalsIgnoreCase(agreement)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "请先同意用户协议和隐私政策"))
+                    .build();
+        }
+        if (confirmPassword == null || !Objects.equals(password, confirmPassword)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "两次输入的密码不一致"))
+                    .build();
+        }
+
+        String normalizedUsername = username.trim();
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+
         String clientIp = clientIpResolver.resolve(routingContext).clientIp();
         if (!securityRateLimitService.tryAcquire("user-register-ip:" + clientIp, 5, Duration.ofHours(1))) {
             return rateLimitedResponse("注册尝试过于频繁，请一小时后重试", 3600);
         }
 
         // 检查用户名是否已存在
-        if (User.find("username = ?1 and deletedAt is null", username).firstResult() != null) {
+        if (User.find("username = ?1 and deletedAt is null", normalizedUsername).firstResult() != null) {
             return Response.status(Response.Status.CONFLICT)
                     .entity(Map.of("success", false, "message", "用户名已被使用"))
                     .build();
         }
 
         // 检查邮箱是否已存在
-        if (User.find("email = ?1 and deletedAt is null", email).firstResult() != null) {
+        if (User.find("email = ?1 and deletedAt is null", normalizedEmail).firstResult() != null) {
             return Response.status(Response.Status.CONFLICT)
                     .entity(Map.of("success", false, "message", "邮箱已被注册"))
                     .build();
@@ -273,8 +334,8 @@ public class UserController {
 
         // 创建新用户
         User user = new User();
-        user.username = username.trim();
-        user.email = email.trim().toLowerCase();
+        user.username = normalizedUsername;
+        user.email = normalizedEmail;
         user.password = passwordHasher.hash(password);
         user.status = 1;
         user.roleName = RoleConstant.USER;
@@ -315,7 +376,7 @@ public class UserController {
             @FormParam("remember") String remember,
             @FormParam("redirect") String redirect) {
 
-        String normalizedAccount = account.trim().toLowerCase();
+        String normalizedAccount = account.trim().toLowerCase(Locale.ROOT);
         String clientIp = clientIpResolver.resolve(routingContext).clientIp();
         String accountLimitKey = "user-login-account:" + normalizedAccount;
         String ipLimitKey = "user-login-ip:" + clientIp;
@@ -326,8 +387,8 @@ public class UserController {
         }
 
         // 查找用户（支持用户名或邮箱登录）
-        User user = User.find("(username = ?1 or email = ?1) and deletedAt is null",
-                account.trim()).firstResult();
+        User user = User.find("(username = ?1 or email = ?2) and deletedAt is null",
+                account.trim(), normalizedAccount).firstResult();
 
         if (user == null || user.status != 1) {
             return Response.status(Response.Status.UNAUTHORIZED)
@@ -428,6 +489,82 @@ public class UserController {
                 .secure(cookieSecure)
                 .sameSite(NewCookie.SameSite.LAX)
                 .build();
+    }
+
+    @POST
+    @Path("/api/forgot-password")
+    @Transactional
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response requestPasswordReset(@FormParam("email") String email) {
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        if (!securityRateLimitService.tryAcquire(
+                "user-password-reset-ip:" + clientIp, 5, Duration.ofHours(1))) {
+            return rateLimitedResponse("操作过于频繁，请一小时后重试", 3600);
+        }
+        if (!normalizedEmail.isBlank()
+                && !securityRateLimitService.tryAcquire(
+                "user-password-reset-email:" + normalizedEmail, 3, Duration.ofHours(1))) {
+            return rateLimitedResponse("操作过于频繁，请一小时后重试", 3600);
+        }
+
+        passwordResetService.requestReset(normalizedEmail);
+        return Response.ok(Map.of(
+                "success", true,
+                "message", "如果该邮箱已注册，重置链接会发送到邮箱。请检查收件箱和垃圾邮件。"
+        )).build();
+    }
+
+    @POST
+    @Path("/api/reset-password")
+    @Transactional
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response resetPassword(
+            @FormParam("token") String token,
+            @FormParam("password") @NotBlank @Size(min = 6, max = 32) String password,
+            @FormParam("confirmPassword") String confirmPassword) {
+        if (!Objects.equals(password, confirmPassword)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "两次输入的密码不一致"))
+                    .build();
+        }
+        boolean reset = passwordResetService.resetPassword(token, password);
+        if (!reset) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "重置链接无效或已过期，请重新申请"))
+                    .build();
+        }
+        return Response.ok(Map.of(
+                "success", true,
+                "message", "密码已重置，请使用新密码登录",
+                "redirect", "/user/login"
+        )).build();
+    }
+
+    @POST
+    @Path("/api/resend-verification")
+    @Transactional
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response resendVerification(@FormParam("email") String email) {
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        if (!securityRateLimitService.tryAcquire(
+                "user-verification-resend-ip:" + clientIp, 5, Duration.ofHours(1))) {
+            return rateLimitedResponse("操作过于频繁，请一小时后重试", 3600);
+        }
+        User user = normalizedEmail.isBlank()
+                ? null
+                : User.find("email = ?1 and deletedAt is null", normalizedEmail).firstResult();
+        if (user != null && user.status == 1 && user.emailVerifiedAt == null) {
+            emailVerificationService.sendVerification(user);
+        }
+        return Response.ok(Map.of(
+                "success", true,
+                "message", "如果该邮箱需要验证，验证邮件会发送到邮箱。请检查收件箱和垃圾邮件。"
+        )).build();
     }
 
     private Response rateLimitedResponse(String message, int retryAfterSeconds) {

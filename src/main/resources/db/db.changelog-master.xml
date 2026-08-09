@@ -105,4 +105,5 @@
     <include file="db/migration/102-add-home-cloud-hot-path-indexes.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/103-add-media-download-ticket-age.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/104-seed-admin-outbox-permission.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/105-create-password-reset-tokens.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

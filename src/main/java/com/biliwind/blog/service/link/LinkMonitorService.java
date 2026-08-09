@@ -3,7 +3,7 @@ package com.biliwind.blog.service.link;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkMonitorLog;
 import com.biliwind.blog.model.LinkType;
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.PublicUrlService;
 import com.biliwind.blog.service.edge.DataSyncEvent;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.scheduler.Scheduled;
@@ -23,7 +23,7 @@ public class LinkMonitorService {
     private static final Logger LOG = Logger.getLogger(LinkMonitorService.class);
 
     @Inject
-    ConfigManager configManager;
+    PublicUrlService publicUrlService;
 
     @Inject
     NodeRoleService nodeRoleService;
@@ -61,7 +61,7 @@ public class LinkMonitorService {
     }
 
     public void checkLink(Link link, boolean readOnly) {
-        String siteUrl = configManager.getString("site_info", "site_url", "");
+        String siteUrl = publicUrlService.getBaseUrl();
         String checkBatchId = UUID.randomUUID().toString();
         OffsetDateTime checkedAt = OffsetDateTime.now(ZoneOffset.UTC);
 
