@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -242,6 +243,12 @@ public class ElasticsearchIndexService {
     private void createInitialIndex() throws Exception {
         log.info("Creating initial index: " + INDEX_PATTERN);
 
+        if (writeAliasExists()) {
+            log.info("日志写入别名已存在，跳过初始索引 PUT，直接校正别名状态");
+            repairWriteAlias();
+            return;
+        }
+
         String indexBody = """
                 {
                   "aliases": {
@@ -262,8 +269,9 @@ public class ElasticsearchIndexService {
 
         if (response.statusCode() == 200) {
             log.info("Initial index created successfully");
-        } else if (response.statusCode() == 400) {
-            log.warn("Initial index may already exist: " + SensitiveMessageSanitizer.sanitize(response.body()));
+        } else if (response.statusCode() == 400 || response.body().contains("more than one write index")) {
+            log.warn("Initial index already exists or its write alias needs repair: "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
         } else {
             log.error("Initial index creation failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new RuntimeException("Initial index creation failed: " + response.statusCode());
@@ -277,11 +285,7 @@ public class ElasticsearchIndexService {
      * Elasticsearch rejects writes when more than one index is marked as the write index.
      */
     public void repairWriteAlias() throws Exception {
-        HttpRequest aliasRequest = HttpRequest.newBuilder()
-                .uri(connectionManager.resolveUri("/_alias/" + WRITE_ALIAS))
-                .GET()
-                .build();
-        java.net.http.HttpResponse<String> aliasResponse = connectionManager.sendRequest(aliasRequest);
+        HttpResponse<String> aliasResponse = readWriteAlias();
 
         ElasticsearchWriteAliasRepair.AliasRepairPlan plan;
         if (aliasResponse.statusCode() == 404) {
@@ -317,7 +321,7 @@ public class ElasticsearchIndexService {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .header("Content-Type", "application/json")
                 .build();
-        java.net.http.HttpResponse<String> repairResponse = connectionManager.sendRequest(repairRequest);
+        HttpResponse<String> repairResponse = connectionManager.sendRequest(repairRequest);
         if (repairResponse.statusCode() != 200) {
             throw new IllegalStateException("修复 Elasticsearch 日志别名失败: "
                     + repairResponse.statusCode() + " "
@@ -325,6 +329,25 @@ public class ElasticsearchIndexService {
         }
         log.warn("已修复 Elasticsearch 日志写入别名，当前写入索引: " + plan.selectedWriteIndex()
                 + "；历史索引未删除");
+    }
+
+    private boolean writeAliasExists() throws Exception {
+        HttpResponse<String> aliasResponse = readWriteAlias();
+        if (aliasResponse.statusCode() == 200) {
+            return true;
+        }
+        if (aliasResponse.statusCode() == 404) {
+            return false;
+        }
+        throw new IllegalStateException("读取 Elasticsearch 日志别名失败: " + aliasResponse.statusCode());
+    }
+
+    private HttpResponse<String> readWriteAlias() throws Exception {
+        HttpRequest aliasRequest = HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_alias/" + WRITE_ALIAS))
+                .GET()
+                .build();
+        return connectionManager.sendRequest(aliasRequest);
     }
 
     /**
