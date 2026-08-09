@@ -131,6 +131,13 @@ public class AdminElasticsearchController {
             ));
         }
 
+        var logIndexStatus = indexService.getServiceStatus();
+        result.put("logIndex", Map.of(
+                "connectionAvailable", logIndexStatus.connectionAvailable(),
+                "indexInitialized", logIndexStatus.indexInitialized(),
+                "healthStatus", logIndexStatus.healthStatus()
+        ));
+
         result.put("logBuffer", Map.of(
                 "bufferedCount", logBufferService.getBufferedCount(),
                 "droppedCount", logBufferService.getDroppedCount(),
@@ -140,6 +147,40 @@ public class AdminElasticsearchController {
         ));
 
         return Response.ok(result).build();
+    }
+
+    @POST
+    @Path("/repair-log-alias")
+    @Operation(summary = "修复日志写入别名", description = "修复日志 rollover 别名的多个写入索引状态，不删除历史索引")
+    @APIResponse(responseCode = "200", description = "修复完成")
+    @APIResponse(responseCode = "503", description = "Elasticsearch 服务不可用")
+    public Response repairLogAlias() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+        if (!connectionManager.isAvailable()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(Map.of(
+                            "success", false,
+                            "message", "Elasticsearch 当前不可用"
+                    ))
+                    .build();
+        }
+
+        try {
+            indexService.repairWriteAlias();
+            return Response.ok(Map.of(
+                    "success", true,
+                    "message", "日志写入别名已修复，历史索引未删除"
+            )).build();
+        } catch (Exception exception) {
+            return Response.serverError().entity(Map.of(
+                    "success", false,
+                    "message", SensitiveMessageSanitizer.sanitize(exception.getMessage())
+            )).build();
+        }
     }
 
     @GET

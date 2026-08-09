@@ -2,6 +2,7 @@ package com.biliwind.blog.service.elasticsearch;
 
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.service.edge.NodeRoleService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -31,11 +32,14 @@ public class ElasticsearchIndexService {
     ElasticsearchConnectionManager connectionManager;
     @Inject
     NodeRoleService nodeRoleService;
+    @Inject
+    ObjectMapper objectMapper;
 
     private static final String ILM_POLICY_NAME = "windblog-logs-policy";
     private static final String INDEX_TEMPLATE_NAME = "windblog-logs-template";
     private static final String INDEX_PATTERN = "windblog-logs-*";
     private static final String WRITE_ALIAS = "windblog-logs";
+    private static final String INITIAL_INDEX = "windblog-logs-000001";
 
     @PostConstruct
     void postConstruct() {
@@ -249,7 +253,7 @@ public class ElasticsearchIndexService {
                 """.formatted(WRITE_ALIAS);
 
         var request = HttpRequest.newBuilder()
-                .uri(connectionManager.resolveUri("/windblog-logs-000001"))
+                .uri(connectionManager.resolveUri("/" + INITIAL_INDEX))
                 .PUT(HttpRequest.BodyPublishers.ofString(indexBody))
                 .header("Content-Type", "application/json")
                 .build();
@@ -264,6 +268,63 @@ public class ElasticsearchIndexService {
             log.error("Initial index creation failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new RuntimeException("Initial index creation failed: " + response.statusCode());
         }
+
+        repairWriteAlias();
+    }
+
+    /**
+     * Reconcile a rollover alias after an old setup or an interrupted rollover.
+     * Elasticsearch rejects writes when more than one index is marked as the write index.
+     */
+    public void repairWriteAlias() throws Exception {
+        HttpRequest aliasRequest = HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_alias/" + WRITE_ALIAS))
+                .GET()
+                .build();
+        java.net.http.HttpResponse<String> aliasResponse = connectionManager.sendRequest(aliasRequest);
+
+        ElasticsearchWriteAliasRepair.AliasRepairPlan plan;
+        if (aliasResponse.statusCode() == 404) {
+            plan = ElasticsearchWriteAliasRepair.plan(
+                    objectMapper,
+                    "{}",
+                    WRITE_ALIAS,
+                    INITIAL_INDEX
+            );
+        } else if (aliasResponse.statusCode() == 200) {
+            plan = ElasticsearchWriteAliasRepair.plan(
+                    objectMapper,
+                    aliasResponse.body(),
+                    WRITE_ALIAS,
+                    INITIAL_INDEX
+            );
+        } else {
+            throw new IllegalStateException("读取 Elasticsearch 日志别名失败: " + aliasResponse.statusCode());
+        }
+
+        if (!plan.repairRequired()) {
+            log.debug("Elasticsearch 日志写入别名已正确指向 " + plan.selectedWriteIndex());
+            return;
+        }
+
+        String requestBody = ElasticsearchWriteAliasRepair.buildRequestBody(
+                objectMapper,
+                plan,
+                WRITE_ALIAS
+        );
+        HttpRequest repairRequest = HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_aliases"))
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .header("Content-Type", "application/json")
+                .build();
+        java.net.http.HttpResponse<String> repairResponse = connectionManager.sendRequest(repairRequest);
+        if (repairResponse.statusCode() != 200) {
+            throw new IllegalStateException("修复 Elasticsearch 日志别名失败: "
+                    + repairResponse.statusCode() + " "
+                    + SensitiveMessageSanitizer.sanitize(repairResponse.body()));
+        }
+        log.warn("已修复 Elasticsearch 日志写入别名，当前写入索引: " + plan.selectedWriteIndex()
+                + "；历史索引未删除");
     }
 
     /**
