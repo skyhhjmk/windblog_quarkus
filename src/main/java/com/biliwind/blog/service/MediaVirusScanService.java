@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
@@ -14,6 +15,8 @@ import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Scans uploaded files through ClamAV's bounded INSTREAM protocol.
@@ -22,7 +25,9 @@ import java.nio.file.Path;
 @ApplicationScoped
 public class MediaVirusScanService {
 
+    private static final Logger log = Logger.getLogger(MediaVirusScanService.class);
     private static final int BUFFER_SIZE = 64 * 1024;
+    private static final long AUTO_DETECTION_RETRY_MILLIS = 15_000L;
 
     @ConfigProperty(name = "windblog.media.virus-scan.enabled", defaultValue = "false")
     boolean enabled;
@@ -39,7 +44,21 @@ public class MediaVirusScanService {
     @ConfigProperty(name = "windblog.media.virus-scan.timeout", defaultValue = "30S")
     java.time.Duration timeout;
 
+    @ConfigProperty(name = "windblog.media.virus-scan.auto-detect", defaultValue = "true")
+    boolean autoDetect;
+
+    @ConfigProperty(
+            name = "windblog.media.virus-scan.auto-detect-hosts",
+            defaultValue = "clamav,127.0.0.1,host.docker.internal"
+    )
+    String autoDetectHosts;
+
+    private volatile String detectedHost;
+    private volatile boolean detectedAutomatically;
+    private volatile long lastAutoDetectionAt;
+
     public ScanResult scan(Path file) {
+        ensureAutoDetected();
         if (!enabled) {
             if (required) {
                 return new ScanResult(Status.UNAVAILABLE, "病毒扫描已要求启用，但扫描服务未启用");
@@ -51,8 +70,8 @@ public class MediaVirusScanService {
         }
 
         try (Socket socket = new Socket()) {
-            int timeoutMillis = Math.toIntExact(Math.max(1000L, timeout.toMillis()));
-            socket.connect(new InetSocketAddress(host, port), timeoutMillis);
+            int timeoutMillis = scanTimeoutMillis();
+            socket.connect(new InetSocketAddress(currentHost(), port), timeoutMillis);
             socket.setSoTimeout(timeoutMillis);
             DataOutputStream output = new DataOutputStream(socket.getOutputStream());
             try (InputStream input = Files.newInputStream(file)) {
@@ -92,6 +111,7 @@ public class MediaVirusScanService {
     }
 
     public boolean isEnabled() {
+        ensureAutoDetected();
         return enabled;
     }
 
@@ -105,13 +125,17 @@ public class MediaVirusScanService {
      * verify the service without creating an audit or media record.
      */
     public ProbeResult probe() {
+        ensureAutoDetected();
         if (!enabled) {
+            if (autoDetect) {
+                return new ProbeResult(ProbeStatus.DISABLED, false, "病毒扫描未启用，且未自动发现可用的 ClamAV");
+            }
             return new ProbeResult(ProbeStatus.DISABLED, false, "病毒扫描未启用");
         }
 
         try (Socket socket = new Socket()) {
             int timeoutMillis = probeTimeoutMillis();
-            socket.connect(new InetSocketAddress(host, port), timeoutMillis);
+            socket.connect(new InetSocketAddress(currentHost(), port), timeoutMillis);
             socket.setSoTimeout(timeoutMillis);
             socket.getOutputStream().write("zPING\0".getBytes(StandardCharsets.US_ASCII));
             socket.getOutputStream().flush();
@@ -127,7 +151,86 @@ public class MediaVirusScanService {
     }
 
     public Configuration getConfiguration() {
-        return new Configuration(enabled, required, host, port, timeout);
+        ensureAutoDetected();
+        return new Configuration(enabled, required, currentHost(), port, timeout, detectedAutomatically);
+    }
+
+    private void ensureAutoDetected() {
+        if (!autoDetect || detectedAutomatically) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        synchronized (this) {
+            if (!autoDetect || detectedAutomatically) {
+                return;
+            }
+            if (now - lastAutoDetectionAt < AUTO_DETECTION_RETRY_MILLIS) {
+                return;
+            }
+            lastAutoDetectionAt = now;
+
+            String configuredHost = currentHost();
+            if (enabled && probeHost(configuredHost)) {
+                return;
+            }
+
+            for (String candidate : detectionCandidates()) {
+                if (enabled && candidate.equals(configuredHost)) {
+                    continue;
+                }
+                if (probeHost(candidate)) {
+                    detectedHost = candidate;
+                    detectedAutomatically = true;
+                    enabled = true;
+                    log.infof("自动发现 ClamAV，使用 %s:%d", candidate, port);
+                    return;
+                }
+            }
+        }
+    }
+
+    private Set<String> detectionCandidates() {
+        Set<String> candidates = new LinkedHashSet<>();
+        addCandidate(candidates, host);
+        if (autoDetectHosts != null) {
+            String[] configuredCandidates = autoDetectHosts.split(",");
+            for (String candidate : configuredCandidates) {
+                addCandidate(candidates, candidate);
+            }
+        }
+        return candidates;
+    }
+
+    private void addCandidate(Set<String> candidates, String candidate) {
+        if (candidate != null && !candidate.isBlank()) {
+            candidates.add(candidate.trim());
+        }
+    }
+
+    private boolean probeHost(String candidate) {
+        try (Socket socket = new Socket()) {
+            int timeoutMillis = probeTimeoutMillis();
+            socket.connect(new InetSocketAddress(candidate, port), timeoutMillis);
+            socket.setSoTimeout(timeoutMillis);
+            socket.getOutputStream().write("zPING\0".getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            return readProbeResponse(socket.getInputStream()).contains("PONG");
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private String currentHost() {
+        if (detectedHost != null && !detectedHost.isBlank()) {
+            return detectedHost;
+        }
+        return host;
+    }
+
+    private int scanTimeoutMillis() {
+        long configuredMillis = timeout == null ? 30_000L : timeout.toMillis();
+        return Math.toIntExact(Math.max(1000L, Math.min(configuredMillis, Integer.MAX_VALUE)));
     }
 
     private int probeTimeoutMillis() {
@@ -169,6 +272,13 @@ public class MediaVirusScanService {
     public record ProbeResult(ProbeStatus status, boolean available, String message) {
     }
 
-    public record Configuration(boolean enabled, boolean required, String host, int port, Duration timeout) {
+    public record Configuration(
+            boolean enabled,
+            boolean required,
+            String host,
+            int port,
+            Duration timeout,
+            boolean autoDetected
+    ) {
     }
 }

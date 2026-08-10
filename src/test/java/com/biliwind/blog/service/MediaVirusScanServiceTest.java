@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MediaVirusScanServiceTest {
 
@@ -73,6 +74,30 @@ class MediaVirusScanServiceTest {
         }
     }
 
+    @Test
+    void shouldAutoDetectReachableClamAvWhenDisabledByDefault() throws Exception {
+        try (ServerSocket server = new ServerSocket(0)) {
+            Thread probeThread = startFakeProbeServer(server, "PONG\0", 2);
+
+            MediaVirusScanService service = new MediaVirusScanService();
+            service.enabled = false;
+            service.required = false;
+            service.autoDetect = true;
+            service.autoDetectHosts = "127.0.0.1";
+            service.host = "127.0.0.1";
+            service.port = server.getLocalPort();
+            service.timeout = Duration.ofSeconds(3);
+
+            MediaVirusScanService.ProbeResult result = service.probe();
+            MediaVirusScanService.Configuration configuration = service.getConfiguration();
+
+            probeThread.join(3000);
+            assertEquals(MediaVirusScanService.ProbeStatus.AVAILABLE, result.status());
+            assertTrue(service.isEnabled());
+            assertTrue(configuration.autoDetected());
+        }
+    }
+
     private Thread startFakeClamAv(ServerSocket server, String response) {
         Thread scanner = new Thread(() -> {
             try (Socket socket = server.accept();
@@ -90,12 +115,20 @@ class MediaVirusScanServiceTest {
     }
 
     private Thread startFakeProbeServer(ServerSocket server, String response) {
+        return startFakeProbeServer(server, response, 1);
+    }
+
+    private Thread startFakeProbeServer(ServerSocket server, String response, int connectionCount) {
         Thread probe = new Thread(() -> {
-            try (Socket socket = server.accept()) {
-                socket.getInputStream().readNBytes(6);
-                OutputStream output = socket.getOutputStream();
-                output.write(response.getBytes(StandardCharsets.US_ASCII));
-                output.flush();
+            try {
+                for (int index = 0; index < connectionCount; index++) {
+                    try (Socket socket = server.accept()) {
+                        socket.getInputStream().readNBytes(6);
+                        OutputStream output = socket.getOutputStream();
+                        output.write(response.getBytes(StandardCharsets.US_ASCII));
+                        output.flush();
+                    }
+                }
             } catch (IOException exception) {
                 throw new IllegalStateException(exception);
             }

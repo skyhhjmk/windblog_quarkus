@@ -55,6 +55,8 @@ public class AdminSecurityServicesController {
         data.put("status", probe.status().name());
         data.put("available", probe.available());
         data.put("message", probe.message());
+        data.put("autoDetected", configuration.autoDetected());
+        data.put("configurationSource", configuration.autoDetected() ? "AUTO_DETECTED" : "CONFIGURED");
         return data;
     }
 }
