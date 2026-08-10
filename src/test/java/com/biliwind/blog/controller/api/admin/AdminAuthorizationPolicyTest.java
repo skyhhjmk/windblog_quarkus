@@ -63,6 +63,8 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/users/7/wallet/adjust"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/users/7/wallet/adjust"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-deliveries/7/retry"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/email-deliveries/fail-pending"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-channels/7/test"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-templates/7/test"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-campaigns"));
@@ -78,6 +80,8 @@ class AdminAuthorizationPolicyTest {
                 "POST", "/api/admin/dead-letters/7/retry").action());
         assertEquals("email_deliveries.retry", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/email-deliveries/7/retry").action());
+        assertEquals("email_deliveries.fail_pending", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/email-deliveries/fail-pending").action());
         assertEquals("media.retry", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/media/7/retry").action());
         assertEquals("repost.revoke", AdminAuthorizationPolicy.decide(

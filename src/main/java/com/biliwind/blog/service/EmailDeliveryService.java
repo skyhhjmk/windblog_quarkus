@@ -140,7 +140,7 @@ public class EmailDeliveryService {
             }
             processedDeliveries = processedDeliveries + 1;
             EmailDelivery delivery = EmailDelivery.find(
-                    "id = ?1 and lockOwner = ?2 and lockedUntil > ?3",
+                    "id = ?1 and lockOwner = ?2 and status = 'IN_FLIGHT' and lockedUntil > ?3",
                     deliveryId, owner, OffsetDateTime.now()).firstResult();
             if (delivery == null) {
                 continue;
@@ -173,8 +173,9 @@ public class EmailDeliveryService {
         OffsetDateTime leaseUntil = OffsetDateTime.now().plus(effectiveLease);
         @SuppressWarnings("unchecked")
         List<Number> ids = (List<Number>) EmailDelivery.getEntityManager().createNativeQuery(
-                        "update email_deliveries set locked_until = ?1, lock_owner = ?2 "
-                                + "where id = (select id from email_deliveries where status = 'PENDING' "
+                        "update email_deliveries set status = 'IN_FLIGHT', locked_until = ?1, lock_owner = ?2 "
+                                + "where id = (select id from email_deliveries "
+                                + "where status in ('PENDING', 'IN_FLIGHT') "
                                 + "and next_attempt_at <= now() and (locked_until is null or locked_until < now()) "
                                 + "order by id limit 1 for update skip locked) returning id")
                 .setParameter(1, leaseUntil)
@@ -242,7 +243,8 @@ public class EmailDeliveryService {
 
     @Transactional
     void completeDelivery(Long deliveryId, String owner, DeliveryOutcome outcome) {
-        EmailDelivery delivery = EmailDelivery.find("id = ?1 and lockOwner = ?2", deliveryId, owner).firstResult();
+        EmailDelivery delivery = EmailDelivery.find(
+                "id = ?1 and lockOwner = ?2 and status = 'IN_FLIGHT'", deliveryId, owner).firstResult();
         if (delivery == null) {
             return;
         }
@@ -314,6 +316,7 @@ public class EmailDeliveryService {
     private void deferDelivery(EmailDelivery delivery, String errorMessage) {
         delivery.attemptCount = delivery.attemptCount + 1;
         delivery.lastError = errorMessage;
+        delivery.status = "PENDING";
         if (delivery.channelGroupId != null) {
             delivery.channelId = null;
         }

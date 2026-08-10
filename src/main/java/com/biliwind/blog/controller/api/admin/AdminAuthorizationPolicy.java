@@ -91,6 +91,9 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/email-deliveries/") && path.endsWith("/retry")) {
             return "POST".equals(method);
         }
+        if (path.equals("/api/admin/email-deliveries/fail-pending")) {
+            return "POST".equals(method);
+        }
         if (path.startsWith("/api/admin/email-channels/") && path.endsWith("/test")) {
             return "POST".equals(method);
         }
@@ -218,6 +221,9 @@ public final class AdminAuthorizationPolicy {
         }
         if (path.startsWith("/api/admin/email-deliveries/") && path.endsWith("/retry")) {
             return "email_deliveries.retry";
+        }
+        if (path.equals("/api/admin/email-deliveries/fail-pending")) {
+            return "email_deliveries.fail_pending";
         }
         if (path.startsWith("/api/admin/media/")
                 && (path.endsWith("/retry") || path.endsWith("/batch-retry"))) {
