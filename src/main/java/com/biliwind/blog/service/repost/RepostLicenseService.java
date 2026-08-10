@@ -25,7 +25,7 @@ import java.util.Base64;
 @ApplicationScoped
 public class RepostLicenseService {
 
-    private final SecureRandom secureRandom = new SecureRandom();
+    private volatile SecureRandom secureRandom;
 
     @ConfigProperty(name = "windblog.site.public-url", defaultValue = "http://localhost:8080")
     String publicSiteUrl;
@@ -224,8 +224,23 @@ public class RepostLicenseService {
 
     private String generateLicenseCode() {
         byte[] randomBytes = new byte[12];
-        secureRandom.nextBytes(randomBytes);
+        getSecureRandom().nextBytes(randomBytes);
         return "RPL-" + Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private SecureRandom getSecureRandom() {
+        SecureRandom cached = secureRandom;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = secureRandom;
+            if (cached == null) {
+                cached = new SecureRandom();
+                secureRandom = cached;
+            }
+            return cached;
+        }
     }
 
     private String escapeHtml(String text) {

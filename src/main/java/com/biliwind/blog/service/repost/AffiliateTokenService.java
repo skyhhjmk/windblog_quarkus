@@ -20,7 +20,7 @@ import java.util.Base64;
 public class AffiliateTokenService {
 
     private static final int RAW_TOKEN_BYTES = 24;
-    private final SecureRandom secureRandom = new SecureRandom();
+    private volatile SecureRandom secureRandom;
 
     @Inject
     Event<DataSyncEvent> dataSyncEvent;
@@ -104,8 +104,23 @@ public class AffiliateTokenService {
 
     private String generateRawToken() {
         byte[] randomBytes = new byte[RAW_TOKEN_BYTES];
-        secureRandom.nextBytes(randomBytes);
+        getSecureRandom().nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private SecureRandom getSecureRandom() {
+        SecureRandom cached = secureRandom;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = secureRandom;
+            if (cached == null) {
+                cached = new SecureRandom();
+                secureRandom = cached;
+            }
+            return cached;
+        }
     }
 
     public static class TokenCreationResult {

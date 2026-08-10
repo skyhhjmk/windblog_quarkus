@@ -17,7 +17,7 @@ import java.util.Base64;
 public class LinkPublicTokenService {
 
     private static final int TOKEN_BYTES_LENGTH = 18;
-    private final SecureRandom secureRandom = new SecureRandom();
+    private volatile SecureRandom secureRandom;
 
     @Inject
     Event<DataSyncEvent> dataSyncEvent;
@@ -64,7 +64,22 @@ public class LinkPublicTokenService {
 
     private String generateToken() {
         byte[] tokenBytes = new byte[TOKEN_BYTES_LENGTH];
-        secureRandom.nextBytes(tokenBytes);
+        getSecureRandom().nextBytes(tokenBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+    }
+
+    private SecureRandom getSecureRandom() {
+        SecureRandom cached = secureRandom;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = secureRandom;
+            if (cached == null) {
+                cached = new SecureRandom();
+                secureRandom = cached;
+            }
+            return cached;
+        }
     }
 }

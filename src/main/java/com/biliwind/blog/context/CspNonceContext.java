@@ -8,16 +8,42 @@ import java.util.Base64;
 @RequestScoped
 public class CspNonceContext {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
-    private final String nonce = createNonce();
+    private volatile SecureRandom random;
+    private volatile String nonce;
 
     public String getNonce() {
-        return nonce;
+        String cached = nonce;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = nonce;
+            if (cached == null) {
+                cached = createNonce();
+                nonce = cached;
+            }
+            return cached;
+        }
     }
 
-    private static String createNonce() {
+    private String createNonce() {
         byte[] bytes = new byte[18];
-        RANDOM.nextBytes(bytes);
+        getRandom().nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private SecureRandom getRandom() {
+        SecureRandom cached = random;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = random;
+            if (cached == null) {
+                cached = new SecureRandom();
+                random = cached;
+            }
+            return cached;
+        }
     }
 }

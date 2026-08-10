@@ -36,8 +36,7 @@ public class AiHttpClientHelper {
     private static final int MAX_NON_STREAM_RESPONSE_BYTES = 8 * 1024 * 1024;
 
     // 直连客户端在每次请求前固定已验证的 DNS 地址。
-    private static final AiPinnedHttpClient defaultClient =
-            AiPinnedHttpClient.direct(null, AiHttpClientHelper::isExplicitlyAllowed);
+    private static volatile AiPinnedHttpClient defaultClient;
 
     // 缓存不同代理设置的 HttpClient 实例，避免重复创建线程和连接池消耗系统资源
     private static final ConcurrentHashMap<String, AiPinnedHttpClient> clientCache = new ConcurrentHashMap<>();
@@ -46,7 +45,7 @@ public class AiHttpClientHelper {
         validateConfiguredEndpoint(config);
         // 如果配置为空或无扩展配置，默认降级使用无代理的 client
         if (config == null) {
-            return defaultClient;
+            return getDefaultClient();
         }
         if (config.config == null) {
             return directClient(config);
@@ -165,6 +164,22 @@ public class AiHttpClientHelper {
                 AiHttpClientHelper::isExplicitlyAllowed);
         AiPinnedHttpClient existing = clientCache.putIfAbsent(cacheKey, created);
         return existing == null ? created : existing;
+    }
+
+    private static AiPinnedHttpClient getDefaultClient() {
+        AiPinnedHttpClient cached = defaultClient;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (AiHttpClientHelper.class) {
+            cached = defaultClient;
+            if (cached == null) {
+                cached = AiPinnedHttpClient.direct(null,
+                        AiHttpClientHelper::isExplicitlyAllowed);
+                defaultClient = cached;
+            }
+            return cached;
+        }
     }
 
     static HttpResponse.BodyHandler<String> boundedStringBodyHandler() {

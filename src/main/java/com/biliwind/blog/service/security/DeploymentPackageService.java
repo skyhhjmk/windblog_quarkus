@@ -26,7 +26,7 @@ import java.util.zip.ZipOutputStream;
 public class DeploymentPackageService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DeploymentPackageService.class);
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private volatile SecureRandom secureRandom;
     private static final String DEFAULT_ADMIN_JWT_SECRET = "windblog-admin-dev-secret-change-me";
     private static final String DEFAULT_USER_JWT_SECRET = "windblog-user-dev-secret-change-me";
     private static final String DEFAULT_ADMIN_INIT_PASSWORD = "admin";
@@ -76,7 +76,7 @@ public class DeploymentPackageService {
     @Inject
     @ConfigProperty(
             name = "windblog.edge.deployment.image-repository",
-            defaultValue = "ghcr.io/hhjmk/windblog_quarkus"
+            defaultValue = "ghcr.io/skyhhjmk/windblog_quarkus"
     )
     String edgeImageRepository;
 
@@ -435,7 +435,7 @@ public class DeploymentPackageService {
 
         String imageRepository = edgeImageRepository;
         if (imageRepository == null || imageRepository.isBlank()) {
-            imageRepository = "ghcr.io/hhjmk/windblog_quarkus";
+            imageRepository = "ghcr.io/skyhhjmk/windblog_quarkus";
         }
 
         imageRepository = removeTrailingTag(imageRepository.trim());
@@ -516,7 +516,22 @@ public class DeploymentPackageService {
 
     private String generateSecretHex(int byteCount) {
         byte[] bytes = new byte[byteCount];
-        SECURE_RANDOM.nextBytes(bytes);
+        getSecureRandom().nextBytes(bytes);
         return HexFormat.of().formatHex(bytes);
+    }
+
+    private SecureRandom getSecureRandom() {
+        SecureRandom cached = secureRandom;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = secureRandom;
+            if (cached == null) {
+                cached = new SecureRandom();
+                secureRandom = cached;
+            }
+            return cached;
+        }
     }
 }

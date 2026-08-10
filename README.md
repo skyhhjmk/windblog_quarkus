@@ -53,29 +53,31 @@ You can then execute your native executable with: `./target/windblog_quarkus-1.0
 
 ## Native container image publishing
 
-The GitHub Actions native image workflow builds `hhjmk/windblog_quarkus` by
-default. Configure these GitHub repository variables to change the destination:
-
-- `CONTAINER_REGISTRY`: registry host, for example `ghcr.io`
-- `CONTAINER_IMAGE_GROUP`: image owner or organization, defaults to `hhjmk`
-- `CONTAINER_IMAGE_NAME`: image repository name, defaults to `windblog_quarkus`
-
-Configure `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` as GitHub repository
-secrets. Images are pushed only for `main` or `master` builds and `v1.2.3`
-tags when the registry host and both credentials are present. Other builds,
-or builds without complete registry configuration, only build the image.
+The GitHub Actions native image workflow publishes the private GHCR repository
+`ghcr.io/skyhhjmk/windblog_quarkus`. It uses the repository `GITHUB_TOKEN`, so
+no registry username/password variables are required. Pull requests and other
+branches build images without pushing; `main`, `master`, and `v1.2.3` tags
+push the release images.
 
 Jenkins uses the same `CONTAINER_REGISTRY`, `CONTAINER_IMAGE_GROUP`, and
 `CONTAINER_IMAGE_NAME` environment variables. Set `REGISTRY_CREDENTIALS_ID`
 to the Jenkins username/password credential used for registry login. Jenkins
 also skips the push when the registry or credential ID is absent.
 
-Each release builds these Dockerfile variants:
+The GitHub Actions release job builds only native images:
 
-- `Dockerfile.native-micro`: the default edge image, published as `<version>`,
-  `<version>-native-micro`, `latest`, and `latest-native-micro`
-- `Dockerfile.native`: published as `<version>-native` and `latest-native`
-- `Dockerfile.jvm`: published as `<version>-jvm` and `latest-jvm`
+- `Dockerfile.native`: the WindBlog primary image, published as
+  `<version>-native`, `sha-<commit>-native`, and `latest-native`
+- `Dockerfile.native-micro`: the edge image, published as `<version>`,
+  `sha-<commit>`, and `latest`
+
+The workflow does not build or push a JVM image. The edge image is compiled
+with the `edge` profile and the primary image with the `prod` profile; they
+must not share a native runner because Quarkus fixes messaging topology at
+native build time.
+
+The Jenkinsfile is a separate pipeline. It is not used by this GHCR workflow;
+configure its registry credentials independently if Jenkins is retained.
 
 Native edge variants are compiled with `-Dquarkus.profile=edge`. Native images
 must use the same profile at build time and runtime because messaging channel
@@ -83,10 +85,13 @@ topology is fixed during native compilation. Setting only
 `QUARKUS_PROFILE=edge` when starting an image built with `prod` is not enough.
 
 The edge deployment package defaults to
-`ghcr.io/hhjmk/windblog_quarkus:latest`. Override the default repository with
+`ghcr.io/skyhhjmk/windblog_quarkus:latest`. Override the default repository with
 `EDGE_IMAGE_REPOSITORY`, or pass `image` and `variant` to
 `GET /api/admin/edge-nodes/{nodeId}/deployment-zip`. The `image` parameter is
 the complete image reference written to `.env`, including its tag or digest.
+Because the package is private, the deployment host must authenticate to GHCR
+with a token that has `read:packages` before running `docker compose pull`; keep
+that credential outside `.env`.
 
 If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
 

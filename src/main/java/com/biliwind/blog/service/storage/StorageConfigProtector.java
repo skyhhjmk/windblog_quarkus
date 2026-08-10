@@ -27,7 +27,7 @@ public class StorageConfigProtector {
     private static final int GCM_IV_BYTES = 12;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final SecureRandom secureRandom = new SecureRandom();
+    private volatile SecureRandom secureRandom;
 
     public String protectForStorage(String configJson) {
         JsonNode rootNode = parseConfig(configJson);
@@ -245,7 +245,7 @@ public class StorageConfigProtector {
     private String encryptValue(String value) {
         try {
             byte[] initializationVector = new byte[GCM_IV_BYTES];
-            secureRandom.nextBytes(initializationVector);
+            getSecureRandom().nextBytes(initializationVector);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_BITS, initializationVector);
             cipher.init(Cipher.ENCRYPT_MODE, buildSecretKey(), parameterSpec);
@@ -288,6 +288,21 @@ public class StorageConfigProtector {
             return new SecretKeySpec(keyBytes, "AES");
         } catch (Exception e) {
             throw new IllegalStateException("存储配置密钥初始化失败", e);
+        }
+    }
+
+    private SecureRandom getSecureRandom() {
+        SecureRandom cached = secureRandom;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = secureRandom;
+            if (cached == null) {
+                cached = new SecureRandom();
+                secureRandom = cached;
+            }
+            return cached;
         }
     }
 }

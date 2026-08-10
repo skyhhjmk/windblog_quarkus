@@ -5,7 +5,7 @@ on:
     branches:
       - "**"
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v*"
   pull_request:
     branches:
       - "**"
@@ -15,17 +15,14 @@ permissions:
   contents: read
   packages: write
 
+env:
+  IMAGE_REPOSITORY: ghcr.io/skyhhjmk/windblog_quarkus
+
 jobs:
   build-native-image:
-    name: Build native image
+    name: Build native images
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    env:
-      CONTAINER_REGISTRY: ${{ vars.CONTAINER_REGISTRY }}
-      CONTAINER_IMAGE_GROUP: ${{ vars.CONTAINER_IMAGE_GROUP }}
-      CONTAINER_IMAGE_NAME: ${{ vars.CONTAINER_IMAGE_NAME }}
-      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -45,61 +42,41 @@ jobs:
         id: release
         shell: bash
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
+          SHORT_SHA="${GITHUB_SHA::12}"
           VERSION="0.1.${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
-          RELEASE_IMAGE="false"
+          PUSH_IMAGE="false"
           ADD_LATEST="false"
 
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               VERSION="${GITHUB_REF_NAME#v}"
-              RELEASE_IMAGE="true"
+              PUSH_IMAGE="true"
               ADD_LATEST="true"
             else
               echo "Unsupported release tag: ${GITHUB_REF_NAME}" >&2
               exit 1
             fi
-          fi
-
-          if [[ "${GITHUB_REF_TYPE}" == "branch" && ( "${GITHUB_REF_NAME}" == "main" || "${GITHUB_REF_NAME}" == "master" ) ]]; then
+          elif [[ "${GITHUB_REF_TYPE}" == "branch" &&
+                  ( "${GITHUB_REF_NAME}" == "main" || "${GITHUB_REF_NAME}" == "master" ) ]]; then
             VERSION="0.1.${GITHUB_RUN_NUMBER}"
-            RELEASE_IMAGE="true"
+            PUSH_IMAGE="true"
             ADD_LATEST="true"
           fi
 
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            VERSION="0.1.${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
-            RELEASE_IMAGE="false"
+            PUSH_IMAGE="false"
             ADD_LATEST="false"
           fi
 
-          IMAGE_GROUP="${CONTAINER_IMAGE_GROUP:-hhjmk}"
-          IMAGE_NAME="${CONTAINER_IMAGE_NAME:-windblog_quarkus}"
-          IMAGE="${IMAGE_GROUP}/${IMAGE_NAME}"
-          PUSH_IMAGE="false"
-
-          if [[ -n "${CONTAINER_REGISTRY}" ]]; then
-            IMAGE="${CONTAINER_REGISTRY}/${IMAGE}"
-          fi
-
-          if [[ "${RELEASE_IMAGE}" == "true" ]]; then
-            if [[ -n "${CONTAINER_REGISTRY}" && -n "${REGISTRY_USERNAME}" && -n "${REGISTRY_PASSWORD}" ]]; then
-              PUSH_IMAGE="true"
-            else
-              echo "Registry configuration is incomplete. The image will be built but not pushed."
-            fi
-          fi
-
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "short_sha=${SHORT_SHA}" >> "${GITHUB_OUTPUT}"
           echo "push_image=${PUSH_IMAGE}" >> "${GITHUB_OUTPUT}"
           echo "add_latest=${ADD_LATEST}" >> "${GITHUB_OUTPUT}"
-          echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
-          echo "image_group=${IMAGE_GROUP}" >> "${GITHUB_OUTPUT}"
-          echo "image_name=${IMAGE_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "image=${IMAGE_REPOSITORY}" >> "${GITHUB_OUTPUT}"
 
       - name: Set Maven project version
         run: |
-          ./mvnw -B org.codehaus.mojo:versions-maven-plugin:2.18.0:set \
+          ./mvnw -B -ntp org.codehaus.mojo:versions-maven-plugin:2.18.0:set \
             -DnewVersion="${{ steps.release.outputs.version }}" \
             -DgenerateBackupPoms=false \
             -DprocessAllModules=true
@@ -113,86 +90,94 @@ jobs:
             exit 1
           fi
 
-      - name: Login to container registry
+      - name: Login to GHCR
         if: steps.release.outputs.push_image == 'true'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.CONTAINER_REGISTRY }}
-          username: ${{ env.REGISTRY_USERNAME }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build JVM application
+      - name: Build WindBlog native application
         shell: bash
         run: |
-          ./mvnw -B package \
-            -DskipTests \
-            -Dquarkus.application.version=${{ steps.release.outputs.version }} \
-            -Dquarkus.container-image.build=false \
-            -Dquarkus.container-image.push=false
-
-      - name: Build JVM container image
-        shell: bash
-        run: |
-          IMAGE="${{ steps.release.outputs.image }}"
-          VERSION="${{ steps.release.outputs.version }}"
-
-          docker build \
-            -f src/main/docker/Dockerfile.jvm \
-            -t "${IMAGE}:${VERSION}-jvm" \
-            .
-
-      - name: Build native application
-        shell: bash
-        run: |
-          ./mvnw -B package \
+          ./mvnw -B -ntp clean package \
             -DskipTests \
             -Dnative \
-            -Dquarkus.profile=edge \
-            -Dquarkus.application.version=${{ steps.release.outputs.version }} \
+            -Dquarkus.profile=prod \
+            -Dquarkus.application.version="${{ steps.release.outputs.version }}" \
             -Dquarkus.native.container-build=true \
+            -Dquarkus.native.native-image-xmx=8g \
             -Dquarkus.container-image.build=false \
-            -Dquarkus.container-image.push=false
+            -Dquarkus.container-image.push=false \
+            -Dquarkus.container-image.registry=ghcr.io \
+            -Dquarkus.container-image.group=skyhhjmk \
+            -Dquarkus.container-image.name=windblog_quarkus
 
-      - name: Build native container image variants
+      - name: Build and tag WindBlog native image
         shell: bash
         run: |
           IMAGE="${{ steps.release.outputs.image }}"
           VERSION="${{ steps.release.outputs.version }}"
-
-          # native-micro 是边缘节点默认镜像，因此同时占用无后缀主版本标签。
-          docker build \
-            -f src/main/docker/Dockerfile.native-micro \
-            -t "${IMAGE}:${VERSION}" \
-            -t "${IMAGE}:${VERSION}-native-micro" \
-            .
+          SHORT_SHA="${{ steps.release.outputs.short_sha }}"
 
           docker build \
             -f src/main/docker/Dockerfile.native \
             -t "${IMAGE}:${VERSION}-native" \
+            -t "${IMAGE}:sha-${SHORT_SHA}-native" \
+            .
+
+          if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
+            docker tag "${IMAGE}:${VERSION}-native" "${IMAGE}:latest-native"
+          fi
+
+      - name: Build edge native application
+        shell: bash
+        run: |
+          ./mvnw -B -ntp clean package \
+            -DskipTests \
+            -Dnative \
+            -Dquarkus.profile=edge \
+            -Dquarkus.application.version="${{ steps.release.outputs.version }}" \
+            -Dquarkus.native.container-build=true \
+            -Dquarkus.native.native-image-xmx=8g \
+            -Dquarkus.container-image.build=false \
+            -Dquarkus.container-image.push=false \
+            -Dquarkus.container-image.registry=ghcr.io \
+            -Dquarkus.container-image.group=skyhhjmk \
+            -Dquarkus.container-image.name=windblog_quarkus
+
+      - name: Build and tag edge native image
+        shell: bash
+        run: |
+          IMAGE="${{ steps.release.outputs.image }}"
+          VERSION="${{ steps.release.outputs.version }}"
+          SHORT_SHA="${{ steps.release.outputs.short_sha }}"
+
+          docker build \
+            -f src/main/docker/Dockerfile.native-micro \
+            -t "${IMAGE}:${VERSION}" \
+            -t "${IMAGE}:sha-${SHORT_SHA}" \
             .
 
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
             docker tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
-            docker tag "${IMAGE}:${VERSION}-native-micro" "${IMAGE}:latest-native-micro"
-            docker tag "${IMAGE}:${VERSION}-native" "${IMAGE}:latest-native"
-            docker tag "${IMAGE}:${VERSION}-jvm" "${IMAGE}:latest-jvm"
           fi
 
-      - name: Push container image variants
+      - name: Push native images to GHCR
         if: steps.release.outputs.push_image == 'true'
         shell: bash
         run: |
           IMAGE="${{ steps.release.outputs.image }}"
           VERSION="${{ steps.release.outputs.version }}"
+          SHORT_SHA="${{ steps.release.outputs.short_sha }}"
 
-          docker push "${IMAGE}:${VERSION}"
-          docker push "${IMAGE}:${VERSION}-native-micro"
           docker push "${IMAGE}:${VERSION}-native"
-          docker push "${IMAGE}:${VERSION}-jvm"
+          docker push "${IMAGE}:sha-${SHORT_SHA}-native"
+          docker push "${IMAGE}:${VERSION}"
+          docker push "${IMAGE}:sha-${SHORT_SHA}"
 
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
-            docker push "${IMAGE}:latest"
-            docker push "${IMAGE}:latest-native-micro"
             docker push "${IMAGE}:latest-native"
-            docker push "${IMAGE}:latest-jvm"
+            docker push "${IMAGE}:latest"
           fi

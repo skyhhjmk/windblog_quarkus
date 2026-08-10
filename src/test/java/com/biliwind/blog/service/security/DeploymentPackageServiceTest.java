@@ -92,7 +92,7 @@ public class DeploymentPackageServiceTest {
         assertFalse(envContent.contains("EDGE_REDIS_PORT="));
         assertTrue(envContent.contains("EDGE_APP_HTTP_PORT="));
         assertTrue(envContent.contains("EDGE_APP_GRPC_PORT=9005"));
-        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=hhjmk/windblog_quarkus:latest"));
+        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=ghcr.io/skyhhjmk/windblog_quarkus:latest"));
         assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE_VARIANT=native-micro"));
         assertTrue(envContent.contains("USER_JWT_SECRET="));
         assertTrue(envContent.contains("USER_JWT_ISSUER="));

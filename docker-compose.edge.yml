@@ -47,7 +47,7 @@ services:
   # 边缘节点应用
   edge-node:
     container_name: windblog-edge-node
-    image: ${WINDBLOG_EDGE_IMAGE:-ghcr.io/hhjmk/windblog_quarkus:latest}
+    image: ${WINDBLOG_EDGE_IMAGE:-ghcr.io/skyhhjmk/windblog_quarkus:latest}
     restart: unless-stopped
     networks:
       - app-network

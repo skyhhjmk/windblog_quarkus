@@ -15,7 +15,7 @@ import java.util.Base64;
 @ApplicationScoped
 public class ContentAccessTicketService {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private volatile SecureRandom random;
     private static final int TOKEN_BYTES = 32;
 
     @Transactional
@@ -246,8 +246,23 @@ public class ContentAccessTicketService {
 
     private String randomToken() {
         byte[] bytes = new byte[TOKEN_BYTES];
-        RANDOM.nextBytes(bytes);
+        getRandom().nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private SecureRandom getRandom() {
+        SecureRandom cached = random;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = random;
+            if (cached == null) {
+                cached = new SecureRandom();
+                random = cached;
+            }
+            return cached;
+        }
     }
 
     private String hash(String value) {
