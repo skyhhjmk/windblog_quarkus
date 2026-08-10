@@ -256,6 +256,19 @@ public class EdgeSyncDataApplyService {
         media.skipStorageClasses = readStringList(node, "skipStorageClasses");
         media.processingStatus = readOptionalText(node, "processingStatus");
         media.processingProgress = readOptionalInteger(node, "processingProgress");
+        String incomingVirusScanStatus = readOptionalText(node, "virusScanStatus");
+        if (incomingVirusScanStatus != null && !incomingVirusScanStatus.isBlank()) {
+            media.virusScanStatus = incomingVirusScanStatus;
+        }
+        if (node.has("virusScannedAt")) {
+            media.virusScannedAt = readOptionalDateTime(node, "virusScannedAt");
+        }
+        if (node.has("virusScanMessage")) {
+            media.virusScanMessage = readOptionalText(node, "virusScanMessage");
+        }
+        if (newMedia && (media.virusScanStatus == null || media.virusScanStatus.isBlank())) {
+            media.virusScanStatus = "NOT_SCANNED";
+        }
 
         if (media.processingProgress != null && (media.processingProgress < 0 || media.processingProgress > 100)) {
             throw new IllegalArgumentException("媒体处理进度超出范围");
@@ -272,14 +285,16 @@ public class EdgeSyncDataApplyService {
                     id, storage_key, url, media_type, mime_type, file_name, size, uploaded_by,
                     width, height, alt, metadata, storage_classes, version, created_at, updated_at,
                     processing_status, processing_progress, visibility_regions, hidden_regions,
-                    sync_storage_classes, skip_storage_classes
+                    sync_storage_classes, skip_storage_classes, virus_scan_status, virus_scanned_at,
+                    virus_scan_message
                 ) values (
                     :id, :storageKey, :url, :mediaType, :mimeType, :fileName, :size, :uploadedBy,
                     :width, :height, cast(:alt as jsonb), cast(:metadata as jsonb),
                     cast(:storageClasses as jsonb), :version, current_timestamp, current_timestamp,
                     :processingStatus, :processingProgress, cast(:visibilityRegions as jsonb),
                     cast(:hiddenRegions as jsonb), cast(:syncStorageClasses as jsonb),
-                    cast(:skipStorageClasses as jsonb)
+                    cast(:skipStorageClasses as jsonb), :virusScanStatus, :virusScannedAt,
+                    :virusScanMessage
                 )
                 """)
                 .setParameter("id", media.id)
@@ -302,6 +317,10 @@ public class EdgeSyncDataApplyService {
                 .setParameter("hiddenRegions", writeJsonValue(media.hiddenRegions))
                 .setParameter("syncStorageClasses", writeJsonValue(media.syncStorageClasses))
                 .setParameter("skipStorageClasses", writeJsonValue(media.skipStorageClasses))
+                .setParameter("virusScanStatus", media.virusScanStatus == null
+                        ? "NOT_SCANNED" : media.virusScanStatus)
+                .setParameter("virusScannedAt", media.virusScannedAt)
+                .setParameter("virusScanMessage", media.virusScanMessage)
                 .executeUpdate();
 
         entityManager.createNativeQuery("""

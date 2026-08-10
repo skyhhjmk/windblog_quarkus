@@ -118,6 +118,20 @@ public class Media extends PanacheEntityBase {
     public String processingError;
 
     /**
+     * 病毒扫描状态：NOT_SCANNED, SCANNING, CLEAN, INFECTED, UNAVAILABLE, DISABLED
+     */
+    @Column(name = "virus_scan_status", nullable = false, length = 32)
+    public String virusScanStatus = "NOT_SCANNED";
+
+    /** 病毒扫描完成或尝试时间 */
+    @Column(name = "virus_scanned_at")
+    public OffsetDateTime virusScannedAt;
+
+    /** 病毒扫描结果或失败原因 */
+    @Column(name = "virus_scan_message", columnDefinition = "text")
+    public String virusScanMessage;
+
+    /**
      * 区域可见性设置 (JSON数组)
      */
     @JdbcTypeCode(SqlTypes.JSON)

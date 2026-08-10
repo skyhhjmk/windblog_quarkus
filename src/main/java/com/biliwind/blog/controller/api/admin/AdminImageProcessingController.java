@@ -85,7 +85,7 @@ public class AdminImageProcessingController {
                         "key", "cwebp_path",
                         "label", "cwebp 工具路径",
                         "type", "text",
-                        "description", "Google WebP 转换工具的绝对路径",
+                        "description", "Google WebP 转换工具路径；可填写绝对路径，也可填写 PATH 中的 cwebp 命令名",
                         "testUrl", "/api/admin/storage/image-processing/configs/test-webp"
                 ),
                 Map.of(

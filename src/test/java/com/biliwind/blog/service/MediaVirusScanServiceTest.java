@@ -3,6 +3,7 @@ package com.biliwind.blog.service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -40,6 +41,69 @@ class MediaVirusScanServiceTest {
 
             scanner.join(3000);
             assertEquals(MediaVirusScanService.Status.CLEAN, result.status());
+        }
+    }
+
+    @Test
+    void shouldScanAnInputStreamForStoredMedia() throws Exception {
+        try (ServerSocket server = new ServerSocket(0)) {
+            Thread scanner = startFakeClamAv(server, "stream: OK\n");
+
+            MediaVirusScanService service = new MediaVirusScanService();
+            service.enabled = true;
+            service.required = true;
+            service.host = "127.0.0.1";
+            service.port = server.getLocalPort();
+            service.timeout = Duration.ofSeconds(3);
+
+            MediaVirusScanService.ScanResult result = service.scan(
+                    new ByteArrayInputStream("stored media".getBytes(StandardCharsets.UTF_8)));
+
+            scanner.join(3000);
+            assertEquals(MediaVirusScanService.Status.CLEAN, result.status());
+        }
+    }
+
+    @Test
+    void shouldAcceptClamAvResponseWithTrailingNul() throws Exception {
+        Path file = tempDir.resolve("nul-terminated.bin");
+        Files.write(file, "safe sample".getBytes(StandardCharsets.UTF_8));
+
+        try (ServerSocket server = new ServerSocket(0)) {
+            Thread scanner = startFakeClamAv(server, "stream: OK\0");
+
+            MediaVirusScanService service = new MediaVirusScanService();
+            service.enabled = true;
+            service.required = true;
+            service.host = "127.0.0.1";
+            service.port = server.getLocalPort();
+            service.timeout = Duration.ofSeconds(3);
+
+            MediaVirusScanService.ScanResult result = service.scan(file);
+
+            scanner.join(3000);
+            assertEquals(MediaVirusScanService.Status.CLEAN, result.status());
+        }
+    }
+
+    @Test
+    void shouldExplainClamAvStreamSizeLimit() throws Exception {
+        try (ServerSocket server = new ServerSocket(0)) {
+            Thread scanner = startFakeClamAv(server, "INSTREAM size limit exceeded. ERROR\n");
+
+            MediaVirusScanService service = new MediaVirusScanService();
+            service.enabled = true;
+            service.required = true;
+            service.host = "127.0.0.1";
+            service.port = server.getLocalPort();
+            service.timeout = Duration.ofSeconds(3);
+
+            MediaVirusScanService.ScanResult result = service.scan(
+                    new ByteArrayInputStream("oversized sample".getBytes(StandardCharsets.UTF_8)));
+
+            scanner.join(3000);
+            assertEquals(MediaVirusScanService.Status.UNAVAILABLE, result.status());
+            assertTrue(result.reason().contains("大小上限"));
         }
     }
 

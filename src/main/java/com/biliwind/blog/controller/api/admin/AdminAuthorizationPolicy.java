@@ -229,6 +229,9 @@ public final class AdminAuthorizationPolicy {
                 && (path.endsWith("/retry") || path.endsWith("/batch-retry"))) {
             return "media.retry";
         }
+        if (path.startsWith("/api/admin/media/") && path.endsWith("/virus-scan")) {
+            return "media.scan";
+        }
         if (path.startsWith("/api/admin/repost/") && path.endsWith("/revoke")) {
             return "repost.revoke";
         }

@@ -18,6 +18,7 @@ public class ExternalToolResolver {
         addDefaultPath(candidates, linuxDefaultPath);
         addWindowsCommonPaths(candidates, windowsCommonPaths);
         addPathEnvironmentCandidates(candidates, windowsExecutableName);
+        addPathEnvironmentCandidates(candidates, withoutExecutableExtension(windowsExecutableName));
 
         for (Path candidate : candidates) {
             Path normalizedCandidate = candidate.toAbsolutePath().normalize();
@@ -88,6 +89,17 @@ public class ExternalToolResolver {
                 candidates.add(Path.of(pathPart).resolve(executableName));
             }
         }
+    }
+
+    private String withoutExecutableExtension(String executableName) {
+        if (executableName == null || executableName.isBlank()) {
+            return executableName;
+        }
+        String lowerName = executableName.toLowerCase();
+        if (lowerName.endsWith(".exe")) {
+            return executableName.substring(0, executableName.length() - 4);
+        }
+        return executableName;
     }
 
     private boolean isUsableTool(Path path) {

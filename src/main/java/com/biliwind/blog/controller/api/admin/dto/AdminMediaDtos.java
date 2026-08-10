@@ -40,7 +40,13 @@ public final class AdminMediaDtos {
             List<String> syncStorageClasses,
             List<String> skipStorageClasses,
             Map<String, Object> storageClasses,
-            Map<String, Object> metadata) {
+            Map<String, Object> metadata,
+            String processingStatus,
+            Integer processingProgress,
+            String processingError,
+            String virusScanStatus,
+            OffsetDateTime virusScannedAt,
+            String virusScanMessage) {
     }
 
     public record MediaUpdateRequest(
@@ -55,6 +61,20 @@ public final class AdminMediaDtos {
             long total,
             int page,
             int pageSize) {
+    }
+
+    public record MediaUploadSession(
+            String uploadId,
+            int chunkSize,
+            int chunkCount,
+            long totalSize,
+            List<Integer> uploadedChunks) {
+    }
+
+    public record MediaUploadSessionRequest(
+            String fileName,
+            String mimeType,
+            long totalSize) {
     }
 
     public record MediaScanResult(

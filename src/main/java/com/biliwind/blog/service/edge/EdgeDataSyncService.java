@@ -194,6 +194,9 @@ public class EdgeDataSyncService {
         putDateTime(publicMedia, "updatedAt", media.updatedAt);
         putText(publicMedia, "processingStatus", media.processingStatus);
         putInteger(publicMedia, "processingProgress", media.processingProgress);
+        putText(publicMedia, "virusScanStatus", media.virusScanStatus);
+        putDateTime(publicMedia, "virusScannedAt", media.virusScannedAt);
+        putText(publicMedia, "virusScanMessage", media.virusScanMessage);
         return publicMedia;
     }
 

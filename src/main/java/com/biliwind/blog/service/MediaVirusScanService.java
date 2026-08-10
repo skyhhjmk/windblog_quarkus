@@ -11,11 +11,12 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -41,7 +42,7 @@ public class MediaVirusScanService {
     @ConfigProperty(name = "windblog.media.virus-scan.port", defaultValue = "3310")
     int port;
 
-    @ConfigProperty(name = "windblog.media.virus-scan.timeout", defaultValue = "30S")
+    @ConfigProperty(name = "windblog.media.virus-scan.timeout", defaultValue = "5M")
     java.time.Duration timeout;
 
     @ConfigProperty(name = "windblog.media.virus-scan.auto-detect", defaultValue = "true")
@@ -59,14 +60,31 @@ public class MediaVirusScanService {
 
     public ScanResult scan(Path file) {
         ensureAutoDetected();
+        if (file == null || !Files.isRegularFile(file)) {
+            return new ScanResult(Status.UNAVAILABLE, "待扫描文件不存在");
+        }
+
+        try (InputStream input = Files.newInputStream(file)) {
+            return scan(input);
+        } catch (Exception exception) {
+            return new ScanResult(Status.UNAVAILABLE, "待扫描文件无法读取");
+        }
+    }
+
+    /**
+     * Scans a stream so callers can scan files stored outside the local upload directory.
+     * The caller owns the stream and is responsible for closing it.
+     */
+    public ScanResult scan(InputStream input) {
+        ensureAutoDetected();
         if (!enabled) {
             if (required) {
                 return new ScanResult(Status.UNAVAILABLE, "病毒扫描已要求启用，但扫描服务未启用");
             }
             return new ScanResult(Status.DISABLED, "病毒扫描未启用");
         }
-        if (file == null || !Files.isRegularFile(file)) {
-            return new ScanResult(Status.UNAVAILABLE, "待扫描文件不存在");
+        if (input == null) {
+            return new ScanResult(Status.UNAVAILABLE, "待扫描文件无法读取");
         }
 
         try (Socket socket = new Socket()) {
@@ -74,20 +92,18 @@ public class MediaVirusScanService {
             socket.connect(new InetSocketAddress(currentHost(), port), timeoutMillis);
             socket.setSoTimeout(timeoutMillis);
             DataOutputStream output = new DataOutputStream(socket.getOutputStream());
-            try (InputStream input = Files.newInputStream(file)) {
-                output.write("zINSTREAM\0".getBytes(StandardCharsets.US_ASCII));
-                byte[] buffer = new byte[BUFFER_SIZE];
-                int read;
-                while ((read = input.read(buffer)) >= 0) {
-                    if (read == 0) {
-                        continue;
-                    }
-                    output.writeInt(read);
-                    output.write(buffer, 0, read);
+            output.write("zINSTREAM\0".getBytes(StandardCharsets.US_ASCII));
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read == 0) {
+                    continue;
                 }
-                output.writeInt(0);
-                output.flush();
+                output.writeInt(read);
+                output.write(buffer, 0, read);
             }
+            output.writeInt(0);
+            output.flush();
             return parseResponse(socket.getInputStream());
         } catch (Exception exception) {
             return new ScanResult(Status.UNAVAILABLE, "病毒扫描服务不可用");
@@ -101,11 +117,15 @@ public class MediaVirusScanService {
         if (response == null || response.isBlank()) {
             return new ScanResult(Status.UNAVAILABLE, "病毒扫描服务未返回结果");
         }
-        if (response.endsWith("OK")) {
+        String normalizedResponse = response.replace("\0", "").trim();
+        if (normalizedResponse.endsWith("OK")) {
             return new ScanResult(Status.CLEAN, "clean");
         }
-        if (response.endsWith("FOUND")) {
+        if (normalizedResponse.endsWith("FOUND")) {
             return new ScanResult(Status.INFECTED, "病毒扫描拒绝文件");
+        }
+        if (normalizedResponse.toLowerCase(Locale.ROOT).contains("size limit")) {
+            return new ScanResult(Status.UNAVAILABLE, "文件超过 ClamAV 流扫描大小上限");
         }
         return new ScanResult(Status.UNAVAILABLE, "病毒扫描服务返回异常结果");
     }

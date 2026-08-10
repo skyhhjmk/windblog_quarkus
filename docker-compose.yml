@@ -256,6 +256,12 @@ services:
         max-file: "5"
     networks:
       - app-network
+    environment:
+      # ClamAV 默认 StreamMaxLength 只有 25M，无法扫描管理端允许的 103MB/512MB 媒体。
+      CLAMD_CONF_StreamMaxLength: "${CLAMAV_STREAM_MAX_LENGTH:-512M}"
+      CLAMD_CONF_MaxFileSize: "${CLAMAV_MAX_FILE_SIZE:-512M}"
+      CLAMD_CONF_MaxScanSize: "${CLAMAV_MAX_SCAN_SIZE:-1G}"
+      CLAMD_CONF_MaxScanTime: "${CLAMAV_MAX_SCAN_TIME:-600000}"
     volumes:
       - clamav-data:/var/lib/clamav
     ports:

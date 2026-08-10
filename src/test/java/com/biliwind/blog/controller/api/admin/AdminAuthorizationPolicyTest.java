@@ -84,6 +84,8 @@ class AdminAuthorizationPolicyTest {
                 "POST", "/api/admin/email-deliveries/fail-pending").action());
         assertEquals("media.retry", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/media/7/retry").action());
+        assertEquals("media.scan", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/media/7/virus-scan").action());
         assertEquals("repost.revoke", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/repost/tokens/7/revoke").action());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp(

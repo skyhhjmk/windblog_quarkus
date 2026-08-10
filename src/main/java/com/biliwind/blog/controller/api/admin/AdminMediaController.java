@@ -5,8 +5,10 @@ import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.MediaManagementService;
+import com.biliwind.blog.service.MediaChunkUploadService;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.service.edge.EdgeWriteGuard;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -33,6 +35,9 @@ public class AdminMediaController {
 
     @Inject
     MediaManagementService mediaService;
+
+    @Inject
+    MediaChunkUploadService chunkUploadService;
 
     @Inject
     com.biliwind.blog.service.PostAccessService postAccessService;
@@ -122,6 +127,63 @@ public class AdminMediaController {
         return toMediaScanJob(job);
     }
 
+    @POST
+    @Path("/upload/session")
+    @Operation(summary = "创建媒体分片上传会话")
+    public AdminMediaDtos.MediaUploadSession initiateChunkUpload(
+        AdminMediaDtos.MediaUploadSessionRequest request) {
+        User operator = mustFindOperator();
+        edgeWriteGuard.rejectWriteOnEdge("创建媒体分片上传");
+        if (request == null) {
+            throw new BadRequestException("缺少分片上传参数");
+        }
+        MediaChunkUploadService.Session session = chunkUploadService.initiate(
+                operator, request.fileName(), request.mimeType(), request.totalSize());
+        return toUploadSession(session);
+    }
+
+    @GET
+    @Path("/upload/session/{uploadId}")
+    @Operation(summary = "获取媒体分片上传状态")
+    public AdminMediaDtos.MediaUploadSession uploadStatus(@PathParam("uploadId") String uploadId) {
+        MediaChunkUploadService.Session session = chunkUploadService.status(mustFindOperator(), uploadId);
+        return toUploadSession(session);
+    }
+
+    @PUT
+    @Path("/upload/session/{uploadId}/chunk/{chunkIndex}")
+    @Consumes(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(summary = "上传一个媒体分片")
+    public AdminMediaDtos.MediaUploadSession uploadChunk(
+            @PathParam("uploadId") String uploadId,
+            @PathParam("chunkIndex") int chunkIndex,
+            @HeaderParam("X-Chunk-Sha256") String chunkSha256,
+            InputStream input) {
+        edgeWriteGuard.rejectWriteOnEdge("上传媒体分片");
+        MediaChunkUploadService.Session session = chunkUploadService.writeChunk(
+                mustFindOperator(), uploadId, chunkIndex, input, chunkSha256);
+        return toUploadSession(session);
+    }
+
+    @POST
+    @Path("/upload/session/{uploadId}/complete")
+    @Blocking
+    @Transactional
+    @Operation(summary = "完成媒体分片上传")
+    public AdminMediaDtos.MediaItem completeChunkUpload(@PathParam("uploadId") String uploadId) {
+        edgeWriteGuard.rejectWriteOnEdge("完成媒体分片上传");
+        User operator = mustFindOperator();
+        Media media = chunkUploadService.complete(operator, uploadId);
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("MEDIA", media.id, "UPSERT"));
+        return mediaService.toDto(media, List.of());
+    }
+
+    private AdminMediaDtos.MediaUploadSession toUploadSession(MediaChunkUploadService.Session session) {
+        return new AdminMediaDtos.MediaUploadSession(
+                session.uploadId(), session.chunkSize(), session.chunkCount(),
+                session.totalSize(), session.uploadedChunks());
+    }
+
     @GET
     @Path("/scan/{jobId}")
     @Operation(summary = "获取媒体引用重建任务状态")
@@ -153,6 +215,22 @@ public class AdminMediaController {
             throw new BadRequestException("重试失败: "
                     + SensitiveMessageSanitizer.sanitize(e.getMessage()));
         }
+    }
+
+    @POST
+    @Path("/{id}/virus-scan")
+    @Operation(summary = "扫描媒体文件病毒")
+    public AdminMediaDtos.MediaItem virusScan(@PathParam("id") Long id) {
+        edgeWriteGuard.rejectWriteOnEdge("手动扫描媒体病毒");
+        mustFindOperator();
+        Media media = mediaService.scanVirus(id);
+        if (media == null) {
+            throw new NotFoundException("媒体不存在");
+        }
+        dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("MEDIA", media.id, "UPSERT"));
+        List<com.biliwind.blog.model.PostMedia> references =
+                com.biliwind.blog.model.PostMedia.find("media.id = ?1", media.id).list();
+        return mediaService.toDto(media, references);
     }
 
     @POST

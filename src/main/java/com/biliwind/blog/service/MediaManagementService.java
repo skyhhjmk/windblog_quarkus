@@ -14,9 +14,11 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import javax.imageio.ImageIO;
@@ -477,6 +479,10 @@ public class MediaManagementService {
             if (virusScanResult.status() == MediaVirusScanService.Status.INFECTED) {
                 throw new BadRequestException("媒体文件未通过病毒扫描");
             }
+            if (virusScanResult.status() == MediaVirusScanService.Status.UNAVAILABLE) {
+                throw new ServiceUnavailableException(
+                        "病毒扫描服务暂不可用，上传未完成：" + virusScanResult.reason());
+            }
             throw new IllegalStateException("媒体文件未完成病毒扫描：" + virusScanResult.reason());
         }
 
@@ -503,7 +509,9 @@ public class MediaManagementService {
         Map<String, Object> metadata = new HashMap<>();
         MediaManagementService transactionalSelf = selfProxy.get();
         Media media = transactionalSelf.createPendingUploadedMedia(
-                storageKey, normalizedMime, sanitizedFileName, size, operator.id, metadata);
+                storageKey, normalizedMime, sanitizedFileName, size, operator.id, metadata,
+                toVirusScanStatus(virusScanResult.status()), OffsetDateTime.now(),
+                sanitizeVirusScanMessage(virusScanResult));
 
         if (asyncMediaProcessing) {
             try {
@@ -524,6 +532,94 @@ public class MediaManagementService {
         }
 
         return processPendingMedia(media.id);
+    }
+
+    /**
+     * Scans one existing media original and stores the result for the media library.
+     * The file is read from the local original first, then from configured storage copies.
+     */
+    public Media scanVirus(Long mediaId) {
+        VirusScanClaim claim = selfProxy.get().claimVirusScan(mediaId);
+        if (claim == null) {
+            return null;
+        }
+        if (!claim.claimed()) {
+            return claim.media();
+        }
+
+        MediaVirusScanService.ScanResult result;
+        try (InputStream input = openOriginalForVirusScan(claim.media())) {
+            result = mediaVirusScanService.scan(input);
+        } catch (Exception exception) {
+            result = new MediaVirusScanService.ScanResult(
+                    MediaVirusScanService.Status.UNAVAILABLE, "媒体原始文件无法读取");
+        }
+        return selfProxy.get().completeVirusScan(mediaId, result);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public VirusScanClaim claimVirusScan(Long mediaId) {
+        if (mediaId == null) {
+            return null;
+        }
+        Media media = Media.find("id = ?1 and deletedAt is null", mediaId)
+                .withLock(LockModeType.PESSIMISTIC_WRITE)
+                .firstResult();
+        if (media == null) {
+            return null;
+        }
+        if ("SCANNING".equals(media.virusScanStatus)) {
+            return new VirusScanClaim(media, false);
+        }
+        media.virusScanStatus = "SCANNING";
+        media.virusScanMessage = "正在扫描";
+        media.persist();
+        return new VirusScanClaim(media, true);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media completeVirusScan(Long mediaId, MediaVirusScanService.ScanResult result) {
+        Media media = Media.findById(mediaId);
+        if (media == null || media.deletedAt != null) {
+            return null;
+        }
+        MediaVirusScanService.ScanResult safeResult = result == null
+                ? new MediaVirusScanService.ScanResult(
+                        MediaVirusScanService.Status.UNAVAILABLE, "病毒扫描未返回结果")
+                : result;
+        media.virusScanStatus = toVirusScanStatus(safeResult.status());
+        media.virusScannedAt = OffsetDateTime.now();
+        media.virusScanMessage = sanitizeVirusScanMessage(safeResult);
+        media.persist();
+        return media;
+    }
+
+    private InputStream openOriginalForVirusScan(Media media) throws IOException {
+        if (media != null && media.storageKey != null && !media.storageKey.isBlank()) {
+            Path localTarget = uploadRoot.resolve(media.storageKey).normalize();
+            if (localTarget.startsWith(uploadRoot) && Files.isRegularFile(localTarget)) {
+                return Files.newInputStream(localTarget);
+            }
+        }
+        try {
+            return storageService.fallbackDownload(media, VariantType.ORIGINAL);
+        } catch (Exception exception) {
+            throw new IOException("媒体原始文件不存在或无法从存储读取", exception);
+        }
+    }
+
+    private String toVirusScanStatus(MediaVirusScanService.Status status) {
+        if (status == null) {
+            return "UNAVAILABLE";
+        }
+        return status.name();
+    }
+
+    private String sanitizeVirusScanMessage(MediaVirusScanService.ScanResult result) {
+        if (result == null || result.reason() == null || result.reason().isBlank()) {
+            return null;
+        }
+        return SensitiveMessageSanitizer.sanitize(result.reason());
     }
 
     /** Processes one durable media job; the caller is the outbox worker, not an HTTP request. */
@@ -601,6 +697,15 @@ public class MediaManagementService {
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public Media createPendingUploadedMedia(String storageKey, String normalizedMime, String sanitizedFileName,
                                             long size, Long operatorId, Map<String, Object> metadata) {
+        return createPendingUploadedMedia(storageKey, normalizedMime, sanitizedFileName, size, operatorId,
+                metadata, "NOT_SCANNED", null, null);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media createPendingUploadedMedia(String storageKey, String normalizedMime, String sanitizedFileName,
+                                            long size, Long operatorId, Map<String, Object> metadata,
+                                            String virusScanStatus, OffsetDateTime virusScannedAt,
+                                            String virusScanMessage) {
         Media media = new Media();
         media.storageKey = storageKey;
         media.url = buildPublicUrl(storageKey);
@@ -619,6 +724,10 @@ public class MediaManagementService {
         media.storageClasses = new LinkedHashMap<>();
         media.processingStatus = "PENDING";
         media.processingProgress = 0;
+        media.virusScanStatus = virusScanStatus == null || virusScanStatus.isBlank()
+                ? "NOT_SCANNED" : virusScanStatus;
+        media.virusScannedAt = virusScannedAt;
+        media.virusScanMessage = virusScanMessage;
         media.persist();
         Media.getEntityManager().flush();
         return media;
@@ -680,39 +789,69 @@ public class MediaManagementService {
                                   Map<String, Object> metadata) {
     }
 
+    public record VirusScanClaim(Media media, boolean claimed) {
+    }
+
     private void processImage(Media media, Path target, Map<String, Object> metadata) {
+        BufferedImage image;
         try {
-            BufferedImage image = ImageIO.read(target.toFile());
-            if (image == null) {
-                return;
-            }
-            media.width = image.getWidth();
-            media.height = image.getHeight();
-
-            String baseName = media.storageKey;
-            int idx = media.storageKey.lastIndexOf('.');
-            if (idx > 0) {
-                baseName = media.storageKey.substring(0, idx);
-            }
-
-            String placeholderKey = baseName + "_placeholder.jpg";
-            Path placeholderPath = uploadRoot.resolve(placeholderKey);
-            Path placeholderOutput = imageProcessingService.generatePlaceholder(target, placeholderPath);
-            String placeholderUrl = buildPublicUrl(placeholderKey);
-            metadata.put("placeholderUrl", placeholderUrl);
-
-            String webpKey = baseName + ".webp";
-            Path webpPath = uploadRoot.resolve(webpKey);
-            Path webpOutput = imageProcessingService.convertToWebp(target, webpPath);
-            String webpUrl = buildPublicUrl(webpKey);
-            metadata.put("webpUrl", webpUrl);
-
-            int[] dimensions = imageProcessingService.extractDimensions(target);
-            metadata.put("width", dimensions[0]);
-            metadata.put("height", dimensions[1]);
-        } catch (IOException e) {
-            Log.warn("图片处理失败: " + e.getMessage());
+            image = ImageIO.read(target.toFile());
+        } catch (IOException exception) {
+            recordProcessingWarning(metadata, "图片", exception);
+            Log.warn("图片变体生成失败，保留原图: " + exception.getMessage());
+            return;
         }
+        if (image == null) {
+            IOException exception = new IOException("无法读取原图片: " + target);
+            recordProcessingWarning(metadata, "图片", exception);
+            Log.warn("图片变体生成失败，保留原图: " + exception.getMessage());
+            return;
+        }
+
+        media.width = image.getWidth();
+        media.height = image.getHeight();
+        metadata.put("width", image.getWidth());
+        metadata.put("height", image.getHeight());
+
+        String baseName = media.storageKey;
+        int idx = media.storageKey.lastIndexOf('.');
+        if (idx > 0) {
+            baseName = media.storageKey.substring(0, idx);
+        }
+
+        String placeholderKey = baseName + "_placeholder.jpg";
+        Path placeholderPath = uploadRoot.resolve(placeholderKey);
+        try {
+            imageProcessingService.generatePlaceholder(target, placeholderPath);
+            metadata.put("placeholderUrl", buildPublicUrl(placeholderKey));
+        } catch (Exception exception) {
+            recordProcessingWarning(metadata, "占位图", exception);
+            Log.warn("占位图生成失败，保留原图: " + exception.getMessage());
+        }
+
+        String webpKey = baseName + ".webp";
+        Path webpPath = uploadRoot.resolve(webpKey);
+        try {
+            imageProcessingService.convertToWebp(target, webpPath);
+            metadata.put("webpUrl", buildPublicUrl(webpKey));
+        } catch (Exception exception) {
+            recordProcessingWarning(metadata, "WebP", exception);
+            Log.warn("WebP 变体生成失败，保留原图: " + exception.getMessage());
+        }
+    }
+
+    private void recordProcessingWarning(Map<String, Object> metadata, String variantName,
+                                         Exception exception) {
+        String message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
+        if (message == null || message.isBlank()) {
+            message = "未知处理错误";
+        }
+        String warning = variantName + "变体生成失败: " + message;
+        Object previousValue = metadata.get("processingWarning");
+        if (previousValue instanceof String previous && !previous.isBlank()) {
+            warning = previous + "；" + warning;
+        }
+        metadata.put("processingWarning", warning);
     }
 
     private void processVideo(Media media, Path target, String storageKey, Map<String, Object> metadata) {
@@ -784,6 +923,7 @@ public class MediaManagementService {
         media.size = 0L;
         media.uploadedBy = operator.id;
         media.createdAt = OffsetDateTime.now();
+        media.virusScanStatus = "NOT_SCANNED";
 
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("importStatus", "failed");
@@ -1120,7 +1260,13 @@ public class MediaManagementService {
                 media.syncStorageClasses,
                 media.skipStorageClasses,
                 safeStorageClasses,
-                safeMetadata
+                safeMetadata,
+                media.processingStatus == null ? "PENDING" : media.processingStatus,
+                media.processingProgress == null ? 0 : media.processingProgress,
+                media.processingError == null ? null : SensitiveMessageSanitizer.sanitize(media.processingError),
+                media.virusScanStatus == null ? "NOT_SCANNED" : media.virusScanStatus,
+                media.virusScannedAt,
+                media.virusScanMessage
         );
     }
 
@@ -1155,7 +1301,7 @@ public class MediaManagementService {
         }
         Set<String> allowedKeys = Set.of(
                 "placeholderUrl", "webpUrl", "coverUrl", "width", "height",
-                "importStatus", "importError", "lastRetryAt");
+                "importStatus", "importError", "lastRetryAt", "processingWarning");
         Map<String, Object> result = new LinkedHashMap<>();
         for (String key : allowedKeys) {
             if (metadata.containsKey(key)) {
