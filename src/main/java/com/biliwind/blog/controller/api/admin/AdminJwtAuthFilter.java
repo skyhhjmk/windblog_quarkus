@@ -50,7 +50,8 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
         if (!path.startsWith("/api/admin")) {
             return;
         }
-        if (path.equals("/api/admin/auth/login")) {
+        if (path.equals("/api/admin/auth/login") || path.equals("/api/admin/install")
+                || path.equals("/api/admin/install/status")) {
             return;
         }
         if (path.startsWith("/api/admin/docs") || path.startsWith("/api/admin/openapi")) {

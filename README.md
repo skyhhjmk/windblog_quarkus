@@ -358,7 +358,7 @@ Create your first JPA entity
 
 生成的生产配置默认使用 `QUARKUS_PROFILE=prod`、`COOKIE_SECURE=true` 和 gRPC mTLS；请先把 `WINDBLOG_SITE_PUBLIC_URL` 改为实际的 `https://` 地址。
 
-`ADMIN_INIT_ENABLED` 默认是 `false`。首次生产部署且数据库中还没有活跃 `SUPER_ADMIN` 时，可将它设为 `true`，应用会使用 `ADMIN_INIT_USERNAME`、`ADMIN_INIT_EMAIL` 和 `ADMIN_INIT_PASSWORD` 创建首个管理员；已有 `SUPER_ADMIN` 时会自动跳过初始化，不会覆盖或提升普通用户。若初始化用户名或邮箱已被普通用户占用，应用会拒绝启动并要求修改初始化配置。
+首次启动不会再从环境变量创建管理员。服务启动后，Admin Flutter 使用服务器地址尝试登录；如果服务器尚未安装，登录接口会返回安装引导，客户端进入“安装初始化”页面。完成超级管理员、站点标题、描述、关键词和本站链接等信息后，系统在一个事务中写入管理员与站点配置，之后再使用新账号登录。
 
 #### 2. 启动服务
 

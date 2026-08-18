@@ -20,16 +20,12 @@ public class SecurityConfigurationWarning {
     private static final Logger LOG = Logger.getLogger(SecurityConfigurationWarning.class);
     private static final String DEFAULT_ADMIN_JWT_SECRET = "windblog-admin-dev-secret-change-me";
     private static final String DEFAULT_USER_JWT_SECRET = "windblog-user-dev-secret-change-me";
-    private static final String DEFAULT_ADMIN_INIT_PASSWORD = "admin";
 
     @ConfigProperty(name = "admin.jwt.secret", defaultValue = DEFAULT_ADMIN_JWT_SECRET)
     String adminJwtSecret;
 
     @ConfigProperty(name = "user.jwt.secret", defaultValue = DEFAULT_USER_JWT_SECRET)
     String userJwtSecret;
-
-    @ConfigProperty(name = "admin.init.password", defaultValue = DEFAULT_ADMIN_INIT_PASSWORD)
-    String adminInitPassword;
 
     @ConfigProperty(name = "security.warn-default-secrets", defaultValue = "true")
     boolean warnDefaultSecrets;
@@ -82,9 +78,6 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "elasticsearch.ssl-verify", defaultValue = "full")
     String elasticsearchSslVerify;
 
-    @ConfigProperty(name = "admin.init.enabled", defaultValue = "false")
-    boolean adminInitializationEnabled;
-
     @ConfigProperty(name = "windblog.node.role", defaultValue = "primary")
     String nodeRole;
 
@@ -125,7 +118,6 @@ public class SecurityConfigurationWarning {
         if (warnDefaultSecrets) {
             checkDefault("ADMIN_JWT_SECRET", adminJwtSecret, DEFAULT_ADMIN_JWT_SECRET);
             checkDefault("USER_JWT_SECRET", userJwtSecret, DEFAULT_USER_JWT_SECRET);
-            checkDefault("ADMIN_INIT_PASSWORD", adminInitPassword, DEFAULT_ADMIN_INIT_PASSWORD);
         }
         if (shouldFailStartup()) {
             validateProductionConfiguration();
@@ -329,7 +321,6 @@ public class SecurityConfigurationWarning {
     private boolean usesDefaultSecret() {
         return DEFAULT_ADMIN_JWT_SECRET.equals(adminJwtSecret)
                 || DEFAULT_USER_JWT_SECRET.equals(userJwtSecret)
-                || DEFAULT_ADMIN_INIT_PASSWORD.equals(adminInitPassword)
                 || "windblog-dev-event-hash-secret".equals(eventHashSecret);
     }
 

@@ -105,6 +105,9 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
         if (path.equals("/api/admin/auth/login")) {
             return true;
         }
+        if (path.equals("/api/admin/install")) {
+            return true;
+        }
         if (path.startsWith("/q/")) {
             return true;
         }

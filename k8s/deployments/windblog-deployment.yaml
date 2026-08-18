@@ -70,14 +70,6 @@ spec:
               value: "false"
             - name: SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD
               value: "false"
-            - name: ADMIN_INIT_ENABLED
-              value: "true"
-            - name: ADMIN_INIT_USERNAME
-              value: admin
-            - name: ADMIN_INIT_PASSWORD
-              value: admin
-            - name: ADMIN_INIT_EMAIL
-              value: admin@windblog.local
             - name: GRPC_SERVER_CLIENT_AUTH
               value: required
             - name: GRPC_SERVER_PLAINTEXT

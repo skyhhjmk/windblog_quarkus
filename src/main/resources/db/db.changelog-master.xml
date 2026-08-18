@@ -108,4 +108,5 @@
     <include file="db/migration/105-create-password-reset-tokens.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/106-add-media-virus-scan-fields.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/107-user-content-features.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/108-create-application-installation.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

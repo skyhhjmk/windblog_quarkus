@@ -465,7 +465,6 @@ env_generate() {
   ensure_env_value RABBITMQ_PASSWORD "$rabbit_password" true
   ensure_env_value ELASTIC_PASSWORD "$elastic_password" true
   ensure_env_value ELASTICSEARCH_PASSWORD "$elastic_password" true
-  ensure_env_value ADMIN_INIT_PASSWORD "$(generate_secret 32)" true
   ensure_env_value ADMIN_JWT_SECRET "$(generate_secret 32)" true
   ensure_env_value USER_JWT_SECRET "$(generate_secret 32)" true
   ensure_env_value SECURITY_EVENT_HASH_SECRET "$(generate_secret 32)" true
@@ -499,9 +498,6 @@ env_generate() {
   ensure_env_value ELASTICSEARCH_USERNAME elastic
   ensure_env_value ELASTICSEARCH_SSL_VERIFY full
   ensure_env_value ELASTICSEARCH_SSL_TRUST_ALL false
-  ensure_production_value ADMIN_INIT_ENABLED false true
-  ensure_env_value ADMIN_INIT_USERNAME admin
-  ensure_env_value ADMIN_INIT_EMAIL admin@windblog.local
   ensure_production_value COOKIE_SECURE true false
   ensure_env_value SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD true
   ensure_env_value CORS_ORIGINS https://your-domain.example
@@ -612,7 +608,6 @@ env_check() {
   env_check_key KIBANA_ENCRYPTION_KEY 32 || failed=1
   env_check_key KIBANA_REPORTING_KEY 32 || failed=1
   env_check_key KIBANA_SERVICE_ACCOUNT_TOKEN 16 || failed=1
-  env_check_key ADMIN_INIT_PASSWORD 16 || failed=1
   env_check_key ADMIN_JWT_SECRET 32 || failed=1
   env_check_key USER_JWT_SECRET 32 || failed=1
   env_check_key SECURITY_EVENT_HASH_SECRET 32 || failed=1
@@ -635,10 +630,6 @@ env_check() {
       failed=1
     fi
     env_check_exact COOKIE_SECURE true || failed=1
-    env_check_bool ADMIN_INIT_ENABLED || failed=1
-    if [[ "$(read_env_value ADMIN_INIT_ENABLED)" == true ]]; then
-      printf '%s\n' 'WARN ADMIN_INIT_ENABLED=true：仅当数据库没有活跃 SUPER_ADMIN 时创建首个管理员；已有 SUPER_ADMIN 时自动跳过。'
-    fi
     env_check_exact SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD true || failed=1
     env_check_exact SECURITY_HEADERS_HSTS_ENABLED true || failed=1
     env_check_exact SECURITY_HEADERS_CSP_ENFORCE true || failed=1

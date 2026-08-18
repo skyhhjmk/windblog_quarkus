@@ -48,6 +48,7 @@ public class AdminAuthorizationFilter implements ContainerRequestFilter {
             return;
         }
         if (path.endsWith("/auth/login") || path.endsWith("/auth/logout")
+                || path.equals("/api/admin/install") || path.equals("/api/admin/install/status")
                 || path.startsWith("/api/admin/docs") || path.startsWith("/api/admin/openapi")) {
             return;
         }

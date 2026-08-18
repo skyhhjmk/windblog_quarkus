@@ -7,6 +7,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminLoginResponse;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserProfile;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.AdminActionSecurityService;
+import com.biliwind.blog.service.ApplicationInstallationService;
 import io.smallrye.jwt.build.Jwt;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -44,6 +45,9 @@ public class AdminAuthApiController {
     AdminActionSecurityService adminActionSecurityService;
 
     @Inject
+    ApplicationInstallationService installationService;
+
+    @Inject
     com.biliwind.blog.service.security.AdminTokenRevocationService tokenRevocationService;
 
     @Inject
@@ -75,6 +79,12 @@ public class AdminAuthApiController {
             content = @Content(schema = @Schema(implementation = AdminLoginResponse.class)))
     @APIResponse(responseCode = "401", description = "账号或密码错误")
     public Response login(@Valid AdminLoginRequest request) {
+        if (!installationService.isInstalled()) {
+            return Response.status(Response.Status.PRECONDITION_REQUIRED)
+                    .entity(Map.of("success", false, "code", "INSTALL_REQUIRED",
+                            "message", "系统尚未完成安装初始化，请先在 Admin Flutter 中完成安装"))
+                    .build();
+        }
         String normalizedAccount = request.account().trim().toLowerCase();
         String clientIp = clientIpResolver.resolve(routingContext).clientIp();
         String accountLimitKey = "admin-login-account:" + normalizedAccount;

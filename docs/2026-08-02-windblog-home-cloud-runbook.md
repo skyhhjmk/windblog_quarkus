@@ -32,7 +32,7 @@ PostgreSQL 镜像可通过 `POSTGRES_IMAGE` 配置，示例默认是 `postgres:1
 必须提供并保存于部署平台 secret store 的配置至少包括：
 
 - `ADMIN_JWT_SECRET`、`USER_JWT_SECRET`、`SECURITY_EVENT_HASH_SECRET`（事件密钥至少 32 字符）；
-- `ADMIN_INIT_PASSWORD`（首次初始化使用；`ADMIN_INIT_ENABLED=true` 只会在没有活跃 `SUPER_ADMIN` 时创建首个管理员，已有管理员时自动跳过）；
+- 首次安装由 Admin Flutter 的安装初始化页面完成，不再配置 `ADMIN_INIT_*` 环境变量；
 - `SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=true`，禁止通过关闭告警绕过默认凭据启动保护；
 - `COOKIE_SECURE=true`、`WINDBLOG_SITE_PUBLIC_URL=https://...`；
 - 明确的 `CORS_ORIGINS`，且 `CORS_ALLOW_CREDENTIALS=false`；

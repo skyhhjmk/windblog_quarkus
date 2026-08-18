@@ -29,7 +29,6 @@ public class DeploymentPackageService {
     private volatile SecureRandom secureRandom;
     private static final String DEFAULT_ADMIN_JWT_SECRET = "windblog-admin-dev-secret-change-me";
     private static final String DEFAULT_USER_JWT_SECRET = "windblog-user-dev-secret-change-me";
-    private static final String DEFAULT_ADMIN_INIT_PASSWORD = "admin";
 
     @Inject
     CertificateService certificateService;
@@ -52,10 +51,6 @@ public class DeploymentPackageService {
     @Inject
     @ConfigProperty(name = "admin.jwt.issuer", defaultValue = "windblog-admin")
     String adminJwtIssuer;
-
-    @Inject
-    @ConfigProperty(name = "admin.init.password", defaultValue = DEFAULT_ADMIN_INIT_PASSWORD)
-    String adminInitPassword;
 
     @Inject
     @ConfigProperty(name = "security.event-hash-secret", defaultValue = "windblog-dev-event-hash-secret")
@@ -199,7 +194,6 @@ public class DeploymentPackageService {
         sb.append("SECURITY_HEADERS_CSP_ENFORCE=true\n");
         sb.append("SECURITY_HEADERS_HSTS_ENABLED=true\n");
         sb.append("SWAGGER_UI_ENABLED=false\n");
-        sb.append("ADMIN_INIT_ENABLED=false\n");
         sb.append("SECURITY_EVENT_HASH_SECRET=").append(eventHashSecret).append("\n");
 
         sb.append("EDGE_DB_USER=windblog\n");
@@ -218,7 +212,6 @@ public class DeploymentPackageService {
         sb.append("USER_JWT_ISSUER=").append(this.userJwtIssuer).append("\n");
         sb.append("ADMIN_JWT_SECRET=").append(this.adminJwtSecret).append("\n");
         sb.append("ADMIN_JWT_ISSUER=").append(this.adminJwtIssuer).append("\n");
-        sb.append("ADMIN_INIT_PASSWORD=").append(this.adminInitPassword).append("\n");
         appendDevelopmentSecurityCompatibility(sb);
         sb.append("BLOG_URL=").append(this.blogUrl).append("\n");
         appendClusterPublicKey(sb);
@@ -245,7 +238,7 @@ public class DeploymentPackageService {
         if (DEFAULT_USER_JWT_SECRET.equals(this.userJwtSecret)) {
             return true;
         }
-        return DEFAULT_ADMIN_INIT_PASSWORD.equals(this.adminInitPassword);
+        return "windblog-dev-event-hash-secret".equals(this.eventHashSecret);
     }
 
     private void appendClusterPublicKey(StringBuilder sb) {
@@ -350,7 +343,6 @@ public class DeploymentPackageService {
         sb.append("      - USER_JWT_ISSUER=${USER_JWT_ISSUER}\n");
         sb.append("      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}\n");
         sb.append("      - ADMIN_JWT_ISSUER=${ADMIN_JWT_ISSUER}\n");
-        sb.append("      - ADMIN_INIT_PASSWORD=${ADMIN_INIT_PASSWORD}\n");
         sb.append("      - SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=${SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD:-true}\n");
         sb.append("      - BLOG_URL=${BLOG_URL}\n");
         sb.append("    depends_on:\n");

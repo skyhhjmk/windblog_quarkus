@@ -142,8 +142,6 @@ try {
         RABBITMQ_PASSWORD = $smokePassword
         ADMIN_JWT_SECRET = $applicationSecret
         USER_JWT_SECRET = $applicationSecret
-        ADMIN_INIT_PASSWORD = $applicationSecret
-        ADMIN_INIT_ENABLED = "false"
         SECURITY_EVENT_HASH_SECRET = $applicationSecret
         SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD = "true"
         COOKIE_SECURE = "true"

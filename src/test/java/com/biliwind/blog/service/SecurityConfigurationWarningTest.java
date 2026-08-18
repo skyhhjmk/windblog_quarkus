@@ -16,14 +16,6 @@ class SecurityConfigurationWarningTest {
     }
 
     @Test
-    void shouldAllowOneTimeAdminBootstrapInProduction() {
-        SecurityConfigurationWarning warning = validPrimaryConfiguration();
-        warning.adminInitializationEnabled = true;
-
-        assertDoesNotThrow(warning::validateProductionConfiguration);
-    }
-
-    @Test
     void shouldRejectWildcardCorsOrigin() {
         SecurityConfigurationWarning warning = validPrimaryConfiguration();
         warning.corsOrigins = "https://blog.example.com,*";
@@ -144,7 +136,7 @@ class SecurityConfigurationWarningTest {
     @Test
     void shouldRejectDefaultSecretEvenWhenWarningsAreDisabled() {
         SecurityConfigurationWarning warning = validPrimaryConfiguration();
-        warning.adminInitPassword = "admin";
+        warning.adminJwtSecret = "windblog-admin-dev-secret-change-me";
         warning.warnDefaultSecrets = false;
         warning.failOnDefaultSecretsInProd = true;
 
@@ -204,7 +196,6 @@ class SecurityConfigurationWarningTest {
         warning.corsOrigins = "https://admin.example.com";
         warning.rabbitmqUsername = "windblog";
         warning.rabbitmqPassword = "rabbit-value-that-is-longer-than-32";
-        warning.adminInitPassword = "initial-admin-password-that-is-long";
         warning.failOnDefaultSecretsInProd = true;
         warning.eventHashSecret = "event-hash-value-that-is-longer-than-32";
         warning.adminJwtSecret = "admin-jwt-value-that-is-longer-than-32";
@@ -217,7 +208,6 @@ class SecurityConfigurationWarningTest {
         warning.cspConnectSources = "none";
         warning.corsCredentialsAllowed = false;
         warning.elasticsearchSslVerify = "full";
-        warning.adminInitializationEnabled = false;
         warning.nodeRole = "primary";
         warning.grpcServerPlaintext = false;
         warning.grpcServerClientAuth = "required";
