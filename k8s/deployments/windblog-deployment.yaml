@@ -83,22 +83,22 @@ spec:
             - name: GRPC_SERVER_PLAINTEXT
               value: "false"
             - name: GRPC_SERVER_CERTIFICATE
-              value: certs/ca/server.crt
+              value: /deployments/certs/ca/server.crt
             - name: GRPC_SERVER_KEY
-              value: certs/ca/server.key
+              value: /deployments/certs/ca/server.key
             - name: GRPC_SERVER_TRUST_STORE
-              value: certs/ca/truststore.p12
+              value: /deployments/certs/ca/truststore.p12
             - name: GRPC_SERVER_TRUST_STORE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: windblog-grpc-tls
                   key: truststore-password
             - name: GRPC_CLIENT_CA_CERTIFICATE
-              value: certs/ca/ca.crt
+              value: /deployments/certs/ca/ca.crt
             - name: GRPC_CLIENT_CERTIFICATE
-              value: certs/ca/client.crt
+              value: /deployments/certs/ca/client.crt
             - name: GRPC_CLIENT_KEY
-              value: certs/ca/client.key
+              value: /deployments/certs/ca/client.key
             - name: GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK
               value: "false"
             - name: QUARKUS_LOG_FILE_ENABLED

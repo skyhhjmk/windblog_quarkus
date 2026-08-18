@@ -16,6 +16,14 @@ class SecurityConfigurationWarningTest {
     }
 
     @Test
+    void shouldAllowOneTimeAdminBootstrapInProduction() {
+        SecurityConfigurationWarning warning = validPrimaryConfiguration();
+        warning.adminInitializationEnabled = true;
+
+        assertDoesNotThrow(warning::validateProductionConfiguration);
+    }
+
+    @Test
     void shouldRejectWildcardCorsOrigin() {
         SecurityConfigurationWarning warning = validPrimaryConfiguration();
         warning.corsOrigins = "https://blog.example.com,*";

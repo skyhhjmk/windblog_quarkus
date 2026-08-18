@@ -53,9 +53,7 @@ public class AdminBootstrapInitializer {
 
     private void createInitialSuperAdmin() {
         User existingUser = User.find("username = ?1 or email = ?2", initUsername, initEmail).firstResult();
-        if (existingUser != null) {
-            return;
-        }
+        ensureNoExistingUser(existingUser);
         OffsetDateTime now = OffsetDateTime.now();
         User admin = new User();
         admin.username = initUsername;
@@ -66,5 +64,11 @@ public class AdminBootstrapInitializer {
         admin.createdAt = now;
         admin.updatedAt = now;
         admin.persist();
+    }
+
+    static void ensureNoExistingUser(User existingUser) {
+        if (existingUser != null) {
+            throw new IllegalStateException("无法创建初始 SUPER_ADMIN：初始化用户名或邮箱已被现有用户占用；请修改 ADMIN_INIT_USERNAME/ADMIN_INIT_EMAIL，或先处理现有账号");
+        }
     }
 }

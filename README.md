@@ -349,23 +349,23 @@ Create your first JPA entity
 
 #### 1. 配置环境变量
 
-复制环境变量文件并修改密码：
+生产部署建议使用管理脚本生成并检查环境变量：
 
 ```bash
-# 复制示例配置
-cp .env.example .env
-
-# 编辑 .env 文件，修改密码和密钥
-# ELASTIC_PASSWORD=<设置强密码>
-# KIBANA_ENCRYPTION_KEY=<使用 openssl rand -hex 32 生成>
-# KIBANA_REPORTING_KEY=<使用 openssl rand -hex 32 生成>
+./admin.sh env-generate
+./admin.sh env-check
 ```
+
+生成的生产配置默认使用 `QUARKUS_PROFILE=prod`、`COOKIE_SECURE=true` 和 gRPC mTLS；请先把 `WINDBLOG_SITE_PUBLIC_URL` 改为实际的 `https://` 地址。
+
+`ADMIN_INIT_ENABLED` 默认是 `false`。首次生产部署且数据库中还没有活跃 `SUPER_ADMIN` 时，可将它设为 `true`，应用会使用 `ADMIN_INIT_USERNAME`、`ADMIN_INIT_EMAIL` 和 `ADMIN_INIT_PASSWORD` 创建首个管理员；已有 `SUPER_ADMIN` 时会自动跳过初始化，不会覆盖或提升普通用户。若初始化用户名或邮箱已被普通用户占用，应用会拒绝启动并要求修改初始化配置。
 
 #### 2. 启动服务
 
 ```bash
-# 启动所有服务（包括 Elasticsearch 和 Kibana）
-docker-compose --env-file .env up -d
+# 构建本地 Elasticsearch IK 镜像并启动生产服务
+./admin.sh build
+./admin.sh start
 
 # 等待 Elasticsearch 就绪后，运行初始化脚本
 # Windows PowerShell:

@@ -180,9 +180,6 @@ public class SecurityConfigurationWarning {
         if (!"full".equalsIgnoreCase(elasticsearchSslVerify)) {
             throw new IllegalStateException("生产环境必须启用 Elasticsearch 完整 TLS 证书校验");
         }
-        if (adminInitializationEnabled) {
-            throw new IllegalStateException("生产环境必须关闭 ADMIN_INIT_ENABLED");
-        }
         if ("changeit".equalsIgnoreCase(grpcServerTrustStorePassword.orElse(""))) {
             throw new IllegalStateException("生产环境禁止使用默认 gRPC trust-store 密码");
         }
