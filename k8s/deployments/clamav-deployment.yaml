@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clamav
+  labels:
+    app.kubernetes.io/name: clamav
+    app.kubernetes.io/component: dependency
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clamav
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clamav
+        app.kubernetes.io/component: dependency
+    spec:
+      containers:
+        - name: clamav
+          image: clamav/clamav:stable
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: clamd
+              containerPort: 3310
+              protocol: TCP
+          env:
+            - name: CLAMD_CONF_StreamMaxLength
+              value: 512M
+            - name: CLAMD_CONF_MaxFileSize
+              value: 512M
+            - name: CLAMD_CONF_MaxScanSize
+              value: 1G
+            - name: CLAMD_CONF_MaxScanTime
+              value: "600000"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          startupProbe:
+            exec:
+              command:
+                - clamdscan
+                - --ping
+                - "1"
+                - --wait
+                - /etc/hostname
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 36
+          readinessProbe:
+            exec:
+              command:
+                - clamdscan
+                - --ping
+                - "1"
+                - --wait
+                - /etc/hostname
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: clamd
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: clamav-data
+              mountPath: /var/lib/clamav
+      volumes:
+        - name: clamav-data
+          persistentVolumeClaim:
+            claimName: clamav-data

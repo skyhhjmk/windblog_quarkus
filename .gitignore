@@ -46,5 +46,14 @@ nb-configuration.xml
 .certs/
 /uploads/
 /logs/
+/postgres-data/
+/redis-data/
+/rabbitmq_data/
+/rabbitmq_data.migration-*/
+/.windblog-migration-recovery/
+/elasticsearch-data/
+/kibana-data/
+/clamav-data/
+/windblog-logs/
 /rsa_keys/*
 /certs/

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-data
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/component: dependency
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi

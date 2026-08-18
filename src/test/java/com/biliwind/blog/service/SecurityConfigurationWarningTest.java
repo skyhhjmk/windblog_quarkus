@@ -188,10 +188,10 @@ class SecurityConfigurationWarningTest {
         warning.adminInitializationEnabled = false;
         warning.nodeRole = "primary";
         warning.grpcServerClientAuth = "required";
-        warning.grpcServerCertificate = "server.crt";
-        warning.grpcServerKey = "server.key";
-        warning.grpcServerTrustStore = "truststore.p12";
-        warning.grpcServerTrustStorePassword = "trust-store-password";
+        warning.grpcServerCertificate = java.util.Optional.of("server.crt");
+        warning.grpcServerKey = java.util.Optional.of("server.key");
+        warning.grpcServerTrustStore = java.util.Optional.of("truststore.p12");
+        warning.grpcServerTrustStorePassword = java.util.Optional.of("trust-store-password");
         warning.grpcClientPlaintextFallbackAllowed = false;
         warning.mediaVirusScanEnabled = true;
         warning.mediaVirusScanRequired = true;

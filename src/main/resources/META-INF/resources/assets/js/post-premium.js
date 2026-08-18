@@ -119,7 +119,10 @@
             try {
                 const response = await fetch('/api/user/repost/licenses', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-XSRF-TOKEN': getCsrfToken()
+                    },
                     body: JSON.stringify({
                         postSlug: button.dataset.postRef,
                         targetUrl: targetUrl

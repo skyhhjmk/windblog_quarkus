@@ -98,6 +98,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate Docker Hub credentials
+        if: steps.release.outputs.push_image == 'true'
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [[ -z "${DOCKERHUB_USERNAME}" || -z "${DOCKERHUB_TOKEN}" ]]; then
+            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets are required for image publishing." >&2
+            exit 1
+          fi
+
+      - name: Login to Docker Hub
+        if: steps.release.outputs.push_image == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build WindBlog native application
         shell: bash
         run: |
@@ -180,4 +199,32 @@ jobs:
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
             docker push "${IMAGE}:latest-native"
             docker push "${IMAGE}:latest"
+          fi
+
+      - name: Push native images to Docker Hub
+        if: steps.release.outputs.push_image == 'true'
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          SOURCE_IMAGE="${{ steps.release.outputs.image }}"
+          DOCKERHUB_IMAGE="docker.io/${DOCKERHUB_USERNAME}/windblog_quarkus"
+          VERSION="${{ steps.release.outputs.version }}"
+          SHORT_SHA="${{ steps.release.outputs.short_sha }}"
+
+          docker tag "${SOURCE_IMAGE}:${VERSION}-native" "${DOCKERHUB_IMAGE}:${VERSION}-native"
+          docker tag "${SOURCE_IMAGE}:sha-${SHORT_SHA}-native" "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}-native"
+          docker tag "${SOURCE_IMAGE}:${VERSION}" "${DOCKERHUB_IMAGE}:${VERSION}"
+          docker tag "${SOURCE_IMAGE}:sha-${SHORT_SHA}" "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}"
+
+          docker push "${DOCKERHUB_IMAGE}:${VERSION}-native"
+          docker push "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}-native"
+          docker push "${DOCKERHUB_IMAGE}:${VERSION}"
+          docker push "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}"
+
+          if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
+            docker tag "${SOURCE_IMAGE}:latest-native" "${DOCKERHUB_IMAGE}:latest-native"
+            docker tag "${SOURCE_IMAGE}:latest" "${DOCKERHUB_IMAGE}:latest"
+            docker push "${DOCKERHUB_IMAGE}:latest-native"
+            docker push "${DOCKERHUB_IMAGE}:latest"
           fi

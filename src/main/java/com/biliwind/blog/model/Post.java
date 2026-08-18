@@ -110,6 +110,23 @@ public class Post extends PanacheEntityBase {
     @Column(name = "published_at")
     public OffsetDateTime publishedAt;
 
+    /** 用户投稿提交审核时间 */
+    @Column(name = "submitted_at")
+    public OffsetDateTime submittedAt;
+
+    /** 最近一次审核时间 */
+    @Column(name = "reviewed_at")
+    public OffsetDateTime reviewedAt;
+
+    /** 最近一次审核人 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by")
+    public User reviewedBy;
+
+    /** 审核意见 */
+    @Column(name = "review_note", columnDefinition = "text")
+    public String reviewNote;
+
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp

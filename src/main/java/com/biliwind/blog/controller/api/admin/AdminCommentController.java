@@ -33,6 +33,9 @@ public class AdminCommentController {
     com.biliwind.blog.service.CommentEmailNotificationService commentEmailNotificationService;
 
     @Inject
+    com.biliwind.blog.service.UserNotificationService userNotificationService;
+
+    @Inject
     AiManager aiManager;
 
     @Inject
@@ -153,6 +156,7 @@ public class AdminCommentController {
         auditService.log("comment", String.valueOf(comment.id), "update", oldVal, newVal);
         if (shouldNotifyReplyRecipient) {
             commentEmailNotificationService.notifyReplyRecipient(comment);
+            userNotificationService.notifyCommentReply(comment);
         }
         invalidateCommentCaches();
 

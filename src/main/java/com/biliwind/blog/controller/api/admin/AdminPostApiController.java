@@ -80,6 +80,9 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.service.ArticleEmailNotificationService articleEmailNotificationService;
 
+    @Inject
+    com.biliwind.blog.service.UserNotificationService userNotificationService;
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -302,6 +305,7 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "409", description = "内容相同")
     public AdminPostDetail publish(@PathParam("id") Long id, EmailDispatchRequest emailDispatchRequest) {
         Post post = mustFindPost(id);
+        boolean wasPendingReview = post.status == PostStatus.PENDING_REVIEW;
         if (post.currentRevision == null) {
             throw badRequest("文章暂无草稿内容");
         }
@@ -309,6 +313,9 @@ public class AdminPostApiController {
             throw conflict("内容相同");
         }
         publishRevision(post, post.currentRevision, OffsetDateTime.now());
+        if (wasPendingReview) {
+            userNotificationService.notifyPostPublished(post);
+        }
         articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         return toDetail(post);
@@ -372,13 +379,39 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "409", description = "内容相同")
     public AdminPostDetail publishRevision(@PathParam("id") Long id, @PathParam("revisionNumber") int revisionNumber, EmailDispatchRequest emailDispatchRequest) {
         Post post = mustFindPost(id);
+        boolean wasPendingReview = post.status == PostStatus.PENDING_REVIEW;
         PostRevision revision = findRevisionOrThrow(id, revisionNumber);
         if (post.status == PostStatus.PUBLISHED && sameRevision(post.publishedRevision, revision)) {
             throw conflict("内容相同");
         }
         publishRevision(post, revision, OffsetDateTime.now());
+        if (wasPendingReview) {
+            userNotificationService.notifyPostPublished(post);
+        }
         articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        return toDetail(post);
+    }
+
+    @POST
+    @Path("/{id}/reject")
+    @Transactional
+    @Operation(summary = "退回用户投稿")
+    @APIResponse(responseCode = "200", description = "已退回")
+    @APIResponse(responseCode = "409", description = "文章不在待审核状态")
+    public AdminPostDetail reject(@PathParam("id") Long id, ReviewDecisionRequest request) {
+        Post post = mustFindPost(id);
+        if (post.status != PostStatus.PENDING_REVIEW) {
+            throw conflict("只有待审核文章可以退回");
+        }
+        post.status = PostStatus.DRAFT;
+        post.reviewedAt = OffsetDateTime.now();
+        post.reviewedBy = mustFindOperator();
+        post.reviewNote = request == null || request.note() == null ? null : request.note().trim();
+        post.updatedAt = OffsetDateTime.now();
+        userNotificationService.notifyPostRejected(post);
+        auditService.log("post", post.id, "reject", null,
+                Map.of("reviewNote", post.reviewNote == null ? "" : post.reviewNote));
         return toDetail(post);
     }
 

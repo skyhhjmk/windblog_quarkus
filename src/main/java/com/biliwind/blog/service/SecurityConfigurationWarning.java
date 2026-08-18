@@ -12,6 +12,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.Locale;
+import java.util.Optional;
 
 @ApplicationScoped
 public class SecurityConfigurationWarning {
@@ -93,17 +94,17 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "quarkus.grpc.server.ssl.client-auth", defaultValue = "none")
     String grpcServerClientAuth;
 
-    @ConfigProperty(name = "quarkus.grpc.server.ssl.certificate", defaultValue = "")
-    String grpcServerCertificate;
+    @ConfigProperty(name = "quarkus.grpc.server.ssl.certificate")
+    Optional<String> grpcServerCertificate;
 
-    @ConfigProperty(name = "quarkus.grpc.server.ssl.key", defaultValue = "")
-    String grpcServerKey;
+    @ConfigProperty(name = "quarkus.grpc.server.ssl.key")
+    Optional<String> grpcServerKey;
 
-    @ConfigProperty(name = "quarkus.grpc.server.ssl.trust-store", defaultValue = "")
-    String grpcServerTrustStore;
+    @ConfigProperty(name = "quarkus.grpc.server.ssl.trust-store")
+    Optional<String> grpcServerTrustStore;
 
-    @ConfigProperty(name = "quarkus.grpc.server.ssl.trust-store-password", defaultValue = "")
-    String grpcServerTrustStorePassword;
+    @ConfigProperty(name = "quarkus.grpc.server.ssl.trust-store-password")
+    Optional<String> grpcServerTrustStorePassword;
 
     @ConfigProperty(name = "windblog.grpc.client.allow-plaintext-fallback", defaultValue = "true")
     boolean grpcClientPlaintextFallbackAllowed;
@@ -182,7 +183,7 @@ public class SecurityConfigurationWarning {
                 || isBlank(grpcServerTrustStore)) {
             throw new IllegalStateException("生产环境的 gRPC 服务端必须启用完整 mTLS 配置");
         }
-        if ("changeit".equalsIgnoreCase(grpcServerTrustStorePassword)) {
+        if ("changeit".equalsIgnoreCase(grpcServerTrustStorePassword.orElse(""))) {
             throw new IllegalStateException("生产环境禁止使用默认 gRPC trust-store 密码");
         }
         if (grpcClientPlaintextFallbackAllowed) {
@@ -207,7 +208,7 @@ public class SecurityConfigurationWarning {
 
     private boolean shouldFailStartup() {
         return LaunchMode.current() == LaunchMode.NORMAL
-                && !"test".equalsIgnoreCase(quarkusProfile);
+                && "prod".equalsIgnoreCase(quarkusProfile);
     }
 
     private boolean isUnsafePublicUrl(String value) {
@@ -325,6 +326,10 @@ public class SecurityConfigurationWarning {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private boolean isBlank(Optional<String> value) {
+        return value.isEmpty() || value.get().isBlank();
     }
 
     private boolean containsUnsafeCspSource(String sources) {

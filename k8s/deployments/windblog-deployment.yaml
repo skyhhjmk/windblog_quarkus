@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: windblog
+  labels:
+    app.kubernetes.io/name: windblog
+    app.kubernetes.io/component: application
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: windblog-quarkus
+  template:
+    metadata:
+      labels:
+        app: windblog-quarkus
+        app.kubernetes.io/name: windblog
+        app.kubernetes.io/component: application
+    spec:
+      containers:
+        - name: windblog
+          image: localhost/windblog-quarkus:k8s-dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JAVA_OPTS_APPEND
+              value: >-
+                -Dquarkus.profile=dev -Dquarkus.http.host=0.0.0.0
+                -Djava.util.logging.manager=org.jboss.logmanager.LogManager
+            - name: QUARKUS_PROFILE
+              value: dev
+            - name: DB_JDBC_URL
+              value: jdbc:postgresql://postgresql:5432/windblog
+            - name: DB_USERNAME
+              value: windblog
+            - name: DB_PASSWORD
+              value: ""
+            - name: REDIS_URL
+              value: redis://redis:6379
+            - name: RABBITMQ_HOST
+              value: rabbitmq
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USERNAME
+              value: guest
+            - name: RABBITMQ_PASSWORD
+              value: guest
+            - name: ELASTICSEARCH_HOSTS
+              value: http://elasticsearch:9200
+            - name: ELASTICSEARCH_USERNAME
+              value: ""
+            - name: ELASTICSEARCH_PASSWORD
+              value: ""
+            - name: ELASTICSEARCH_SSL_VERIFY
+              value: none
+            - name: ELASTICSEARCH_SSL_TRUST_ALL
+              value: "true"
+            - name: WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED
+              value: "true"
+            - name: WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED
+              value: "false"
+            - name: WIND_BLOG_MEDIA_VIRUS_SCAN_AUTO_DETECT
+              value: "false"
+            - name: WIND_BLOG_MEDIA_VIRUS_SCAN_HOST
+              value: clamav
+            - name: WIND_BLOG_MEDIA_VIRUS_SCAN_PORT
+              value: "3310"
+            - name: COOKIE_SECURE
+              value: "false"
+            - name: SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD
+              value: "false"
+            - name: ADMIN_INIT_ENABLED
+              value: "true"
+            - name: ADMIN_INIT_USERNAME
+              value: admin
+            - name: ADMIN_INIT_PASSWORD
+              value: admin
+            - name: ADMIN_INIT_EMAIL
+              value: admin@windblog.local
+            - name: GRPC_SERVER_CLIENT_AUTH
+              value: none
+            - name: GRPC_SERVER_PLAINTEXT
+              value: "true"
+            - name: GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK
+              value: "true"
+            - name: QUARKUS_LOG_FILE_ENABLED
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 9000
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6

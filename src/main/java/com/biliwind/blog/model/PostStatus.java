@@ -18,7 +18,12 @@ public enum PostStatus {
     /**
      * 已归档
      */
-    ARCHIVED((short) 2);
+    ARCHIVED((short) 2),
+
+    /**
+     * 用户已提交、等待管理员审核
+     */
+    PENDING_REVIEW((short) 3);
 
     private final short code;
 

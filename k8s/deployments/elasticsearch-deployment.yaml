@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/component: dependency
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: elasticsearch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: elasticsearch
+        app.kubernetes.io/component: dependency
+    spec:
+      containers:
+        - name: elasticsearch
+          image: localhost/windblog-elasticsearch:k8s-dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: xpack.security.enabled
+              value: "false"
+            - name: cluster.name
+              value: windblog-cluster
+            - name: node.name
+              value: windblog-node-1
+            - name: ES_JAVA_OPTS
+              value: -Xms512m -Xmx512m
+          ports:
+            - name: http
+              containerPort: 9200
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /_cluster/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+      volumes:
+        - name: elasticsearch-data
+          persistentVolumeClaim:
+            claimName: elasticsearch-data

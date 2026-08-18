@@ -31,7 +31,7 @@
                     </select>
                 </div>
                 <div class="flex items-center gap-3">
-                    <button id="linkFilterApplyBtn"
+                    <button type="button" id="linkFilterApplyBtn"
                             class="btn-minimal px-6 py-1.5 bg-accent text-white font-bold border-none rounded-md">
                         应用筛选
                     </button>
@@ -46,6 +46,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 link-grid">
                 {#for link in links}
                     <div class="card p-6 flex flex-col group relative link-card cursor-pointer"
+                         tabindex="0" role="button" aria-label="打开友链资源详情"
                          data-id="{link.id ?: 0}"
                          data-name="{link.name}"
                          data-url="{link.url}"

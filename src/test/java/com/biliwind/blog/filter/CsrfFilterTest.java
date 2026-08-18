@@ -19,6 +19,10 @@ class CsrfFilterTest {
                 "/api/user/buy-post/7",
                 "/api/user/wallet/check-in",
                 "/api/user/repost/licenses",
+                "/user/api/posts",
+                "/user/api/posts/7/submit",
+                "/api/user/favorites/post/demo",
+                "/user/api/notifications/7/read",
                 "/api/link-applications"
         };
 

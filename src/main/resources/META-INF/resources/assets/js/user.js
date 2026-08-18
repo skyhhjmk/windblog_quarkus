@@ -12,21 +12,32 @@
         fetch('/user/api/profile')
             .then(r => r.json())
             .then(data => {
-                const userNotLoggedIn = document.getElementById('userNotLoggedIn');
-                const mobileUserAuth = document.getElementById('mobileUserAuth');
-                const userLoggedIn = document.getElementById('userLoggedIn');
+                const loggedOutNodes = document.querySelectorAll('#userNotLoggedIn, [data-mobile-user-logged-out]');
+                const loggedInNodes = document.querySelectorAll('#userLoggedIn, [data-mobile-user-logged-in]');
                 const userNickname = document.getElementById('userNickname');
+                const mobileNicknames = document.querySelectorAll('[data-mobile-user-nickname]');
 
                 const ok = data && data.success && data.data;
                 if (ok) {
-                    if (userNotLoggedIn) userNotLoggedIn.style.display = 'none';
-                    if (mobileUserAuth) mobileUserAuth.style.display = 'none';
-                    if (userLoggedIn) userLoggedIn.classList.remove('hidden');
+                    loggedOutNodes.forEach(node => {
+                        node.classList.add('hidden');
+                        node.style.display = 'none';
+                    });
+                    loggedInNodes.forEach(node => {
+                        node.classList.remove('hidden');
+                        node.style.display = '';
+                    });
                     if (userNickname) userNickname.textContent = data.data.username || 'User';
+                    mobileNicknames.forEach(node => node.textContent = data.data.username || 'User');
                 } else {
-                    if (userNotLoggedIn) userNotLoggedIn.style.display = 'block';
-                    if (mobileUserAuth) mobileUserAuth.style.display = 'block';
-                    if (userLoggedIn) userLoggedIn.classList.add('hidden');
+                    loggedOutNodes.forEach(node => {
+                        node.classList.remove('hidden');
+                        node.style.display = '';
+                    });
+                    loggedInNodes.forEach(node => {
+                        node.classList.add('hidden');
+                        node.style.display = 'none';
+                    });
                 }
             })
             .catch(() => {
@@ -48,6 +59,7 @@
     function bindLogout() {
         const logoutLink = document.getElementById('logoutLink');
         const logoutBtn = document.getElementById('logoutBtn');
+        const mobileLogoutLinks = document.querySelectorAll('[data-mobile-logout]');
 
         const doLogout = (e) => {
             if (e) e.preventDefault();
@@ -74,6 +86,9 @@
         if (logoutBtn) {
             logoutBtn.onclick = doLogout;
         }
+        mobileLogoutLinks.forEach(link => {
+            link.onclick = doLogout;
+        });
     }
 
     function bindLoginForm() {
@@ -148,30 +163,303 @@
         const articleUpdates = document.getElementById('subscribeArticleUpdates');
         const promotions = document.getElementById('subscribePromotions');
         const hint = document.getElementById('subscriptionVerificationHint');
-        fetch('/user/api/subscriptions').then(response => response.json()).then(result => {
-            if (!result.success) return;
-            articleUpdates.checked = result.data.subscribeArticleUpdates === true;
-            promotions.checked = result.data.subscribePromotions === true;
-            if (result.data.emailVerified !== true) {
-                articleUpdates.disabled = true;
-                promotions.disabled = true;
-                form.querySelector('button').disabled = true;
-                hint.textContent = '请先完成邮箱验证后再管理订阅。';
-            }
-        });
+        const saveButton = form.querySelector('button[type="submit"]');
+        fetch('/user/api/subscriptions')
+            .then(response => response.json())
+            .then(result => {
+                if (!result.success) throw new Error(result.message || '订阅偏好加载失败');
+                articleUpdates.checked = result.data.subscribeArticleUpdates === true;
+                promotions.checked = result.data.subscribePromotions === true;
+                if (result.data.emailVerified !== true) {
+                    articleUpdates.disabled = true;
+                    promotions.disabled = true;
+                    if (saveButton) saveButton.disabled = true;
+                    hint.textContent = '请先完成邮箱验证后再管理订阅。';
+                }
+            })
+            .catch(error => {
+                hint.textContent = error.message || '订阅偏好加载失败，请刷新重试。';
+                hint.classList.add('text-red-400');
+            });
         form.onsubmit = async function (event) {
             event.preventDefault();
-            const response = await fetch('/user/api/subscriptions', {
-                method: 'POST',
+            window.setLoading(saveButton, true, {text: '保存中...'});
+            try {
+                const response = await fetch('/user/api/subscriptions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': window.getCsrfToken()},
+                    body: JSON.stringify({
+                        subscribeArticleUpdates: articleUpdates.checked,
+                        subscribePromotions: promotions.checked
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.message || '订阅偏好保存失败');
+                window.showToast('订阅偏好已保存', 'success');
+            } catch (error) {
+                window.showToast(error.message || '订阅偏好保存失败，请稍后重试', 'error');
+            } finally {
+                window.setLoading(saveButton, false);
+            }
+        };
+    }
+
+    function bindFavoriteButton() {
+        const button = document.getElementById('favoritePostBtn');
+        if (!button || button.dataset.bound === 'true') return;
+        button.dataset.bound = 'true';
+        const slug = button.dataset.postSlug;
+        const label = button.querySelector('[data-favorite-label]');
+        const icon = button.querySelector('span[aria-hidden="true"]');
+        if (!slug) return;
+
+        const setState = (favorited) => {
+            button.setAttribute('aria-pressed', String(favorited));
+            button.classList.toggle('bg-accent/10', favorited);
+            if (label) label.textContent = favorited ? '已收藏' : '收藏文章';
+            if (icon) icon.textContent = favorited ? '★' : '☆';
+        };
+
+        fetch('/api/user/favorites/post/' + encodeURIComponent(slug) + '/status')
+            .then(response => response.ok ? response.json() : null)
+            .then(result => {
+                if (result && result.success) setState(result.favorited === true);
+            })
+            .catch(() => {});
+
+        button.onclick = async function () {
+            if (button.disabled) return;
+            const favorited = button.getAttribute('aria-pressed') === 'true';
+            button.disabled = true;
+            try {
+                const response = await fetch('/api/user/favorites/post/' + encodeURIComponent(slug), {
+                    method: favorited ? 'DELETE' : 'POST',
+                    headers: {'X-XSRF-TOKEN': window.getCsrfToken()}
+                });
+                const result = await response.json();
+                if (response.status === 401) {
+                    const redirect = window.location.pathname + window.location.search + window.location.hash;
+                    window.location.href = '/user/login?redirect=' + encodeURIComponent(redirect);
+                    return;
+                }
+                if (!response.ok || !result.success) throw new Error(result.message || '收藏操作失败');
+                setState(result.favorited === true);
+                window.showToast(result.favorited ? '已加入收藏' : '已取消收藏', 'success');
+            } catch (error) {
+                window.showToast(error.message || '收藏操作失败，请稍后重试', 'error');
+            } finally {
+                button.disabled = false;
+            }
+        };
+    }
+
+    function bindUserPosts() {
+        const form = document.getElementById('userPostForm');
+        const list = document.getElementById('userPostList');
+        if (!form || !list || form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
+        const idInput = document.getElementById('userPostId');
+        const titleInput = document.getElementById('userPostTitle');
+        const slugInput = document.getElementById('userPostSlug');
+        const summaryInput = document.getElementById('userPostSummary');
+        const contentInput = document.getElementById('userPostContent');
+        const saveButton = document.getElementById('saveUserPost');
+        const submitButton = document.getElementById('submitUserPost');
+        const resetButton = document.getElementById('resetUserPost');
+        const feedback = document.getElementById('userPostFeedback');
+
+        const showFeedback = (message, error) => {
+            if (!feedback) return;
+            feedback.textContent = message || '';
+            feedback.classList.remove('hidden', 'border-green-500/30', 'text-green-400', 'border-red-500/30', 'text-red-400');
+            feedback.classList.add(error ? 'border-red-500/30' : 'border-green-500/30');
+            feedback.classList.add(error ? 'text-red-400' : 'text-green-400');
+        };
+
+        const resetForm = () => {
+            idInput.value = '';
+            titleInput.value = '';
+            slugInput.value = '';
+            summaryInput.value = '';
+            contentInput.value = '';
+            showFeedback('', false);
+            if (feedback) feedback.classList.add('hidden');
+        };
+
+        const statusName = (status) => ({0: '草稿', 1: '已发布', 2: '已归档', 3: '待审核'}[status] || '未知状态');
+
+        const loadPosts = async () => {
+            try {
+                const response = await fetch('/user/api/posts');
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || '投稿列表加载失败');
+                list.replaceChildren();
+                if (!result.length) {
+                    list.textContent = '还没有投稿，先写下第一篇文章吧。';
+                    return;
+                }
+                result.forEach((post) => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'w-full text-left rounded border border-[var(--border)] px-3 py-3 hover:border-[var(--accent)] transition-colors';
+                    const title = document.createElement('div');
+                    title.className = 'font-medium';
+                    title.textContent = post.title || post.slug;
+                    const meta = document.createElement('div');
+                    meta.className = 'mt-1 text-xs text-gray-500';
+                    meta.textContent = statusName(post.status) + ' · ' + (post.reviewNote || '点击编辑');
+                    item.append(title, meta);
+                    item.onclick = async () => {
+                        try {
+                            const detailResponse = await fetch('/user/api/posts/' + post.id);
+                            const detail = await detailResponse.json();
+                            if (!detailResponse.ok) throw new Error(detail.message || '投稿加载失败');
+                            idInput.value = detail.id;
+                            titleInput.value = detail.title || '';
+                            slugInput.value = detail.slug || '';
+                            summaryInput.value = detail.summary || '';
+                            contentInput.value = detail.contentMarkdown || '';
+                            showFeedback(detail.statusName === 'DRAFT' ? '已载入草稿' : '已载入文章；待审核或已发布文章不能直接保存', false);
+                        } catch (error) {
+                            showFeedback(error.message || '投稿加载失败', true);
+                        }
+                    };
+                    list.appendChild(item);
+                });
+            } catch (error) {
+                list.textContent = error.message || '投稿列表加载失败，请刷新重试。';
+            }
+        };
+
+        const payload = () => ({
+            title: titleInput.value.trim(),
+            slug: slugInput.value.trim(),
+            summary: summaryInput.value.trim(),
+            contentMarkdown: contentInput.value
+        });
+
+        const saveDraft = async (notify) => {
+            const id = idInput.value;
+            const method = id ? 'PUT' : 'POST';
+            const endpoint = id ? '/user/api/posts/' + id : '/user/api/posts';
+            const response = await fetch(endpoint, {
+                method,
                 headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': window.getCsrfToken()},
-                body: JSON.stringify({
-                    subscribeArticleUpdates: articleUpdates.checked,
-                    subscribePromotions: promotions.checked
-                })
+                body: JSON.stringify(payload())
             });
             const result = await response.json();
-            window.showToast(result.success ? '订阅偏好已保存' : '订阅偏好保存失败', result.success ? 'success' : 'error');
+            if (!response.ok) throw new Error(result.message || '草稿保存失败');
+            idInput.value = result.id;
+            slugInput.value = result.slug || slugInput.value;
+            if (notify) window.showToast('草稿已保存', 'success');
+            await loadPosts();
+            return result;
         };
+
+        form.onsubmit = async (event) => {
+            event.preventDefault();
+            window.setLoading(saveButton, true, {text: '保存中...'});
+            try {
+                await saveDraft(true);
+                showFeedback('草稿已保存，可以继续编辑或提交审核。', false);
+            } catch (error) {
+                showFeedback(error.message || '草稿保存失败', true);
+            } finally {
+                window.setLoading(saveButton, false);
+            }
+        };
+
+        submitButton.onclick = async () => {
+            window.setLoading(submitButton, true, {text: '提交中...'});
+            try {
+                if (!idInput.value) await saveDraft(false);
+                const response = await fetch('/user/api/posts/' + idInput.value + '/submit', {
+                    method: 'POST', headers: {'X-XSRF-TOKEN': window.getCsrfToken()}
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || '提交审核失败');
+                window.showToast('文章已提交审核', 'success');
+                showFeedback('已提交审核，审核结果会通过站内通知告知你。', false);
+                await loadPosts();
+            } catch (error) {
+                showFeedback(error.message || '提交审核失败', true);
+            } finally {
+                window.setLoading(submitButton, false);
+            }
+        };
+
+        resetButton.onclick = resetForm;
+        loadPosts();
+    }
+
+    function bindFavoriteList() {
+        const list = document.getElementById('favoritePostsList');
+        if (!list || list.dataset.bound === 'true') return;
+        list.dataset.bound = 'true';
+        fetch('/api/user/favorites?page=1&pageSize=50')
+            .then(response => response.json().then(result => ({response, result})))
+            .then(({response, result}) => {
+                if (!response.ok || !result.success) throw new Error(result.message || '收藏加载失败');
+                list.replaceChildren();
+                if (!result.data || !result.data.length) {
+                    list.textContent = '还没有收藏文章。';
+                    return;
+                }
+                result.data.forEach((post) => {
+                    const link = document.createElement('a');
+                    link.href = '/post/' + encodeURIComponent(post.slug);
+                    link.className = 'block rounded border border-[var(--border)] px-3 py-3 hover:border-[var(--accent)] transition-colors';
+                    link.textContent = post.title || post.slug;
+                    list.appendChild(link);
+                });
+            })
+            .catch(error => { list.textContent = error.message || '收藏加载失败，请刷新重试。'; });
+    }
+
+    function bindUserNotifications() {
+        const list = document.getElementById('userNotificationsList');
+        const unreadCount = document.getElementById('notificationUnreadCount');
+        const readAllButton = document.getElementById('markAllNotificationsRead');
+        if (!list || list.dataset.bound === 'true') return;
+        list.dataset.bound = 'true';
+
+        const load = () => fetch('/user/api/notifications?page=1&pageSize=50')
+            .then(response => response.json().then(result => ({response, result})))
+            .then(({response, result}) => {
+                if (!response.ok || !result.success) throw new Error(result.message || '通知加载失败');
+                unreadCount.textContent = result.unread ? '(' + result.unread + ' 未读)' : '';
+                list.replaceChildren();
+                if (!result.data || !result.data.length) {
+                    list.textContent = '暂无通知。';
+                    return;
+                }
+                result.data.forEach((notification) => {
+                    const item = document.createElement('div');
+                    item.className = 'rounded border px-3 py-3 cursor-pointer hover:border-[var(--accent)] transition-colors ' + (notification.readAt ? 'border-[var(--border)]' : 'border-[var(--accent)]/50');
+                    const title = document.createElement('div');
+                    title.className = 'font-medium text-[var(--text)]';
+                    title.textContent = notification.title;
+                    const body = document.createElement('div');
+                    body.className = 'mt-1 text-gray-400';
+                    body.textContent = notification.body;
+                    item.append(title, body);
+                    item.onclick = async () => {
+                        await fetch('/user/api/notifications/' + notification.id + '/read', {method: 'POST', headers: {'X-XSRF-TOKEN': window.getCsrfToken()}});
+                        if (notification.targetUrl && notification.targetUrl.startsWith('/')) window.location.href = notification.targetUrl;
+                        else await load();
+                    };
+                    list.appendChild(item);
+                });
+            })
+            .catch(error => { list.textContent = error.message || '通知加载失败，请刷新重试。'; });
+
+        if (readAllButton) {
+            readAllButton.onclick = async () => {
+                await fetch('/user/api/notifications/read-all', {method: 'POST', headers: {'X-XSRF-TOKEN': window.getCsrfToken()}});
+                await load();
+            };
+        }
+        load();
     }
 
     function bindRegisterForm() {
@@ -511,6 +799,10 @@
         bindUserWallet();
         bindBackpackItems();
         bindSubscriptions();
+        bindFavoriteButton();
+        bindUserPosts();
+        bindFavoriteList();
+        bindUserNotifications();
         applyDynamicPublicStyles();
     }
 

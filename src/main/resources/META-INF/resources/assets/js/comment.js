@@ -169,6 +169,11 @@
         const count = root.querySelector('#comment-count');
         const loadMoreBox = root.querySelector('#comment-load-more');
         const loadMoreBtn = root.querySelector('#btn-load-more');
+        const loginLink = root.querySelector('.comment-login-link');
+        if (loginLink) {
+            const redirect = window.location.pathname + window.location.search + window.location.hash;
+            loginLink.href = '/user/login?redirect=' + encodeURIComponent(redirect);
+        }
 
         if (!slug || !list || !count) return;
 

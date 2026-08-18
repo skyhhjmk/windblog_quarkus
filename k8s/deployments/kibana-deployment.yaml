@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  labels:
+    app.kubernetes.io/name: kibana
+    app.kubernetes.io/component: dependency
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kibana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kibana
+        app.kubernetes.io/component: dependency
+    spec:
+      containers:
+        - name: kibana
+          image: elastic.1ms.run/kibana/kibana:9.3.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5601
+              protocol: TCP
+          env:
+            - name: ELASTICSEARCH_HOSTS
+              value: http://elasticsearch:9200
+            - name: XPACK_SECURITY_ENABLED
+              value: "false"
+            - name: I18N_LOCALE
+              value: zh-CN
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: kibana-data
+              mountPath: /usr/share/kibana/data
+      volumes:
+        - name: kibana-data
+          persistentVolumeClaim:
+            claimName: kibana-data

@@ -22,15 +22,18 @@ public class ElasticsearchSettingsService {
     }
 
     public ElasticsearchSettings parse(JsonNode settingValue) {
-        String defaultHosts = ConfigProvider.getConfig()
-                .getOptionalValue("elasticsearch.hosts", String.class)
-                .orElse("http://127.0.0.1:9200");
-        String defaultUsername = ConfigProvider.getConfig()
-                .getOptionalValue("elasticsearch.username", String.class)
-                .orElse("");
-        String defaultPassword = ConfigProvider.getConfig()
-                .getOptionalValue("elasticsearch.password", String.class)
-                .orElse("");
+        String defaultHosts = environmentOverride("ELASTICSEARCH_HOSTS")
+                .orElseGet(() -> ConfigProvider.getConfig()
+                        .getOptionalValue("elasticsearch.hosts", String.class)
+                        .orElse("http://127.0.0.1:9200"));
+        String defaultUsername = environmentOverride("ELASTICSEARCH_USERNAME")
+                .orElseGet(() -> ConfigProvider.getConfig()
+                        .getOptionalValue("elasticsearch.username", String.class)
+                        .orElse(""));
+        String defaultPassword = environmentOverride("ELASTICSEARCH_PASSWORD")
+                .orElseGet(() -> ConfigProvider.getConfig()
+                        .getOptionalValue("elasticsearch.password", String.class)
+                        .orElse(""));
         int defaultTimeoutSeconds = ConfigProvider.getConfig()
                 .getOptionalValue("elasticsearch.health-check.timeout-seconds", Integer.class)
                 .orElse(5);
@@ -48,9 +51,12 @@ public class ElasticsearchSettingsService {
         }
 
         boolean enabled = settingValue.path("enabled").asBoolean(true);
-        String hosts = textValue(settingValue, "hosts", defaultHosts);
-        String username = textValueAllowBlank(settingValue, "username", defaultUsername);
-        String password = textValueAllowBlank(settingValue, "password", defaultPassword);
+        String hosts = environmentOverride("ELASTICSEARCH_HOSTS")
+                .orElseGet(() -> textValue(settingValue, "hosts", defaultHosts));
+        String username = environmentOverride("ELASTICSEARCH_USERNAME")
+                .orElseGet(() -> textValueAllowBlank(settingValue, "username", defaultUsername));
+        String password = environmentOverride("ELASTICSEARCH_PASSWORD")
+                .orElseGet(() -> textValueAllowBlank(settingValue, "password", defaultPassword));
         int timeoutSeconds = settingValue.path("timeout_seconds").asInt(defaultTimeoutSeconds);
         if (timeoutSeconds < 1) {
             timeoutSeconds = 1;
@@ -121,6 +127,19 @@ public class ElasticsearchSettingsService {
             return defaultValue;
         }
         return value.asText("").trim();
+    }
+
+    /**
+     * Service endpoints and credentials can differ between a host process and a container
+     * while sharing the same database-backed system settings. Explicit deployment env vars
+     * therefore take precedence over the saved UI setting.
+     */
+    private java.util.Optional<String> environmentOverride(String name) {
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(value.trim());
     }
 
     private String normalizeHosts(String hosts) {

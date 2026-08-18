@@ -1,5 +1,5 @@
 <!-- Toast Container -->
-<div id="toastContainer" class="toast-container"></div>
+<div id="toastContainer" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <!-- App Modal -->
 <div id="appModal" class="fixed inset-0 z-[9999] hidden items-center justify-center p-4">
@@ -7,7 +7,7 @@
     <div class="modal-container relative bg-card border border-border shadow-2xl max-w-md w-full overflow-hidden rounded-xl">
         <div class="p-8">
             <h3 id="modalTitle" class="text-xl font-bold mb-3 tracking-tight">确认</h3>
-            <p id="modalMessage" class="text-body text-sm mb-8 leading-relaxed"></p>
+            <div id="modalMessage" class="text-body text-sm mb-8 leading-relaxed"></div>
 
             <div id="modalPromptContainer" class="hidden mb-8">
                 <input type="text" id="modalPromptInput"
@@ -16,11 +16,11 @@
             </div>
 
             <div class="flex gap-3 justify-end">
-                <button id="modalCancel"
+                <button type="button" id="modalCancel"
                         class="px-6 py-2.5 text-sm font-semibold text-meta hover:text-main hover:bg-white/5 rounded-lg transition-all">
                     取消
                 </button>
-                <button id="modalOk"
+                <button type="button" id="modalOk"
                         class="px-8 py-2.5 bg-accent text-bg font-black rounded-lg text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-accent/20">
                     确定
                 </button>

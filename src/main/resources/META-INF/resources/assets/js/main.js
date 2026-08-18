@@ -16,8 +16,9 @@
         const mobileMenu = document.getElementById('mobileMenu');
         if (mobileBtn && mobileMenu) {
             mobileBtn.addEventListener('click', () => {
-                mobileMenu.classList.toggle('hidden');
-                mobileBtn.setAttribute('aria-expanded', (!mobileMenu.classList.contains('hidden')).toString());
+                const isOpen = mobileMenu.classList.toggle('hidden') === false;
+                mobileBtn.setAttribute('aria-expanded', isOpen.toString());
+                mobileBtn.setAttribute('aria-label', isOpen ? '关闭菜单' : '打开菜单');
             });
         }
 
@@ -929,12 +930,12 @@
         });
 
         // Search Suggestions logic
-        const searchInput = document.querySelector('form[action="/search"] input[name="q"]');
-        if (searchInput) {
-            const form = searchInput.closest('form');
+        const searchForms = document.querySelectorAll('form[action="/search"]');
+        searchForms.forEach((form) => {
+            const searchInput = form.querySelector('input[name="q"]');
+            if (!searchInput) return;
             const suggestWrap = document.createElement('div');
-            suggestWrap.id = 'search-suggestions';
-            suggestWrap.className = 'absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl hidden z-[60] overflow-hidden';
+            suggestWrap.className = 'search-suggestions absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl hidden z-[60] overflow-hidden';
             form.appendChild(suggestWrap);
 
             let suggestTimer = null;
@@ -954,11 +955,14 @@
                         const suggestions = await res.json();
 
                         if (suggestions && suggestions.length > 0) {
-                            suggestWrap.innerHTML = suggestions.map(s => `
-                                <div class="px-4 py-2 text-sm hover:bg-accent/10 cursor-pointer transition-colors border-b border-border/50 last:border-0" data-val="${s.replace(/"/g, '&quot;')}">
-                                    ${s}
-                                </div>
-                            `).join('');
+                            suggestWrap.replaceChildren();
+                            suggestions.forEach((suggestion) => {
+                                const item = document.createElement('div');
+                                item.className = 'px-4 py-2 text-sm hover:bg-accent/10 cursor-pointer transition-colors border-b border-border/50 last:border-0';
+                                item.dataset.val = String(suggestion);
+                                item.textContent = String(suggestion);
+                                suggestWrap.appendChild(item);
+                            });
                             suggestWrap.classList.remove('hidden');
                         } else {
                             suggestWrap.innerHTML = '';
@@ -990,6 +994,6 @@
                     suggestWrap.classList.add('hidden');
                 }
             });
-        }
+        });
     });
 })();

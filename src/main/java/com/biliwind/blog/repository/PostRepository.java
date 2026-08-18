@@ -50,8 +50,13 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
         java.util.Map<String, Object> parameters = new java.util.HashMap<>();
 
         if (status != null) {
-            where.append(" and status = :status");
-            parameters.put("status", status);
+            com.biliwind.blog.model.PostStatus postStatus = com.biliwind.blog.model.PostStatus.fromCode(status);
+            if (postStatus == null) {
+                where.append(" and 1 = 0");
+            } else {
+                where.append(" and status = :status");
+                parameters.put("status", postStatus);
+            }
         }
         if (categoryId != null) {
             where.append(" and category.id = :categoryId");

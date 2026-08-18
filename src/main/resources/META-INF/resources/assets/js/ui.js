@@ -26,10 +26,8 @@
         else if (type === 'error') icon = '<svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
         else icon = '<svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-        toast.innerHTML = `
-            <div class="toast-icon">${icon}</div>
-            <div class="toast-message">${message}</div>
-        `;
+        toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-message"></div>`;
+        toast.querySelector('.toast-message').textContent = String(message ?? '');
 
         container.appendChild(toast);
         setTimeout(() => toast.classList.add('show'), 10);
@@ -62,7 +60,12 @@
             }
 
             titleEl.textContent = options.title || '提示';
-            messageEl.textContent = options.message || '';
+            messageEl.replaceChildren();
+            if (typeof options.renderContent === 'function') {
+                options.renderContent(messageEl);
+            } else {
+                messageEl.textContent = options.message || '';
+            }
 
             if (options.showCancel) cancelBtn.classList.remove('hidden');
             else cancelBtn.classList.add('hidden');
@@ -75,14 +78,25 @@
                 promptContainer.classList.add('hidden');
             }
 
+            const previousActiveElement = document.activeElement;
+            const previousBodyOverflow = document.body.style.overflow;
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.setAttribute('aria-labelledby', 'modalTitle');
             modal.classList.remove('hidden');
             void modal.offsetWidth;
             modal.classList.add('show');
             document.body.style.overflow = 'hidden';
+            const focusTarget = options.type === 'prompt' ? promptInput : (options.showCancel ? cancelBtn : okBtn);
+            setTimeout(() => focusTarget && focusTarget.focus(), 0);
 
+            let settled = false;
             const cleanup = (result) => {
+                if (settled) return;
+                settled = true;
                 modal.classList.remove('show');
-                document.body.style.overflow = '';
+                document.body.style.overflow = previousBodyOverflow;
+                document.removeEventListener('keydown', escHandler);
                 setTimeout(() => {
                     if (!modal.classList.contains('show')) {
                         modal.classList.add('hidden');
@@ -90,6 +104,10 @@
                 }, 400);
                 okBtn.onclick = null;
                 cancelBtn.onclick = null;
+                modal.querySelector('.modal-overlay').onclick = null;
+                if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
+                    previousActiveElement.focus();
+                }
                 resolve(result);
             };
 
@@ -102,7 +120,6 @@
 
             const escHandler = (e) => {
                 if (e.key === 'Escape') {
-                    document.removeEventListener('keydown', escHandler);
                     cleanup(false);
                 }
             };

@@ -71,6 +71,10 @@ The GitHub Actions release job builds only native images:
 - `Dockerfile.native-micro`: the edge image, published as `<version>`,
   `sha-<commit>`, and `latest`
 
+The same release images are also pushed to Docker Hub. Configure the repository
+secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`; the token should be a Docker
+Hub access token with permission to push to the `windblog_quarkus` repository.
+
 The workflow does not build or push a JVM image. The edge image is compiled
 with the `edge` profile and the primary image with the `prod` profile; they
 must not share a native runner because Quarkus fixes messaging topology at

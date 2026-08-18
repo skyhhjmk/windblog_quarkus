@@ -101,6 +101,9 @@ public final class AdminPostDtos {
             Long channelId) {
     }
 
+    public record ReviewDecisionRequest(String note) {
+    }
+
         public record AdminPostDetail(
                         Long id,
                         String slug,
