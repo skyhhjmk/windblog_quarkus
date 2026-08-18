@@ -35,12 +35,12 @@ public class GrpcChannelFactory {
     @ConfigProperty(name = "windblog.grpc.client.rewrite-local-target", defaultValue = "false")
     boolean rewriteLocalTarget;
 
-    @ConfigProperty(name = "windblog.grpc.client.allow-plaintext-fallback", defaultValue = "true")
+    @ConfigProperty(name = "windblog.grpc.client.allow-plaintext-fallback", defaultValue = "false")
     boolean allowPlaintextFallback;
 
     /**
      * 创建支持 mTLS 的 gRPC 通道。
-     * 如果证书文件不存在，则回退到明文连接（用于兼容旧节点或初始引导）。
+     * 证书缺失时直接失败，禁止通过明文连接绕过 mTLS。
      */
     public ManagedChannel createChannel(String grpcAddress, String nodeId) {
         try {

@@ -17,6 +17,8 @@ spec:
         app.kubernetes.io/name: windblog
         app.kubernetes.io/component: application
     spec:
+      securityContext:
+        fsGroup: 185
       containers:
         - name: windblog
           image: localhost/windblog-quarkus:k8s-dev
@@ -77,11 +79,28 @@ spec:
             - name: ADMIN_INIT_EMAIL
               value: admin@windblog.local
             - name: GRPC_SERVER_CLIENT_AUTH
-              value: none
+              value: required
             - name: GRPC_SERVER_PLAINTEXT
-              value: "true"
+              value: "false"
+            - name: GRPC_SERVER_CERTIFICATE
+              value: certs/ca/server.crt
+            - name: GRPC_SERVER_KEY
+              value: certs/ca/server.key
+            - name: GRPC_SERVER_TRUST_STORE
+              value: certs/ca/truststore.p12
+            - name: GRPC_SERVER_TRUST_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: windblog-grpc-tls
+                  key: truststore-password
+            - name: GRPC_CLIENT_CA_CERTIFICATE
+              value: certs/ca/ca.crt
+            - name: GRPC_CLIENT_CERTIFICATE
+              value: certs/ca/client.crt
+            - name: GRPC_CLIENT_KEY
+              value: certs/ca/client.key
             - name: GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK
-              value: "true"
+              value: "false"
             - name: QUARKUS_LOG_FILE_ENABLED
               value: "false"
           ports:
@@ -118,3 +137,25 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 6
+          volumeMounts:
+            - name: windblog-grpc-tls
+              mountPath: /deployments/certs/ca
+              readOnly: true
+      volumes:
+        - name: windblog-grpc-tls
+          secret:
+            secretName: windblog-grpc-tls
+            defaultMode: 0440
+            items:
+              - key: ca.crt
+                path: ca.crt
+              - key: server.crt
+                path: server.crt
+              - key: server.key
+                path: server.key
+              - key: client.crt
+                path: client.crt
+              - key: client.key
+                path: client.key
+              - key: truststore.p12
+                path: truststore.p12

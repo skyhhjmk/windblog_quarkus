@@ -110,6 +110,30 @@ class SecurityConfigurationWarningTest {
     }
 
     @Test
+    void shouldRejectGrpcPlaintextInEveryRuntimeProfile() {
+        SecurityConfigurationWarning warning = validPrimaryConfiguration();
+        warning.grpcServerPlaintext = true;
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                warning::validateGrpcSecurityConfiguration);
+
+        assertTrue(exception.getMessage().contains("明文"));
+    }
+
+    @Test
+    void shouldRejectGrpcPlaintextFallbackInEveryRuntimeProfile() {
+        SecurityConfigurationWarning warning = validPrimaryConfiguration();
+        warning.grpcClientPlaintextFallbackAllowed = true;
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                warning::validateGrpcSecurityConfiguration);
+
+        assertTrue(exception.getMessage().contains("回退"));
+    }
+
+    @Test
     void shouldRejectDefaultSecretEvenWhenWarningsAreDisabled() {
         SecurityConfigurationWarning warning = validPrimaryConfiguration();
         warning.adminInitPassword = "admin";
@@ -187,6 +211,7 @@ class SecurityConfigurationWarningTest {
         warning.elasticsearchSslVerify = "full";
         warning.adminInitializationEnabled = false;
         warning.nodeRole = "primary";
+        warning.grpcServerPlaintext = false;
         warning.grpcServerClientAuth = "required";
         warning.grpcServerCertificate = java.util.Optional.of("server.crt");
         warning.grpcServerKey = java.util.Optional.of("server.key");

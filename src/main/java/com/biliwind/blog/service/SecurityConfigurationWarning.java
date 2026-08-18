@@ -91,8 +91,11 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "quarkus.profile", defaultValue = "prod")
     String quarkusProfile;
 
-    @ConfigProperty(name = "quarkus.grpc.server.ssl.client-auth", defaultValue = "none")
+    @ConfigProperty(name = "quarkus.grpc.server.ssl.client-auth", defaultValue = "required")
     String grpcServerClientAuth;
+
+    @ConfigProperty(name = "quarkus.grpc.server.plain-text", defaultValue = "false")
+    boolean grpcServerPlaintext;
 
     @ConfigProperty(name = "quarkus.grpc.server.ssl.certificate")
     Optional<String> grpcServerCertificate;
@@ -106,7 +109,7 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "quarkus.grpc.server.ssl.trust-store-password")
     Optional<String> grpcServerTrustStorePassword;
 
-    @ConfigProperty(name = "windblog.grpc.client.allow-plaintext-fallback", defaultValue = "true")
+    @ConfigProperty(name = "windblog.grpc.client.allow-plaintext-fallback", defaultValue = "false")
     boolean grpcClientPlaintextFallbackAllowed;
 
     @ConfigProperty(name = "windblog.media.virus-scan.enabled", defaultValue = "false")
@@ -126,10 +129,13 @@ public class SecurityConfigurationWarning {
         }
         if (shouldFailStartup()) {
             validateProductionConfiguration();
+        } else {
+            validateGrpcSecurityConfiguration();
         }
     }
 
     void validateProductionConfiguration() {
+        validateGrpcSecurityConfiguration();
         if (failOnDefaultSecretsInProd && usesDefaultSecret()) {
             throw new IllegalStateException("生产环境禁止使用默认安全配置");
         }
@@ -177,23 +183,29 @@ public class SecurityConfigurationWarning {
         if (adminInitializationEnabled) {
             throw new IllegalStateException("生产环境必须关闭 ADMIN_INIT_ENABLED");
         }
-        if (!"required".equalsIgnoreCase(grpcServerClientAuth)
-                || isBlank(grpcServerCertificate)
-                || isBlank(grpcServerKey)
-                || isBlank(grpcServerTrustStore)) {
-            throw new IllegalStateException("生产环境的 gRPC 服务端必须启用完整 mTLS 配置");
-        }
         if ("changeit".equalsIgnoreCase(grpcServerTrustStorePassword.orElse(""))) {
             throw new IllegalStateException("生产环境禁止使用默认 gRPC trust-store 密码");
-        }
-        if (grpcClientPlaintextFallbackAllowed) {
-            throw new IllegalStateException("生产环境禁止 gRPC 客户端回退到明文连接");
         }
         if (edgeMaxRoutedBodyBytes < 1 || edgeMaxRoutedBodyBytes > 64L * 1024L * 1024L) {
             throw new IllegalStateException("边缘回源请求体上限必须在 1 到 64 MiB 之间");
         }
         if (!isEdgeNode() && (!mediaVirusScanRequired || !mediaVirusScanEnabled)) {
             throw new IllegalStateException("生产环境必须启用并强制执行媒体病毒扫描，未扫描文件不得进入媒体处理链路");
+        }
+    }
+
+    void validateGrpcSecurityConfiguration() {
+        if (grpcServerPlaintext) {
+            throw new IllegalStateException("gRPC 服务端禁止使用明文传输，必须启用 TLS");
+        }
+        if (!"required".equalsIgnoreCase(grpcServerClientAuth)
+                || isBlank(grpcServerCertificate)
+                || isBlank(grpcServerKey)
+                || isBlank(grpcServerTrustStore)) {
+            throw new IllegalStateException("gRPC 服务端必须启用完整 mTLS 配置");
+        }
+        if (grpcClientPlaintextFallbackAllowed) {
+            throw new IllegalStateException("gRPC 客户端禁止回退到明文连接");
         }
     }
 

@@ -35,6 +35,8 @@ services:
     container_name: windblog
     image: ${WINDBLOG_IMAGE:-ghcr.io/skyhhjmk/windblog_quarkus:latest-native}
     pull_policy: ${WINDBLOG_PULL_POLICY:-always}
+    # 本地证书目录保持 0600；rootless Podman 的容器 root 仍映射到当前宿主用户。
+    user: "0:0"
     restart: unless-stopped
     cpus: "2.0"
     mem_limit: 2g
@@ -73,13 +75,21 @@ services:
       ADMIN_INIT_EMAIL: ${ADMIN_INIT_EMAIL:-admin@windblog.local}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD: ${SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD:-false}
-      GRPC_SERVER_PLAINTEXT: ${GRPC_SERVER_PLAINTEXT:-true}
-      GRPC_SERVER_CLIENT_AUTH: ${GRPC_SERVER_CLIENT_AUTH:-none}
-      GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK: ${GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK:-true}
+      GRPC_SERVER_PLAINTEXT: ${GRPC_SERVER_PLAINTEXT:-false}
+      GRPC_SERVER_CLIENT_AUTH: ${GRPC_SERVER_CLIENT_AUTH:-required}
+      GRPC_SERVER_CERTIFICATE: ${GRPC_SERVER_CERTIFICATE:-certs/ca/server.crt}
+      GRPC_SERVER_KEY: ${GRPC_SERVER_KEY:-certs/ca/server.key}
+      GRPC_SERVER_TRUST_STORE: ${GRPC_SERVER_TRUST_STORE:-certs/ca/truststore.p12}
+      GRPC_SERVER_TRUST_STORE_PASSWORD: ${GRPC_SERVER_TRUST_STORE_PASSWORD:-changeit}
+      GRPC_CLIENT_CA_CERTIFICATE: ${GRPC_CLIENT_CA_CERTIFICATE:-certs/ca/ca.crt}
+      GRPC_CLIENT_CERTIFICATE: ${GRPC_CLIENT_CERTIFICATE:-certs/ca/client.crt}
+      GRPC_CLIENT_KEY: ${GRPC_CLIENT_KEY:-certs/ca/client.key}
+      GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK: ${GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK:-false}
       MEDIA_UPLOAD_DIR: /deployments/uploads
     volumes:
       - ${WINDBLOG_DATA_DIR:-.}/windblog-logs:/deployments/logs
       - ${WINDBLOG_DATA_DIR:-.}/uploads:/deployments/uploads
+      - ${WINDBLOG_CERT_DIR:-./certs}:/deployments/certs:ro
     depends_on:
       db:
         condition: service_healthy
