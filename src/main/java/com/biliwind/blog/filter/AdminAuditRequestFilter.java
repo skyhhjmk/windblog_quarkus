@@ -12,6 +12,8 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.ext.Provider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 
@@ -20,6 +22,7 @@ import java.util.UUID;
 @ApplicationScoped
 public class AdminAuditRequestFilter implements ContainerRequestFilter, ContainerResponseFilter {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AdminAuditRequestFilter.class);
     public static final String REQUEST_ID_HEADER_NAME = "X-Request-Id";
     private static final String REQUEST_ID_PROPERTY = "admin.audit.request.id";
 
@@ -72,7 +75,14 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
         if (routingContext == null) {
             return "unknown";
         }
-        return clientIpResolver.resolve(routingContext).clientIp();
+        try {
+            return clientIpResolver.resolve(routingContext).clientIp();
+        } catch (RuntimeException exception) {
+            // 审计元数据解析不能阻断管理 API 本身。尤其是在 Redis/配置暂时不可用、
+            // 或代理请求上下文不完整时，安全边界仍由 JWT 和权限过滤器负责。
+            LOGGER.warn("解析管理请求客户端 IP 失败，继续使用 unknown: {}", exception.getMessage());
+            return "unknown";
+        }
     }
 
     static String resolveRequestId(String candidate) {
