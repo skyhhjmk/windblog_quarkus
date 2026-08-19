@@ -4,7 +4,7 @@
 {/title}
 
 {#navPath}
-{navPath ?: '~/windblog / categories'}
+{#if navPath}{navPath}{#else}{config:siteNavRoot} / categories{/if}
 {/navPath}
 
 {#content}

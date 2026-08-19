@@ -8,6 +8,7 @@ import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
+import com.biliwind.blog.service.ConfigTemplateData;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import io.quarkus.qute.Location;
@@ -84,7 +85,7 @@ public class CategoryController {
                 .data("language", lang)
                 .data("detailMode", false)
                 .data("pageTitle", safeKeyword.isBlank() ? "Categories" : "Categories - " + safeKeyword)
-                .data("navPath", "~/windblog / categories")
+                .data("navPath", ConfigTemplateData.siteNavRoot() + " / categories")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
                 .data("currentPage", currentPage)
@@ -135,7 +136,7 @@ public class CategoryController {
                 .data("language", lang)
                 .data("detailMode", true)
                 .data("pageTitle", "Category - " + resolveCategoryName(entity, lang))
-                .data("navPath", "~/windblog / category / " + entity.slug)
+                .data("navPath", ConfigTemplateData.siteNavRoot() + " / category / " + entity.slug)
                 .data("totalCount", childItems.size())
                 .data("postCount", postCount)
                 .data("currentPage", currentPage)

@@ -1,5 +1,5 @@
 <div id="pjax-content-root" data-page-title="{pageTitle ?: '标签'}">
-    <div id="pjax-nav-path" class="hidden">{navPath ?: 'tags'}</div>
+    <div id="pjax-nav-path" class="hidden">{#if navPath}{navPath}{#else}{config:siteNavRoot} / tags{/if}</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-8">
                 {#include sidebar/tags.html /}

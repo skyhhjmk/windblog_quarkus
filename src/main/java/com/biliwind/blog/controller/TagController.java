@@ -8,6 +8,7 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.model.Tag;
+import com.biliwind.blog.service.ConfigTemplateData;
 import io.quarkus.panache.common.Page;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -83,7 +84,7 @@ public class TagController {
                 .data("language", lang)
                 .data("detailMode", false)
                 .data("pageTitle", safeKeyword.isBlank() ? "Tags" : "Tags - " + safeKeyword)
-                .data("navPath", "~/windblog / tags")
+                .data("navPath", ConfigTemplateData.siteNavRoot() + " / tags")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
                 .data("currentPage", currentPage)
@@ -135,7 +136,7 @@ public class TagController {
                 .data("language", lang)
                 .data("detailMode", true)
                 .data("pageTitle", "Tag - " + tagName)
-                .data("navPath", "~/windblog / tag / " + entity.slug)
+                .data("navPath", ConfigTemplateData.siteNavRoot() + " / tag / " + entity.slug)
                 .data("totalCount", totalCount)
                 .data("currentPage", currentPage)
                 .data("totalPages", totalPages)

@@ -1,6 +1,6 @@
 <div id="pjax-content-root" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
     <div id="pjax-nav-path" class="hidden">
-        ~/windblog / 首页{#if subPage && subPage > 1} / page-{subPage}{/if}
+        {config:siteNavRoot} / 首页{#if subPage && subPage > 1} / page-{subPage}{/if}
     </div>
     {#if pjaxRequest}
         <div id="pjax-sidebar-html" class="hidden">

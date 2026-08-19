@@ -24,6 +24,11 @@ public class ConfigTemplateData {
         return configManager().getString("site_info", "title", "WindBlog");
     }
 
+    public static String siteNavRoot() {
+        String title = siteTitle();
+        return "~/" + (title == null || title.isBlank() ? "WindBlog" : title);
+    }
+
     public static String siteTitleInitial() {
         String siteTitle = siteTitle();
         if (siteTitle == null) {

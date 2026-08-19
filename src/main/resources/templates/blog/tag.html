@@ -4,7 +4,7 @@
 {/title}
 
 {#navPath}
-{navPath ?: '~/windblog / tags'}
+{#if navPath}{navPath}{#else}{config:siteNavRoot} / tags{/if}
 {/navPath}
 
 {#content}
