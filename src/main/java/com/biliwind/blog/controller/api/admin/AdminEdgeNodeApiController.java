@@ -47,6 +47,7 @@ public class AdminEdgeNodeApiController {
 
     @GET
     @Operation(summary = "获取所有边缘节点", description = "获取所有已注册的边缘节点及其状态")
+    @Transactional
     public List<EdgeNode> list() {
         return registry.getAllNodes();
     }
@@ -54,6 +55,7 @@ public class AdminEdgeNodeApiController {
     @GET
     @Path("/{nodeId}")
     @Operation(summary = "获取边缘节点详情", description = "获取单个边缘节点的详细配置及最后活跃指标")
+    @Transactional
     public EdgeNode get(@PathParam("nodeId") String nodeId) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) {
@@ -176,6 +178,7 @@ public class AdminEdgeNodeApiController {
     @GET
     @Path("/{nodeId}/sync-status")
     @Operation(summary = "获取同步进度", description = "获取当前节点的同步进度（仅包含正在进行或最近一次的手动同步任务）")
+    @Transactional
     public com.biliwind.blog.service.edge.EdgeDataSyncService.SyncProgress getSyncStatus(@PathParam("nodeId") String nodeId) {
         return syncService.getSyncStatus(nodeId);
     }
@@ -183,6 +186,7 @@ public class AdminEdgeNodeApiController {
     @GET
     @Path("/{nodeId}/sync-records")
     @Operation(summary = "获取边缘节点同步记录", description = "返回最近的增量和全量同步投递记录，用于排查失败、漏同步和节点收敛问题")
+    @Transactional
     public List<EdgeSyncRecord> getSyncRecords(@PathParam("nodeId") String nodeId,
                                                @QueryParam("status") String status,
                                                @QueryParam("page") @DefaultValue("1") int page,
@@ -221,6 +225,7 @@ public class AdminEdgeNodeApiController {
     @GET
     @Path("/{nodeId}/data-status")
     @Operation(summary = "获取边缘节点数据通道状态", description = "返回持久通道、只读模式、心跳指标和同步进度")
+    @Transactional
     public EdgeNodeDataStatusResponse getDataStatus(@PathParam("nodeId") String nodeId) {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node == null) {
@@ -274,6 +279,7 @@ public class AdminEdgeNodeApiController {
     @GET
     @Path("/{nodeId}/availability-history")
     @Operation(summary = "获取边缘节点在线历史", description = "返回近 1-30 天在线率采样、在线时段和日历数据")
+    @Transactional
     public com.biliwind.blog.service.edge.EdgeNodeAvailabilityService.AvailabilityHistory getAvailabilityHistory(
             @PathParam("nodeId") String nodeId,
             @QueryParam("days") @DefaultValue("30") int days) {

@@ -50,6 +50,7 @@ public class AdminStorageController {
 
     @GET
     @Path("/classes")
+    @Transactional
     public Response listClasses() {
         List<StorageClassEntity> entities = storageService.getAllStorageClassEntities();
         ArrayList<StorageClassResponse> result = new ArrayList<>();
@@ -244,6 +245,7 @@ public class AdminStorageController {
 
     @GET
     @Path("/sync/status")
+    @Transactional
     public Response getSyncStatus(@QueryParam("page") @DefaultValue("0") int page,
                                   @QueryParam("size") @DefaultValue("20") int size) {
         // 统计扫描按固定批次进行，避免管理端请求把全部媒体实体同时装入 JVM。
@@ -314,6 +316,7 @@ public class AdminStorageController {
 
     @GET
     @Path("/sync/detail/{mediaId}")
+    @Transactional
     public Response getSyncDetail(@PathParam("mediaId") Long mediaId) {
         MediaSyncStatus status = storageService.getSyncStatus(mediaId);
         if (status == null) {

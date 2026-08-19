@@ -115,6 +115,9 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
     }
 
     private boolean isHtmlExpected() {
+        if (headers == null) {
+            return false;
+        }
         List<MediaType> acceptableMediaTypes = headers.getAcceptableMediaTypes();
         for (int i = 0; i < acceptableMediaTypes.size(); i++) {
             MediaType mediaType = acceptableMediaTypes.get(i);
@@ -129,13 +132,16 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         StringBuilder sb = new StringBuilder();
         OffsetDateTime now = OffsetDateTime.now();
         sb.append("Timestamp: ").append(now.toString()).append("\n");
-        sb.append("Path: ").append(request.path()).append("\n");
-        sb.append("Method: ").append(request.method().toString()).append("\n");
-        sb.append("IP: ").append(request.remoteAddress().host()).append("\n");
+        if (request != null) {
+            sb.append("Path: ").append(request.path()).append("\n");
+            sb.append("Method: ").append(request.method().toString()).append("\n");
+            sb.append("IP: ").append(request.remoteAddress() == null
+                    ? "unknown" : request.remoteAddress().host()).append("\n");
 
-        String userAgent = request.getHeader("User-Agent");
-        if (userAgent != null) {
-            sb.append("User-Agent: ").append(userAgent).append("\n");
+            String userAgent = request.getHeader("User-Agent");
+            if (userAgent != null) {
+                sb.append("User-Agent: ").append(userAgent).append("\n");
+            }
         }
 
         // 包含完整的堆栈轨迹

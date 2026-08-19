@@ -1,7 +1,9 @@
 package com.biliwind.blog.service.security;
 
+import com.biliwind.blog.service.ConfigManager;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,5 +20,22 @@ class ClientIpResolverTest {
         assertFalse(ClientIpResolver.isAddressLiteral("203.0.113"));
         assertFalse(ClientIpResolver.isAddressLiteral("203.0.113.999"));
         assertFalse(ClientIpResolver.isAddressLiteral("2001:db8::10%eth0"));
+    }
+
+    @Test
+    void shouldHandleDirectHttpIpAccessWithoutProxyHeader() {
+        ClientIpResolver resolver = new ClientIpResolver();
+        resolver.configManager = new ConfigManager() {
+            @Override
+            public String getString(String key, String field, String defaultValue) {
+                return defaultValue;
+            }
+        };
+
+        ClientIpResolver.ClientIpResolution resolution = resolver.resolve("10.0.0.100", null);
+
+        assertEquals("10.0.0.100", resolution.clientIp());
+        assertTrue(resolution.trustedProxy());
+        assertEquals("10.0.0.100", resolution.remoteIp());
     }
 }

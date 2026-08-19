@@ -31,6 +31,7 @@ public class AdminImageProcessingController {
     VideoProcessingService videoProcessingService;
 
     @GET
+    @Transactional
     public Response listConfigs() {
         List<ImageProcessingConfig> configs = ImageProcessingConfig.listAll();
         return Response.ok(configs).build();
@@ -51,6 +52,7 @@ public class AdminImageProcessingController {
 
     @POST
     @Path("/test-webp")
+    @Transactional
     public Response testWebp() {
         ImageProcessingConfig cwebpConfig = ImageProcessingConfig.find("configKey = ?1", "cwebp_path").firstResult();
         String cwebpPath = "/usr/bin/cwebp";
@@ -65,6 +67,7 @@ public class AdminImageProcessingController {
 
     @POST
     @Path("/test-ffmpeg")
+    @Transactional
     public Response testFfmpeg() {
         ImageProcessingConfig ffmpegConfig = ImageProcessingConfig.find("configKey = ?1", "ffmpeg_path").firstResult();
         String ffmpegPath = "/usr/bin/ffmpeg";

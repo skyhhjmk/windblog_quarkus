@@ -51,17 +51,23 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
         String requestId = resolveRequestId(
                 resolveHeaderValue(requestContext, REQUEST_ID_HEADER_NAME));
 
-        String requestMethod = requestContext.getMethod();
-        String clientIp = resolveClientIp(requestContext);
-        String userAgent = resolveHeaderValue(requestContext, "User-Agent");
-
-        adminAuditRequestContext.setRequestId(requestId);
-        adminAuditRequestContext.setRequestMethod(requestMethod);
-        adminAuditRequestContext.setRequestPath(requestPath);
-        adminAuditRequestContext.setClientIp(clientIp);
-        adminAuditRequestContext.setUserAgent(userAgent);
-
+        // 先写入请求属性，确保即使后续元数据解析失败，响应仍能带回可检索的请求 ID。
         requestContext.setProperty(REQUEST_ID_PROPERTY, requestId);
+
+        try {
+            String requestMethod = requestContext.getMethod();
+            String clientIp = resolveClientIp(requestContext);
+            String userAgent = resolveHeaderValue(requestContext, "User-Agent");
+
+            adminAuditRequestContext.setRequestId(requestId);
+            adminAuditRequestContext.setRequestMethod(requestMethod);
+            adminAuditRequestContext.setRequestPath(requestPath);
+            adminAuditRequestContext.setClientIp(clientIp);
+            adminAuditRequestContext.setUserAgent(userAgent);
+        } catch (RuntimeException exception) {
+            // 审计元数据是辅助信息，不能阻断管理 API；请求 ID 已在上方保留。
+            LOGGER.warn("初始化管理请求审计上下文失败: path={}, requestId={}", requestPath, requestId);
+        }
     }
 
     @Override

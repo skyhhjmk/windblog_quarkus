@@ -60,6 +60,7 @@ public class AdminSystemSettingsController {
     @GET
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "获取所有设置项")
+    @Transactional
     public Response getAllSettings(@QueryParam("group") String group,
                                    @QueryParam("page") @DefaultValue("1") int page,
                                    @QueryParam("pageSize") @DefaultValue("50") int pageSize) {
@@ -85,6 +86,7 @@ public class AdminSystemSettingsController {
     @Path("/{key}")
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "根据Key获取设置项")
+    @Transactional
     public Response getSettingByKey(@PathParam("key") String key) {
         SystemSetting setting = SystemSetting.findByKey(key);
         if (setting == null) {
@@ -197,6 +199,7 @@ public class AdminSystemSettingsController {
     @Path("/{key}/history")
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "获取配置变更历史")
+    @Transactional
     public Response getHistory(@PathParam("key") String key,
                                @QueryParam("page") @DefaultValue("1") int page,
                                @QueryParam("pageSize") @DefaultValue("50") int pageSize) {
@@ -277,6 +280,7 @@ public class AdminSystemSettingsController {
     @Path("/client-ip/inspect")
     @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "查看当前客户端 IP 解析结果")
+    @Transactional
     public Response inspectClientIp() {
         com.biliwind.blog.service.security.ClientIpResolver.ClientIpResolution resolution = clientIpResolver.resolve(routingContext);
         return Response.ok(Map.of("success", true, "data", resolution)).build();
