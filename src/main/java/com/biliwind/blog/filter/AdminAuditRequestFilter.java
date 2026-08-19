@@ -1,6 +1,7 @@
 package com.biliwind.blog.filter;
 
 import com.biliwind.blog.context.AdminAuditRequestContext;
+import com.biliwind.blog.service.AuditService;
 import com.biliwind.blog.service.security.ClientIpResolver;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.annotation.Priority;
@@ -15,6 +16,7 @@ import jakarta.ws.rs.ext.Provider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Provider
@@ -25,6 +27,7 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
     private static final Logger LOGGER = LoggerFactory.getLogger(AdminAuditRequestFilter.class);
     public static final String REQUEST_ID_HEADER_NAME = "X-Request-Id";
     private static final String REQUEST_ID_PROPERTY = "admin.audit.request.id";
+    private static final String REQUEST_AUDITED_PROPERTY = "admin.audit.request.persisted";
 
     @Inject
     AdminAuditRequestContext adminAuditRequestContext;
@@ -34,6 +37,9 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
 
     @Inject
     RoutingContext routingContext;
+
+    @Inject
+    AuditService auditService;
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
@@ -69,6 +75,30 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
         if (requestId != null && !isBlank(requestId.toString())) {
             responseContext.getHeaders().putSingle(REQUEST_ID_HEADER_NAME, requestId.toString());
         }
+
+        if (Boolean.TRUE.equals(requestContext.getProperty(REQUEST_AUDITED_PROPERTY))) {
+            return;
+        }
+        requestContext.setProperty(REQUEST_AUDITED_PROPERTY, Boolean.TRUE);
+
+        int responseStatus = responseContext.getStatus();
+        try {
+            // 统一记录管理 API 请求，覆盖正常读取、成功写入、权限拒绝以及异常响应。
+            // 具体业务变更仍由各控制器保留更详细的旧值/新值审计。
+            auditService.log(
+                    "admin_request",
+                    requestPath,
+                    requestContext.getMethod(),
+                    null,
+                    null,
+                    Map.of(
+                            "status", responseStatus,
+                            "outcome", outcomeForStatus(responseStatus)));
+        } catch (RuntimeException exception) {
+            // 审计故障不能反过来把一个原本正常的管理请求变成 500。
+            LOGGER.warn("记录管理请求审计失败: path={}, method={}, status={}",
+                    requestPath, requestContext.getMethod(), responseStatus);
+        }
     }
 
     private String resolveClientIp(ContainerRequestContext requestContext) {
@@ -90,6 +120,19 @@ public class AdminAuditRequestFilter implements ContainerRequestFilter, Containe
             return candidate;
         }
         return UUID.randomUUID().toString();
+    }
+
+    static String outcomeForStatus(int status) {
+        if (status >= 200 && status < 400) {
+            return "SUCCESS";
+        }
+        if (status >= 400 && status < 500) {
+            return "CLIENT_ERROR";
+        }
+        if (status >= 500) {
+            return "SERVER_ERROR";
+        }
+        return "UNKNOWN";
     }
 
     private String resolveHeaderValue(ContainerRequestContext requestContext, String headerName) {

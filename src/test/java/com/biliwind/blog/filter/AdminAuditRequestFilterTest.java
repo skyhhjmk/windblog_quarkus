@@ -24,4 +24,13 @@ class AdminAuditRequestFilterTest {
         assertTrue(missing.matches("[0-9a-f-]{36}"));
         assertTrue(unsafe.matches("[0-9a-f-]{36}"));
     }
+
+    @Test
+    void shouldClassifyResponseStatusForRequestAudit() {
+        assertEquals("SUCCESS", AdminAuditRequestFilter.outcomeForStatus(200));
+        assertEquals("SUCCESS", AdminAuditRequestFilter.outcomeForStatus(302));
+        assertEquals("CLIENT_ERROR", AdminAuditRequestFilter.outcomeForStatus(403));
+        assertEquals("SERVER_ERROR", AdminAuditRequestFilter.outcomeForStatus(500));
+        assertEquals("UNKNOWN", AdminAuditRequestFilter.outcomeForStatus(-1));
+    }
 }
