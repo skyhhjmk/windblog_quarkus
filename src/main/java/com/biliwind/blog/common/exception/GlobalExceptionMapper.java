@@ -89,7 +89,13 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         if (family == Response.Status.Family.SERVER_ERROR) {
             UUID uuid = UUID.randomUUID();
             trackingId = uuid.toString();
-            trackingText = generateTrackingText(exception);
+            try {
+                trackingText = generateTrackingText(exception);
+            } catch (RuntimeException trackingException) {
+                // 错误追踪信息是辅助能力，不能因 RSA/请求上下文异常再次遮蔽原始 500 响应。
+                LOGGER.error("生成错误追踪信息失败，保留 JSON 错误响应", trackingException);
+                trackingText = null;
+            }
         }
 
         // 根据客户端期望的类型返回响应
