@@ -170,11 +170,20 @@ public class AdminElasticsearchController {
         }
 
         try {
-            indexService.repairWriteAlias();
-            return Response.ok(Map.of(
-                    "success", true,
-                    "message", "日志写入别名已修复，历史索引未删除"
-            )).build();
+            // Ensure the initial index exists before reconciling its alias.
+            // Repairing an alias against a missing index would otherwise fail
+            // with a misleading Elasticsearch 404/400 response.
+            boolean ready = indexService.initializeIndexNow();
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", ready);
+            result.put("indexInitialized", ready);
+            result.put("message", ready
+                    ? "日志写入别名已修复，日志索引已就绪，历史索引未删除"
+                    : "日志写入别名已处理，但日志索引仍未就绪，请检查 Elasticsearch 策略、模板和权限");
+            if (!ready) {
+                return Response.status(Response.Status.SERVICE_UNAVAILABLE).entity(result).build();
+            }
+            return Response.ok(result).build();
         } catch (Exception exception) {
             return Response.serverError().entity(Map.of(
                     "success", false,
@@ -510,7 +519,18 @@ public class AdminElasticsearchController {
         }
         try {
             postSearchService.rebuildPostIndex();
-            return reindexAll();
+            boolean logIndexReady = indexService.initializeIndexNow();
+            Response postResponse = reindexAll();
+            if (!logIndexReady) {
+                return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                        .entity(Map.of(
+                                "success", false,
+                                "message", "文章索引重建已执行，但日志索引仍未就绪",
+                                "logIndexInitialized", false,
+                                "postIndexResponse", postResponse.getEntity()
+                        )).build();
+            }
+            return postResponse;
         } catch (Exception exception) {
             return Response.serverError().entity(Map.of(
                     "success", false,

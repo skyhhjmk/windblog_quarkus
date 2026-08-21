@@ -129,6 +129,15 @@ public class ElasticsearchIndexService {
         log.warn("[LOG INDEX] Elasticsearch log index initialization failed after all retries, logs will be cached to local file");
     }
 
+    /** Explicitly initialize or reconcile the log index from an admin action. */
+    public boolean initializeIndexNow() {
+        if (nodeRoleService.isEdgeNode() || !connectionManager.isAvailable()) {
+            return false;
+        }
+        initializeIndex();
+        return isIndexInitialized();
+    }
+
     /**
      * Delete legacy templates that might conflict with our configuration
      */
