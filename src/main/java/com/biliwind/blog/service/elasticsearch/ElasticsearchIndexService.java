@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.elasticsearch;
 
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
+import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.StartupEvent;
@@ -68,6 +69,12 @@ public class ElasticsearchIndexService {
             log.debug("Callback registration completed");
         } catch (Exception e) {
             log.error("Exception during callback registration", e);
+        }
+    }
+
+    void onConfigChanged(@Observes ConfigChangedEvent event) {
+        if (ElasticsearchSettingsService.SETTING_KEY.equals(event.key)) {
+            indexInitialized.set(false);
         }
     }
 
@@ -172,7 +179,7 @@ public class ElasticsearchIndexService {
         if (nodeRoleService.isEdgeNode()) {
             return false;
         }
-        return connectionManager.isAvailable() && indexInitialized.get();
+        return connectionManager.isAvailable() && isIndexInitialized();
     }
 
     /**
@@ -184,9 +191,37 @@ public class ElasticsearchIndexService {
         }
         return new ServiceStatus(
                 connectionManager.isAvailable(),
-                indexInitialized.get(),
+                isIndexInitialized(),
                 connectionManager.getHealthStatus().name()
         );
+    }
+
+    /**
+     * Recover readiness from Elasticsearch metadata after a restart or a
+     * transient initialization failure. The in-memory flag is only an
+     * optimization; it must not be the source of truth for the admin status.
+     */
+    private boolean isIndexInitialized() {
+        if (indexInitialized.get()) {
+            return true;
+        }
+        if (!connectionManager.isAvailable()) {
+            return false;
+        }
+        try {
+            boolean ready = verifyIlmPolicy()
+                    && verifyIndexTemplate()
+                    && isWriteAliasReady();
+            if (ready) {
+                indexInitialized.set(true);
+                log.info("Elasticsearch log index status restored from existing ES metadata");
+            }
+            return ready;
+        } catch (Exception exception) {
+            log.debug("Unable to restore Elasticsearch log index status from metadata: "
+                    + SensitiveMessageSanitizer.sanitize(exception.getMessage()));
+            return false;
+        }
     }
 
     /**
@@ -340,6 +375,21 @@ public class ElasticsearchIndexService {
             return false;
         }
         throw new IllegalStateException("读取 Elasticsearch 日志别名失败: " + aliasResponse.statusCode());
+    }
+
+    private boolean isWriteAliasReady() throws Exception {
+        HttpResponse<String> aliasResponse = readWriteAlias();
+        if (aliasResponse.statusCode() != 200) {
+            return false;
+        }
+        ElasticsearchWriteAliasRepair.AliasRepairPlan plan =
+                ElasticsearchWriteAliasRepair.plan(
+                        objectMapper,
+                        aliasResponse.body(),
+                        WRITE_ALIAS,
+                        INITIAL_INDEX
+                );
+        return !plan.repairRequired();
     }
 
     private HttpResponse<String> readWriteAlias() throws Exception {

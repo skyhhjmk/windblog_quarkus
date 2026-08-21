@@ -121,6 +121,7 @@ public class ElasticsearchConnectionManager {
         log.debugf("onAvailable called, current available status: %s, callback count before: %d",
                 available.get(), onAvailableCallbacks.size());
         log.debugf("Callback class: %s", callbackName);
+        onAvailableCallbacks.addIfAbsent(callback);
         if (available.get()) {
             log.debug("Elasticsearch already available, executing callback immediately");
             try {
@@ -131,7 +132,6 @@ public class ElasticsearchConnectionManager {
             }
         } else {
             log.debug("Elasticsearch not available, callback registered for later execution");
-            onAvailableCallbacks.add(callback);
             log.debugf("Current registered callback count: %d", onAvailableCallbacks.size());
         }
     }
@@ -171,8 +171,9 @@ public class ElasticsearchConnectionManager {
                             log.errorf("Callback #%d failed: %s", callbackCount, callback.toString(), e);
                         }
                     }
-                    log.debug("All callbacks executed, clearing callback list");
-                    onAvailableCallbacks.clear();
+                    // Keep callbacks registered so a later connection recovery
+                    // can re-run index initialization and restore readiness.
+                    log.debug("All Elasticsearch availability callbacks executed");
                     return;
                 }
             } catch (Exception e) {
@@ -260,7 +261,8 @@ public class ElasticsearchConnectionManager {
                 log.error("Callback execution failed", e);
             }
         }
-        onAvailableCallbacks.clear();
+        // Availability callbacks are persistent: services such as index
+        // initialization must run again after a connection outage/recovery.
     }
 
     private void resetHealthCheckCounters() {
