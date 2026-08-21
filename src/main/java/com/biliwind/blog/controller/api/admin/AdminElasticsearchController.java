@@ -72,7 +72,9 @@ public class AdminElasticsearchController {
         result.put("logIndex", Map.of(
                 "connectionAvailable", indexServiceStatus.connectionAvailable(),
                 "indexInitialized", indexServiceStatus.indexInitialized(),
-                "healthStatus", indexServiceStatus.healthStatus()
+                "healthStatus", indexServiceStatus.healthStatus(),
+                "initializationError", indexServiceStatus.initializationError() == null
+                        ? "" : indexServiceStatus.initializationError()
         ));
         result.put("logBuffer", Map.of(
                 "bufferedCount", logBufferService.getBufferedCount(),
@@ -135,7 +137,9 @@ public class AdminElasticsearchController {
         result.put("logIndex", Map.of(
                 "connectionAvailable", logIndexStatus.connectionAvailable(),
                 "indexInitialized", logIndexStatus.indexInitialized(),
-                "healthStatus", logIndexStatus.healthStatus()
+                "healthStatus", logIndexStatus.healthStatus(),
+                "initializationError", logIndexStatus.initializationError() == null
+                        ? "" : logIndexStatus.initializationError()
         ));
 
         result.put("logBuffer", Map.of(

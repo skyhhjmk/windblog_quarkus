@@ -19,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Elasticsearch index management service
@@ -30,6 +31,7 @@ public class ElasticsearchIndexService {
     private static final Logger log = Logger.getLogger(ElasticsearchIndexService.class);
 
     private final AtomicBoolean indexInitialized = new AtomicBoolean(false);
+    private final AtomicReference<String> initializationError = new AtomicReference<>();
     @Inject
     ElasticsearchConnectionManager connectionManager;
     @Inject
@@ -75,6 +77,7 @@ public class ElasticsearchIndexService {
     void onConfigChanged(@Observes ConfigChangedEvent event) {
         if (ElasticsearchSettingsService.SETTING_KEY.equals(event.key)) {
             indexInitialized.set(false);
+            initializationError.set(null);
         }
     }
 
@@ -106,6 +109,7 @@ public class ElasticsearchIndexService {
                 createInitialIndex();
                 log.debug("[LOG INDEX] Initial index created");
                 indexInitialized.set(true);
+                initializationError.set(null);
                 log.debug("[LOG INDEX] ====== initializeIndex() COMPLETED ======");
                 log.debug("[LOG INDEX] Elasticsearch log index initialization completed");
                 return;
@@ -114,6 +118,7 @@ public class ElasticsearchIndexService {
                 log.error("[LOG INDEX] Failed to initialize log index (attempt " + attempt + "/"
                         + maxRetries + "): " + SensitiveMessageSanitizer.sanitize(e.getMessage()), e);
                 log.error("[LOG INDEX] Exception type: " + e.getClass().getName());
+                initializationError.set(SensitiveMessageSanitizer.sanitize(e.getMessage()));
                 if (attempt < maxRetries) {
                     try {
                         Thread.sleep(2000);
@@ -196,12 +201,13 @@ public class ElasticsearchIndexService {
      */
     public ServiceStatus getServiceStatus() {
         if (nodeRoleService.isEdgeNode()) {
-            return new ServiceStatus(false, false, "DISABLED");
+            return new ServiceStatus(false, false, "DISABLED", "边缘节点不启用 Elasticsearch");
         }
         return new ServiceStatus(
                 connectionManager.isAvailable(),
                 isIndexInitialized(),
-                connectionManager.getHealthStatus().name()
+                connectionManager.getHealthStatus().name(),
+                initializationError.get()
         );
     }
 
@@ -226,7 +232,8 @@ public class ElasticsearchIndexService {
                 log.info("Elasticsearch log index status restored from existing ES metadata");
             }
             return ready;
-        } catch (Exception exception) {
+            } catch (Exception exception) {
+            initializationError.set(SensitiveMessageSanitizer.sanitize(exception.getMessage()));
             log.debug("Unable to restore Elasticsearch log index status from metadata: "
                     + SensitiveMessageSanitizer.sanitize(exception.getMessage()));
             return false;
@@ -520,7 +527,8 @@ public class ElasticsearchIndexService {
         return response.body();
     }
 
-    public record ServiceStatus(boolean connectionAvailable, boolean indexInitialized, String healthStatus) {
+    public record ServiceStatus(boolean connectionAvailable, boolean indexInitialized,
+                                 String healthStatus, String initializationError) {
     }
 
     /**

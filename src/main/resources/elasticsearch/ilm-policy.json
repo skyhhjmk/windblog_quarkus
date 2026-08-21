@@ -29,8 +29,7 @@
         "actions": {
           "set_priority": {
             "priority": 0
-          },
-          "freeze": {}
+          }
         }
       },
       "delete": {
