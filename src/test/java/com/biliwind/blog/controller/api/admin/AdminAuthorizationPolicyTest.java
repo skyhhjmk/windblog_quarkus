@@ -16,6 +16,12 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/storage/dead-letter/1/retry").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("PUT", "/api/admin/settings/mail.password").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/import"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import/test-connection"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/import/test-connection"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import/analyze"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/import/analyze-sql"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import/execute"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/dead-letters/1"));
         assertTrue(AdminAuthorizationPolicy.decide("GET", "/api/admin/media").action().equals("media.read"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/posts/1/publish").action().equals("post.publish"));
@@ -41,6 +47,14 @@ class AdminAuthorizationPolicyTest {
         assertFalse(AdminAuthorizationPolicy.decide("GET", "/api/admin/settings").superAdminOnly());
         assertFalse(AdminAuthorizationPolicy.decide("GET", "/api/admin/edge-nodes/node-a").superAdminOnly());
         assertFalse(AdminAuthorizationPolicy.requiresStepUp("GET", "/api/admin/settings"));
+    }
+
+    @Test
+    void shouldKeepStepUpBootstrapOutsideHighRiskRequestChecks() {
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/auth/step-up"));
+        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/auth/step-up"));
+        assertEquals("auth.write",
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/auth/step-up").action());
     }
 
     @Test

@@ -48,8 +48,12 @@ public class AdminAuthorizationFilter implements ContainerRequestFilter {
             return;
         }
         if (path.endsWith("/auth/login") || path.endsWith("/auth/logout")
+                || path.equals("/api/admin/auth/step-up")
                 || path.equals("/api/admin/install") || path.equals("/api/admin/install/status")
                 || path.startsWith("/api/admin/docs") || path.startsWith("/api/admin/openapi")) {
+            // Step-up is itself the credential bootstrap endpoint. It still passes
+            // through AdminJwtAuthFilter, so a normal bearer token is required,
+            // but it must not require a step-up token or idempotency key first.
             return;
         }
 
@@ -87,7 +91,8 @@ public class AdminAuthorizationFilter implements ContainerRequestFilter {
                     decision.resource(), decision.action(), "DENIED_STEP_UP");
                 requestContext.abortWith(Response.status(Response.Status.PRECONDITION_REQUIRED)
                     .type(MediaType.APPLICATION_JSON_TYPE)
-                    .entity(Map.of("success", false, "message", "该高风险操作需要 5 分钟内的 step-up token",
+                    .entity(Map.of("success", false, "code", "STEP_UP_REQUIRED",
+                            "message", "该高风险操作需要 5 分钟内的 step-up token",
                             "resource", decision.resource(), "action", decision.action()))
                     .build());
             securityMetricsService.increment("admin.denied", "step_up");

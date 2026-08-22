@@ -182,12 +182,13 @@ public class AdminAuthApiController {
 
     @POST
     @Path("/step-up")
+    @SecurityRequirement(name = "adminBearerAuth")
     @Operation(summary = "签发短时高风险操作凭证")
     public Response stepUp(StepUpRequest request) {
         String token = adminActionSecurityService.issueStepUp(
                 adminRequestContext.getUserId(), request == null ? null : request.password());
         if (token == null) {
-            return unauthorized();
+            return stepUpUnauthorized();
         }
         return Response.ok(Map.of("success", true, "token", token, "expiresInSeconds", 300)).build();
     }
@@ -198,6 +199,13 @@ public class AdminAuthApiController {
     private Response unauthorized() {
         return Response.status(Response.Status.UNAUTHORIZED)
                 .entity(Map.of("success", false, "message", "账号或密码错误"))
+                .build();
+    }
+
+    private Response stepUpUnauthorized() {
+        return Response.status(Response.Status.UNAUTHORIZED)
+                .entity(Map.of("success", false, "code", "STEP_UP_PASSWORD_INVALID",
+                        "message", "管理员密码错误"))
                 .build();
     }
 

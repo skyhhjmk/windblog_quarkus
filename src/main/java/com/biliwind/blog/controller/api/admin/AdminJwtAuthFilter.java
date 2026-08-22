@@ -69,30 +69,30 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
             }
         }
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            abort(requestContext, Response.Status.UNAUTHORIZED, "缺少 Bearer Token");
+            abort(requestContext, Response.Status.UNAUTHORIZED, "缺少 Bearer Token", "AUTH_TOKEN_INVALID");
             return;
         }
 
         String token = authHeader.substring("Bearer ".length()).trim();
         if (token.isBlank()) {
-            abort(requestContext, Response.Status.UNAUTHORIZED, "Token 不能为空");
+            abort(requestContext, Response.Status.UNAUTHORIZED, "Token 不能为空", "AUTH_TOKEN_INVALID");
             return;
         }
 
         AdminTokenVerifier.VerifiedToken verified = tokenVerifier.verify(token);
         if (verified == null) {
-            abort(requestContext, Response.Status.UNAUTHORIZED, "Token 校验失败");
+            abort(requestContext, Response.Status.UNAUTHORIZED, "登录令牌已失效，请重新登录", "AUTH_TOKEN_INVALID");
             return;
         }
         User currentUser = User.find("id = ?1 and deletedAt is null", verified.uid()).firstResult();
         if (currentUser == null || currentUser.status != 1) {
-            abort(requestContext, Response.Status.UNAUTHORIZED, "管理员账号已禁用或不存在");
+            abort(requestContext, Response.Status.UNAUTHORIZED, "管理员账号已禁用或不存在", "AUTH_ACCOUNT_INVALID");
             return;
         }
         boolean currentIsAdmin = RoleConstant.ADMIN.equals(currentUser.roleName)
                 || RoleConstant.SUPER_ADMIN.equals(currentUser.roleName);
         if (!currentIsAdmin) {
-            abort(requestContext, Response.Status.FORBIDDEN, "没有管理员权限");
+            abort(requestContext, Response.Status.FORBIDDEN, "没有管理员权限", "ADMIN_ROLE_REQUIRED");
             return;
         }
         boolean currentIsSuperAdmin = RoleConstant.SUPER_ADMIN.equals(currentUser.roleName);
@@ -136,10 +136,11 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
         });
     }
 
-    private void abort(ContainerRequestContext requestContext, Response.Status status, String message) {
+    private void abort(ContainerRequestContext requestContext, Response.Status status, String message,
+                       String code) {
         requestContext.abortWith(Response.status(status)
                 .type(MediaType.APPLICATION_JSON_TYPE)
-                .entity(Map.of("success", false, "message", message))
+                .entity(Map.of("success", false, "code", code, "message", message))
                 .build());
     }
 
