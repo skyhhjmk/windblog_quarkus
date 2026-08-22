@@ -9,8 +9,10 @@ If you want to learn more about Quarkus, please visit its website: <https://quar
 You can run your application in dev mode that enables live coding using:
 
 ```shell script
-./mvnw quarkus:dev
+./scripts/run-local-dev.sh
 ```
+
+`run-local-dev.sh` 会读取根目录 `.env`（也可通过 `WINDBLOG_ENV_FILE` 指定文件），并将 Compose 使用的 `POSTGRES_*`、`REDIS_*` 映射为应用使用的 `DB_*`、`REDIS_URL`。直接运行 Maven 时，需要先手动 `source .env`；Compose 则会自动读取同一份 `.env`。
 
 > **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
 

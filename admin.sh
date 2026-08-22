@@ -287,8 +287,12 @@ ensure_compose() {
 }
 
 compose() {
+  local compose_env_args=()
   ensure_compose
-  "${COMPOSE[@]}" "$@"
+  if [[ -f "$ENV_FILE" ]]; then
+    compose_env_args=(--env-file "$ENV_FILE")
+  fi
+  "${COMPOSE[@]}" "${compose_env_args[@]}" "$@"
 }
 
 prepare_data_dirs() {
