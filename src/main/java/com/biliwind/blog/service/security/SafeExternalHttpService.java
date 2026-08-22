@@ -22,9 +22,15 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 @ApplicationScoped
 public class SafeExternalHttpService {
+
+    @FunctionalInterface
+    public interface DownloadProgressListener {
+        void onProgress(long downloadedBytes, long totalBytes, int statusCode, int redirectCount);
+    }
 
     private static final int MAX_RESPONSE_BYTES = 1024 * 1024;
     private static final int MAX_REDIRECTS = 3;
@@ -39,13 +45,19 @@ public class SafeExternalHttpService {
     }
 
     public ExternalHttpResponse get(String url, String userAgent, int maxResponseBytes) {
+        return get(url, userAgent, maxResponseBytes, null);
+    }
+
+    public ExternalHttpResponse get(String url, String userAgent, int maxResponseBytes,
+                                    DownloadProgressListener listener) {
         if (maxResponseBytes <= 0 || maxResponseBytes > 256 * 1024 * 1024) {
             throw new IllegalArgumentException("外部响应大小限制无效");
         }
         URI currentUri = validatePublicHttpUri(url);
         int redirectCount = 0;
         while (true) {
-            ExternalHttpResponse response = executeGet(currentUri, userAgent, maxResponseBytes);
+            ExternalHttpResponse response = executeGet(currentUri, userAgent, maxResponseBytes,
+                    listener, redirectCount);
             if (!isRedirect(response.statusCode())) {
                 return response;
             }
@@ -87,7 +99,8 @@ public class SafeExternalHttpService {
         return uri;
     }
 
-    private ExternalHttpResponse executeGet(URI uri, String userAgent, int maxResponseBytes) {
+    private ExternalHttpResponse executeGet(URI uri, String userAgent, int maxResponseBytes,
+                                            DownloadProgressListener listener, int redirectCount) {
         InetAddress[] pinnedAddresses = resolvePublicAddresses(uri.getHost());
         PoolingHttpClientConnectionManager connectionManager = PoolingHttpClientConnectionManagerBuilder.create()
                 .setDnsResolver(new PinnedPublicAddressDnsResolver(uri.getHost(), pinnedAddresses))
@@ -106,7 +119,11 @@ public class SafeExternalHttpService {
             request.setHeader("User-Agent", safeUserAgent(userAgent));
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 List<HeaderValue> headers = validateResponseHeaders(response.getHeaders());
-                byte[] body = readLimitedBody(response, maxResponseBytes);
+                long declaredLength = response.getEntity() == null
+                        ? -1L : response.getEntity().getContentLength();
+                notifyProgress(listener, 0L, declaredLength, response.getCode(), redirectCount);
+                byte[] body = readLimitedBody(response, maxResponseBytes, listener,
+                        response.getCode(), redirectCount);
                 return new ExternalHttpResponse(response.getCode(), body, headers);
             }
         } catch (IllegalArgumentException exception) {
@@ -119,16 +136,29 @@ public class SafeExternalHttpService {
     }
 
     private byte[] readLimitedBody(CloseableHttpResponse response, int maxResponseBytes) throws Exception {
+        return readLimitedBody(response, maxResponseBytes, null, response.getCode(), 0);
+    }
+
+    private byte[] readLimitedBody(CloseableHttpResponse response, int maxResponseBytes,
+                                   DownloadProgressListener listener, int statusCode,
+                                   int redirectCount) throws Exception {
         if (response.getEntity() == null) {
             return new byte[0];
         }
         long declaredLength = response.getEntity().getContentLength();
         try (InputStream input = response.getEntity().getContent()) {
-            return readLimitedStream(input, declaredLength, maxResponseBytes);
+            return readLimitedStream(input, declaredLength, maxResponseBytes,
+                    downloaded -> notifyProgress(listener, downloaded, declaredLength,
+                            statusCode, redirectCount));
         }
     }
 
     static byte[] readLimitedStream(InputStream input, long declaredLength, int maxResponseBytes) throws Exception {
+        return readLimitedStream(input, declaredLength, maxResponseBytes, null);
+    }
+
+    static byte[] readLimitedStream(InputStream input, long declaredLength, int maxResponseBytes,
+                                    LongConsumer progressConsumer) throws Exception {
         if (declaredLength > maxResponseBytes) {
             throw new IllegalArgumentException("外部响应内容超过限制");
         }
@@ -145,8 +175,19 @@ public class SafeExternalHttpService {
                 }
                 output.write(buffer, 0, bytesRead);
                 totalBytes += bytesRead;
+                if (progressConsumer != null) progressConsumer.accept(totalBytes);
             }
             return output.toByteArray();
+        }
+    }
+
+    private void notifyProgress(DownloadProgressListener listener, long downloadedBytes,
+                                long totalBytes, int statusCode, int redirectCount) {
+        if (listener == null) return;
+        try {
+            listener.onProgress(downloadedBytes, totalBytes, statusCode, redirectCount);
+        } catch (RuntimeException ignored) {
+            // Progress reporting must never change the secure download outcome.
         }
     }
 

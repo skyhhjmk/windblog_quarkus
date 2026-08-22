@@ -15,16 +15,21 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.net.URLDecoder;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.sql.DataSource;
 
 @ApplicationScoped
 public class ImportService {
@@ -37,7 +42,7 @@ public class ImportService {
     private static final Pattern MD_LINK_PATTERN = Pattern.compile("(?<!!)(\\[(.*?)\\])\\((.*?)\\)");
     private static final Pattern HTML_IMG_PATTERN = Pattern.compile("(<img[^>]+src=[\"'])(.*?)([\"'])");
     private static final Pattern HTML_LINK_PATTERN = Pattern.compile("(<a[^>]+href=[\"'])(.*?)([\"'])");
-    private static final Pattern URL_DISCOVERY_MD_PATTERN = Pattern.compile("!?\\[.*?\\]\\((.*?)\\)");
+    private static final Pattern URL_DISCOVERY_MD_PATTERN = Pattern.compile("!\\[.*?\\]\\((.*?)\\)");
     private static final Pattern URL_DISCOVERY_HTML_PATTERN = Pattern.compile("src=[\"'](.*?)([\"'])");
 
     private final BroadcastProcessor<ImportProgressEvent> eventProcessor = BroadcastProcessor.create();
@@ -45,76 +50,185 @@ public class ImportService {
     @Inject
     MediaManagementService mediaService;
 
+    @Inject
+    ImportAnalysisService importAnalysisService;
+
+    @Inject
+    EmbeddedDataImageService embeddedDataImageService;
+
+    @Inject
+    DataSource targetDataSource;
+
+    private static final List<String> IMPORT_TABLES = List.of(
+            "categories", "tags", "posts", "post_category", "post_tag", "post_author",
+            "links", "comments", "media", "wa_users");
+    private static final Pattern SQL_TARGET_TABLE = Pattern.compile(
+            "(?is)^(?:insert\\s+into|create\\s+(?:temporary\\s+)?table)\\s+"
+                    + "(?:if\\s+not\\s+exists\\s+)?(?:[\\\"`\\w]+\\.)?[\\\"`]?([a-zA-Z_][a-zA-Z0-9_]*)");
+
     /**
      * 执行数据导入
      */
     public ImportResult doImport(ImportRequest req, Long operatorId) {
         emit("info", "准备开始导入数据...", null);
-        ImportContext ctx = new ImportContext();
+        if (req == null) {
+            return new ImportResult(false, "导入请求不能为空", 0, 0, 0, 0, 0);
+        }
+        if (req.clearExisting()) {
+            return new ImportResult(false, "为避免误删现有数据，当前导入不支持清空模式，请使用跳过已有记录策略", 0, 0, 0, 0, 0);
+        }
         try (Connection conn = DriverManager.getConnection(req.url(), req.username(), req.password())) {
-            int categories = 0, tags = 0, posts = 0, links = 0, comments = 0;
-
-            User operator = User.findById(operatorId);
-            if (operator == null) {
-                operator = User.find("roleName = ?1", RoleConstant.SUPER_ADMIN).firstResult();
-            }
-
-            List<String> types = req.types();
-            if (types.contains("categories")) {
-                emit("info", "正在导入分类...", null);
-                categories = importCategories(conn, ctx);
-                emit("progress", "分类导入完成", Map.of("count", categories));
-            }
-            if (types.contains("tags")) {
-                emit("info", "正在导入标签...", null);
-                tags = importTags(conn, ctx);
-                emit("progress", "标签导入完成", Map.of("count", tags));
-            }
-            if (types.contains("media")) {
-                emit("info", "正在导入媒体库...", null);
-                importMedia(conn, req.assetPrefix(), operator, ctx);
-                emit("progress", "媒体库导入主体完成", null);
-            }
-
-            // 尝试导入作者以便建立文章关联
-            emit("info", "正在处理作者/用户映射...", null);
-            importUsers(conn, ctx);
-
-            if (types.contains("posts")) {
-                emit("info", "正在导入文章并处理附件...", null);
-                posts = importPosts(conn, operator, req.assetPrefix(), ctx);
-                emit("progress", "文章基本数据导入完成", Map.of("count", posts));
-
-                emit("info", "正在重建文章关联关系（分类、标签、作者）...", null);
-                importPostRelations(conn, ctx);
-                emit("progress", "关联关系重建完成", null);
-            }
-
-            // 执行一次重试
-            if (!ctx.retryQueue().isEmpty()) {
-                emit("info", "正在执行附件重试任务 (" + ctx.retryQueue().size() + " 个)...", null);
-                processRetryQueue(operator, ctx);
-            }
-
-            if (types.contains("links")) {
-                emit("info", "正在导入友情链接...", null);
-                links = importLinks(conn);
-                emit("progress", "友情链接导入完成", Map.of("count", links));
-            }
-            if (types.contains("comments")) {
-                emit("info", "正在导入评论...", null);
-                comments = importComments(conn, ctx);
-                emit("progress", "评论导入完成", Map.of("count", comments));
-            }
-
-            emit("end", "全部导入任务完成", null);
-            return new ImportResult(true, "导入完成", categories, tags, posts, links, comments);
+            return doImportWithConnection(req, operatorId, conn);
         } catch (Exception e) {
             String safeMessage = sanitizeErrorMessage(e.getMessage());
             log.error("导入发生错误: " + safeMessage + " (" + e.getClass().getSimpleName() + ")");
             emit("error", "导入发生错误: " + safeMessage, safeMessage);
             return new ImportResult(false, "导入失败: " + safeMessage, 0, 0, 0, 0, 0);
         }
+    }
+
+    public ImportResult doImportSql(java.nio.file.Path sqlFile, ImportRequest req, Long operatorId) {
+        emit("info", "准备从 SQL 文件导入数据...", null);
+        if (sqlFile == null || req == null) {
+            return new ImportResult(false, "SQL 文件导入请求不能为空", 0, 0, 0, 0, 0);
+        }
+        if (req.clearExisting()) {
+            return new ImportResult(false, "为避免误删现有数据，当前导入不支持清空模式，请使用跳过已有记录策略", 0, 0, 0, 0, 0);
+        }
+        try (Connection conn = targetDataSource.getConnection()) {
+            materializeSqlIntoTemporaryTables(conn, sqlFile);
+            return doImportWithConnection(req, operatorId, conn);
+        } catch (Exception e) {
+            String safeMessage = sanitizeErrorMessage(e.getMessage());
+            log.error("SQL 文件导入发生错误: " + safeMessage + " (" + e.getClass().getSimpleName() + ")");
+            emit("error", "SQL 文件导入失败: " + safeMessage, safeMessage);
+            return new ImportResult(false, "导入失败: " + safeMessage, 0, 0, 0, 0, 0);
+        }
+    }
+
+    private ImportResult doImportWithConnection(ImportRequest req, Long operatorId, Connection conn)
+            throws Exception {
+        ImportContext ctx = new ImportContext();
+        int categories = 0, tags = 0, posts = 0, links = 0, comments = 0;
+        User operator = User.findById(operatorId);
+        if (operator == null) {
+            operator = User.find("roleName = ?1", RoleConstant.SUPER_ADMIN).firstResult();
+        }
+
+        List<String> types = req.types() == null ? List.of() : req.types();
+        ctx.tracker().initialize(conn, types);
+        emitOverall(ctx, "准备导入", "已选择的导入类型已建立总进度");
+        if (types.contains("categories")) {
+            emit("info", "正在导入分类...", null);
+            categories = importCategories(conn, ctx);
+            ctx.tracker().completeEntityType("categories");
+            emitOverall(ctx, "分类", "分类处理完成");
+            emit("progress", "分类导入完成", Map.of("count", categories));
+        }
+        if (types.contains("tags")) {
+            emit("info", "正在导入标签...", null);
+            tags = importTags(conn, ctx);
+            ctx.tracker().completeEntityType("tags");
+            emitOverall(ctx, "标签", "标签处理完成");
+            emit("progress", "标签导入完成", Map.of("count", tags));
+        }
+        if (types.contains("media")) {
+            emit("info", "正在导入媒体库...", null);
+            importMedia(conn, req.assetPrefix(), operator, ctx);
+            ctx.tracker().completeEntityType("media");
+            emitOverall(ctx, "媒体", "媒体资源处理完成");
+            emit("progress", "媒体库导入主体完成", null);
+        }
+        emit("info", "正在处理作者/用户映射...", null);
+        importUsers(conn, ctx);
+        if (types.contains("posts")) {
+            emit("info", "正在导入文章并处理附件...", null);
+            posts = importPosts(conn, operator, req.assetPrefix(), ctx);
+            ctx.tracker().completeEntityType("posts");
+            emitOverall(ctx, "文章", "文章处理完成");
+            emit("progress", "文章基本数据导入完成", Map.of("count", posts));
+            emit("info", "正在重建文章关联关系（分类、标签、作者）...", null);
+            importPostRelations(conn, ctx);
+            emit("progress", "关联关系重建完成", null);
+        }
+        if (!ctx.retryQueue().isEmpty()) {
+            emit("info", "正在执行附件重试任务 (" + ctx.retryQueue().size() + " 个)...", null);
+            processRetryQueue(operator, ctx);
+        }
+        if (types.contains("links")) {
+            emit("info", "正在导入友情链接...", null);
+            links = importLinks(conn, operator, req.assetPrefix(), ctx);
+            ctx.tracker().completeEntityType("links");
+            emitOverall(ctx, "友情链接", "友情链接处理完成");
+            emit("progress", "友情链接导入完成", Map.of("count", links));
+        }
+        if (types.contains("comments")) {
+            emit("info", "正在导入评论...", null);
+            comments = importComments(conn, operator, req.assetPrefix(), ctx);
+            ctx.tracker().completeEntityType("comments");
+            emitOverall(ctx, "评论", "评论处理完成");
+            emit("progress", "评论导入完成", Map.of("count", comments));
+        }
+        emitOverall(ctx, "完成", "全部导入任务完成");
+        emit("end", "全部导入任务完成", ctx.tracker().snapshot(), "success");
+        return new ImportResult(true, "导入完成", categories, tags, posts, links, comments);
+    }
+
+    private void materializeSqlIntoTemporaryTables(Connection conn, java.nio.file.Path sqlFile) throws Exception {
+        java.util.Set<String> materializedTables = new HashSet<>();
+        try (java.sql.Statement statement = conn.createStatement()) {
+            for (String raw : importAnalysisService.readStatements(sqlFile)) {
+                String sql = importAnalysisService.stripLeadingComments(raw);
+                if (sql.isEmpty()) {
+                    continue;
+                }
+                Matcher matcher = SQL_TARGET_TABLE.matcher(sql);
+                if (!matcher.find()) {
+                    continue;
+                }
+                String table = matcher.group(1).toLowerCase(java.util.Locale.ROOT);
+                if (!IMPORT_TABLES.contains(table)) {
+                    continue;
+                }
+                if (sql.regionMatches(true, 0, "CREATE", 0, 6)) {
+                    // 不执行上传文件中的 DDL。用当前数据库的受控表结构建立临时表，避免 SQL 文件获得任意 DDL 权限。
+                    ensureTemporaryTable(statement, table, materializedTables);
+                } else if (sql.regionMatches(true, 0, "INSERT", 0, 6)) {
+                    ensureTemporaryTable(statement, table, materializedTables);
+                    if (!isSimpleInsert(sql, table)) {
+                        throw new IllegalArgumentException("表 " + table + " 只支持 INSERT ... VALUES 导入，不允许执行查询或附加 SQL");
+                    }
+                    String rewritten = sql.replaceFirst(
+                            "(?is)^(insert\\s+into\\s+)(?:[\\\"`\\w]+\\.)?[\\\"`]?" + table + "[\\\"`]?",
+                            "$1" + table);
+                    statement.execute(rewritten);
+                } else if (sql.regionMatches(true, 0, "COPY", 0, 4)) {
+                    throw new IllegalArgumentException("SQL 文件包含 COPY 导出，请先转换为 INSERT 格式");
+                }
+            }
+        }
+    }
+
+    private void ensureTemporaryTable(java.sql.Statement statement, String table,
+            java.util.Set<String> materializedTables) throws SQLException {
+        if (materializedTables.contains(table)) return;
+        try {
+            statement.execute("CREATE TEMP TABLE IF NOT EXISTS " + table
+                    + " AS SELECT * FROM public." + table + " WITH NO DATA");
+            materializedTables.add(table);
+        } catch (SQLException exception) {
+            throw new IllegalArgumentException("SQL 文件缺少表 " + table
+                    + " 的定义，且当前数据库无法提供兼容表结构");
+        }
+    }
+
+    private boolean isSimpleInsert(String sql, String table) {
+        String normalized = sql.trim();
+        String target = "(?is)^insert\\s+into\\s+(?:[\\\"`\\w]+\\.)?[\\\"`]?"
+                + Pattern.quote(table) + "[\\\"`]?\\s*(?:\\([^;]*?\\))?\\s+values\\s+.+$";
+        if (!normalized.matches(target)) return false;
+        String lower = normalized.toLowerCase(java.util.Locale.ROOT);
+        return !lower.contains(" returning ") && !lower.contains(" on conflict ");
     }
 
     static String sanitizeErrorMessage(String message) {
@@ -191,6 +305,65 @@ public class ImportService {
         eventProcessor.onNext(new ImportProgressEvent(type, message, data, status));
     }
 
+    private void emitOverall(ImportContext ctx, String phase, String message) {
+        Map<String, Object> data = new HashMap<>(ctx.tracker().snapshot());
+        data.put("phase", phase);
+        emit("overall", message, data, "processing");
+    }
+
+    private Media downloadImportedMedia(User operator, String fullUrl, ImportContext ctx) throws Exception {
+        ImportProgressTracker tracker = ctx.tracker();
+        tracker.registerResource(fullUrl);
+        int resourceIndex = tracker.resourceIndex(fullUrl);
+        DownloadState state = new DownloadState();
+        emit("download", "开始下载资源 " + sanitizeErrorMessage(fullUrl),
+                downloadData(tracker, fullUrl, resourceIndex, state, "started"), "processing");
+        try {
+            Media media = mediaService.importFromUrl(operator, fullUrl,
+                    (downloaded, total, statusCode, redirectCount) -> {
+                        state.statusCode = statusCode;
+                        state.redirectCount = redirectCount;
+                        state.downloadedBytes = downloaded;
+                        state.totalBytes = total;
+                        if (state.shouldReport(downloaded, total)) {
+                            emit("download", "下载资源 " + sanitizeErrorMessage(fullUrl),
+                                    downloadData(tracker, fullUrl, resourceIndex, state, "downloading"),
+                                    "processing");
+                        }
+                    });
+            tracker.completeResource(fullUrl, true);
+            emit("download", "资源下载完成 " + sanitizeErrorMessage(fullUrl),
+                    downloadData(tracker, fullUrl, resourceIndex, state, "completed"), "success");
+            emitOverall(ctx, "媒体", "资源下载完成");
+            return media;
+        } catch (Exception exception) {
+            tracker.completeResource(fullUrl, false);
+            state.error = sanitizeErrorMessage(exception.getMessage());
+            emit("download", "资源下载失败 " + sanitizeErrorMessage(fullUrl),
+                    downloadData(tracker, fullUrl, resourceIndex, state, "failed"), "failed");
+            emitOverall(ctx, "媒体", "资源下载失败");
+            throw exception;
+        }
+    }
+
+    private Map<String, Object> downloadData(ImportProgressTracker tracker, String url,
+                                               int resourceIndex, DownloadState state, String phase) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("resourceUrl", sanitizeErrorMessage(url));
+        data.put("resourceIndex", resourceIndex);
+        data.put("resourceTotal", tracker.resourceTotal());
+        data.put("completedResources", tracker.completedResources());
+        data.put("successfulResources", tracker.successfulResources());
+        data.put("failedResources", tracker.failedResources());
+        data.put("downloadedBytes", state.downloadedBytes);
+        data.put("totalBytes", state.totalBytes);
+        data.put("httpStatus", state.statusCode);
+        data.put("redirectCount", state.redirectCount);
+        data.put("phase", phase);
+        if (state.error != null) data.put("error", state.error);
+        return data;
+    }
+
     /**
      * 测试外部数据库连接
      */
@@ -255,8 +428,15 @@ public class ImportService {
                 String filePath = rs.getString("file_path");
                 if (filePath == null) continue;
 
-                String oldRelUrl = normalizeOldRelUrl(filePath);
-                String fullUrl = formatUrl(assetPrefix, oldRelUrl);
+                if (isEmbeddedImageDataUrl(filePath)) {
+                    String imported = importEmbeddedImage(filePath, operator, ctx);
+                    ctx.urlMap().put(filePath, imported);
+                    continue;
+                }
+
+                boolean absoluteSource = isAbsoluteHttpUrl(filePath);
+                String oldRelUrl = absoluteSource ? filePath : normalizeOldRelUrl(filePath);
+                String fullUrl = absoluteSource ? filePath : formatUrl(assetPrefix, oldRelUrl);
 
                 discoveryMap.put(oldRelUrl, fullUrl);
                 discoveryMap.put(filePath, fullUrl);
@@ -274,17 +454,23 @@ public class ImportService {
         // 我们需要按 fullUrl 进行分组，避免同一个文件因为不同的引用路径被下载多次
         Map<String, List<String>> reverseMap = new HashMap<>();
         for (Map.Entry<String, String> entry : discoveryMap.entrySet()) {
+            if (!isAbsoluteHttpUrl(entry.getValue())) {
+                emit("info", "跳过无法解析的相对媒体地址（请填写 http(s) 来源前缀）: "
+                        + sanitizeErrorMessage(entry.getKey()), null);
+                continue;
+            }
             reverseMap.computeIfAbsent(entry.getValue(), k -> new ArrayList<>()).add(entry.getKey());
         }
 
         for (Map.Entry<String, List<String>> entry : reverseMap.entrySet()) {
             String fullUrl = entry.getKey();
             List<String> refPaths = entry.getValue();
+            ctx.tracker().registerResource(fullUrl);
 
             String safeUrl = sanitizeErrorMessage(fullUrl);
             emit("info", "同步媒体资源: " + safeUrl, null);
             try {
-                Media m = mediaService.importFromUrl(operator, fullUrl);
+                Media m = downloadImportedMedia(operator, fullUrl, ctx);
                 // 将所有关联的引用路径都指向新 URL
                 for (String path : refPaths) {
                     ctx.urlMap().put(path, m.url);
@@ -327,10 +513,13 @@ public class ImportService {
     }
 
     private void addDiscoveredUrl(String url, String assetPrefix, Map<String, String> discoveryMap) {
-        if (url == null || url.isBlank() || url.startsWith("http") || url.startsWith("data:")) return;
+        if (url == null || url.isBlank() || isNonMediaScheme(url) || isEmbeddedImageDataUrl(url)) return;
 
-        String oldRelUrl = normalizeOldRelUrl(url);
-        String fullUrl = formatUrl(assetPrefix, oldRelUrl);
+        boolean absoluteSource = isAbsoluteHttpUrl(url);
+        String oldRelUrl = absoluteSource ? url : normalizeOldRelUrl(url);
+        String fullUrl = absoluteSource ? url : url.startsWith("//")
+                ? resolveRelativeUrl(assetPrefix, url)
+                : formatUrl(assetPrefix, oldRelUrl);
         discoveryMap.put(url, fullUrl);
         discoveryMap.put(oldRelUrl, fullUrl);
     }
@@ -375,11 +564,15 @@ public class ImportService {
                 } else if (columnExists(cols, "summary")) {
                     excerptVal = rs.getString("summary");
                 }
-                if (excerptVal != null) p.summary = Map.of("zh-cn", excerptVal);
+                if (excerptVal != null) {
+                    p.summary = Map.of("zh-cn", processContentLinks(excerptVal, assetPrefix, operator, ctx));
+                }
 
                 if (columnExists(cols, "ai_summary")) {
                     String aiSummary = rs.getString("ai_summary");
-                    if (aiSummary != null) p.aiSummary = Map.of("zh-cn", aiSummary);
+                    if (aiSummary != null) {
+                        p.aiSummary = Map.of("zh-cn", processContentLinks(aiSummary, assetPrefix, operator, ctx));
+                    }
                 }
 
                 p.status = mapStatus(columnExists(cols, "status") ? rs.getString("status") : null);
@@ -463,7 +656,9 @@ public class ImportService {
      * 格式化 URL，补全前缀并合并双斜杠（忽略协议部分的 //）
      */
     private String formatUrl(String prefix, String path) {
-        return MediaPathHelper.joinUrl(prefix, path);
+        if (path == null || path.isBlank()) return path;
+        if (isAbsoluteHttpUrl(path)) return path;
+        return resolveRelativeUrl(prefix, path);
     }
 
     private void processRetryQueue(User operator, ImportContext ctx) {
@@ -474,7 +669,7 @@ public class ImportService {
             String safeUrl = sanitizeErrorMessage(task.sourceUrl);
             emit("info", "重试下载: " + safeUrl, null);
             try {
-                Media m = mediaService.importFromUrl(operator, task.sourceUrl);
+                Media m = downloadImportedMedia(operator, task.sourceUrl, ctx);
                 ctx.urlMap().put(task.sourceUrl, m.url);
             } catch (Exception e) {
                 String safeMessage = sanitizeErrorMessage(e.getMessage());
@@ -485,7 +680,7 @@ public class ImportService {
         }
     }
 
-    private int importLinks(Connection conn) throws SQLException {
+    private int importLinks(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
         int count = 0;
         String sql = "SELECT * FROM links";
         try (PreparedStatement ps = conn.prepareStatement(sql);
@@ -498,13 +693,17 @@ public class ImportService {
                 final Link l = new Link();
                 l.url = url;
                 l.name = rs.getString("name");
-                if (columnExists(cols, "description")) l.description = rs.getString("description");
-                if (columnExists(cols, "image")) l.image = rs.getString("image");
-                if (columnExists(cols, "icon")) l.icon = rs.getString("icon");
+                if (columnExists(cols, "description")) l.description = processContentLinks(rs.getString("description"), assetPrefix, operator, ctx);
+                if (columnExists(cols, "image")) l.image = resolveAndDownload(rs.getString("image"), assetPrefix, operator, ctx);
+                if (columnExists(cols, "icon")) l.icon = resolveAndDownload(rs.getString("icon"), assetPrefix, operator, ctx);
                 if (columnExists(cols, "sort_order")) l.sortOrder = rs.getInt("sort_order");
                 l.status = 1; // Default visible
+                l.applicationStatus = 1; // Imported links are treated as approved.
+                l.availabilityStatus = "UNKNOWN";
+                l.backlinkStatus = "UNKNOWN";
                 l.target = "_blank";
                 l.redirectType = 1; // Direct
+                l.showUrl = false;
                 l.type = LinkType.FRIENDLY_LINK;
                 l.createdAt = OffsetDateTime.now();
 
@@ -660,7 +859,7 @@ public class ImportService {
         }
     }
 
-    private int importComments(Connection conn, ImportContext ctx) throws SQLException {
+    private int importComments(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
         int count = 0;
         Map<Long, Long> commentIdMap = new HashMap<>();
 
@@ -697,7 +896,7 @@ public class ImportService {
                 }
 
                 Comment c = new Comment();
-                c.content = rs.getString("content");
+                c.content = processContentLinks(rs.getString("content"), assetPrefix, operator, ctx);
                 c.status = 1; // 默认通过
                 c.auditStatus = COMMENT_AUDIT_STATUS_APPROVED;
 
@@ -805,6 +1004,10 @@ public class ImportService {
     private String processContentLinks(String content, String assetPrefix, User operator, ImportContext ctx) {
         if (content == null || content.isBlank()) return content;
 
+        // 先迁移所有上下文中的 image Data URL（Markdown、HTML、CSS url() 及普通文本），
+        // 保留原有换行和 Markdown，只替换实际的 data:image/... token。
+        content = replaceEmbeddedDataImages(content, operator, ctx);
+
         StringBuilder sb;
         int lastEnd;
 
@@ -873,12 +1076,12 @@ public class ImportService {
     }
 
     private String resolveExternalLink(String url, String text, String assetPrefix, ImportContext ctx) {
-        if (url == null || url.isBlank() || url.startsWith("#") || url.startsWith("javascript:") || url.startsWith("mailto:")) {
+        if (url == null || url.isBlank() || url.startsWith("#") || isNonMediaScheme(url)) {
             return url;
         }
 
-        // 如果是站内资源或附件，保持原样（或已经处理过的本地路径）
-        if (url.startsWith("/") || (assetPrefix != null && url.startsWith(assetPrefix))) {
+        // 普通外链和站内绝对路径保持原样，不再隐式创建 /go 重定向记录。
+        if (isAbsoluteHttpUrl(url) || url.startsWith("/") || url.startsWith("//")) {
             return url;
         }
 
@@ -887,36 +1090,10 @@ public class ImportService {
             return ctx.urlMap().get(url);
         }
 
-        // 转存为外部链接记录
-        final String linkName = (text != null && !text.isBlank()) ? text : url;
-        final Long[] linkId = new Long[1];
-
-        QuarkusTransaction.requiringNew().run(() -> {
-            Link existing = Link.find("url = ?1", url).firstResult();
-            if (existing == null) {
-                Link l = new Link();
-                l.url = url;
-                l.name = linkName;
-                l.type = LinkType.EXTERNAL_ARTICLE;
-                l.redirectType = (short) 2; // goto
-                l.status = 1;
-                l.target = "_blank";
-                l.sortOrder = 99;
-                l.createdAt = OffsetDateTime.now();
-                l.persist();
-                linkId[0] = l.id;
-            } else {
-                linkId[0] = existing.id;
-                // 如果类型不是外部链接，可以考虑更新或保持
-                if (existing.type != LinkType.EXTERNAL_ARTICLE) {
-                    // 保持原有类型，通常是友情链接
-                }
-            }
-        });
-
-        String redirectUrl = "/go/" + linkId[0];
-        ctx.urlMap().put(url, redirectUrl);
-        return redirectUrl;
+        // 非根相对链接使用来源站点基址补全；没有合法基址时保留原值，避免拼出不可访问 URL。
+        String resolved = resolveRelativeUrl(assetPrefix, url);
+        ctx.urlMap().put(url, resolved);
+        return resolved;
     }
 
     private String resolveAndDownload(String url, String assetPrefix, User operator, ImportContext ctx) {
@@ -930,19 +1107,19 @@ public class ImportService {
             return cachedUrl;
         }
 
-        // 如果是相对路径或属于旧系统的路径
-        boolean isRelativeOrOldSystem = false;
-        if (!url.startsWith("http")) {
-            isRelativeOrOldSystem = true;
-        } else if (assetPrefix != null && !assetPrefix.isBlank() && url.contains(assetPrefix)) {
-            isRelativeOrOldSystem = true;
-        }
+        if (isEmbeddedImageDataUrl(url)) return importEmbeddedImage(url, operator, ctx);
+        if (isNonMediaScheme(url)) return url;
+
+        // 相对路径、协议相对 URL，以及来源站点同源资源才进入媒体下载流程。
+        boolean isRelativeOrOldSystem = !isAbsoluteHttpUrl(url) || isSameOrigin(url, assetPrefix);
 
         if (isRelativeOrOldSystem) {
             String fullUrl = url;
-            if (!url.startsWith("http")) {
-                fullUrl = formatUrl(assetPrefix, url);
+            if (!isAbsoluteHttpUrl(url)) {
+                fullUrl = resolveRelativeUrl(assetPrefix, url);
             }
+
+            if (!isAbsoluteHttpUrl(fullUrl)) return url;
 
             // 再次检查拼接后的完整 URL 是否在映射中
             String cachedFullUrl = ctx.urlMap().get(fullUrl);
@@ -951,7 +1128,7 @@ public class ImportService {
             }
 
             try {
-                Media m = mediaService.importFromUrl(operator, fullUrl);
+                Media m = downloadImportedMedia(operator, fullUrl, ctx);
                 ctx.urlMap().put(url, m.url);
                 ctx.urlMap().put(fullUrl, m.url);
                 return m.url;
@@ -968,20 +1145,206 @@ public class ImportService {
         return url;
     }
 
+    private boolean isNonMediaScheme(String url) {
+        String normalized = url.trim().toLowerCase(java.util.Locale.ROOT);
+        return normalized.startsWith("data:") || normalized.startsWith("mailto:")
+                || normalized.startsWith("javascript:") || normalized.startsWith("tel:");
+    }
+
+    private boolean isEmbeddedImageDataUrl(String url) {
+        return url != null && url.trim().regionMatches(true, 0, "data:image/", 0, 11);
+    }
+
+    private String importEmbeddedImage(String dataUrl, User operator, ImportContext ctx) {
+        String normalized = dataUrl.trim();
+        String cached = ctx.embeddedMap().get(normalized);
+        if (cached != null) return cached;
+        EmbeddedDataImageService.ParsedImage parsed = EmbeddedDataImageService.parse(normalized);
+        String byHash = ctx.embeddedMap().get("sha256:" + parsed.sha256());
+        if (byHash != null) {
+            ctx.embeddedMap().put(normalized, byHash);
+            return byHash;
+        }
+        try {
+            Media media = embeddedDataImageService.importImage(normalized, operator);
+            ctx.embeddedMap().put(normalized, media.url);
+            ctx.embeddedMap().put("sha256:" + parsed.sha256(), media.url);
+            return media.url;
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("内嵌图片导入失败：" + sanitizeErrorMessage(exception.getMessage()), exception);
+        }
+    }
+
+    private String replaceEmbeddedDataImages(String content, User operator, ImportContext ctx) {
+        Matcher matcher = EmbeddedDataImageService.DATA_IMAGE_PATTERN.matcher(content);
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String replacement = importEmbeddedImage(matcher.group(), operator, ctx);
+            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private boolean isAbsoluteHttpUrl(String url) {
+        try {
+            URI uri = URI.create(url);
+            return "http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme());
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    private boolean isSameOrigin(String url, String assetPrefix) {
+        try {
+            URI source = URI.create(url);
+            URI base = URI.create(normalizeAssetPrefix(assetPrefix));
+            return source.getHost() != null && source.getHost().equalsIgnoreCase(base.getHost())
+                    && source.getPort() == base.getPort()
+                    && source.getScheme().equalsIgnoreCase(base.getScheme());
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    private String resolveRelativeUrl(String assetPrefix, String path) {
+        String normalizedPrefix = normalizeAssetPrefix(assetPrefix);
+        if (normalizedPrefix.isBlank()) return path;
+        try {
+            URI base = URI.create(normalizedPrefix.endsWith("/") ? normalizedPrefix : normalizedPrefix + "/");
+            URI relative = URI.create(path.trim());
+            if (relative.getScheme() == null && path.startsWith("//")) {
+                relative = URI.create(base.getScheme() + ":" + path.trim());
+            }
+            return base.resolve(relative).toString();
+        } catch (IllegalArgumentException ignored) {
+            return path;
+        }
+    }
+
+    private String normalizeAssetPrefix(String prefix) {
+        if (prefix == null || prefix.isBlank()) return "";
+        try {
+            URI uri = new URI(prefix.trim());
+            if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                    || uri.getHost() == null || uri.getUserInfo() != null) {
+                return "";
+            }
+            return uri.toString();
+        } catch (URISyntaxException ignored) {
+            return "";
+        }
+    }
+
     private record DownloadTask(String sourceUrl, String targetName, Post relatedPost) {
+    }
+
+    private static final class DownloadState {
+        private long downloadedBytes;
+        private long totalBytes = -1L;
+        private int statusCode;
+        private int redirectCount;
+        private String error;
+        private long lastReportedBytes;
+        private long lastReportedNanos;
+
+        private boolean shouldReport(long downloaded, long total) {
+            long now = System.nanoTime();
+            boolean complete = total > 0 && downloaded >= total;
+            boolean enoughBytes = downloaded - lastReportedBytes >= 64 * 1024L;
+            boolean enoughTime = now - lastReportedNanos >= 200_000_000L;
+            if (complete || enoughBytes || enoughTime || lastReportedNanos == 0L) {
+                lastReportedBytes = downloaded;
+                lastReportedNanos = now;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    private static final class ImportProgressTracker {
+        private final Map<String, Long> entityTotals = new HashMap<>();
+        private final Set<String> completedEntityTypes = new HashSet<>();
+        private final Set<String> resources = new java.util.LinkedHashSet<>();
+        private final Set<String> completedResources = new HashSet<>();
+        private final Set<String> successfulResources = new HashSet<>();
+        private final Set<String> failedResources = new HashSet<>();
+
+        void initialize(Connection connection, List<String> types) {
+            for (String type : types) {
+                if (!List.of("categories", "tags", "posts", "media", "links", "comments").contains(type)) {
+                    continue;
+                }
+                try (Statement statement = connection.createStatement();
+                     ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM \"" + type + "\"")) {
+                    if (result.next()) entityTotals.put(type, Math.max(0L, result.getLong(1)));
+                } catch (SQLException ignored) {
+                    entityTotals.put(type, 0L);
+                }
+            }
+        }
+
+        void completeEntityType(String type) {
+            completedEntityTypes.add(type);
+        }
+
+        void registerResource(String url) {
+            resources.add(url);
+        }
+
+        int resourceIndex(String url) {
+            int index = 1;
+            for (String resource : resources) {
+                if (resource.equals(url)) return index;
+                index++;
+            }
+            return index;
+        }
+
+        void completeResource(String url, boolean success) {
+            completedResources.add(url);
+            if (success) successfulResources.add(url); else failedResources.add(url);
+        }
+
+        int resourceTotal() { return resources.size(); }
+        int completedResources() { return completedResources.size(); }
+        int successfulResources() { return successfulResources.size(); }
+        int failedResources() { return failedResources.size(); }
+
+        Map<String, Object> snapshot() {
+            long totalEntityUnits = entityTotals.values().stream().mapToLong(Long::longValue).sum();
+            long completedEntityUnits = completedEntityTypes.stream()
+                    .mapToLong(type -> entityTotals.getOrDefault(type, 0L)).sum();
+            long total = totalEntityUnits + resources.size();
+            long completed = completedEntityUnits + completedResources.size();
+            double percent = total <= 0 ? 0d : Math.min(100d, completed * 100d / total);
+            Map<String, Object> result = new HashMap<>();
+            result.put("completed", completed);
+            result.put("total", total);
+            result.put("percent", percent);
+            result.put("completedEntities", completedEntityUnits);
+            result.put("totalEntities", totalEntityUnits);
+            result.put("completedResources", completedResources.size());
+            result.put("totalResources", resources.size());
+            result.put("successfulResources", successfulResources.size());
+            result.put("failedResources", failedResources.size());
+            return result;
+        }
     }
 
     // 导入上下文，用于在方法间传递状态
     private record ImportContext(
             Map<String, String> urlMap,
+            Map<String, String> embeddedMap,
             List<DownloadTask> retryQueue,
             Map<Long, Long> categoryMap,
             Map<Long, Long> tagMap,
             Map<Long, Long> userMap,
-            Map<Long, Long> postMap
+            Map<Long, Long> postMap,
+            ImportProgressTracker tracker
     ) {
         public ImportContext() {
-            this(new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
+            this(new HashMap<>(), new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new ImportProgressTracker());
         }
     }
 }

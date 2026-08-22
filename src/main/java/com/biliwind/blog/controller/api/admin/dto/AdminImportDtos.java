@@ -1,11 +1,41 @@
 package com.biliwind.blog.controller.api.admin.dto;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 数据导入相关 DTO
  */
 public class AdminImportDtos {
+
+    public record AnalyzeRequest(
+            String sourceType,
+            String driver,
+            String url,
+            String username,
+            String password,
+            String assetPrefix) {
+    }
+
+    public record ExecuteRequest(
+            String analysisId,
+            String sourceType,
+            String driver,
+            String url,
+            String username,
+            String password,
+            List<String> types,
+            String assetPrefix,
+            String conflictPolicy) {
+    }
+
+    public record AnalysisResponse(
+            String analysisId,
+            String sourceType,
+            String status,
+            Map<String, Object> report,
+            String expiresAt) {
+    }
 
     /**
      * 测试连接请求
@@ -50,7 +80,7 @@ public class AdminImportDtos {
      * 导入进度事件（用于 SSE）
      */
     public record ImportProgressEvent(
-            String type,      // info, error, progress, end
+            String type,      // info, error, progress, overall, download, end
             String message,   // 描述信息
             Object data,      // 附加数据 (Map or String)
             String status     // 状态标识 (success, failed, processing)

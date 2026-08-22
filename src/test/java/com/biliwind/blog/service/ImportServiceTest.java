@@ -2,7 +2,10 @@ package com.biliwind.blog.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ImportServiceTest {
@@ -34,5 +37,14 @@ class ImportServiceTest {
         assertFalse(message.contains("sync-secret"));
         assertFalse(message.contains("url-token"));
         assertTrue(message.contains("[REDACTED]"));
+    }
+
+    @Test
+    void shouldNotPrefixAnAbsoluteDiscoveredMediaUrl() throws Exception {
+        Method formatUrl = ImportService.class.getDeclaredMethod("formatUrl", String.class, String.class);
+        formatUrl.setAccessible(true);
+        String result = (String) formatUrl.invoke(new ImportService(),
+                "https://www.biliwind.com", "https://tcimg.cn/image.png");
+        assertEquals("https://tcimg.cn/image.png", result);
     }
 }

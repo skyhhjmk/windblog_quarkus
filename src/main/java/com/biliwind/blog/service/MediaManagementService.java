@@ -885,9 +885,16 @@ public class MediaManagementService {
      * @throws IOException 下载或存储失败时抛出
      */
     public Media importFromUrl(User operator, String fileUrl) throws IOException {
+        return importFromUrl(operator, fileUrl, null);
+    }
+
+    public Media importFromUrl(User operator, String fileUrl,
+                               com.biliwind.blog.service.security.SafeExternalHttpService.DownloadProgressListener progressListener)
+            throws IOException {
         try {
             com.biliwind.blog.service.security.SafeExternalHttpService.ExternalHttpResponse response =
-                    safeExternalHttpService.get(fileUrl, "WindBlog-Safe-Media-Importer/1.0", 256 * 1024 * 1024);
+                    safeExternalHttpService.get(fileUrl, "WindBlog-Safe-Media-Importer/1.0",
+                            256 * 1024 * 1024, progressListener);
             if (response.statusCode() != 200) {
                 throw new IOException("下载文件失败，HTTP 状态码: " + response.statusCode());
             }
@@ -922,6 +929,14 @@ public class MediaManagementService {
         media.fileName = extractFileNameFromUrl(sourceUrl);
         media.size = 0L;
         media.uploadedBy = operator.id;
+        media.mimeType = "application/octet-stream";
+        media.alt = Collections.emptyMap();
+        media.storageClasses = new LinkedHashMap<>();
+        media.version = 0;
+        media.processingStatus = "FAILED";
+        media.processingProgress = 0;
+        media.processingError = SensitiveMessageSanitizer.sanitize(error);
+        media.deletedAt = null;
         media.createdAt = OffsetDateTime.now();
         media.virusScanStatus = "NOT_SCANNED";
 

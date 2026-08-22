@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -52,6 +53,16 @@ class SafeExternalHttpServiceTest {
         assertThrows(IllegalArgumentException.class, () ->
                 SafeExternalHttpService.readLimitedStream(
                         new ByteArrayInputStream(body), -1, 4));
+    }
+
+    @Test
+    void shouldReportStreamingDownloadBytes() throws Exception {
+        AtomicLong downloaded = new AtomicLong();
+        byte[] body = "0123456789".getBytes(StandardCharsets.UTF_8);
+        byte[] result = SafeExternalHttpService.readLimitedStream(
+                new ByteArrayInputStream(body), body.length, 32, downloaded::set);
+        assertArrayEquals(body, result);
+        assertEquals(body.length, downloaded.get());
     }
 
     @Test
