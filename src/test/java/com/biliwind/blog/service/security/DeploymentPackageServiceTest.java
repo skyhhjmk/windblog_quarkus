@@ -4,20 +4,40 @@ import com.biliwind.blog.controller.api.admin.AdminEdgeNodeApiController;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
+import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
+@TestProfile(DeploymentPackageServiceTest.DefaultSecurityProfile.class)
 public class DeploymentPackageServiceTest {
+
+    /**
+     * Keeps the compatibility assertion independent of a developer's local
+     * .env file. The generated edge package must disable the production
+     * default-secret guard only when its source node really uses defaults.
+     */
+    public static class DefaultSecurityProfile implements QuarkusTestProfile {
+        @Override
+        public Map<String, String> getConfigOverrides() {
+            return Map.of(
+                    "admin.jwt.secret", "windblog-admin-dev-secret-change-me",
+                    "user.jwt.secret", "windblog-user-dev-secret-change-me",
+                    "security.event-hash-secret", "windblog-dev-event-hash-secret"
+            );
+        }
+    }
 
     @Inject
     DeploymentPackageService deploymentPackageService;
