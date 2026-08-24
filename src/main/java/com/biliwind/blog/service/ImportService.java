@@ -46,6 +46,12 @@ public class ImportService {
     private static final Pattern URL_DISCOVERY_HTML_PATTERN = Pattern.compile("src=[\"'](.*?)([\"'])");
 
     private final BroadcastProcessor<ImportProgressEvent> eventProcessor = BroadcastProcessor.create();
+    /**
+     * The last durable-ish progress point kept in memory for SSE reconnects.
+     * Import execution is still synchronous for now, but a reconnect must not
+     * leave the admin page showing an old percentage with no context.
+     */
+    private volatile ImportProgressEvent latestProgressEvent;
 
     @Inject
     MediaManagementService mediaService;
@@ -70,6 +76,7 @@ public class ImportService {
      * 执行数据导入
      */
     public ImportResult doImport(ImportRequest req, Long operatorId) {
+        resetProgressStream();
         emit("info", "准备开始导入数据...", null);
         if (req == null) {
             return new ImportResult(false, "导入请求不能为空", 0, 0, 0, 0, 0);
@@ -88,6 +95,7 @@ public class ImportService {
     }
 
     public ImportResult doImportSql(java.nio.file.Path sqlFile, ImportRequest req, Long operatorId) {
+        resetProgressStream();
         emit("info", "准备从 SQL 文件导入数据...", null);
         if (sqlFile == null || req == null) {
             return new ImportResult(false, "SQL 文件导入请求不能为空", 0, 0, 0, 0, 0);
@@ -251,6 +259,8 @@ public class ImportService {
                 if (existing != null) {
                     emit("info", "跳过已存在的分类: " + categoryName, slug);
                     ctx.categoryMap().put(oldId, existing.id);
+                    ctx.tracker().completeEntityItem("categories");
+                    emitEntityProgress(ctx, "分类", "分类处理中");
                     continue;
                 }
 
@@ -287,6 +297,8 @@ public class ImportService {
                 });
 
                 ctx.categoryMap().put(oldId, c.id);
+                ctx.tracker().completeEntityItem("categories");
+                emitEntityProgress(ctx, "分类", "分类处理中");
                 count++;
             }
         }
@@ -294,21 +306,58 @@ public class ImportService {
     }
 
     public Multi<ImportProgressEvent> getEventStream() {
-        return eventProcessor;
+        ImportProgressEvent latest = latestProgressEvent;
+        if (latest == null) {
+            return eventProcessor;
+        }
+        return Multi.createBy().concatenating().streams(
+                Multi.createFrom().item(latest), eventProcessor);
+    }
+
+    /** Returns the latest progress event for the SSE keep-alive tick. */
+    public ImportProgressEvent getProgressHeartbeat() {
+        ImportProgressEvent latest = latestProgressEvent;
+        return latest == null
+                ? new ImportProgressEvent("ping", "keep-alive", null, null)
+                : new ImportProgressEvent("heartbeat", latest.message(), latest.data(), latest.status());
+    }
+
+    private void resetProgressStream() {
+        latestProgressEvent = null;
     }
 
     private void emit(String type, String message, Object data) {
-        eventProcessor.onNext(new ImportProgressEvent(type, message, data, null));
+        publish(new ImportProgressEvent(type, message, data, null));
     }
 
     private void emit(String type, String message, Object data, String status) {
-        eventProcessor.onNext(new ImportProgressEvent(type, message, data, status));
+        publish(new ImportProgressEvent(type, message, data, status));
+    }
+
+    private void publish(ImportProgressEvent event) {
+        if ("overall".equals(event.type()) || "end".equals(event.type())
+                || "error".equals(event.type())) {
+            latestProgressEvent = event;
+        }
+        eventProcessor.onNext(event);
     }
 
     private void emitOverall(ImportContext ctx, String phase, String message) {
         Map<String, Object> data = new HashMap<>(ctx.tracker().snapshot());
         data.put("phase", phase);
         emit("overall", message, data, "processing");
+    }
+
+    /**
+     * Emits row-level progress at a bounded rate.  Previously only completion
+     * of an entire entity type changed the numerator, so a large post or link
+     * phase could sit at an apparently arbitrary percentage for a long time.
+     */
+    private void emitEntityProgress(ImportContext ctx, String phase, String message) {
+        if (!ctx.tracker().shouldReportProgress()) {
+            return;
+        }
+        emitOverall(ctx, phase, message);
     }
 
     private Media downloadImportedMedia(User operator, String fullUrl, ImportContext ctx) throws Exception {
@@ -390,6 +439,8 @@ public class ImportService {
                 if (existing != null) {
                     emit("info", "跳过已存在的标签: " + tagName, slug);
                     ctx.tagMap().put(oldId, existing.id);
+                    ctx.tracker().completeEntityItem("tags");
+                    emitEntityProgress(ctx, "标签", "标签处理中");
                     continue;
                 }
 
@@ -410,6 +461,8 @@ public class ImportService {
                     }
                 });
                 ctx.tagMap().put(oldId, t.id);
+                ctx.tracker().completeEntityItem("tags");
+                emitEntityProgress(ctx, "标签", "标签处理中");
                 count++;
             }
         }
@@ -426,11 +479,17 @@ public class ImportService {
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 String filePath = rs.getString("file_path");
-                if (filePath == null) continue;
+                if (filePath == null) {
+                    ctx.tracker().completeEntityItem("media");
+                    emitEntityProgress(ctx, "媒体", "媒体资源发现中");
+                    continue;
+                }
 
                 if (isEmbeddedImageDataUrl(filePath)) {
                     String imported = importEmbeddedImage(filePath, operator, ctx);
                     ctx.urlMap().put(filePath, imported);
+                    ctx.tracker().completeEntityItem("media");
+                    emitEntityProgress(ctx, "媒体", "媒体资源处理中");
                     continue;
                 }
 
@@ -441,6 +500,8 @@ public class ImportService {
                 discoveryMap.put(oldRelUrl, fullUrl);
                 discoveryMap.put(filePath, fullUrl);
                 if (!filePath.startsWith("/")) discoveryMap.put("/" + filePath, fullUrl);
+                ctx.tracker().completeEntityItem("media");
+                emitEntityProgress(ctx, "媒体", "媒体资源发现中");
             }
         } catch (SQLException e) {
             String safeMessage = sanitizeErrorMessage(e.getMessage());
@@ -448,7 +509,7 @@ public class ImportService {
         }
 
         // 2. 从 posts 表中通过内容分析发现
-        extractUrlsFromPosts(conn, assetPrefix, discoveryMap);
+        extractUrlsFromPosts(conn, assetPrefix, discoveryMap, ctx);
 
         // 3. 执行去重后的下载任务
         // 我们需要按 fullUrl 进行分组，避免同一个文件因为不同的引用路径被下载多次
@@ -488,7 +549,8 @@ public class ImportService {
         }
     }
 
-    private void extractUrlsFromPosts(Connection conn, String assetPrefix, Map<String, String> discoveryMap) throws SQLException {
+    private void extractUrlsFromPosts(Connection conn, String assetPrefix,
+                                      Map<String, String> discoveryMap, ImportContext ctx) throws SQLException {
         String sql = "SELECT content FROM posts WHERE deleted_at IS NULL";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -508,6 +570,7 @@ public class ImportService {
                 while (htmlMatcher.find()) {
                     addDiscoveredUrl(htmlMatcher.group(1), assetPrefix, discoveryMap);
                 }
+                emitEntityProgress(ctx, "媒体", "正在分析文章资源");
             }
         }
     }
@@ -551,6 +614,8 @@ public class ImportService {
 
                 if (Post.count("slug = ?1", slug) > 0) {
                     emit("info", "跳过已存在的文章: " + title, slug);
+                    ctx.tracker().completeEntityItem("posts");
+                    emitEntityProgress(ctx, "文章", "文章处理中");
                     continue;
                 }
 
@@ -646,6 +711,8 @@ public class ImportService {
                 });
 
                 ctx.postMap().put(oldPostId, p.id);
+                ctx.tracker().completeEntityItem("posts");
+                emitEntityProgress(ctx, "文章", "文章处理中");
                 count++;
             }
         }
@@ -688,7 +755,11 @@ public class ImportService {
             List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 String url = rs.getString("url");
-                if (Link.count("url = ?1", url) > 0) continue;
+                if (Link.count("url = ?1", url) > 0) {
+                    ctx.tracker().completeEntityItem("links");
+                    emitEntityProgress(ctx, "友情链接", "友情链接处理中");
+                    continue;
+                }
 
                 final Link l = new Link();
                 l.url = url;
@@ -713,6 +784,8 @@ public class ImportService {
                         l.persist();
                     }
                 });
+                ctx.tracker().completeEntityItem("links");
+                emitEntityProgress(ctx, "友情链接", "友情链接处理中");
                 count++;
             }
         }
@@ -738,6 +811,7 @@ public class ImportService {
                     // 如果不存在，可以考虑自动创建，但目前为了安全，仅做映射
                     // 也可以映射给当前操作者，或者映射给超级管理员
                 }
+                emitEntityProgress(ctx, "作者映射", "正在处理作者/用户映射");
             }
         } catch (SQLException e) {
             emit("info", "未找到旧系统的用户表 (wa_users)，将跳过作者映射: "
@@ -794,6 +868,7 @@ public class ImportService {
                         }
                     });
                 }
+                emitEntityProgress(ctx, "文章关联", "正在处理分类关联");
             }
         } catch (SQLException e) {
             emit("info", "处理分类关联时跳过 (可能表不存在): "
@@ -826,6 +901,7 @@ public class ImportService {
                         }
                     });
                 }
+                emitEntityProgress(ctx, "文章关联", "正在处理标签关联");
             }
         } catch (SQLException e) {
             emit("info", "处理标签关联时跳过 (可能表不存在): "
@@ -853,6 +929,7 @@ public class ImportService {
                         }
                     });
                 }
+                emitEntityProgress(ctx, "文章关联", "正在处理作者关联");
             }
         } catch (SQLException e) {
             // 可能没有 post_author 表，或者是 wa_posts 里直接带 author_id
@@ -892,6 +969,8 @@ public class ImportService {
                 Long newPostId = ctx.postMap().get(oldPostId);
 
                 if (newPostId == null) {
+                    ctx.tracker().completeEntityItem("comments");
+                    emitEntityProgress(ctx, "评论", "评论处理中");
                     continue; // 文章不存在，跳过评论
                 }
 
@@ -938,6 +1017,8 @@ public class ImportService {
                 });
 
                 commentIdMap.put(oldId, c.id);
+                ctx.tracker().completeEntityItem("comments");
+                emitEntityProgress(ctx, "评论", "评论处理中");
                 count++;
             }
         } catch (SQLException e) {
@@ -1263,12 +1344,14 @@ public class ImportService {
     }
 
     private static final class ImportProgressTracker {
+        private static final long PROGRESS_REPORT_INTERVAL_NANOS = 250_000_000L;
         private final Map<String, Long> entityTotals = new HashMap<>();
-        private final Set<String> completedEntityTypes = new HashSet<>();
+        private final Map<String, Long> completedEntityItems = new HashMap<>();
         private final Set<String> resources = new java.util.LinkedHashSet<>();
         private final Set<String> completedResources = new HashSet<>();
         private final Set<String> successfulResources = new HashSet<>();
         private final Set<String> failedResources = new HashSet<>();
+        private long lastProgressReportNanos;
 
         void initialize(Connection connection, List<String> types) {
             for (String type : types) {
@@ -1285,7 +1368,22 @@ public class ImportService {
         }
 
         void completeEntityType(String type) {
-            completedEntityTypes.add(type);
+            completedEntityItems.put(type, entityTotals.getOrDefault(type, 0L));
+        }
+
+        void completeEntityItem(String type) {
+            long total = entityTotals.getOrDefault(type, 0L);
+            long completed = completedEntityItems.getOrDefault(type, 0L);
+            completedEntityItems.put(type, Math.min(total, completed + 1L));
+        }
+
+        boolean shouldReportProgress() {
+            long now = System.nanoTime();
+            if (now - lastProgressReportNanos < PROGRESS_REPORT_INTERVAL_NANOS) {
+                return false;
+            }
+            lastProgressReportNanos = now;
+            return true;
         }
 
         void registerResource(String url) {
@@ -1313,8 +1411,8 @@ public class ImportService {
 
         Map<String, Object> snapshot() {
             long totalEntityUnits = entityTotals.values().stream().mapToLong(Long::longValue).sum();
-            long completedEntityUnits = completedEntityTypes.stream()
-                    .mapToLong(type -> entityTotals.getOrDefault(type, 0L)).sum();
+            long completedEntityUnits = completedEntityItems.values().stream()
+                    .mapToLong(Long::longValue).sum();
             long total = totalEntityUnits + resources.size();
             long completed = completedEntityUnits + completedResources.size();
             double percent = total <= 0 ? 0d : Math.min(100d, completed * 100d / total);

@@ -23,7 +23,6 @@ import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 import java.time.Duration;
-import java.util.function.Function;
 
 @Path("/api/admin/import")
 @Produces(MediaType.APPLICATION_JSON)
@@ -127,12 +126,7 @@ public class AdminImportApiController {
         Multi<ImportProgressEvent> events = importService.getEventStream();
         // 每 15 秒发送一个心跳包，防止网络连接超时断开
         Multi<ImportProgressEvent> ticks = Multi.createFrom().ticks().every(Duration.ofSeconds(15))
-                .map(new Function<Long, ImportProgressEvent>() {
-                    @Override
-                    public ImportProgressEvent apply(Long tick) {
-                        return new ImportProgressEvent("ping", "keep-alive", null, null);
-                    }
-                });
+                .map(tick -> importService.getProgressHeartbeat());
         return Multi.createBy().merging().streams(events, ticks);
     }
 
