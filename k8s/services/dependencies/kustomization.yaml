@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - postgresql-service.yaml
+  - codex-creator-service.yaml
   - redis-service.yaml
   - rabbitmq-service.yaml
   - elasticsearch-service.yaml

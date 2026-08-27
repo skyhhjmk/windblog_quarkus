@@ -1,7 +1,7 @@
 services:
   db:
     container_name: postgresdb
-    image: ${POSTGRES_IMAGE:-postgres:18}
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18}
     restart: unless-stopped
     cpus: "2.0"
     mem_limit: 2g
@@ -20,6 +20,7 @@ services:
       start_period: 30s
     volumes:
       - ${WINDBLOG_DATA_DIR:-.}/postgres-data:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       - target: 5432
         published: "${POSTGRES_HOST_PORT:-5432}"
@@ -80,6 +81,10 @@ services:
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?ADMIN_JWT_SECRET must be set}
       USER_JWT_SECRET: ${USER_JWT_SECRET:?USER_JWT_SECRET must be set}
       SECURITY_EVENT_HASH_SECRET: ${SECURITY_EVENT_HASH_SECRET:?SECURITY_EVENT_HASH_SECRET must be set}
+      WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED: ${WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED:-false}
+      WINDBLOG_CODEX_CREATOR_PREFER: ${WINDBLOG_CODEX_CREATOR_PREFER:-true}
+      WINDBLOG_CODEX_CREATOR_ENDPOINT: ${WINDBLOG_CODEX_CREATOR_ENDPOINT:-http://codex-creator:8090}
+      WINDBLOG_CODEX_CREATOR_SHARED_SECRET: ${WINDBLOG_CODEX_CREATOR_SHARED_SECRET:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD: ${SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set}
@@ -124,6 +129,48 @@ services:
       - "9000"
     healthcheck:
       test: [ "CMD-SHELL", "curl -fsS http://localhost:8080/q/health/ready >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  codex-creator:
+    container_name: codex-creator
+    image: ${CODEX_CREATOR_IMAGE:-ghcr.io/skyhhjmk/codex-creator:latest}
+    pull_policy: ${CODEX_CREATOR_PULL_POLICY:-always}
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+    networks:
+      - app-network
+    environment:
+      CODEX_CREATOR_DB_JDBC_URL: jdbc:postgresql://db:5432/${CODEX_CREATOR_DB_NAME:-codex_creator}
+      CODEX_CREATOR_DB_USERNAME: ${CODEX_CREATOR_DB_USERNAME:-${POSTGRES_USER:-windblog}}
+      CODEX_CREATOR_DB_PASSWORD: ${CODEX_CREATOR_DB_PASSWORD:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}}
+      CODEX_CREATOR_REDIS_URL: redis://redis:6379
+      CODEX_CREATOR_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      CODEX_CREATOR_ADMIN_TOKEN: ${CODEX_CREATOR_ADMIN_TOKEN:-}
+      CODEX_CREATOR_INTERNAL_SHARED_SECRET: ${WINDBLOG_CODEX_CREATOR_SHARED_SECRET:-}
+      CODEX_CREATOR_MCP_BEARER_TOKEN: ${CODEX_CREATOR_MCP_BEARER_TOKEN:-}
+      CODEX_APP_SERVER_ENABLED: ${CODEX_APP_SERVER_ENABLED:-false}
+      CODEX_COMMAND: ${CODEX_COMMAND:-codex}
+    volumes:
+      - ${WINDBLOG_DATA_DIR:-.}/codex-creator-data:/data/codex-creator
+      - ${WINDBLOG_DATA_DIR:-.}/codex-creator-logs:/deployments/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8090"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -fsS http://localhost:8090/q/health/ready >/dev/null || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 12

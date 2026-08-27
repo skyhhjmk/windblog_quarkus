@@ -34,6 +34,9 @@ public class AiTaskConsumer {
     AiManager aiManager;
 
     @Inject
+    com.biliwind.blog.service.PostAiMetadataService postAiMetadataService;
+
+    @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     private volatile int maxRetries;
@@ -310,6 +313,8 @@ public class AiTaskConsumer {
                             "message", "AI generated content but it was not saved due to post settings"
                     );
                     skipLog.persist();
+                    postAiMetadataService.record(postId, post.currentRevision == null ? null : post.currentRevision.id,
+                            "summarize", aiResult, "BLOCKED_BY_POST_POLICY");
                     return;
                 }
 
@@ -349,6 +354,8 @@ public class AiTaskConsumer {
                 // 更新文章摘要
                 post.aiSummary = aiResult.contents;
                 post.persist();
+                postAiMetadataService.record(postId, post.currentRevision == null ? null : post.currentRevision.id,
+                        "summarize", aiResult, "DRAFT");
                 log.info("{} 已保存 AI 摘要并写入审计日志，postId={}", MQ_TAG, postId);
             }
         });

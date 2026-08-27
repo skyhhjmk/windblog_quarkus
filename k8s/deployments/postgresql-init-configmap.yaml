@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init
+  labels:
+    app.kubernetes.io/name: postgresql
+data:
+  010-create-codex-creator.sql: |
+    SELECT 'CREATE DATABASE codex_creator OWNER ' || quote_ident(current_user)
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'codex_creator')\gexec
+    \connect codex_creator
+    CREATE EXTENSION IF NOT EXISTS vector;

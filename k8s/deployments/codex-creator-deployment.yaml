@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codex-creator
+  labels:
+    app.kubernetes.io/name: codex-creator
+    app.kubernetes.io/component: application
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: codex-creator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: codex-creator
+        app.kubernetes.io/component: application
+    spec:
+      containers:
+        - name: codex-creator
+          image: localhost/codex-creator:k8s-dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CODEX_CREATOR_DB_JDBC_URL
+              value: jdbc:postgresql://postgresql:5432/codex_creator
+            - name: CODEX_CREATOR_DB_USERNAME
+              value: windblog
+            - name: CODEX_CREATOR_DB_PASSWORD
+              value: ""
+            - name: CODEX_CREATOR_REDIS_URL
+              value: redis://redis:6379
+            - name: CODEX_CREATOR_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: codex-creator-secrets
+                  key: admin-token
+                  optional: true
+            - name: CODEX_CREATOR_INTERNAL_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: codex-creator-secrets
+                  key: internal-shared-secret
+                  optional: true
+            - name: CODEX_CREATOR_MCP_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: codex-creator-secrets
+                  key: mcp-bearer-token
+                  optional: true
+            - name: CODEX_APP_SERVER_ENABLED
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8090
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: codex-creator-data
+              mountPath: /data/codex-creator
+      volumes:
+        - name: codex-creator-data
+          emptyDir: {}

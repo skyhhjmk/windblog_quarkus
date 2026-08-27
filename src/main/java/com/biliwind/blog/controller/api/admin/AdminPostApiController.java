@@ -42,7 +42,13 @@ public class AdminPostApiController {
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
 
     @Inject
+    com.biliwind.blog.service.CodexCreatorEventPublisher codexCreatorEventPublisher;
+
+    @Inject
     com.biliwind.blog.service.ai.AiManager aiManager;
+
+    @Inject
+    com.biliwind.blog.service.PostAiMetadataService postAiMetadataService;
 
     @Inject
     MediaManagementService mediaService;
@@ -146,6 +152,33 @@ public class AdminPostApiController {
         return toDetail(post);
     }
 
+    @GET
+    @Path("/{id}/ai-metadata")
+    @Transactional
+    @Operation(summary = "查询文章 AI 来源和生成记录")
+    public List<Map<String, Object>> aiMetadata(@PathParam("id") Long id) {
+        mustFindPost(id);
+        List<PostAiMetadata> metadata = PostAiMetadata.list("postId = ?1 order by createdAt desc", id);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (PostAiMetadata item : metadata) {
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("id", item.id);
+            view.put("postId", item.postId);
+            view.put("revisionId", item.revisionId);
+            view.put("taskId", item.taskId);
+            view.put("operation", item.operation);
+            view.put("provider", item.provider);
+            view.put("modelId", item.modelId);
+            view.put("reasoningEffort", item.reasoningEffort);
+            view.put("generationMode", item.generationMode);
+            view.put("provenance", item.provenance);
+            view.put("autoPublishStatus", item.autoPublishStatus);
+            view.put("createdAt", item.createdAt);
+            result.add(view);
+        }
+        return result;
+    }
+
     @POST
     @Transactional
     @Operation(summary = "创建文章草稿")
@@ -239,6 +272,11 @@ public class AdminPostApiController {
         }
 
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        codexCreatorEventPublisher.postRevisionUpdated(post.id, revision.id,
+                Map.of("title", request.title(), "contentMarkdown", request.contentMarkdown() == null ? "" : request.contentMarkdown()), null);
+        if (requestedStatus == PostStatus.PUBLISHED) {
+            codexCreatorEventPublisher.postPublished(post.id, Map.of("postId", post.id, "title", request.title()), null);
+        }
 
         return toDetail(post);
     }
@@ -293,6 +331,11 @@ public class AdminPostApiController {
         }
 
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        if (post.currentRevision != null) {
+            codexCreatorEventPublisher.postRevisionUpdated(post.id, post.currentRevision.id,
+                    Map.of("title", post.currentRevision.title == null ? Map.of() : post.currentRevision.title,
+                            "contentMarkdown", post.currentRevision.contentMarkdown == null ? Map.of() : post.currentRevision.contentMarkdown), null);
+        }
         return toDetail(post);
     }
 
@@ -318,6 +361,8 @@ public class AdminPostApiController {
         }
         articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        codexCreatorEventPublisher.postPublished(post.id, Map.of("postId", post.id,
+                "revisionId", post.publishedRevision == null ? 0L : post.publishedRevision.id), null);
         return toDetail(post);
     }
 
@@ -362,6 +407,8 @@ public class AdminPostApiController {
             String translatedContent = requiredTranslation(result, "contentMarkdown");
             auditService.log("post", post.id, "ai_translation", null,
                     Map.of("sourceLanguage", sourceLanguage, "targetLanguage", targetLanguage));
+            postAiMetadataService.record(post.id, post.currentRevision == null ? null : post.currentRevision.id,
+                    "translate", result, "DRAFT");
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
                     translatedTitle, translatedSummary, translatedContent);
         } catch (java.util.concurrent.CompletionException exception) {

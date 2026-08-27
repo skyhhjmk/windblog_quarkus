@@ -53,6 +53,14 @@ public class AiResult {
      */
     public String rawResponse;
 
+    /** Optional provider provenance populated by the Codex Creator adapter. */
+    public String provider;
+    public String modelId;
+    public String reasoningEffort;
+    public String taskId;
+    public String generationMode;
+    public Map<String, Object> provenance = new HashMap<>();
+
     public AiResult() {
     }
 

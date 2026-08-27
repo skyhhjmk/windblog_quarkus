@@ -74,6 +74,9 @@ public class OutboxEventService {
     @Inject
     Instance<EmailDeliveryService> emailDeliveryService;
 
+    @Inject
+    Instance<com.biliwind.blog.service.ai.CodexCreatorHttpClient> codexCreatorHttpClient;
+
     @ConfigProperty(name = "windblog.outbox.enabled", defaultValue = "true")
     boolean enabled;
 
@@ -277,6 +280,23 @@ public class OutboxEventService {
             }
             emailDeliveryService.get().persistQueuedDelivery(
                     scenario, recipientAddress, subject, htmlContent, channelGroupId, channelId);
+            return;
+        }
+        if ("CODEX_CREATOR_EVENT".equals(event.eventType)) {
+            if (event.payload == null || event.payload.get("eventType") == null) {
+                throw new IllegalArgumentException("CODEX_CREATOR_EVENT outbox payload 不完整");
+            }
+            com.biliwind.blog.service.CodexCreatorIntegrationEvent integrationEvent =
+                    new com.biliwind.blog.service.CodexCreatorIntegrationEvent(
+                            objectMapper.convertValue(event.payload.get("eventType"), String.class),
+                            objectMapper.convertValue(event.payload.get("aggregateType"), String.class),
+                            objectMapper.convertValue(event.payload.get("aggregateId"), String.class),
+                            objectMapper.convertValue(event.payload.get("input"), Map.class),
+                            objectMapper.convertValue(event.payload.get("idempotencyKey"), String.class),
+                            objectMapper.convertValue(event.payload.get("traceId"), String.class),
+                            objectMapper.convertValue(event.payload.get("profileId"), String.class),
+                            objectMapper.convertValue(event.payload.get("promptVersion"), String.class));
+            awaitPublish(codexCreatorHttpClient.get().publishEvent(integrationEvent));
             return;
         }
         throw new IllegalArgumentException("没有注册的 outbox event handler: " + event.eventType);

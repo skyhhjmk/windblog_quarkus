@@ -93,6 +93,10 @@ spec:
               value: /deployments/certs/ca/client.key
             - name: GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK
               value: "false"
+            - name: WINDBLOG_CODEX_CREATOR_ENDPOINT
+              value: http://codex-creator:8090
+            - name: WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED
+              value: "false"
             - name: QUARKUS_LOG_FILE_ENABLED
               value: "false"
           ports:

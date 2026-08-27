@@ -30,6 +30,9 @@ public class AiManager {
     @Inject
     jakarta.enterprise.inject.Instance<AiPollingService> pollingService;
 
+    @Inject
+    AiSelectionService selectionService;
+
     private AiService findService(AiProviderConfig config) {
         if (config == null) return null;
         for (AiService service : providers) {
@@ -42,40 +45,25 @@ public class AiManager {
 
     public CompletionStage<AiResult> summarize(Map<String, String> content) {
         List<AiProviderConfig> allConfigs = configService.listAll();
-        List<AiProviderConfig> configs = new ArrayList<>();
-        for (AiProviderConfig c : allConfigs) {
-            if (c.enabled) {
-                configs.add(c);
-            }
-        }
+        List<AiProviderConfig> configs = new ArrayList<>(allConfigs);
         
         if (configs.isEmpty()) {
             return CompletableFuture.failedFuture(new RuntimeException("当前没有任何已启用的 AI 配置"));
         }
 
-        AiProviderConfig best = null;
-        for (AiProviderConfig c : configs) {
-            if (c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-                best = c;
-                break;
-            }
-        }
-        if (best == null) {
-            best = configs.get(0);
-        }
+        AiProviderConfig best = selectionService.select("summarize", configs);
+        if (best == null) return CompletableFuture.failedFuture(new RuntimeException("没有允许摘要操作的 AI 配置"));
         
         log.info("[AI] 开始生成摘要，接管配置={}", best.name);
-        return executeSummarize(best, content);
+        return executeSummarize(best, content).exceptionallyCompose(error -> {
+            AiProviderConfig fallback = selectionService.fallback("summarize", configs, best);
+            return fallback == null ? CompletableFuture.failedFuture(error) : executeSummarize(fallback, content);
+        });
     }
 
     public CompletionStage<AiResult> moderate(String content) {
         List<AiProviderConfig> allConfigs = configService.listAll();
-        List<AiProviderConfig> configs = new ArrayList<>();
-        for (AiProviderConfig c : allConfigs) {
-            if (c.enabled) {
-                configs.add(c);
-            }
-        }
+        List<AiProviderConfig> configs = new ArrayList<>(allConfigs);
         
         if (configs.isEmpty()) {
             AiResult defaultRes = new AiResult();
@@ -83,15 +71,11 @@ public class AiManager {
             return CompletableFuture.completedFuture(defaultRes);
         }
 
-        AiProviderConfig best = null;
-        for (AiProviderConfig c : configs) {
-            if (c.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-                best = c;
-                break;
-            }
-        }
+        AiProviderConfig best = selectionService.select("moderate", configs);
         if (best == null) {
-            best = configs.get(0);
+            AiResult defaultRes = new AiResult();
+            defaultRes.isSafe = true;
+            return CompletableFuture.completedFuture(defaultRes);
         }
 
         // 获取系统设置中的提示词
@@ -100,37 +84,34 @@ public class AiManager {
         if (setting != null && setting.configValue != null && setting.configValue.has("prompt")) {
             prompt = setting.configValue.get("prompt").asText();
         }
+        final String effectivePrompt = prompt;
 
         log.info("[AI] 开始审核内容，使用配置={}, provider={}", best.name, best.provider);
-        return executeModerate(best, prompt, content);
+        return executeModerate(best, effectivePrompt, content).exceptionallyCompose(error -> {
+            AiProviderConfig fallback = selectionService.fallback("moderate", configs, best);
+            return fallback == null ? CompletableFuture.failedFuture(error) : executeModerate(fallback, effectivePrompt, content);
+        });
     }
 
     public CompletionStage<AiResult> translate(String sourceLanguage, String targetLanguage,
             Map<String, String> fields) {
         List<AiProviderConfig> allConfigs = configService.listAll();
-        List<AiProviderConfig> configs = new ArrayList<>();
-        for (AiProviderConfig config : allConfigs) {
-            if (config.enabled) {
-                configs.add(config);
-            }
-        }
+        List<AiProviderConfig> configs = new ArrayList<>(allConfigs);
 
         if (configs.isEmpty()) {
             return CompletableFuture.failedFuture(new RuntimeException("当前没有任何已启用的 AI 配置"));
         }
 
-        AiProviderConfig selected = null;
-        for (AiProviderConfig config : configs) {
-            if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-                selected = config;
-                break;
-            }
-        }
+        AiProviderConfig selected = selectionService.select("translate", configs);
         if (selected == null) {
-            selected = configs.get(0);
+            return CompletableFuture.failedFuture(new RuntimeException("没有允许翻译操作的 AI 配置"));
         }
 
-        return executeTranslate(selected, sourceLanguage, targetLanguage, fields);
+        return executeTranslate(selected, sourceLanguage, targetLanguage, fields).exceptionallyCompose(error -> {
+            AiProviderConfig fallback = selectionService.fallback("translate", configs, selected);
+            return fallback == null ? CompletableFuture.failedFuture(error)
+                    : executeTranslate(fallback, sourceLanguage, targetLanguage, fields);
+        });
     }
 
     public CompletionStage<AiResult> executeTranslate(AiProviderConfig config, String sourceLanguage,

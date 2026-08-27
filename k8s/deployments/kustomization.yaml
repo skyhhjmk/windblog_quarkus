@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - postgresql-pvc.yaml
   - postgresql-deployment.yaml
+  - postgresql-init-configmap.yaml
   - redis-pvc.yaml
   - redis-deployment.yaml
   - rabbitmq-pvc.yaml
@@ -15,3 +16,4 @@ resources:
   - clamav-pvc.yaml
   - clamav-deployment.yaml
   - windblog-deployment.yaml
+  - codex-creator-deployment.yaml
