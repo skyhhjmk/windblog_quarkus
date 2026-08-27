@@ -134,11 +134,12 @@
             <div class="h-4 w-[1px] bg-border"></div>
 
             <!-- Search -->
-            <form action="/search" method="get" class="relative group">
+            <form action="/search" method="get" class="relative group" data-shortcut-form="search">
                 <input
                         type="text"
                         name="q"
-                        placeholder="搜索文章..."
+                        placeholder="搜索文章...（Ctrl+K）"
+                        data-shortcut-target="search"
                         class="pl-10 pr-4 py-1.5 text-sm w-48 bg-card border border-border rounded-md text-main placeholder:text-meta"/>
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -193,9 +194,9 @@
             <a href="/tag" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">标签</a>
             <a href="/category" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">分类</a>
         </div>
-        <form action="/search" method="get" class="relative group pt-4 border-t border-border">
+        <form action="/search" method="get" class="relative group pt-4 border-t border-border" data-shortcut-form="search">
             <label class="sr-only" for="mobileSearchInput">搜索文章</label>
-            <input id="mobileSearchInput" type="search" name="q" placeholder="搜索文章..."
+            <input id="mobileSearchInput" type="search" name="q" placeholder="搜索文章...（Ctrl+K）" data-shortcut-target="search"
                    class="w-full pl-4 pr-4 py-2 text-sm bg-card border border-border rounded-md text-main placeholder:text-meta" />
         </form>
         <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">

@@ -97,6 +97,7 @@
                 modal.classList.remove('show');
                 document.body.style.overflow = previousBodyOverflow;
                 document.removeEventListener('keydown', escHandler);
+                document.removeEventListener('keydown', enterHandler);
                 setTimeout(() => {
                     if (!modal.classList.contains('show')) {
                         modal.classList.add('hidden');
@@ -123,7 +124,15 @@
                     cleanup(false);
                 }
             };
+            const enterHandler = (e) => {
+                if (e.key !== 'Enter' || e.isComposing || !document.hasFocus()) return;
+                if (e.target.closest && e.target.closest('#modalCancel')) return;
+                if (e.target.closest && e.target.closest('textarea,[contenteditable="true"]')) return;
+                e.preventDefault();
+                okBtn.click();
+            };
             document.addEventListener('keydown', escHandler);
+            document.addEventListener('keydown', enterHandler);
 
             modal.querySelector('.modal-overlay').onclick = () => {
                 cleanup(false);

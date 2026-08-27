@@ -11,6 +11,13 @@
         document.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
     }
 
+    // Source-of-truth for the public web shortcut labels and bindings.
+    // Custom key mapping is intentionally not exposed to users.
+    const SHORTCUTS = Object.freeze({
+        submit: 'Enter',
+        search: 'Ctrl+K'
+    });
+
     ready(() => {
         const mobileBtn = document.getElementById('mobileMenuBtn');
         const mobileMenu = document.getElementById('mobileMenu');
@@ -906,6 +913,7 @@
         document.addEventListener('page:ready', () => {
             formatTimestamps();
             injectSidebar();
+            decorateShortcutButtons();
         });
 
         dispatch('page:ready', { url: window.location.href });
@@ -929,11 +937,73 @@
             }
         });
 
+        function isEditableShortcutTarget(target) {
+            if (!target || !target.closest) return false;
+            return Boolean(target.closest('textarea,[contenteditable="true"]'));
+        }
+
+        function isVisible(element) {
+            return Boolean(element && element.getClientRects().length &&
+                getComputedStyle(element).visibility !== 'hidden');
+        }
+
+        function focusSearchInput() {
+            const searchInput = Array.from(document.querySelectorAll('[data-shortcut-target="search"]'))
+                .find(isVisible);
+            if (!searchInput) return false;
+            searchInput.focus({preventScroll: true});
+            searchInput.select?.();
+            return true;
+        }
+
+        function decorateShortcutButtons() {
+            document.querySelectorAll('form:not([data-shortcut-form="search"]) button[type="submit"]')
+                .forEach((button) => {
+                    button.dataset.shortcut = button.dataset.shortcut || 'enter';
+                    button.setAttribute('aria-keyshortcuts', SHORTCUTS.submit);
+                    if (button.querySelector('[data-shortcut-hint]')) return;
+                    if (button.textContent.includes('回车')) return;
+                    const hint = document.createElement('span');
+                    hint.dataset.shortcutHint = 'enter';
+                    hint.className = 'ml-1 text-xs opacity-70';
+                    hint.textContent = '（回车）';
+                    button.appendChild(hint);
+                });
+        }
+
+        // Application-scoped shortcuts. Do not react while this document is
+        // hidden or has lost focus, and never compete with multiline editors.
+        document.addEventListener('keydown', (event) => {
+            if (!document.hasFocus() || document.visibilityState === 'hidden' || event.isComposing) return;
+
+            if (event.key.toLowerCase() === 'k' && event.ctrlKey &&
+                !event.metaKey && !event.altKey && !event.shiftKey &&
+                !isEditableShortcutTarget(event.target)) {
+                if (focusSearchInput()) event.preventDefault();
+                return;
+            }
+
+            if (event.key !== 'Enter' || event.ctrlKey || event.metaKey ||
+                event.altKey || event.shiftKey || isEditableShortcutTarget(event.target)) return;
+            const target = event.target;
+            const form = target?.closest?.('form');
+            if (!form || form.dataset.shortcutForm === 'search') return;
+            const button = form.querySelector('button[data-shortcut="enter"]:not(:disabled)');
+            if (!button) return;
+            event.preventDefault();
+            if (typeof form.requestSubmit === 'function') form.requestSubmit(button);
+            else button.click();
+        });
+
         // Search Suggestions logic
-        const searchForms = document.querySelectorAll('form[action="/search"]');
-        searchForms.forEach((form) => {
+        function bindSearchForms() {
+            const searchForms = document.querySelectorAll('form[action="/search"]');
+            searchForms.forEach((form) => {
+                if (form.dataset.searchBound === 'true') return;
+                form.dataset.searchBound = 'true';
             const searchInput = form.querySelector('input[name="q"]');
             if (!searchInput) return;
+            searchInput.dataset.shortcutTarget = 'search';
             const suggestWrap = document.createElement('div');
             suggestWrap.className = 'search-suggestions absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl hidden z-[60] overflow-hidden';
             form.appendChild(suggestWrap);
@@ -994,6 +1064,14 @@
                     suggestWrap.classList.add('hidden');
                 }
             });
+            });
+        }
+
+        bindSearchForms();
+        decorateShortcutButtons();
+        document.addEventListener('page:ready', () => {
+            bindSearchForms();
+            decorateShortcutButtons();
         });
     });
 })();

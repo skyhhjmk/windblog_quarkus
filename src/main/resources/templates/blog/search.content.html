@@ -39,11 +39,12 @@
             </div>
 
             <div class="card p-8 space-y-8">
-                <form action="/search" method="get" class="relative group">
+                <form action="/search" method="get" class="relative group" data-shortcut-form="search">
                     <input type="text"
                            name="q"
                            value="{searchKeyword ?: ''}"
-                           placeholder="输入以搜索..."
+                           placeholder="输入以搜索...（Ctrl+K）"
+                           data-shortcut-target="search"
                            class="w-full pl-14 pr-4 py-4 bg-card border border-border rounded-lg text-xl text-main outline-none"/>
                     <svg class="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
