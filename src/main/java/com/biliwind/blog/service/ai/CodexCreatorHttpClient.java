@@ -59,7 +59,7 @@ public class CodexCreatorHttpClient {
                 "traceId", traceId, "promptVersion", "1");
         return send(endpoint + "/api/v1/runtime/infer", body, secret)
                 .thenApply(response -> new CodexCreatorInference(response.path("output"),
-                        response.path("taskId").isMissingNode() ? null : response.path("taskId").asText(),
+                        response.hasNonNull("taskId") ? response.path("taskId").asText() : null,
                         response.path("usage"), response.path("provenance")));
     }
 

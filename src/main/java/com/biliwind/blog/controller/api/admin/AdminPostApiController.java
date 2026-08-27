@@ -332,9 +332,10 @@ public class AdminPostApiController {
 
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         if (post.currentRevision != null) {
-            codexCreatorEventPublisher.postRevisionUpdated(post.id, post.currentRevision.id,
-                    Map.of("title", post.currentRevision.title == null ? Map.of() : post.currentRevision.title,
-                            "contentMarkdown", post.currentRevision.contentMarkdown == null ? Map.of() : post.currentRevision.contentMarkdown), null);
+            Map<String, Object> revisionInput = new LinkedHashMap<>();
+            revisionInput.put("title", post.currentRevision.title == null ? "" : post.currentRevision.title);
+            revisionInput.put("contentMarkdown", post.currentRevision.contentMarkdown == null ? "" : post.currentRevision.contentMarkdown);
+            codexCreatorEventPublisher.postRevisionUpdated(post.id, post.currentRevision.id, revisionInput, null);
         }
         return toDetail(post);
     }
