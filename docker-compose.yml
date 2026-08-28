@@ -136,7 +136,7 @@ services:
 
   codex-creator:
     container_name: codex-creator
-    image: ${CODEX_CREATOR_IMAGE:-ghcr.io/skyhhjmk/codex-creator:latest}
+    image: ${CODEX_CREATOR_IMAGE:-ghcr.io/skyhhjmk/codex-creator:latest-native}
     pull_policy: ${CODEX_CREATOR_PULL_POLICY:-always}
     restart: unless-stopped
     cpus: "2.0"
