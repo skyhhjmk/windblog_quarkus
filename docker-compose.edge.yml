@@ -2,7 +2,7 @@ services:
   # 边缘节点专用数据库 (用于存储逻辑复制的只读副本)
   edge-db:
     container_name: windblog-edge-db
-    image: postgres:18
+    image: pgvector/pgvector:pg18
     restart: unless-stopped
     networks:
       - app-network

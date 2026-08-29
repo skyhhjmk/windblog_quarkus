@@ -13,7 +13,13 @@ Codex Creator 作为独立仓库 `codex-creator` 挂载在本仓库的 `codex-cr
 
 Compose/Kubernetes 默认只在内部网络暴露 `codex-creator:8090`，不配置公网端口。OpenAPI/Swagger、管理 API 和 `/mcp` 均为私有面；如确需访问，运维人员必须手工建立带源地址 allowlist、VPN/认证、有效期和撤销记录的 APISIX 路由。
 
-在已有 PostgreSQL 卷上切换 `pgvector/pgvector:pg18` 前，按仓库内的 [Codex Creator 部署手册](../codex-creator/docs/runbook.md) 完成备份和回滚演练。新卷初始化脚本只创建 `codex_creator` 并在该数据库执行 `CREATE EXTENSION vector`；不会修改 WindBlog 既有表。
+在已有 PostgreSQL 卷上切换 `pgvector/pg18` 前，按仓库内的 [Codex Creator 部署手册](../codex-creator/docs/runbook.md) 完成备份和回滚演练。新卷初始化脚本以及 Compose/Kubernetes 的幂等启动初始化都会确保 `codex_creator` 存在并在该数据库执行 `CREATE EXTENSION vector`；不会修改 WindBlog 既有表，也不会删除数据卷。
+
+Kubernetes 部署要求预先创建名为 `codex-creator-secrets` 的 Secret，且必须包含
+`admin-token`、`internal-shared-secret`、`mcp-bearer-token` 三个键。启用
+Codex app-server 时，再配置 `openai-api-key` 或 `codex-access-token` 其中一个。
+可复制
+`k8s/secrets/codex-creator-secrets.env.example` 为未跟踪的 `.env` 文件，填入独立随机值后按文件中的命令创建 Secret；部署清单会把缺失 Secret 视为配置错误，不再静默启动。WindBlog 事件集成和 Codex app-server 在该清单中已启用，因此还必须确认镜像内的 `codex` 已完成认证和模型可用性。
 
 ## 验收边界
 

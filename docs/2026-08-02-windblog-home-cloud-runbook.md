@@ -16,8 +16,8 @@ RabbitMQ 管理端 15672、Elasticsearch 9200 和 Kibana 5601；可用 `*_HOST_P
 或明确的内网来源，不能直接暴露到公网。`docker-compose.yml`
 仍使用服务网络、健康检查、CPU/内存上限和 JSON 日志轮转；应用容器由部署平台单独编排，并加入同样的限制。
 
-PostgreSQL 镜像可通过 `POSTGRES_IMAGE` 配置，示例默认是 `postgres:18`。已有数据卷若安装了
-`pgvector` 等扩展，必须选择包含相同扩展的镜像（例如 `pgvector/pgvector:pg18`），并在维护窗口执行
+PostgreSQL 镜像可通过 `POSTGRES_IMAGE` 配置，示例默认是包含 `pgvector` 的 `pgvector/pgvector:pg18`。
+已有数据卷若安装了 `pgvector` 等扩展，必须先完成备份并选择包含相同扩展的镜像，再在维护窗口执行
 `docker compose up -d db`；切换前后都不得删除 `postgres-data` 数据卷。镜像与扩展不一致时，`pg_dump`
 可能在读取索引定义阶段失败，不能通过排除索引来伪造完整备份。
 

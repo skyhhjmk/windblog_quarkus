@@ -45,6 +45,7 @@ nb-configuration.xml
 /.quarkus/cli/plugins/
 # TLS Certificates
 .certs/
+/k8s/secrets/codex-creator-secrets.env
 /uploads/
 /logs/
 /postgres-data/
@@ -56,5 +57,6 @@ nb-configuration.xml
 /kibana-data/
 /clamav-data/
 /windblog-logs/
+/\.codex-test-data/
 /rsa_keys/*
 /certs/

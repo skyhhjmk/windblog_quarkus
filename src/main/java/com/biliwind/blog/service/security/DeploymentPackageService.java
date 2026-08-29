@@ -261,7 +261,7 @@ public class DeploymentPackageService {
 
         sb.append("  edge-db:\n");
         sb.append("    container_name: ").append(containerPrefix).append("-db\n");
-        sb.append("    image: postgres:18\n");
+        sb.append("    image: pgvector/pgvector:pg18\n");
         sb.append("    restart: unless-stopped\n");
         sb.append("    networks:\n");
         sb.append("      - app-network\n");

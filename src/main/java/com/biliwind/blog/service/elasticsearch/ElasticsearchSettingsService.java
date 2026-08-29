@@ -8,6 +8,8 @@ import org.eclipse.microprofile.config.ConfigProvider;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
 
 @ApplicationScoped
 public class ElasticsearchSettingsService {
@@ -16,6 +18,16 @@ public class ElasticsearchSettingsService {
 
     @Inject
     ConfigManager configManager;
+
+    private final Function<String, Optional<String>> environmentOverrides;
+
+    public ElasticsearchSettingsService() {
+        this(ElasticsearchSettingsService::systemEnvironmentOverride);
+    }
+
+    ElasticsearchSettingsService(Function<String, Optional<String>> environmentOverride) {
+        this.environmentOverrides = environmentOverride;
+    }
 
     public ElasticsearchSettings getSettings() {
         return parse(configManager.get(SETTING_KEY));
@@ -134,12 +146,16 @@ public class ElasticsearchSettingsService {
      * while sharing the same database-backed system settings. Explicit deployment env vars
      * therefore take precedence over the saved UI setting.
      */
-    private java.util.Optional<String> environmentOverride(String name) {
+    private static Optional<String> systemEnvironmentOverride(String name) {
         String value = System.getenv(name);
         if (value == null || value.isBlank()) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
-        return java.util.Optional.of(value.trim());
+        return Optional.of(value.trim());
+    }
+
+    private Optional<String> environmentOverride(String name) {
+        return environmentOverrides.apply(name);
     }
 
     private String normalizeHosts(String hosts) {

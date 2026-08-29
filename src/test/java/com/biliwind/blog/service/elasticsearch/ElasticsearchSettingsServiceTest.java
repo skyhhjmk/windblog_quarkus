@@ -11,7 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class ElasticsearchSettingsServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ElasticsearchSettingsService settingsService = new ElasticsearchSettingsService();
+    // Keep this pure unit test independent of a developer/container ELASTICSEARCH_HOSTS override.
+    private final ElasticsearchSettingsService settingsService = new ElasticsearchSettingsService(name -> java.util.Optional.empty());
 
     @Test
     void shouldParseConnectionAnalyzerAndSynonymSettings() {

@@ -1,0 +1,48 @@
+# Local-only test overlay.
+# Keep the base Compose file unchanged for the normal deployment topology.
+# An isolated Codex auth directory is supplied at runtime through
+# CODEX_CREATOR_HOST_CODEX_DIR; the helper script prepares it from auth.json.
+services:
+  db:
+    container_name: windblog-codex-test-db
+
+  codex-creator-db-init:
+    container_name: windblog-codex-test-db-init
+
+  windblog:
+    container_name: windblog-codex-test-windblog
+
+  codex-creator:
+    container_name: windblog-codex-test-codex-creator
+    ports:
+      - target: 8090
+        published: "${CODEX_CREATOR_HOST_PORT:-58091}"
+        host_ip: "127.0.0.1"
+    volumes:
+      - ${CODEX_CREATOR_HOST_CODEX_DIR:?CODEX_CREATOR_HOST_CODEX_DIR must point to an isolated local Codex auth directory}:/data/codex-creator/.codex:rw
+
+  redis:
+    container_name: windblog-codex-test-redis
+
+  rabbitmq:
+    container_name: windblog-codex-test-rabbitmq
+
+  elasticsearch:
+    container_name: windblog-codex-test-elasticsearch
+    volumes:
+      - windblog-codex-test-elasticsearch-data:/usr/share/elasticsearch/data
+
+  kibana:
+    container_name: windblog-codex-test-kibana
+    volumes:
+      - windblog-codex-test-kibana-data:/usr/share/kibana/data
+
+  filebeat:
+    container_name: windblog-codex-test-filebeat
+
+  clamav:
+    container_name: windblog-codex-test-clamav
+
+volumes:
+  windblog-codex-test-elasticsearch-data:
+  windblog-codex-test-kibana-data:

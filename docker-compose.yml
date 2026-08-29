@@ -32,6 +32,33 @@ services:
     expose:
       - "5432"
 
+  codex-creator-db-init:
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18}
+    restart: "no"
+    networks:
+      - app-network
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_USER: ${POSTGRES_USER:-windblog}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-windblog}
+      CODEX_CREATOR_DB_NAME: ${CODEX_CREATOR_DB_NAME:-codex_creator}
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export PGPASSWORD="$${POSTGRES_PASSWORD}"
+        if ! psql -h "$${POSTGRES_HOST}" -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" \
+            -tAc "SELECT 1 FROM pg_database WHERE datname = '$${CODEX_CREATOR_DB_NAME}'" | grep -q 1; then
+          psql -h "$${POSTGRES_HOST}" -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" \
+            -c "CREATE DATABASE \"$${CODEX_CREATOR_DB_NAME}\" OWNER \"$${POSTGRES_USER}\""
+        fi
+        psql -h "$${POSTGRES_HOST}" -U "$${POSTGRES_USER}" -d "$${CODEX_CREATOR_DB_NAME}" \
+          -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"
+
   windblog:
     container_name: windblog
     image: ${WINDBLOG_IMAGE:-ghcr.io/skyhhjmk/windblog_quarkus:latest-native}
@@ -159,6 +186,8 @@ services:
       CODEX_CREATOR_MCP_BEARER_TOKEN: ${CODEX_CREATOR_MCP_BEARER_TOKEN:-}
       CODEX_APP_SERVER_ENABLED: ${CODEX_APP_SERVER_ENABLED:-false}
       CODEX_COMMAND: ${CODEX_COMMAND:-codex}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CODEX_ACCESS_TOKEN: ${CODEX_ACCESS_TOKEN:-}
     volumes:
       - ${WINDBLOG_DATA_DIR:-.}/codex-creator-data:/data/codex-creator
       - ${WINDBLOG_DATA_DIR:-.}/codex-creator-logs:/deployments/logs
@@ -167,6 +196,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      codex-creator-db-init:
+        condition: service_completed_successfully
     expose:
       - "8090"
     healthcheck:

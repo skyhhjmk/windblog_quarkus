@@ -140,6 +140,7 @@ public class DeploymentPackageServiceTest {
         // 验证 docker-compose.yml 内容
         assertNotNull(dockerComposeContent);
         assertTrue(dockerComposeContent.contains("edge-db:"));
+        assertTrue(dockerComposeContent.contains("image: pgvector/pgvector:pg18"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-db"));
         assertFalse(dockerComposeContent.contains("${EDGE_DB_PORT}:5432"));
         assertTrue(dockerComposeContent.contains("edge-redis:"));
