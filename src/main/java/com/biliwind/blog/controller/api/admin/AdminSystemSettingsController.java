@@ -24,6 +24,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.ArrayList;
 
@@ -305,7 +306,7 @@ public class AdminSystemSettingsController {
             ObjectNode sanitized = mapper.createObjectNode();
             if (value.isObject()) {
                 value.fieldNames().forEachRemaining(fieldName -> {
-                    if (fieldName.contains("key") || fieldName.contains("secret") || fieldName.contains("password")) {
+                    if (isSensitiveKey(fieldName)) {
                         sanitized.put(fieldName, "***REDACTED***");
                     } else {
                         sanitized.set(fieldName, value.get(fieldName));
@@ -321,7 +322,14 @@ public class AdminSystemSettingsController {
     }
 
     private boolean isSensitiveKey(String key) {
-        return key.contains("key") || key.contains("secret") || key.contains("password") || key.contains("token");
+        if (key == null) {
+            return false;
+        }
+        String normalized = key.toLowerCase(Locale.ROOT);
+        return normalized.endsWith("key")
+                || normalized.contains("secret")
+                || normalized.contains("password")
+                || normalized.contains("token");
     }
 
     private SystemSettingView toView(SystemSetting setting) {
