@@ -21,11 +21,41 @@
     ready(() => {
         const mobileBtn = document.getElementById('mobileMenuBtn');
         const mobileMenu = document.getElementById('mobileMenu');
+        let restoreMobileFocusOnPageReady = false;
+        const closeMobileMenu = (restoreFocus = false) => {
+            if (!mobileBtn || !mobileMenu) return;
+            mobileMenu.classList.add('hidden');
+            mobileBtn.setAttribute('aria-expanded', 'false');
+            mobileBtn.setAttribute('aria-label', '打开菜单');
+            if (restoreFocus) {
+                mobileBtn.focus({preventScroll: true});
+            }
+        };
         if (mobileBtn && mobileMenu) {
             mobileBtn.addEventListener('click', () => {
                 const isOpen = mobileMenu.classList.toggle('hidden') === false;
                 mobileBtn.setAttribute('aria-expanded', isOpen.toString());
                 mobileBtn.setAttribute('aria-label', isOpen ? '关闭菜单' : '打开菜单');
+            });
+
+            mobileMenu.addEventListener('click', (event) => {
+                const anchor = event.target.closest?.('a');
+                if (!anchor || !anchor.getAttribute('href') || anchor.hasAttribute('download')) return;
+                restoreMobileFocusOnPageReady = true;
+                closeMobileMenu();
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!mobileMenu.classList.contains('hidden') &&
+                    !mobileMenu.contains(event.target) && !mobileBtn.contains(event.target)) {
+                    closeMobileMenu();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !mobileMenu.classList.contains('hidden')) {
+                    closeMobileMenu(true);
+                }
             });
         }
 
@@ -38,6 +68,8 @@
             const isLight = document.documentElement.classList.contains('light');
             darkIcons.forEach(icon => isLight ? icon.classList.add('hidden') : icon.classList.remove('hidden'));
             lightIcons.forEach(icon => isLight ? icon.classList.remove('hidden') : icon.classList.add('hidden'));
+            const colorSchemeMeta = document.getElementById('color-scheme-meta');
+            if (colorSchemeMeta) colorSchemeMeta.setAttribute('content', isLight ? 'light' : 'dark');
         }
 
         if (themeToggles.length > 0) {
@@ -914,6 +946,12 @@
             formatTimestamps();
             injectSidebar();
             decorateShortcutButtons();
+            if (restoreMobileFocusOnPageReady) {
+                restoreMobileFocusOnPageReady = false;
+                closeMobileMenu(true);
+            } else {
+                closeMobileMenu();
+            }
         });
 
         dispatch('page:ready', { url: window.location.href });
@@ -937,9 +975,14 @@
             }
         });
 
-        function isEditableShortcutTarget(target) {
+        function isTextEditingTarget(target) {
             if (!target || !target.closest) return false;
             return Boolean(target.closest('textarea,[contenteditable="true"]'));
+        }
+
+        function isFormControlTarget(target) {
+            if (!target || !target.closest) return false;
+            return Boolean(target.closest('input,textarea,select,[contenteditable="true"]'));
         }
 
         function isVisible(element) {
@@ -978,13 +1021,13 @@
 
             if (event.key.toLowerCase() === 'k' && event.ctrlKey &&
                 !event.metaKey && !event.altKey && !event.shiftKey &&
-                !isEditableShortcutTarget(event.target)) {
+                !isFormControlTarget(event.target)) {
                 if (focusSearchInput()) event.preventDefault();
                 return;
             }
 
             if (event.key !== 'Enter' || event.ctrlKey || event.metaKey ||
-                event.altKey || event.shiftKey || isEditableShortcutTarget(event.target)) return;
+                event.altKey || event.shiftKey || isTextEditingTarget(event.target)) return;
             const target = event.target;
             const form = target?.closest?.('form');
             if (!form || form.dataset.shortcutForm === 'search') return;
@@ -996,74 +1039,143 @@
         });
 
         // Search Suggestions logic
+        let searchSuggestionCounter = 0;
         function bindSearchForms() {
             const searchForms = document.querySelectorAll('form[action="/search"]');
             searchForms.forEach((form) => {
                 if (form.dataset.searchBound === 'true') return;
                 form.dataset.searchBound = 'true';
-            const searchInput = form.querySelector('input[name="q"]');
-            if (!searchInput) return;
-            searchInput.dataset.shortcutTarget = 'search';
-            const suggestWrap = document.createElement('div');
-            suggestWrap.className = 'search-suggestions absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl hidden z-[60] overflow-hidden';
-            form.appendChild(suggestWrap);
 
-            let suggestTimer = null;
-            searchInput.addEventListener('input', () => {
-                const q = searchInput.value.trim();
-                clearTimeout(suggestTimer);
-                if (q.length < 2) {
-                    suggestWrap.innerHTML = '';
-                    suggestWrap.classList.add('hidden');
-                    return;
-                }
+                const searchInput = form.querySelector('input[name="q"]');
+                if (!searchInput) return;
+                searchInput.dataset.shortcutTarget = 'search';
+                searchInput.setAttribute('role', 'combobox');
+                searchInput.setAttribute('aria-autocomplete', 'list');
+                searchInput.setAttribute('aria-haspopup', 'listbox');
+                searchInput.setAttribute('aria-expanded', 'false');
+                searchInput.setAttribute('autocomplete', 'off');
 
-                suggestTimer = setTimeout(async () => {
-                    try {
-                        const res = await fetch(`/search/suggest?q=${encodeURIComponent(q)}`);
-                        if (!res.ok) throw new Error('Suggest fetch failed');
-                        const suggestions = await res.json();
+                const suggestWrap = document.createElement('div');
+                const suggestId = `search-suggestions-${++searchSuggestionCounter}`;
+                suggestWrap.id = suggestId;
+                suggestWrap.setAttribute('role', 'listbox');
+                suggestWrap.setAttribute('aria-label', '搜索建议');
+                suggestWrap.className = 'search-suggestions absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl hidden z-[60] overflow-hidden';
+                searchInput.setAttribute('aria-controls', suggestId);
+                form.appendChild(suggestWrap);
 
-                        if (suggestions && suggestions.length > 0) {
-                            suggestWrap.replaceChildren();
-                            suggestions.forEach((suggestion) => {
-                                const item = document.createElement('div');
-                                item.className = 'px-4 py-2 text-sm hover:bg-accent/10 cursor-pointer transition-colors border-b border-border/50 last:border-0';
-                                item.dataset.val = String(suggestion);
-                                item.textContent = String(suggestion);
-                                suggestWrap.appendChild(item);
-                            });
-                            suggestWrap.classList.remove('hidden');
-                        } else {
-                            suggestWrap.innerHTML = '';
-                            suggestWrap.classList.add('hidden');
-                        }
-                    } catch (err) {
-                        console.warn('Autocomplete error:', err);
+                let suggestTimer = null;
+                let suggestRequestId = 0;
+                let activeIndex = -1;
+
+                const setSuggestionsVisible = (visible) => {
+                    suggestWrap.classList.toggle('hidden', !visible);
+                    searchInput.setAttribute('aria-expanded', visible.toString());
+                    if (!visible) {
+                        activeIndex = -1;
+                        searchInput.removeAttribute('aria-activedescendant');
                     }
-                }, 300);
-            });
+                };
 
-            suggestWrap.addEventListener('click', (e) => {
-                const item = e.target.closest('[data-val]');
-                if (item) {
-                    searchInput.value = item.getAttribute('data-val');
-                    suggestWrap.classList.add('hidden');
-                    form.submit();
-                }
-            });
+                const suggestionItems = () => Array.from(suggestWrap.querySelectorAll('[data-val]'));
 
-            document.addEventListener('click', (e) => {
-                if (!form.contains(e.target)) {
-                    suggestWrap.classList.add('hidden');
-                }
-            });
+                const setActiveSuggestion = (index) => {
+                    const items = suggestionItems();
+                    if (items.length === 0) {
+                        activeIndex = -1;
+                        return;
+                    }
+                    activeIndex = (index + items.length) % items.length;
+                    items.forEach((item, itemIndex) => {
+                        const active = itemIndex === activeIndex;
+                        item.setAttribute('aria-selected', active.toString());
+                        item.classList.toggle('bg-accent/10', active);
+                        item.classList.toggle('text-accent', active);
+                    });
+                    searchInput.setAttribute('aria-activedescendant', items[activeIndex].id);
+                };
 
-            searchInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    suggestWrap.classList.add('hidden');
-                }
-            });
+                const selectSuggestion = (item) => {
+                    if (!item) return;
+                    searchInput.value = item.getAttribute('data-val') || '';
+                    setSuggestionsVisible(false);
+                    if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                    else form.submit();
+                };
+
+                searchInput.addEventListener('input', () => {
+                    const q = searchInput.value.trim();
+                    clearTimeout(suggestTimer);
+                    const requestId = ++suggestRequestId;
+                    activeIndex = -1;
+                    setSuggestionsVisible(false);
+                    if (q.length < 2) {
+                        suggestWrap.replaceChildren();
+                        return;
+                    }
+
+                    suggestTimer = setTimeout(async () => {
+                        try {
+                            const res = await fetch(`/search/suggest?q=${encodeURIComponent(q)}`);
+                            if (!res.ok) throw new Error('Suggest fetch failed');
+                            const suggestions = await res.json();
+                            if (requestId !== suggestRequestId || searchInput.value.trim() !== q) return;
+
+                            if (suggestions && suggestions.length > 0) {
+                                suggestWrap.replaceChildren();
+                                suggestions.forEach((suggestion, index) => {
+                                    const item = document.createElement('div');
+                                    item.id = `${suggestId}-option-${index}`;
+                                    item.setAttribute('role', 'option');
+                                    item.setAttribute('aria-selected', 'false');
+                                    item.tabIndex = -1;
+                                    item.className = 'px-4 py-2 text-sm hover:bg-accent/10 cursor-pointer transition-colors border-b border-border/50 last:border-0';
+                                    item.dataset.val = String(suggestion);
+                                    item.textContent = String(suggestion);
+                                    suggestWrap.appendChild(item);
+                                });
+                                setSuggestionsVisible(true);
+                            } else {
+                                suggestWrap.replaceChildren();
+                                setSuggestionsVisible(false);
+                            }
+                        } catch (err) {
+                            if (requestId === suggestRequestId) setSuggestionsVisible(false);
+                            console.warn('Autocomplete error:', err);
+                        }
+                    }, 300);
+                });
+
+                suggestWrap.addEventListener('click', (event) => {
+                    const item = event.target.closest?.('[data-val]');
+                    selectSuggestion(item);
+                });
+
+                suggestWrap.addEventListener('mousemove', (event) => {
+                    const item = event.target.closest?.('[data-val]');
+                    if (!item) return;
+                    setActiveSuggestion(suggestionItems().indexOf(item));
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (!form.contains(event.target)) setSuggestionsVisible(false);
+                });
+
+                searchInput.addEventListener('keydown', (event) => {
+                    const items = suggestionItems();
+                    if (event.key === 'ArrowDown' && items.length > 0) {
+                        event.preventDefault();
+                        setActiveSuggestion(activeIndex < 0 ? 0 : activeIndex + 1);
+                    } else if (event.key === 'ArrowUp' && items.length > 0) {
+                        event.preventDefault();
+                        setActiveSuggestion(activeIndex < 0 ? items.length - 1 : activeIndex - 1);
+                    } else if (event.key === 'Enter' && activeIndex >= 0) {
+                        event.preventDefault();
+                        selectSuggestion(items[activeIndex]);
+                    } else if (event.key === 'Escape') {
+                        setSuggestionsVisible(false);
+                    }
+                });
             });
         }
 

@@ -20,22 +20,30 @@
 
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
+        toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
 
         let icon = '';
         if (type === 'success') icon = '<svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
         else if (type === 'error') icon = '<svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
         else icon = '<svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-        toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-message"></div>`;
+        toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-message"></div><button type="button" class="toast-close" aria-label="关闭通知" title="关闭通知"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-width="2" stroke-linecap="round"/></svg></button>`;
         toast.querySelector('.toast-message').textContent = String(message ?? '');
 
         container.appendChild(toast);
         setTimeout(() => toast.classList.add('show'), 10);
 
-        setTimeout(() => {
+        const dismiss = () => {
+            if (!toast.isConnected) return;
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 400);
-        }, duration);
+        };
+        const dismissTimer = setTimeout(dismiss, duration);
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            clearTimeout(dismissTimer);
+            dismiss();
+        });
     };
 
     /**
@@ -83,6 +91,7 @@
             modal.setAttribute('role', 'dialog');
             modal.setAttribute('aria-modal', 'true');
             modal.setAttribute('aria-labelledby', 'modalTitle');
+            modal.setAttribute('aria-describedby', 'modalMessage');
             modal.classList.remove('hidden');
             void modal.offsetWidth;
             modal.classList.add('show');
@@ -98,6 +107,7 @@
                 document.body.style.overflow = previousBodyOverflow;
                 document.removeEventListener('keydown', escHandler);
                 document.removeEventListener('keydown', enterHandler);
+                document.removeEventListener('keydown', trapFocusHandler);
                 setTimeout(() => {
                     if (!modal.classList.contains('show')) {
                         modal.classList.add('hidden');
@@ -131,8 +141,32 @@
                 e.preventDefault();
                 okBtn.click();
             };
+            const trapFocusHandler = (e) => {
+                if (e.key !== 'Tab') return;
+                const focusable = Array.from(modal.querySelectorAll(
+                    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+                )).filter((element) => element.getClientRects().length > 0 &&
+                    getComputedStyle(element).visibility !== 'hidden');
+                if (focusable.length === 0) {
+                    e.preventDefault();
+                    return;
+                }
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (!modal.contains(document.activeElement)) {
+                    e.preventDefault();
+                    first.focus();
+                } else if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            };
             document.addEventListener('keydown', escHandler);
             document.addEventListener('keydown', enterHandler);
+            document.addEventListener('keydown', trapFocusHandler);
 
             modal.querySelector('.modal-overlay').onclick = () => {
                 cleanup(false);

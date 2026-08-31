@@ -2,7 +2,7 @@
     <!-- Profile Header -->
     <header class="flex items-center justify-between p-8 border border-[var(--border)] bg-[var(--panel-bg)]">
         <div class="flex items-center gap-6">
-            <div class="w-20 h-20 bg-gradient-to-br from-[var(--accent)] to-cyan-500 rounded-full flex items-center justify-center text-3xl font-bold text-[var(--bg)]">
+            <div class="w-20 h-20 bg-gradient-to-br from-[var(--accent)] to-cyan-500 rounded-full flex items-center justify-center text-3xl font-bold text-[var(--accent-foreground)]">
                 {user.username.substring(0, 1).toUpperCase()}
             </div>
             <div>
@@ -33,7 +33,7 @@
                         <span class="text-gray-400">EXP: {currentLevelExp} / {currentLevelMaxExp}</span>
                         <span class="text-[var(--accent)] font-bold">{expPercent}%</span>
                     </div>
-                    <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+                    <div class="w-full h-3 bg-[var(--inset-bg)] rounded-full overflow-hidden border border-[var(--inset-border)]">
                         <div class="h-full bg-[var(--accent)] transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(var(--accent-rgb),0.8)] exp-progress-bar"
                              data-exp-percent="{expPercent}"></div>
                     </div>
@@ -67,7 +67,7 @@
                             </button>
                         {#else}
                         <button type="button" id="checkInBtn"
-                                    class="px-8 py-3 bg-[var(--accent)] text-[var(--bg)] font-bold rounded hover:shadow-[0_0_20px_rgba(var(--accent-rgb),0.4)] transition-all flex items-center gap-2">
+                                    class="px-8 py-3 bg-[var(--accent)] text-[var(--accent-foreground)] font-bold rounded hover:shadow-[0_0_20px_rgba(var(--accent-rgb),0.4)] transition-all flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none"
                                      stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                      stroke-linejoin="round">
@@ -125,7 +125,7 @@
                     </div>
                     <div class="flex flex-wrap items-center gap-3">
                         <button type="submit" id="saveUserPost" class="btn-minimal rounded border border-[var(--border)] px-4 py-2">保存草稿</button>
-                        <button type="button" id="submitUserPost" class="btn-minimal rounded bg-[var(--accent)] px-4 py-2 text-[var(--bg)]">提交审核</button>
+                        <button type="button" id="submitUserPost" class="btn-minimal rounded bg-[var(--accent)] px-4 py-2 text-[var(--accent-foreground)]">提交审核</button>
                         <button type="button" id="resetUserPost" class="rounded border border-[var(--border)] px-4 py-2 text-sm">新建</button>
                     </div>
                     <div id="userPostFeedback" class="hidden rounded border px-3 py-2 text-sm"></div>
@@ -176,7 +176,7 @@
                 <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 gap-2">
                     {#for item in backpackItems}
                         {#if item}
-                            <div class="aspect-square bg-[var(--bg)] border border-gray-700/50 rounded-md relative group cursor-pointer overflow-hidden transition-all duration-300 hover:scale-105 hover:z-10 backpack-item-shell"
+                            <div class="aspect-square bg-[var(--bg)] border border-[var(--inset-border)] rounded-md relative group cursor-pointer overflow-hidden transition-all duration-300 hover:scale-105 hover:z-10 backpack-item-shell"
                                  title="{item.name} ({item.type})"
                                  data-backpack-item="true"
                                  data-item-id="{item.id}"
@@ -195,8 +195,8 @@
                                      data-backpack-rarity-background="true"></div>
                             </div>
                         {#else}
-                            <div class="aspect-square bg-gray-900/50 border border-gray-800 rounded-md shadow-inner flex items-center justify-center opacity-50">
-                                <div class="w-1.5 h-1.5 rounded-full bg-gray-800"></div>
+                            <div class="aspect-square bg-[var(--inset-bg)] border border-[var(--inset-border)] rounded-md shadow-inner flex items-center justify-center opacity-50">
+                                <div class="w-1.5 h-1.5 rounded-full bg-[var(--inset-border)]"></div>
                             </div>
                         {/if}
                     {/for}
@@ -215,7 +215,8 @@
                             <div class="w-2 h-6 bg-accent rounded-full"></div>
                             <h2 class="text-xl font-bold text-main tracking-tight">积分变动记录</h2>
                         </div>
-                        <button class="modal-close p-2 hover:bg-accent/10 hover:text-accent rounded-lg transition-all">
+                        <button type="button" class="modal-close p-2 hover:bg-accent/10 hover:text-accent rounded-lg transition-all"
+                                aria-label="关闭积分变动记录" title="关闭">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none"
                                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
                                  stroke-linejoin="round">
@@ -272,7 +273,8 @@
                 <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm bg-card border border-border shadow-2xl rounded-xl p-6 transition-all duration-300 scale-95 opacity-0 item-modal-container">
                     <div class="flex justify-between items-start mb-4">
                         <h3 id="itemModalName" class="text-xl font-bold"></h3>
-                        <button class="item-modal-close p-1 hover:text-[var(--accent)]">✕</button>
+                        <button type="button" class="item-modal-close p-1 hover:text-[var(--accent)]"
+                                aria-label="关闭物品详情" title="关闭">✕</button>
                     </div>
                     <div id="itemModalType"
                          class="text-xs uppercase tracking-widest text-gray-500 mb-4 font-mono"></div>

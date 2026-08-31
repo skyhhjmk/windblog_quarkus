@@ -87,7 +87,7 @@
                                         <p class="text-[10px] text-gray-500 font-mono opacity-80">{media.formattedSize}</p>
                                     </div>
                                     {#if hasPurchased && media.downloadUrl}
-                                        <a href="{media.downloadUrl}" download
+                                        <a href="{media.downloadUrl}" download aria-label="下载附件" title="下载附件"
                                            class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -168,9 +168,9 @@
     </div>
 
 
-    <div class="card card-static p-8 md:p-12">
-        <article class="space-y-16" data-article-transition-slug="{postSlug}">
-            <header class="space-y-12 mb-16">
+    <div class="card card-static p-5 md:p-12">
+        <article class="space-y-10 md:space-y-16" data-article-transition-slug="{postSlug}">
+            <header class="space-y-8 md:space-y-12 mb-10 md:mb-16">
                 <div class="space-y-6">
                     <div class="flex items-center gap-4">
                         <a href="/category/{postCategorySlug}" class="badge-category">
@@ -183,12 +183,12 @@
                         </a>
                         <div class="h-[1px] flex-1 bg-gradient-to-r from-accent/20 to-transparent"></div>
                     </div>
-                    <h1 class="text-6xl font-black text-main tracking-tight leading-[1.1]"
+                    <h1 class="text-4xl sm:text-5xl md:text-6xl font-black text-main tracking-tight leading-[1.1]"
                         data-article-transition-part="title"
                         data-article-transition-slug="{postSlug}">{postTitle ?: '文章信息'}</h1>
                 </div>
 
-                <div class="flex items-center gap-12 py-6 border-y border-border/40">
+                <div class="flex flex-wrap items-center gap-6 md:gap-12 py-5 md:py-6 border-y border-border/40">
                     <div class="post-meta-item">
                         <span class="post-meta-label">作者</span>
                         <div class="flex items-center gap-2">

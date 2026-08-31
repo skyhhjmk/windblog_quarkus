@@ -9,7 +9,7 @@
     </div>
 
     {#if detailMode}
-        <section class="space-y-16">
+        <section class="space-y-10 md:space-y-16">
             <header class="space-y-6">
                 <div class="space-y-2">
                     <div class="flex items-center gap-3">
@@ -27,12 +27,12 @@
             </header>
 
             {#if posts && posts.size > 0}
-                <div class="grid grid-cols-1 gap-8">
+                <div class="grid grid-cols-1 gap-6 md:gap-8">
                     {#for post in posts}
-                        <article class="group card p-8 transition-all duration-300 relative" data-article-transition-slug="{post.slug}">
-                            <div class="flex flex-col md:flex-row gap-8">
+                        <article class="group card p-5 sm:p-6 md:p-8 transition-all duration-300 relative" data-article-transition-slug="{post.slug}">
+                            <div class="flex flex-col md:flex-row gap-5 md:gap-8">
                                 <!-- Left Indicator -->
-                                <div class="hidden md:block w-[3px] h-20 bg-cyan-900 rounded-full group-hover:bg-cyan-500 transition-colors duration-500"></div>
+                                <div class="hidden md:block w-[3px] h-20 bg-[var(--accent-line)] rounded-full group-hover:bg-accent transition-colors duration-500"></div>
 
                                 <div class="flex-1">
                                     <!-- Meta Information -->
@@ -56,7 +56,7 @@
                                     </p>
 
                                     <!-- Footer -->
-                                    <div class="mt-8 flex items-center justify-between border-t border-border pt-6">
+                                <div class="mt-6 md:mt-8 flex items-center justify-between border-t border-border pt-5 md:pt-6">
                                         <div class="flex flex-wrap gap-2">
                                             <span class="text-[10px] text-meta border border-border px-2.5 py-0.5 rounded font-mono">Slug: {post.slug}</span>
                                             {#for tag in post.tags}
@@ -101,7 +101,7 @@
             {/if}
         </section>
     {#else}
-        <section class="space-y-16">
+        <section class="space-y-10 md:space-y-16">
             <header class="space-y-6">
                 <div class="space-y-2">
                     <div class="flex items-center gap-3">

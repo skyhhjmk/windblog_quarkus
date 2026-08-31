@@ -27,20 +27,31 @@
     --bg: #0A0C10;
     --bg-rgb: 10, 12, 16;
     --card-bg: #0D1117;
+    --panel-bg: var(--card-bg);
     --input-bg: #161B22;
     --border: rgba(255, 255, 255, 0.05);
     --border-hover: rgba(255, 255, 255, 0.12);
     --text-main: rgba(255, 255, 255, 0.9);
+    --fg: var(--text-main);
     --text-body: #94a3b8;
-    --text-meta: rgba(255, 255, 255, 0.4);
+    --text-meta: rgba(255, 255, 255, 0.58);
+    --text-muted: #94a3b8;
     --accent: #06b6d4;
     --accent-rgb: 6, 182, 212;
     --accent-dim: rgba(6, 182, 212, 0.7);
+    --accent-foreground: #0A0C10;
     --accent-line: #164e63;
     --card-hover: rgba(255, 255, 255, 0.01);
     --placeholder: rgba(255, 255, 255, 0.2);
     --glass-bg: rgba(13, 17, 23, 0.8);
     --glass-border: rgba(255, 255, 255, 0.1);
+    --overlay-bg: rgba(10, 12, 16, 0.72);
+    --inset-bg: #161B22;
+    --inset-border: #30363d;
+    --tag-bg: rgba(124, 58, 237, 0.12);
+    --tag-bg-hover: rgba(124, 58, 237, 0.2);
+    --tag-text: #c4b5fd;
+    --tag-border: rgba(167, 139, 250, 0.3);
 
     /* Spacing System */
     --space-sm: 1rem;
@@ -103,19 +114,30 @@
     --bg: #f9fafb;
     --bg-rgb: 249, 250, 251;
     --card-bg: #ffffff;
+    --panel-bg: var(--card-bg);
     --input-bg: #f3f4f6;
     --border: rgba(0, 0, 0, 0.08);
     --border-hover: rgba(0, 0, 0, 0.15);
     --text-main: #111827;
+    --fg: var(--text-main);
     --text-body: #374151;
     --text-meta: #4b5563;
+    --text-muted: #4b5563;
     --accent: #0891b2;
     --accent-dim: rgba(8, 145, 178, 0.8);
+    --accent-foreground: #0f172a;
     --accent-line: #cffafe;
     --card-hover: rgba(0, 0, 0, 0.02);
     --placeholder: rgba(0, 0, 0, 0.3);
     --glass-bg: rgba(255, 255, 255, 0.8);
     --glass-border: rgba(0, 0, 0, 0.05);
+    --overlay-bg: rgba(15, 23, 42, 0.46);
+    --inset-bg: #f3f4f6;
+    --inset-border: #d1d5db;
+    --tag-bg: #f5f3ff;
+    --tag-bg-hover: #ede9fe;
+    --tag-text: #6d28d9;
+    --tag-border: #ddd6fe;
 }
 
 /* Base Styles */
@@ -222,7 +244,7 @@ h1, h2, h3, h4, h5, h6 {
     gap: 0.75rem;
     padding: 1.125rem 2.5rem;
     background: var(--accent);
-    color: var(--bg);
+    color: var(--accent-foreground);
     border: none;
     border-radius: 1rem;
     font-size: 0.9375rem;
@@ -266,7 +288,7 @@ h1, h2, h3, h4, h5, h6 {
 .btn-minimal:hover {
     background: var(--accent);
     border-color: var(--accent);
-    color: var(--bg);
+    color: var(--accent-foreground);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.2);
 }
@@ -508,7 +530,7 @@ input::placeholder {
 
 .comment-reply-btn:hover {
     background: var(--accent);
-    color: var(--bg);
+    color: var(--accent-foreground);
     transform: scale(1.05);
 }
 
@@ -583,6 +605,21 @@ input::placeholder {
 body {
     color: var(--text-body);
     line-height: 1.8;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+/* Keep legacy utility classes readable while templates migrate to theme tokens. */
+.text-gray-600 { color: var(--text-muted) !important; }
+.text-gray-500 { color: var(--text-meta) !important; }
+.text-gray-400 { color: var(--text-body) !important; }
+.text-gray-300 { color: var(--text-main) !important; }
+
+.brand-initial {
+    color: var(--accent-foreground);
 }
 
 h1, h2, h3, h4 {
@@ -1022,13 +1059,13 @@ kbd {
 }
 
 .badge-tag {
-    background: #f8fafc;
-    color: #7c3aed;
-    border: 1px solid #e2e8f0;
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    border: 1px solid var(--tag-border);
 }
 
 .badge-tag:hover {
-    background: #ffffff;
+    background: var(--tag-bg-hover);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
@@ -1046,7 +1083,7 @@ kbd {
 }
 
 .light .badge-tag {
-    background: #ffffff;
-    color: #7c3aed;
-    border-color: #e2e8f0;
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    border-color: var(--tag-border);
 }

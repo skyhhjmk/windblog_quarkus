@@ -14,19 +14,19 @@
         </div>
     {/if}
 
-    <section class="space-y-16">
+    <section class="space-y-10 md:space-y-16">
         <div class="space-y-2">
             <h2 class="text-4xl font-bold text-main tracking-tight">最近文章</h2>
             <div class="decorative-line w-20"></div>
         </div>
 
         {#if posts && !posts.isEmpty}
-            <div class="grid grid-cols-1 gap-8">
+            <div class="grid grid-cols-1 gap-6 md:gap-8">
                 {#for post in posts}
-                    <article class="group card p-8 transition-all duration-300 relative" data-article-transition-slug="{post.slug}">
-                        <div class="flex flex-col md:flex-row gap-8">
+                    <article class="group card p-5 sm:p-6 md:p-8 transition-all duration-300 relative" data-article-transition-slug="{post.slug}">
+                        <div class="flex flex-col md:flex-row gap-5 md:gap-8">
                             <!-- Left Indicator (Desktop only) -->
-                            <div class="hidden md:block w-[3px] h-20 bg-cyan-900 rounded-full group-hover:bg-cyan-500 transition-colors duration-500"></div>
+                            <div class="hidden md:block w-[3px] h-20 bg-[var(--accent-line)] rounded-full group-hover:bg-accent transition-colors duration-500"></div>
 
                             <div class="flex-1">
                                 <!-- Meta Information -->
@@ -71,7 +71,7 @@
                                 </p>
 
                                 <!-- Footer -->
-                                <div class="mt-8 flex items-center justify-between border-t border-border pt-6">
+                                <div class="mt-6 md:mt-8 flex items-center justify-between border-t border-border pt-5 md:pt-6">
                                     <div class="flex flex-wrap gap-3">
                                         <a href="/category/{post.categorySlug}" class="badge-category relative z-10">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -110,7 +110,7 @@
             </div>
 
             <!-- Pagination -->
-            <nav class="flex items-center justify-between pt-16">
+            <nav class="flex items-center justify-between pt-10 md:pt-16">
                 <div>
                     {#if hasPrevPage}
                         <a class="btn-minimal" href="{#if prevPage == 1}/{#else}/page/{prevPage}{/if}">
