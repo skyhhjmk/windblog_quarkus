@@ -5,6 +5,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.MediaManagementService;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.event.Event;
@@ -37,6 +38,9 @@ public class AdminPostApiController {
             "SUBJECTIVE_VIEWPOINTS",
             "AUTOMATION_USE_ALLOWED",
             "CC_BY_NC_4_0");
+
+    @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
 
     @Inject
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
@@ -218,6 +222,7 @@ public class AdminPostApiController {
         post.updatedAt = now;
         post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
         post.contentDeclarations = validateContentDeclarations(request.contentDeclarations());
+        post.repostPolicyCode = repostPolicyCatalog.require(request.repostPolicyCode()).code();
 
         // 设置分类
         if (request.categoryId() != null) {
@@ -594,6 +599,7 @@ public class AdminPostApiController {
                 tagIds,
                 post.visibilityRegions,
                 post.contentDeclarations,
+                repostPolicyCatalog.resolve(post).code(),
                 post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
                 post.publishedRevision != null,
                 post.publishedAt,
@@ -779,6 +785,13 @@ public class AdminPostApiController {
                 changed = true;
             }
         }
+        if (request.repostPolicyCode() != null) {
+            String nextPolicyCode = repostPolicyCatalog.require(request.repostPolicyCode()).code();
+            if (!Objects.equals(post.repostPolicyCode, nextPolicyCode)) {
+                post.repostPolicyCode = nextPolicyCode;
+                changed = true;
+            }
+        }
         String nextPassword = resolveUpdatedPassword(post, request);
         if (!Objects.equals(post.password, nextPassword)) {
             post.password = nextPassword;
@@ -936,6 +949,7 @@ public class AdminPostApiController {
                 tagIds,
                 post.visibilityRegions,
                 post.contentDeclarations,
+                repostPolicyCatalog.resolve(post).code(),
                 post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
                 post.publishedRevision != null,
                 post.publishedAt,

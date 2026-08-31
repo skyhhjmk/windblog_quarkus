@@ -69,7 +69,12 @@ public class AmpController {
                 .data("canonicalUrl", post.canonicalUrl())
                 .data("ampUrl", post.ampUrl())
                 .data("publishedAt", post.lastUpdated())
-                .data("imageCount", post.imageCount());
+                .data("imageCount", post.imageCount())
+                .data("repostPolicyName", post.repostPolicyName())
+                .data("repostPolicyRequiresApplication", post.repostPolicyRequiresApplication())
+                .data("repostPolicyConditions", post.repostPolicyConditions())
+                .data("repostPolicyLicenseUrl", post.repostPolicyLicenseUrl())
+                .data("repostOriginalUrl", post.repostOriginalUrl());
         CacheControl cacheControl = new CacheControl();
         cacheControl.setMaxAge(300);
         return Response.ok(instance)

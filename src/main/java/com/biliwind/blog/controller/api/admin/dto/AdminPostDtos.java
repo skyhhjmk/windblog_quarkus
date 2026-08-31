@@ -30,9 +30,10 @@ public final class AdminPostDtos {
                         Long pointsPrice,
                         Integer freeLines,
                         Long categoryId,
-                List<Long> tagIds,
-                List<String> visibilityRegions,
-                List<String> contentDeclarations) {
+                        List<Long> tagIds,
+                        List<String> visibilityRegions,
+                        List<String> contentDeclarations,
+                        String repostPolicyCode) {
         }
 
     public record PostUpdateRequest(
@@ -56,7 +57,8 @@ public final class AdminPostDtos {
                         Long categoryId,
                         List<Long> tagIds,
                         List<String> visibilityRegions,
-                        List<String> contentDeclarations) {
+                        List<String> contentDeclarations,
+                        String repostPolicyCode) {
         }
 
         public record PostTranslationRequest(
@@ -131,6 +133,7 @@ public final class AdminPostDtos {
                         List<Long> tagIds,
                         List<String> visibilityRegions,
                         List<String> contentDeclarations,
+                        String repostPolicyCode,
                         Integer publishedRevisionNumber,
                         Boolean hasPublishedRevision,
                         OffsetDateTime publishedAt,

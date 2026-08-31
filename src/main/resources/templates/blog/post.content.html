@@ -226,17 +226,57 @@
                         {/for}
                     </div>
                 {/if}
-                <div class="rounded-lg border border-border/60 bg-card-bg/40 p-4 text-sm text-body flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <p class="font-bold text-main">授权转载声明</p>
-                        <p class="mt-1 text-gray-500">转载本文必须保留原文链接、授权码和文中 go/affiliate 链接。</p>
-                    </div>
-                    <button type="button"
-                            id="request-repost-license-button"
-                            data-post-ref="{postSlug}"
-                            class="inline-flex items-center justify-center rounded-lg border border-accent/40 px-4 py-2 text-sm font-bold text-accent hover:bg-accent/10 transition-colors">
-                        我要转载
-                    </button>
+                <div class="rounded-lg border border-border/60 bg-card-bg/40 p-4 text-sm text-body">
+                    {#if repostPolicyRequiresApplication}
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                            <div>
+                                <p class="font-bold text-main">授权转载声明</p>
+                                <p class="mt-1 text-gray-500">{repostPolicySummary}</p>
+                                <p class="mt-1 text-gray-500 break-all">原文地址：<a href="{repostOriginalUrl}"
+                                                                                     class="text-accent hover:underline">{repostOriginalUrl}</a></p>
+                            </div>
+                            <button type="button"
+                                    id="request-repost-license-button"
+                                    data-post-ref="{postSlug}"
+                                    class="inline-flex items-center justify-center rounded-lg border border-accent/40 px-4 py-2 text-sm font-bold text-accent hover:bg-accent/10 transition-colors">
+                                我要转载
+                            </button>
+                        </div>
+                    {#else}
+                        <div class="space-y-3">
+                            <div>
+                                <p class="font-bold text-main">本文使用 {repostPolicyName} 协议，无须申请转载</p>
+                                <p class="mt-1 text-gray-500">{repostPolicySummary}</p>
+                            </div>
+                            {#if repostPolicyConditions && ! repostPolicyConditions.isEmpty}
+                                <ul class="list-disc pl-5 space-y-1 text-gray-500">
+                                    {#for condition in repostPolicyConditions}
+                                        <li>{condition}</li>
+                                    {/for}
+                                </ul>
+                            {/if}
+                            <p class="text-gray-500 break-all">原文地址：<a href="{repostOriginalUrl}"
+                                                                         class="text-accent hover:underline">{repostOriginalUrl}</a></p>
+                            <p class="text-gray-500 break-all">协议链接：<a href="{repostPolicyLicenseUrl}"
+                                                                         target="_blank" rel="noopener noreferrer"
+                                                                         class="text-accent hover:underline">{repostPolicyLicenseUrl}</a></p>
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                <button type="button"
+                                        id="copy-repost-attribution-button"
+                                        class="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white hover:opacity-90 transition-opacity">
+                                    复制转载说明
+                                </button>
+                                <button type="button"
+                                        id="optional-repost-registration-button"
+                                        data-post-ref="{postSlug}"
+                                        class="inline-flex items-center justify-center rounded-lg border border-accent/40 px-4 py-2 text-sm font-bold text-accent hover:bg-accent/10 transition-colors">
+                                    自愿登记转载
+                                </button>
+                            </div>
+                            <template id="repost-copy-template">{repostDirectCopyText}</template>
+                            <p class="text-xs text-gray-500">自愿登记用于生成可选授权码和追踪短链，不是转载前置条件。</p>
+                        </div>
+                    {/if}
                 </div>
             </header>
 
@@ -299,13 +339,6 @@
                     </a>
                 {/for}
             </div>
-
-            <section class="mt-12 rounded-lg border border-border/60 bg-card-bg/40 p-5 text-sm text-body">
-                <p class="font-bold text-main">转载要求</p>
-                <p class="mt-2 text-gray-500">转载需先申请授权，并在转载页保留原文链接：<a href="{repostOriginalUrl}"
-                                                                                         class="text-accent hover:underline">{repostOriginalUrl}</a>。
-                </p>
-            </section>
 
         </article>
     </div>

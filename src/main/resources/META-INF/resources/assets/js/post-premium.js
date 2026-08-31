@@ -16,6 +16,7 @@
     };
     let buyButtonListenerBound = false;
     let repostButtonListenerBound = false;
+    let repostCopyButtonListenerBound = false;
     let passwordFormListenerBound = false;
 
     function initPostPremium() {
@@ -30,6 +31,7 @@
 
         initBuyButtons();
         initRepostLicenseButton();
+        initCopyRepostAttributionButton();
         checkAuthorization();
         initBlockManager();
     }
@@ -100,12 +102,21 @@
         repostButtonListenerBound = true;
 
         document.addEventListener('click', async function (event) {
-            const button = event.target.closest('#request-repost-license-button');
+            const button = event.target.closest('#request-repost-license-button, #optional-repost-registration-button');
             if (!button) {
                 return;
             }
 
             event.preventDefault();
+
+            const optionalRegistration = button.id === 'optional-repost-registration-button';
+            if (optionalRegistration) {
+                const confirmed = await window.confirm(
+                    '这是自愿登记，不是转载前置条件。是否生成可选的授权码和追踪短链？');
+                if (!confirmed) {
+                    return;
+                }
+            }
 
             const targetUrl = await window.prompt('请输入转载页面 URL', 'https://');
             if (!targetUrl) {
@@ -113,7 +124,7 @@
             }
 
             if (window.setLoading) {
-                window.setLoading(button, true, {text: '申请中'});
+                window.setLoading(button, true, {text: optionalRegistration ? '登记中' : '申请中'});
             }
 
             try {
@@ -130,24 +141,87 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    const message = result.message || '申请失败';
+                    const message = result.message || (optionalRegistration ? '登记失败' : '申请失败');
                     await window.alert(message);
                     return;
                 }
 
                 await window.showModal({
-                    title: '转载授权已生成',
+                    title: optionalRegistration ? '自愿登记已生成' : '转载授权已生成',
                     message: result.data.copy.markdown,
                     showCancel: false
                 });
             } catch (error) {
-                await window.alert('申请失败，请稍后重试');
+                await window.alert(optionalRegistration ? '登记失败，请稍后重试' : '申请失败，请稍后重试');
             } finally {
                 if (window.setLoading) {
-                    window.setLoading(button, false, {text: '我要转载'});
+                    window.setLoading(button, false, {
+                        text: optionalRegistration ? '自愿登记转载' : '我要转载'
+                    });
                 }
             }
         });
+    }
+
+    function initCopyRepostAttributionButton() {
+        if (repostCopyButtonListenerBound) {
+            return;
+        }
+        repostCopyButtonListenerBound = true;
+
+        document.addEventListener('click', async function (event) {
+            const button = event.target.closest('#copy-repost-attribution-button');
+            if (!button) {
+                return;
+            }
+            event.preventDefault();
+
+            const template = document.getElementById('repost-copy-template');
+            const copyText = template && template.content
+                ? template.content.textContent.trim()
+                : '';
+            if (!copyText) {
+                await window.alert('转载说明暂不可用，请刷新页面后重试');
+                return;
+            }
+
+            if (window.setLoading) {
+                window.setLoading(button, true, {text: '复制中'});
+            }
+            try {
+                await copyRepostText(copyText);
+                window.showToast('转载说明已复制', 'success');
+            } catch (error) {
+                await window.alert('复制失败，请手动复制页面中的转载信息');
+            } finally {
+                if (window.setLoading) {
+                    window.setLoading(button, false, {text: '复制转载说明'});
+                }
+            }
+        });
+    }
+
+    async function copyRepostText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return;
+            } catch (error) {
+                // Fall back to the legacy textarea path when clipboard permission is unavailable.
+            }
+        }
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (!copied) {
+            throw new Error('clipboard copy failed');
+        }
     }
 
     // Check authorization status and load content if needed

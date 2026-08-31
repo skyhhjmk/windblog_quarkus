@@ -110,4 +110,5 @@
     <include file="db/migration/107-user-content-features.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/108-create-application-installation.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/109-create-post-ai-metadata.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/110-add-post-repost-policy.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

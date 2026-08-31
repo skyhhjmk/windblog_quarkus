@@ -9,6 +9,7 @@ import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.StoreItem;
 import com.biliwind.blog.service.edge.DataSyncEvent;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
@@ -35,6 +36,9 @@ public class PublicCacheRefreshService {
 
     @Inject
     PostAccessService postAccessService;
+
+    @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
 
     public void onPostChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
         refreshPostCaches(event.getPostId());
@@ -311,6 +315,7 @@ public class PublicCacheRefreshService {
                 attachments,
                 copyList(post.visibilityRegions),
                 copyList(post.contentDeclarations),
+                repostPolicyCatalog.resolve(post).code(),
                 resolveRelatedStoreItems(post.extraInfo));
     }
 
@@ -466,6 +471,7 @@ public class PublicCacheRefreshService {
             List<PublicAttachmentSnapshot> attachments,
             List<String> visibilityRegions,
             List<String> contentDeclarations,
+            String repostPolicyCode,
             List<PublicStoreItemSnapshot> relatedStoreItems) {
     }
 

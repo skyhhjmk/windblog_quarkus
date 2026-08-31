@@ -102,6 +102,8 @@ class AdminAuthorizationPolicyTest {
                 "POST", "/api/admin/media/7/virus-scan").action());
         assertEquals("repost.revoke", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/repost/tokens/7/revoke").action());
+        assertEquals("repost.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/repost/policies").action());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp(
                 "POST", "/api/admin/repost/tokens/7/revoke"));
     }

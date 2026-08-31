@@ -45,6 +45,9 @@ public class RepostLicenseService {
     @Inject
     Event<DataSyncEvent> dataSyncEvent;
 
+    @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
+
     @Transactional
     public LicenseCreationResult createLicense(Long postId, Long userId, String targetUrl) {
         if (postId == null) {
@@ -133,6 +136,11 @@ public class RepostLicenseService {
         String title = resolvePostTitle(license.article);
         String originalUrl = buildPostUrl(license.article);
         String goUrl = buildGoUrl(rawToken);
+        RepostPolicyCatalog.Policy policy = repostPolicyCatalog.resolve(license.article);
+
+        if (!policy.requiresApplication()) {
+            return buildOptionalRegistrationCopyContent(license, policy, title, originalUrl, goUrl);
+        }
 
         StringBuilder markdownBuilder = new StringBuilder();
         markdownBuilder.append("> 本文已获得 WindBlog 转载授权。授权码：");
@@ -179,6 +187,53 @@ public class RepostLicenseService {
         plainTextBuilder.append("\n");
         plainTextBuilder.append("商业链接：");
         plainTextBuilder.append(goUrl);
+
+        return new CopyContent(markdownBuilder.toString(), htmlBuilder.toString(), plainTextBuilder.toString(), originalUrl, goUrl);
+    }
+
+    private CopyContent buildOptionalRegistrationCopyContent(
+            RepostLicense license,
+            RepostPolicyCatalog.Policy policy,
+            String title,
+            String originalUrl,
+            String goUrl) {
+        String policyNotice = "本文使用 " + policy.name() + " 协议，无须申请转载。";
+        String conditionText = String.join("；", policy.conditions());
+
+        StringBuilder markdownBuilder = new StringBuilder();
+        markdownBuilder.append("> ").append(policyNotice).append("\n");
+        markdownBuilder.append("> 转载条件：").append(conditionText).append("\n");
+        markdownBuilder.append("> 此次登记仅用于生成可选的授权码和追踪短链，不是转载前置条件。\n\n");
+        markdownBuilder.append("# ").append(title).append("\n\n");
+        markdownBuilder.append("原文地址：").append(originalUrl).append("\n\n");
+        markdownBuilder.append("协议链接：").append(policy.licenseUrl()).append("\n\n");
+        markdownBuilder.append("可选登记授权码：").append(license.code).append("\n\n");
+        markdownBuilder.append("追踪链接（可选）：").append(goUrl).append("\n");
+
+        StringBuilder htmlBuilder = new StringBuilder();
+        htmlBuilder.append("<section class=\"repost-license\">");
+        htmlBuilder.append("<p>").append(escapeHtml(policyNotice)).append("</p>");
+        htmlBuilder.append("<p>转载条件：").append(escapeHtml(conditionText)).append("</p>");
+        htmlBuilder.append("<p>此次登记仅用于生成可选的授权码和追踪短链，不是转载前置条件。</p>");
+        htmlBuilder.append("<h1>").append(escapeHtml(title)).append("</h1>");
+        htmlBuilder.append("<p>原文地址：<a href=\"").append(escapeHtml(originalUrl)).append("\">");
+        htmlBuilder.append(escapeHtml(originalUrl)).append("</a></p>");
+        htmlBuilder.append("<p>协议链接：<a href=\"").append(escapeHtml(policy.licenseUrl())).append("\">");
+        htmlBuilder.append(escapeHtml(policy.licenseUrl())).append("</a></p>");
+        htmlBuilder.append("<p>可选登记授权码：").append(escapeHtml(license.code)).append("</p>");
+        htmlBuilder.append("<p>追踪链接（可选）：<a rel=\"nofollow\" href=\"");
+        htmlBuilder.append(escapeHtml(goUrl)).append("\">").append(escapeHtml(goUrl)).append("</a></p>");
+        htmlBuilder.append("</section>");
+
+        StringBuilder plainTextBuilder = new StringBuilder();
+        plainTextBuilder.append(policyNotice).append("\n");
+        plainTextBuilder.append("转载条件：").append(conditionText).append("\n");
+        plainTextBuilder.append("此次登记仅用于生成可选的授权码和追踪短链，不是转载前置条件。\n");
+        plainTextBuilder.append(title).append("\n");
+        plainTextBuilder.append("原文地址：").append(originalUrl).append("\n");
+        plainTextBuilder.append("协议链接：").append(policy.licenseUrl()).append("\n");
+        plainTextBuilder.append("可选登记授权码：").append(license.code).append("\n");
+        plainTextBuilder.append("追踪链接（可选）：").append(goUrl);
 
         return new CopyContent(markdownBuilder.toString(), htmlBuilder.toString(), plainTextBuilder.toString(), originalUrl, goUrl);
     }

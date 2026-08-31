@@ -10,6 +10,7 @@ import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -39,6 +40,9 @@ public class EdgeSyncDataApplyService {
 
     @Inject
     RsaHelper rsaHelper;
+
+    @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
 
     @Transactional
     public void apply(SyncDataRequest request) {
@@ -568,6 +572,14 @@ public class EdgeSyncDataApplyService {
         post.extraInfo = readPublicExtraInfo(validatedPostNode, "extraInfo");
         post.visibilityRegions = readStringList(validatedPostNode, "visibilityRegions");
         post.contentDeclarations = readStringList(validatedPostNode, "contentDeclarations");
+        String incomingRepostPolicyCode = readOptionalText(validatedPostNode, "repostPolicyCode");
+        if (incomingRepostPolicyCode != null && !incomingRepostPolicyCode.isBlank()) {
+            post.repostPolicyCode = repostPolicyCatalog.resolve(incomingRepostPolicyCode, null).code();
+        } else {
+            // Old edge snapshots do not carry the dedicated field. Preserve the
+            // historical CC_BY_NC_4_0 declaration fallback when rebuilding them.
+            post.repostPolicyCode = repostPolicyCatalog.resolve(null, post.contentDeclarations).code();
+        }
         post.publishedAt = readOptionalDateTime(validatedPostNode, "publishedAt");
         post.viewCount = readOptionalLong(validatedPostNode, "viewCount");
         if (post.viewCount == null) {
@@ -640,13 +652,14 @@ public class EdgeSyncDataApplyService {
                     user_id, published_at, created_at, updated_at, deleted_at, version, render_type,
                     password, seo_title, seo_keywords, seo_description, category_id, published_revision_id,
                     view_count, featured, allow_comment, extra_info, visibility_regions,
-                    ai_summary_status, content_declarations
+                    ai_summary_status, content_declarations, repost_policy_code
                 ) values (
                     :id, :slug, cast(:title as jsonb), cast(:summary as jsonb), cast(:aiSummary as jsonb),
                     null, :status, :visibility, :userId, :publishedAt, current_timestamp, current_timestamp,
                     null, 0, :renderType, null, :seoTitle, :seoKeywords, :seoDescription, :categoryId,
                     null, :viewCount, :featured, :allowComment, cast(:extraInfo as jsonb),
-                    cast(:visibilityRegions as jsonb), :aiSummaryStatus, cast(:contentDeclarations as jsonb)
+                    cast(:visibilityRegions as jsonb), :aiSummaryStatus, cast(:contentDeclarations as jsonb),
+                    :repostPolicyCode
                 )
                 """)
                 .setParameter("id", post.id)
@@ -670,6 +683,7 @@ public class EdgeSyncDataApplyService {
                 .setParameter("visibilityRegions", writeJsonValue(post.visibilityRegions))
                 .setParameter("aiSummaryStatus", post.aiSummaryStatus)
                 .setParameter("contentDeclarations", writeJsonValue(post.contentDeclarations))
+                .setParameter("repostPolicyCode", post.repostPolicyCode)
                 .executeUpdate();
         synchronizeSequence("posts");
     }

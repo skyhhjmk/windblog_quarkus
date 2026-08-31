@@ -4,6 +4,7 @@ import com.biliwind.blog.common.security.UserTokenVerifier;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.RepostLicense;
 import com.biliwind.blog.service.repost.RepostLicenseService;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
@@ -26,10 +27,13 @@ public class UserRepostLicenseController {
     RepostLicenseService repostLicenseService;
 
     @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
+
+    @Inject
     UserTokenVerifier tokenVerifier;
 
     @POST
-    @Operation(summary = "申请转载授权")
+    @Operation(summary = "申请或自愿登记转载")
     public Response createLicense(LicenseCreateRequest request, @Context HttpHeaders httpHeaders) {
         Long userId = resolveUserId(httpHeaders);
         if (userId == null) {
@@ -76,6 +80,10 @@ public class UserRepostLicenseController {
         data.put("allowedDomain", license.allowedDomain);
         data.put("targetUrl", license.targetUrl);
         data.put("status", license.status);
+        RepostPolicyCatalog.Policy policy = repostPolicyCatalog.resolve(license.article);
+        data.put("repostPolicyCode", policy.code());
+        data.put("repostPolicyName", policy.name());
+        data.put("requiresApplication", policy.requiresApplication());
         data.put("copy", buildCopyContentResponse(copyContent));
         return data;
     }

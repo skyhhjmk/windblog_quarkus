@@ -29,6 +29,10 @@
         article code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace }
         article blockquote { border-left: 4px solid #38bdf8; margin-left: 0; padding-left: 16px; color: #475569 }
         amp-img { display: block; margin: 20px 0 }
+        section.repost-notice { border: 1px solid #cbd5e1; background: #ffffff; padding: 16px; margin-top: 32px; font-size: .95rem }
+        section.repost-notice h2 { font-size: 1.05rem; margin: 0 0 8px }
+        section.repost-notice ul { margin: 8px 0; padding-left: 24px }
+        section.repost-notice a { overflow-wrap: anywhere }
         footer { border-top: 1px solid #e2e8f0; color: #64748b; font-size: .85rem; margin-top: 36px; padding-top: 18px }
     </style>
 </head>
@@ -39,6 +43,25 @@
         <p class="meta">{publishedAt ?: ''}</p>
     </header>
     <article>{postBody.raw}</article>
+    <section class="repost-notice">
+        <h2>文章转载协议</h2>
+        {#if repostPolicyRequiresApplication}
+            <p>转载需先申请授权，并保留授权码、原文地址和文中 go/affiliate 链接。</p>
+        {#else}
+            <p>本文使用 {repostPolicyName} 协议，无须申请转载。</p>
+        {/if}
+        {#if repostPolicyConditions && ! repostPolicyConditions.isEmpty}
+            <ul>
+                {#for condition in repostPolicyConditions}
+                    <li>{condition}</li>
+                {/for}
+            </ul>
+        {/if}
+        <p>原文地址：<a href="{repostOriginalUrl}">{repostOriginalUrl}</a></p>
+        {#if repostPolicyLicenseUrl}
+            <p>协议链接：<a href="{repostPolicyLicenseUrl}">{repostPolicyLicenseUrl}</a></p>
+        {/if}
+    </section>
     <footer>这是 WindBlog 的轻量 AMP 页面 · <a href="{canonicalUrl}">返回标准页面</a></footer>
 </main>
 </body>

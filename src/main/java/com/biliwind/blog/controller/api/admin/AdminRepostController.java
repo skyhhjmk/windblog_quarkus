@@ -41,6 +41,9 @@ public class AdminRepostController {
     RepostLicenseService repostLicenseService;
 
     @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
+
+    @Inject
     RepostDomainService repostDomainService;
 
     @Inject
@@ -51,6 +54,13 @@ public class AdminRepostController {
 
     @Inject
     Event<DataSyncEvent> dataSyncEvent;
+
+    @GET
+    @Path("/policies")
+    @Operation(summary = "文章转载协议目录")
+    public List<RepostPolicyCatalog.Policy> listPolicies() {
+        return repostPolicyCatalog.list();
+    }
 
     @GET
     @Path("/licenses")

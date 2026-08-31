@@ -4,6 +4,7 @@ import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -45,6 +46,9 @@ public class EdgeDataSyncService {
     NodeRoleService nodeRoleService;
     @Inject
     com.biliwind.blog.service.PostAccessService postAccessService;
+
+    @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
 
     @Inject
     jakarta.enterprise.inject.Instance<com.biliwind.blog.service.OutboxEventService> outboxEventService;
@@ -325,6 +329,7 @@ public class EdgeDataSyncService {
         publicPost.set("extraInfo", safePublicExtraInfo(post.extraInfo));
         publicPost.set("visibilityRegions", objectMapper.valueToTree(post.visibilityRegions));
         publicPost.set("contentDeclarations", objectMapper.valueToTree(post.contentDeclarations));
+        putText(publicPost, "repostPolicyCode", repostPolicyCatalog.resolve(post).code());
         putDateTime(publicPost, "publishedAt", post.publishedAt);
         putDateTime(publicPost, "createdAt", post.createdAt);
         putDateTime(publicPost, "updatedAt", post.updatedAt);

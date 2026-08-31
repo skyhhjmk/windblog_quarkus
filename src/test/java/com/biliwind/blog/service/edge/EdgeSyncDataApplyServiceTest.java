@@ -8,8 +8,10 @@ import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.SystemSetting;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -268,7 +270,7 @@ class EdgeSyncDataApplyServiceTest {
 
     @Test
     @TestTransaction
-    void shouldCreateNewPostAndPublicRevisionWithoutPassword() {
+    void shouldCreateNewPostAndPublicRevisionWithoutPassword() throws Exception {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         long postId = 920_000_000L + UUID.randomUUID().getMostSignificantBits() % 10_000_000L;
         long revisionId = postId + 1;
@@ -339,10 +341,27 @@ class EdgeSyncDataApplyServiceTest {
         assertNotNull(post);
         assertEquals("edge-post-" + suffix, post.slug);
         assertNull(post.password);
+        assertEquals(RepostPolicyCatalog.REQUEST_REQUIRED, post.repostPolicyCode);
         Map<?, ?> extraInfo = (Map<?, ?>) post.extraInfo;
         assertEquals(5, ((Number) extraInfo.get("free_lines")).intValue());
         assertNotNull(revision);
         assertEquals(postId, revision.post.id);
+
+        ObjectNode updatedPayload = (ObjectNode) objectMapper.readTree(request.getPayload());
+        ((ObjectNode) updatedPayload.get("post")).put(
+                "repostPolicyCode", RepostPolicyCatalog.CC_BY_NC_SA_4_0);
+        ((ObjectNode) updatedPayload.get("post")).put("version", 10);
+        syncDataApplyService.apply(SyncDataRequest.newBuilder()
+                .setAction("UPSERT")
+                .setEntityType("POST")
+                .setEntityId(postId)
+                .setPayload(objectMapper.writeValueAsString(updatedPayload))
+                .build());
+        entityManager.flush();
+        entityManager.clear();
+
+        Post updatedPost = Post.findById(postId);
+        assertEquals(RepostPolicyCatalog.CC_BY_NC_SA_4_0, updatedPost.repostPolicyCode);
     }
 
     private void assertNoSensitiveField(JsonNode node, String fieldName) {

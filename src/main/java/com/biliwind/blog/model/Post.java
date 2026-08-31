@@ -180,6 +180,12 @@ public class Post extends PanacheEntityBase {
     @Column(name = "content_declarations", columnDefinition = "jsonb")
     public java.util.List<String> contentDeclarations;
 
+    /**
+     * 文章转载协议代码；为空时由 RepostPolicyCatalog 按旧数据兼容规则解析。
+     */
+    @Column(name = "repost_policy_code", length = 64)
+    public String repostPolicyCode;
+
     /** 乐观锁版本号 */
     @Version
     @Column(nullable = false)

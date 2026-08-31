@@ -4,12 +4,14 @@ import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.PostRenderType;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
 /** Resolves the public, cache-safe representation used by the AMP controller and admin checker. */
@@ -30,6 +32,9 @@ public class AmpPageService {
 
     @Inject
     PublicUrlService publicUrlService;
+
+    @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
 
     public Optional<AmpPost> find(String slug, String languageCode) {
         String normalizedSlug = normalizeSlug(slug);
@@ -62,6 +67,9 @@ public class AmpPageService {
 
         AmpContentRenderer.RenderedContent rendered =
                 ampContentRenderer.render(snapshot.renderType(), rawContent);
+        RepostPolicyCatalog.Policy repostPolicy = repostPolicyCatalog.resolve(
+                snapshot.repostPolicyCode(), snapshot.contentDeclarations());
+        String canonicalUrl = buildCanonicalUrl(normalizedSlug, language);
         return Optional.of(new AmpPost(
                 true,
                 null,
@@ -70,12 +78,17 @@ public class AmpPageService {
                 title,
                 summary,
                 rendered.html(),
-                buildCanonicalUrl(normalizedSlug, language),
+                canonicalUrl,
                 buildAmpUrl(normalizedSlug, language),
                 snapshot.updatedAt() == null ? snapshot.publishedAt() : snapshot.updatedAt(),
                 rendered.imageCount(),
                 rendered.removedElementCount(),
-                snapshot.renderType()));
+                snapshot.renderType(),
+                repostPolicy.name(),
+                repostPolicy.requiresApplication(),
+                repostPolicy.conditions(),
+                repostPolicy.licenseUrl(),
+                canonicalUrl));
     }
 
     public boolean isEnabled() {
@@ -159,7 +172,12 @@ public class AmpPageService {
             OffsetDateTime lastUpdated,
             int imageCount,
             int removedElementCount,
-            PostRenderType renderType) {
+            PostRenderType renderType,
+            String repostPolicyName,
+            boolean repostPolicyRequiresApplication,
+            List<String> repostPolicyConditions,
+            String repostPolicyLicenseUrl,
+            String repostOriginalUrl) {
 
         public static AmpPost unavailable(
                 String slug,
@@ -170,7 +188,8 @@ public class AmpPageService {
                 String ampUrl,
                 OffsetDateTime lastUpdated) {
             return new AmpPost(false, "受保护或付费文章不生成可缓存 AMP 页面", slug, language, title,
-                    summary, "", canonicalUrl, ampUrl, lastUpdated, 0, 0, null);
+                    summary, "", canonicalUrl, ampUrl, lastUpdated, 0, 0, null,
+                    null, false, List.of(), null, null);
         }
     }
 }

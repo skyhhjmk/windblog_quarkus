@@ -10,6 +10,7 @@ import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.PostAccessPolicy;
+import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -28,8 +29,7 @@ public class PostController {
             "EXPLICIT_AND_EMBEDDED_ADVERTISING", "包含显式广告和植入式广告",
             "AI_GENERATED_CONTENT", "存在 AI 生成内容",
             "SUBJECTIVE_VIEWPOINTS", "存在主观观点",
-            "AUTOMATION_USE_ALLOWED", "可用于自动化程序",
-            "CC_BY_NC_4_0", "CC BY-NC 4.0");
+            "AUTOMATION_USE_ALLOWED", "可用于自动化程序");
 
     @Inject
     @Location("blog/post.html")
@@ -71,6 +71,9 @@ public class PostController {
 
     @Inject
     com.biliwind.blog.service.repost.RepostLicenseService repostLicenseService;
+
+    @Inject
+    RepostPolicyCatalog repostPolicyCatalog;
 
     @Inject
     com.biliwind.blog.service.link.ArticleExternalLinkService articleExternalLinkService;
@@ -256,6 +259,13 @@ public class PostController {
             postCategorySlug = "uncategorized";
         }
 
+        RepostPolicyCatalog.Policy repostPolicy = repostPolicyCatalog.resolve(
+                snapshot.repostPolicyCode(), snapshot.contentDeclarations());
+        String repostOriginalUrl = repostLicenseService.buildPostUrl(slug);
+        String repostDirectCopyText = repostPolicy.requiresApplication()
+                ? ""
+                : repostPolicyCatalog.buildDirectCopyText(repostPolicy, displayTitle, repostOriginalUrl);
+
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
                 .data("postSlug", slug)
@@ -282,7 +292,14 @@ public class PostController {
                 .data("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
                 .data("attachments", attachments)
                 .data("relatedStoreItems", snapshot.relatedStoreItems())
-                .data("repostOriginalUrl", repostLicenseService.buildPostUrl(slug))
+                .data("repostPolicyCode", repostPolicy.code())
+                .data("repostPolicyName", repostPolicy.name())
+                .data("repostPolicySummary", repostPolicy.summary())
+                .data("repostPolicyRequiresApplication", repostPolicy.requiresApplication())
+                .data("repostPolicyConditions", repostPolicy.conditions())
+                .data("repostPolicyLicenseUrl", repostPolicy.licenseUrl())
+                .data("repostDirectCopyText", repostDirectCopyText)
+                .data("repostOriginalUrl", repostOriginalUrl)
                 .data("canonicalUrl", buildCanonicalUrl(slug))
                 .data("ampUrl", ampUrl)
                 .data("ogData", buildOgData(slug, seoTitle, pageDescription))
