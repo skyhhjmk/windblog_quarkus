@@ -31,7 +31,7 @@ public class CodexCreatorHttpClient {
     @Inject
     ObjectMapper objectMapper;
 
-    @ConfigProperty(name = "windblog.ai.codex-creator.endpoint", defaultValue = "http://codex-creator:8090")
+    @ConfigProperty(name = "windblog.ai.codex-creator.endpoint", defaultValue = "http://codex-creator:8681")
     String configuredEndpoint;
 
     @ConfigProperty(name = "windblog.ai.codex-creator.shared-secret", defaultValue = "")
@@ -132,7 +132,7 @@ public class CodexCreatorHttpClient {
     }
 
     private static String baseEndpoint(String endpoint) {
-        if (endpoint == null || endpoint.isBlank()) return "http://codex-creator:8090";
+        if (endpoint == null || endpoint.isBlank()) return "http://codex-creator:8681";
         return endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
     }
 

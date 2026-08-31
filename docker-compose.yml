@@ -110,7 +110,7 @@ services:
       SECURITY_EVENT_HASH_SECRET: ${SECURITY_EVENT_HASH_SECRET:?SECURITY_EVENT_HASH_SECRET must be set}
       WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED: ${WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED:-false}
       WINDBLOG_CODEX_CREATOR_PREFER: ${WINDBLOG_CODEX_CREATOR_PREFER:-true}
-      WINDBLOG_CODEX_CREATOR_ENDPOINT: ${WINDBLOG_CODEX_CREATOR_ENDPOINT:-http://codex-creator:8090}
+      WINDBLOG_CODEX_CREATOR_ENDPOINT: ${WINDBLOG_CODEX_CREATOR_ENDPOINT:-http://codex-creator:8681}
       WINDBLOG_CODEX_CREATOR_SHARED_SECRET: ${WINDBLOG_CODEX_CREATOR_SHARED_SECRET:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD: ${SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD:-true}
@@ -199,9 +199,9 @@ services:
       codex-creator-db-init:
         condition: service_completed_successfully
     expose:
-      - "8090"
+      - "8681"
     healthcheck:
-      test: [ "CMD-SHELL", "curl -fsS http://localhost:8090/q/health/ready >/dev/null || exit 1" ]
+      test: [ "CMD-SHELL", "curl -fsS http://localhost:8681/q/health/ready >/dev/null || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 12

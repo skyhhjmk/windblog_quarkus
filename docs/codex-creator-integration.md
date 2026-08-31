@@ -11,7 +11,7 @@ Codex Creator 作为独立仓库 `codex-creator` 挂载在本仓库的 `codex-cr
 
 ## 安全与部署
 
-Compose/Kubernetes 默认只在内部网络暴露 `codex-creator:8090`，不配置公网端口。OpenAPI/Swagger、管理 API 和 `/mcp` 均为私有面；如确需访问，运维人员必须手工建立带源地址 allowlist、VPN/认证、有效期和撤销记录的 APISIX 路由。
+Compose/Kubernetes 默认只在内部网络暴露 `codex-creator:8681`，不配置公网端口。OpenAPI/Swagger、管理 API 和 `/mcp` 均为私有面；如确需访问，运维人员必须手工建立带源地址 allowlist、VPN/认证、有效期和撤销记录的 APISIX 路由。
 
 在已有 PostgreSQL 卷上切换 `pgvector/pg18` 前，按仓库内的 [Codex Creator 部署手册](../codex-creator/docs/runbook.md) 完成备份和回滚演练。新卷初始化脚本以及 Compose/Kubernetes 的幂等启动初始化都会确保 `codex_creator` 存在并在该数据库执行 `CREATE EXTENSION vector`；不会修改 WindBlog 既有表，也不会删除数据卷。
 

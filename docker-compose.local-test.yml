@@ -15,7 +15,7 @@ services:
   codex-creator:
     container_name: windblog-codex-test-codex-creator
     ports:
-      - target: 8090
+      - target: 8681
         published: "${CODEX_CREATOR_HOST_PORT:-58091}"
         host_ip: "127.0.0.1"
     volumes:

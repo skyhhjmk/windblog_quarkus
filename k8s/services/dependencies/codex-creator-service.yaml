@@ -11,5 +11,5 @@ spec:
     app.kubernetes.io/name: codex-creator
   ports:
     - name: http
-      port: 8090
+      port: 8681
       targetPort: http
