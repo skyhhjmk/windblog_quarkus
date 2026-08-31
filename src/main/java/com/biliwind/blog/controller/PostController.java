@@ -115,6 +115,7 @@ public class PostController {
         slug = normalizeSlug(slug);
 
         String currentRegion = regionContext.getCurrentRegion().getCode();
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
 
         Optional<com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot> snapshotResult =
                 publicCacheRefreshService.findPublishedSnapshot(slug, currentRegion);
@@ -136,7 +137,8 @@ public class PostController {
         }
 
         long epoch = lastUpdated.toEpochSecond();
-        String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion;
+        String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion
+                + (pjaxRequest ? "_pjax" : "_full");
         EntityTag etag = new EntityTag(etagValue);
         boolean protectedPage = snapshot.visibility() == 2;
 
@@ -191,7 +193,7 @@ public class PostController {
         String localizedAiSummary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), resolvedLang);
 
         Template template = null;
-        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
+        if (pjaxRequest) {
             template = postContentTemplate;
         } else {
             template = postTemplate;
