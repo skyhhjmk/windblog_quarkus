@@ -135,6 +135,16 @@
             }, 200);
         }
 
+        function scrollToTopInstantly() {
+            // An explicit instant behavior cancels any pending smooth scroll before
+            // the target title is measured for the shared-element transition.
+            window.scrollTo({
+                left: 0,
+                top: 0,
+                behavior: 'instant'
+            });
+        }
+
         function canUsePjax(anchor) {
             if (!anchor) return false;
             if (anchor.dataset.noPjax === 'true') return false;
@@ -277,7 +287,7 @@
             return slug;
         }
 
-        function updatePjaxContainerState(container, html, url, pushState) {
+        function updatePjaxContainerState(container, html, url, pushState, options) {
             container.innerHTML = html;
 
             const titleHolder = container.querySelector('[data-page-title]');
@@ -300,7 +310,13 @@
 
             if (pushState) {
                 window.history.pushState({ pjax: true, url: url }, '', url);
-                window.scrollTo(0, 0);
+                if (!options || options.scrollToTop !== false) {
+                    if (options && options.instantScroll) {
+                        scrollToTopInstantly();
+                    } else {
+                        window.scrollTo(0, 0);
+                    }
+                }
             }
 
             document.dispatchEvent(new CustomEvent('page:ready', { detail: { url: url } }));
@@ -619,6 +635,13 @@
                 return;
             }
 
+            const instantScrollForArticleNavigation = isArticleDetailUrl(url) &&
+                !isArticleDetailUrl(window.location.href);
+            const pjaxUpdateOptions = {
+                scrollToTop: true,
+                instantScroll: instantScrollForArticleNavigation
+            };
+
             document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
             if (activePjaxController) {
                 activePjaxController.abort();
@@ -645,7 +668,7 @@
 
                 if (hasArticleTransitionSourceOnCurrentPage) {
                     const capturedItems = captureArticleTransitionItems(transitionSlug);
-                    updatePjaxContainerState(container, extractedHtml, url, pushState);
+                    updatePjaxContainerState(container, extractedHtml, url, pushState, pjaxUpdateOptions);
                     const preparedItems = prepareArticleTransitionTargets(transitionSlug, capturedItems);
 
                     if (preparedItems.length > 0) {
@@ -663,7 +686,7 @@
                         fallbackReason = 'current page does not expose a matching article transition source';
                     }
                     logArticleTransitionMode(url, transitionSlug, false, fallbackReason);
-                    updatePjaxContainerState(container, extractedHtml, url, pushState);
+                    updatePjaxContainerState(container, extractedHtml, url, pushState, pjaxUpdateOptions);
                     finalizePjaxLoad(url);
                 }
             } catch (error) {
