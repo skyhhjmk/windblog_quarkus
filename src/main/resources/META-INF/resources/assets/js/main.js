@@ -135,14 +135,48 @@
             }, 200);
         }
 
-        function scrollToTopInstantly() {
+        function normalizeScrollPosition(position) {
+            const left = Number(position && position.left);
+            const top = Number(position && position.top);
+            return {
+                left: Number.isFinite(left) ? Math.max(0, left) : 0,
+                top: Number.isFinite(top) ? Math.max(0, top) : 0
+            };
+        }
+
+        function getCurrentScrollPosition() {
+            return normalizeScrollPosition({
+                left: window.scrollX || 0,
+                top: window.scrollY || 0
+            });
+        }
+
+        function getHistoryScrollPosition(state) {
+            return normalizeScrollPosition(state && state.windblogScroll);
+        }
+
+        function scrollToPositionInstantly(position) {
             // An explicit instant behavior cancels any pending smooth scroll before
             // the target title is measured for the shared-element transition.
+            const scrollPosition = normalizeScrollPosition(position);
             window.scrollTo({
-                left: 0,
-                top: 0,
+                left: scrollPosition.left,
+                top: scrollPosition.top,
                 behavior: 'instant'
             });
+        }
+
+        function scrollToTopInstantly() {
+            scrollToPositionInstantly({ left: 0, top: 0 });
+        }
+
+        function replaceCurrentHistoryState(fields) {
+            const currentState = window.history.state;
+            const nextState = currentState && typeof currentState === 'object'
+                ? Object.assign({}, currentState)
+                : {};
+            Object.assign(nextState, fields || {});
+            window.history.replaceState(nextState, '', window.location.href);
         }
 
         function canUsePjax(anchor) {
@@ -171,6 +205,83 @@
             } catch (error) {
                 return false;
             }
+        }
+
+        const ARTICLE_LIST_RETURN_STORAGE_KEY = 'windblog:last-article-list-url';
+        let lastArticleListUrl = '';
+
+        function normalizeInternalUrl(url) {
+            if (typeof url !== 'string' || !url.trim()) {
+                return '';
+            }
+
+            try {
+                const parsedUrl = new URL(url, window.location.href);
+                if (parsedUrl.origin !== window.location.origin || parsedUrl.pathname.startsWith('/assets/')) {
+                    return '';
+                }
+                return parsedUrl.href;
+            } catch (error) {
+                return '';
+            }
+        }
+
+        function rememberArticleListUrl(url) {
+            const normalizedUrl = normalizeInternalUrl(url);
+            if (!normalizedUrl || isArticleDetailUrl(normalizedUrl)) {
+                return '';
+            }
+
+            lastArticleListUrl = normalizedUrl;
+            try {
+                window.sessionStorage.setItem(ARTICLE_LIST_RETURN_STORAGE_KEY, normalizedUrl);
+            } catch (error) {
+                // Storage can be unavailable in private browsing or embedded pages.
+            }
+            return normalizedUrl;
+        }
+
+        function getArticleListReturnUrl() {
+            const stateUrl = normalizeInternalUrl(
+                window.history.state && window.history.state.articleListReturnUrl
+            );
+            if (stateUrl && !isArticleDetailUrl(stateUrl)) {
+                return stateUrl;
+            }
+
+            if (lastArticleListUrl && !isArticleDetailUrl(lastArticleListUrl)) {
+                return lastArticleListUrl;
+            }
+
+            try {
+                const storedUrl = normalizeInternalUrl(
+                    window.sessionStorage.getItem(ARTICLE_LIST_RETURN_STORAGE_KEY)
+                );
+                if (storedUrl && !isArticleDetailUrl(storedUrl)) {
+                    lastArticleListUrl = storedUrl;
+                    return storedUrl;
+                }
+            } catch (error) {
+                // Storage can be unavailable in private browsing or embedded pages.
+            }
+
+            return '';
+        }
+
+        function areSameInternalUrls(firstUrl, secondUrl) {
+            const normalizedFirstUrl = normalizeInternalUrl(firstUrl);
+            const normalizedSecondUrl = normalizeInternalUrl(secondUrl);
+            return Boolean(normalizedFirstUrl && normalizedSecondUrl &&
+                normalizedFirstUrl === normalizedSecondUrl);
+        }
+
+        function updateArticleReturnLink() {
+            const returnUrl = isArticleDetailUrl(window.location.href)
+                ? (getArticleListReturnUrl() || '/')
+                : '/';
+            document.querySelectorAll('[data-article-return-link]').forEach(function (anchor) {
+                anchor.setAttribute('href', returnUrl);
+            });
         }
 
         function getArticleSlugFromUrl(url) {
@@ -238,16 +349,19 @@
         }
 
         function getCurrentArticleTransitionSlug() {
-            if (!isArticleDetailUrl(window.location.href)) {
-                return '';
-            }
-
-            const articleElement = document.querySelector('[data-article-transition-slug][data-article-transition-part="title"]');
+            // During popstate the URL changes before the old DOM is replaced.
+            // Read the detail-page h1 first so the reverse title transition can
+            // still find its source when navigating back to a list page.
+            const articleElement = document.querySelector('h1[data-article-transition-slug][data-article-transition-part="title"]');
             if (articleElement) {
                 const slug = articleElement.getAttribute('data-article-transition-slug');
                 if (slug) {
                     return slug;
                 }
+            }
+
+            if (!isArticleDetailUrl(window.location.href)) {
+                return '';
             }
 
             return getArticleSlugFromUrl(window.location.href);
@@ -257,9 +371,14 @@
             const targetIsPost = isArticleDetailUrl(url);
             const currentSlug = getCurrentArticleTransitionSlug();
             const clickedSlug = getClickedArticleTransitionSlug(anchor);
+            const historyTransitionSlug = window.history.state && window.history.state.articleTransitionSlug;
 
             if (targetIsPost && clickedSlug && hasArticleTransitionSource(document, clickedSlug)) {
                 return clickedSlug;
+            }
+
+            if (targetIsPost && historyTransitionSlug && hasArticleTransitionSource(document, historyTransitionSlug)) {
+                return historyTransitionSlug;
             }
 
             if (!targetIsPost && currentSlug && hasArticleTransitionSource(document, currentSlug)) {
@@ -308,15 +427,42 @@
                 }
             }
 
+            const shouldScrollToTop = !options || options.scrollToTop !== false;
             if (pushState) {
-                window.history.pushState({ pjax: true, url: url }, '', url);
-                if (!options || options.scrollToTop !== false) {
+                const sourceScrollPosition = normalizeScrollPosition(
+                    options && options.sourceScrollPosition
+                        ? options.sourceScrollPosition
+                        : getCurrentScrollPosition()
+                );
+                replaceCurrentHistoryState({ windblogScroll: sourceScrollPosition });
+
+                const nextHistoryState = {
+                    pjax: true,
+                    url: url,
+                    windblogScroll: shouldScrollToTop
+                        ? { left: 0, top: 0 }
+                        : sourceScrollPosition
+                };
+                if (options && options.articleListReturnUrl) {
+                    nextHistoryState.articleListReturnUrl = options.articleListReturnUrl;
+                    nextHistoryState.articleListReturnViaHistory = true;
+                }
+                if (options && options.transitionSlug) {
+                    nextHistoryState.articleTransitionSlug = options.transitionSlug;
+                }
+                window.history.pushState(nextHistoryState, '', url);
+
+                if (shouldScrollToTop) {
                     if (options && options.instantScroll) {
                         scrollToTopInstantly();
                     } else {
                         window.scrollTo(0, 0);
                     }
                 }
+            } else if (options && options.restoreScrollPosition) {
+                // The browser must not restore a history entry with the global
+                // smooth-scroll CSS rule. Restore the target entry explicitly.
+                scrollToPositionInstantly(options.restoreScrollPosition);
             }
 
             document.dispatchEvent(new CustomEvent('page:ready', { detail: { url: url } }));
@@ -628,18 +774,33 @@
             });
         }
 
-        async function loadByPjax(url, pushState, transitionSlug) {
+        async function loadByPjax(url, pushState, transitionSlug, navigationOptions) {
             const container = document.getElementById('pjax-container');
             if (!container) {
                 window.location.href = url;
                 return;
             }
 
+            const currentUrl = window.location.href;
+            const sourceScrollPosition = getCurrentScrollPosition();
+            const restoreScrollPosition = pushState
+                ? null
+                : getHistoryScrollPosition(window.history.state);
+            const enteringArticleFromList = isArticleDetailUrl(url) &&
+                !isArticleDetailUrl(currentUrl);
+            const articleListReturnUrl = enteringArticleFromList
+                ? rememberArticleListUrl(currentUrl)
+                : '';
             const instantScrollForArticleNavigation = isArticleDetailUrl(url) &&
-                !isArticleDetailUrl(window.location.href);
+                !isArticleDetailUrl(currentUrl);
             const pjaxUpdateOptions = {
                 scrollToTop: true,
-                instantScroll: instantScrollForArticleNavigation
+                instantScroll: instantScrollForArticleNavigation ||
+                    Boolean(navigationOptions && navigationOptions.instantScroll),
+                sourceScrollPosition: sourceScrollPosition,
+                restoreScrollPosition: restoreScrollPosition,
+                articleListReturnUrl: articleListReturnUrl,
+                transitionSlug: transitionSlug || ''
             };
 
             document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
@@ -942,8 +1103,18 @@
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
+        if ('scrollRestoration' in window.history) {
+            window.history.scrollRestoration = 'manual';
+        }
+
         if (!window.history.state) {
-            window.history.replaceState({ pjax: false, url: window.location.href }, '', window.location.href);
+            window.history.replaceState({
+                pjax: false,
+                url: window.location.href,
+                windblogScroll: getCurrentScrollPosition()
+            }, '', window.location.href);
+        } else if (!window.history.state.windblogScroll) {
+            replaceCurrentHistoryState({ windblogScroll: getCurrentScrollPosition() });
         }
 
         document.addEventListener('click', (event) => {
@@ -952,13 +1123,31 @@
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
             const anchor = event.target.closest('a');
+            const isArticleReturnNavigation = anchor &&
+                anchor.matches('[data-article-return-link]') &&
+                isArticleDetailUrl(window.location.href);
+            const currentHistoryState = window.history.state;
+            if (isArticleReturnNavigation &&
+                currentHistoryState &&
+                currentHistoryState.articleListReturnViaHistory &&
+                areSameInternalUrls(getArticleListReturnUrl(), currentHistoryState.articleListReturnUrl)) {
+                event.preventDefault();
+                window.history.back();
+                return;
+            }
+
             if (!canUsePjax(anchor)) return;
 
             const url = new URL(anchor.href, window.location.href);
             if (url.href === window.location.href) return;
 
             event.preventDefault();
-            loadByPjax(url.href, true, resolveArticleTransitionSlug(url.href, anchor));
+            loadByPjax(
+                url.href,
+                true,
+                resolveArticleTransitionSlug(url.href, anchor),
+                { instantScroll: isArticleReturnNavigation }
+            );
         });
 
         window.addEventListener('popstate', () => {
@@ -969,6 +1158,7 @@
             formatTimestamps();
             injectSidebar();
             decorateShortcutButtons();
+            updateArticleReturnLink();
             if (restoreMobileFocusOnPageReady) {
                 restoreMobileFocusOnPageReady = false;
                 closeMobileMenu(true);
