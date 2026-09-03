@@ -128,6 +128,10 @@ class AdminAuthorizationPolicyTest {
         assertEquals("region.delete", AdminAuthorizationPolicy.decide("DELETE", "/api/admin/regions/7").action());
         assertEquals("store.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/store").action());
         assertEquals("system.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/system/monitor").action());
+        assertEquals("codex_creator.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/codex-creator/config").action());
+        assertEquals("codex_creator.write", AdminAuthorizationPolicy.decide(
+                "PUT", "/api/admin/codex-creator/config").action());
         assertEquals("user.write", AdminAuthorizationPolicy.decide("PUT", "/api/admin/users/7").action());
         assertEquals("outbox.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/outbox").action());
         assertEquals("outbox.replay", AdminAuthorizationPolicy.decide(
@@ -137,6 +141,17 @@ class AdminAuthorizationPolicyTest {
     @Test
     void shouldKeepSensitiveResourceWritesBehindExplicitStepUpOrSuperAdmin() {
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/settings/site.confirm").superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.decide("PUT", "/api/admin/codex-creator/config").superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/codex-creator/config"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/codex-creator/config"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-runs"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/codex-creator/topic-runs"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/codex-creator/topic-automation"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/codex-creator/topic-automation"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-seeds"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/codex-creator/topic-seeds/7"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topics/7/review"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/codex-creator/topics/7/draft"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/permissions/roles/ADMIN").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/database/seed").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/dead-letters/7/retry").superAdminOnly());

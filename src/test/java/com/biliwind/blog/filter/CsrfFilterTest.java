@@ -39,6 +39,7 @@ class CsrfFilterTest {
         assertFalse(CsrfFilter.requiresCsrf("GET", "/api/comments"));
         assertFalse(CsrfFilter.requiresCsrf("OPTIONS", "/api/comments"));
         assertFalse(CsrfFilter.requiresCsrf("POST", "/api/admin/posts/7/publish"));
+        assertFalse(CsrfFilter.requiresCsrf("POST", "/api/internal/integrations/codex-creator/content"));
         assertFalse(CsrfFilter.requiresCsrf("POST", "/health"));
         assertFalse(CsrfFilter.requiresCsrf("POST", null));
         assertTrue(CsrfFilter.requiresCsrf("post", "/api/comments"));

@@ -54,6 +54,9 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/settings") && !"GET".equals(method)) {
             return true;
         }
+        if (path.startsWith("/api/admin/codex-creator/config") && !"GET".equals(method)) {
+            return true;
+        }
         if (path.startsWith("/api/admin/outbox") && !"GET".equals(method)) {
             return true;
         }
@@ -71,6 +74,9 @@ public final class AdminAuthorizationPolicy {
             return true;
         }
         if (isHighRiskOperationalAction(method, path)) {
+            return true;
+        }
+        if (path.startsWith("/api/admin/codex-creator") && !"GET".equals(method)) {
             return true;
         }
         if ("media.download_original".equals(action)) {
@@ -243,6 +249,9 @@ public final class AdminAuthorizationPolicy {
         }
         if (path.startsWith("/api/admin/settings")) {
             return "GET".equals(method) ? "settings.read" : "settings.write";
+        }
+        if (path.startsWith("/api/admin/codex-creator")) {
+            return "GET".equals(method) ? "codex_creator.read" : "codex_creator.write";
         }
         if ("GET".equals(method)) {
             return resource + ".read";

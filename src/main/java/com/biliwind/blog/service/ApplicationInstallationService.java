@@ -5,6 +5,7 @@ import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.controller.api.admin.dto.AdminInstallRequest;
 import com.biliwind.blog.model.ApplicationInstallation;
 import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.model.UploadRole;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -74,6 +75,12 @@ public class ApplicationInstallationService {
             throw new InstallationValidationException("用户名或邮箱已被占用");
         }
 
+        // users.role_name references upload_roles.name.  A fresh database does not
+        // have the default upload roles yet, so create and flush them before the
+        // first SUPER_ADMIN user is inserted.
+        uploadRoleService.ensureDefaults();
+        UploadRole.getEntityManager().flush();
+
         User admin = new User();
         OffsetDateTime now = OffsetDateTime.now();
         admin.username = request.username().trim();
@@ -86,7 +93,6 @@ public class ApplicationInstallationService {
         admin.persist();
 
         updateSiteInfo(request);
-        uploadRoleService.ensureDefaults();
         markInstalled(state, admin.id);
     }
 

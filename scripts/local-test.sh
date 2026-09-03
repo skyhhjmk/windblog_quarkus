@@ -51,14 +51,40 @@ export WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED="${WINDBLOG_CODEX_CREATOR_EVENTS_EN
 export WINDBLOG_CODEX_CREATOR_PREFER="${WINDBLOG_CODEX_CREATOR_PREFER:-true}"
 export KIBANA_SERVICE_ACCOUNT_TOKEN="${KIBANA_SERVICE_ACCOUNT_TOKEN:-local-test-bootstrap-token}"
 
-if [[ -z "${WINDBLOG_CODEX_CREATOR_SHARED_SECRET:-}" ]]; then
+# The Codex process runs inside a container. A host proxy advertised as
+# 127.0.0.1/localhost therefore points back to the container itself. Translate
+# only the host-loopback part and keep an explicitly supplied CODEX_* value
+# authoritative. The host proxy is optional; direct egress remains supported.
+translate_host_proxy() {
+  local proxy="${1:-}"
+  if [[ "${proxy}" =~ ^([^:/]+://)(127\.0\.0\.1|localhost)(:.*)$ ]]; then
+    printf '%s%s%s' "${BASH_REMATCH[1]}" "${CODEX_CREATOR_PROXY_HOSTNAME:-host.containers.internal}" "${BASH_REMATCH[3]}"
+  else
+    printf '%s' "${proxy}"
+  fi
+}
+
+if [[ -z "${CODEX_CREATOR_HTTP_PROXY:-}" && -n "${HTTP_PROXY:-}" ]]; then
+  export CODEX_CREATOR_HTTP_PROXY="$(translate_host_proxy "${HTTP_PROXY}")"
+fi
+if [[ -z "${CODEX_CREATOR_HTTPS_PROXY:-}" && -n "${HTTPS_PROXY:-}" ]]; then
+  export CODEX_CREATOR_HTTPS_PROXY="$(translate_host_proxy "${HTTPS_PROXY}")"
+fi
+if [[ -z "${CODEX_CREATOR_ALL_PROXY:-}" && -n "${ALL_PROXY:-}" ]]; then
+  export CODEX_CREATOR_ALL_PROXY="$(translate_host_proxy "${ALL_PROXY}")"
+fi
+if [[ -z "${CODEX_CREATOR_NO_PROXY:-}" && -n "${NO_PROXY:-}" ]]; then
+  export CODEX_CREATOR_NO_PROXY="${NO_PROXY}"
+fi
+
+if [[ -z "${CODEX_CREATOR_INTERNAL_SHARED_SECRET:-}" ]]; then
   secret_file="${DATA_DIR}/codex-integration-secret"
   if [[ ! -s "${secret_file}" ]]; then
     mkdir -p "${DATA_DIR}"
     umask 077
     openssl rand -hex 32 >"${secret_file}"
   fi
-  export WINDBLOG_CODEX_CREATOR_SHARED_SECRET="$(<"${secret_file}")"
+  export CODEX_CREATOR_INTERNAL_SHARED_SECRET="$(<"${secret_file}")"
 fi
 
 compose_args=(

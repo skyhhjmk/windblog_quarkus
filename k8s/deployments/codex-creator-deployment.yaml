@@ -74,6 +74,15 @@ spec:
                 secretKeyRef:
                   name: codex-creator-secrets
                   key: mcp-bearer-token
+            - name: CODEX_CREATOR_WINDBLOG_ENDPOINT
+              value: http://windblog
+            - name: CODEX_CREATOR_WINDBLOG_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: codex-creator-secrets
+                  key: internal-shared-secret
+            - name: CODEX_CREATOR_WINDBLOG_MAX_IMAGE_BYTES
+              value: "8388608"
             - name: CODEX_APP_SERVER_ENABLED
               value: "true"
             - name: CODEX_COMMAND

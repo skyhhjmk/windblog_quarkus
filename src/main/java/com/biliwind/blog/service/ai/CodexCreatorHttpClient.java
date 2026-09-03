@@ -17,6 +17,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +31,9 @@ public class CodexCreatorHttpClient {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    CodexCreatorConnectionService connectionService;
 
     @ConfigProperty(name = "windblog.ai.codex-creator.endpoint", defaultValue = "http://codex-creator:8681")
     String configuredEndpoint;
@@ -64,16 +68,33 @@ public class CodexCreatorHttpClient {
     }
 
     public CompletionStage<Void> publishEvent(CodexCreatorIntegrationEvent event) {
-        String secret = configuredSecret.orElse("");
+        CodexCreatorConnectionService.ConnectionSettings connection = connectionService.current();
+        String secret = connection.sharedSecret();
         if (secret.isBlank()) return CompletableFuture.failedFuture(new IllegalStateException(
                 "Codex Creator shared secret is not configured"));
-        return send(baseEndpoint(configuredEndpoint) + "/api/internal/integrations/windblog/events", event, secret)
+        return send(connection.endpoint() + "/api/internal/integrations/windblog/events", event, secret)
                 .thenApply(ignored -> null);
+    }
+
+    /** Calls the HMAC-only topic/article command boundary; the browser never sees this credential. */
+    public CompletionStage<JsonNode> topicCommand(String command, Object payload,
+                                                   String actorId, String traceId) {
+        CodexCreatorConnectionService.ConnectionSettings connection = connectionService.current();
+        String secret = connection.sharedSecret();
+        if (secret.isBlank()) return CompletableFuture.failedFuture(new IllegalStateException(
+                "Codex Creator shared secret is not configured"));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("command", command);
+        body.put("payload", payload == null ? Map.of() : payload);
+        body.put("actorId", actorId == null || actorId.isBlank() ? "WIND_BLOG" : actorId);
+        body.put("traceId", traceId == null || traceId.isBlank() ? UUID.randomUUID().toString() : traceId);
+        return send(connection.endpoint() + "/api/internal/integrations/windblog/topic-automation", body, secret);
     }
 
     public CompletionStage<JsonNode> status() {
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(baseEndpoint(configuredEndpoint) + "/internal/health"))
+            CodexCreatorConnectionService.ConnectionSettings connection = connectionService.current();
+            HttpRequest request = HttpRequest.newBuilder(URI.create(connection.endpoint() + "/internal/health"))
                     .timeout(Duration.ofSeconds(10)).GET().build();
             return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenCompose(response -> {

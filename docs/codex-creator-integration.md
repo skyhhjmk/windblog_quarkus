@@ -6,12 +6,16 @@ Codex Creator 作为独立仓库 `codex-creator` 挂载在本仓库的 `codex-cr
 
 - 运行时：`POST /api/v1/runtime/infer`，字段为 `operation`、`profileId`、`input`、`idempotencyKey`、`traceId`、`promptVersion`。
 - 事件：`POST /api/internal/integrations/windblog/events`，Outbox 只发布 `comment.created`、`link.application.created`、`link.monitor.completed`、`post.revision.updated`、`post.published`。
+- 内容工具：Codex app-server 通过私有 `/mcp` 只获得 `windblog.list_categories`、`windblog.create_category`、`windblog.update_category`、`windblog.list_tags`、`windblog.create_tag`、`windblog.update_tag` 和 `windblog.upload_image`。这些工具再调用 WindBlog 的签名接口 `POST /api/internal/integrations/codex-creator/content`；分类、标签和图片写入均有父服务幂等记录。没有删除、任意 URL、shell、SQL 或文件写入工具。
+- 图片：`windblog.upload_image` 只接收 PNG、JPEG、GIF 或 WebP 的 base64 字节；WindBlog 会重新校验 MIME、Magic Number、病毒扫描和大小，并强制保存 `aiUploaded=true`、`uploadSource=CODEX_CREATOR`、`generationMethod=CODEX_APP_SERVER` 元数据。普通管理员上传不会自动带这个标记。
 - 签名：`X-Codex-Client-Id`、`X-Codex-Timestamp`、`X-Codex-Nonce`、`X-Codex-Body-SHA256`、`X-Codex-Signature`。签名 canonical string 为 `timestamp + "\\n" + nonce + "\\n" + bodySha256 + "\\n" + clientId`，HMAC-SHA256 输出 hex。时间窗和 nonce 防重放，不能复用管理员 JWT。
 - 来源：`post_ai_metadata` 保存任务、模型、思考级别、生成方式、来源和自动发布状态；AI 专区依赖这些系统级元数据，不依赖特殊分类。
 
 ## 安全与部署
 
 Compose/Kubernetes 默认只在内部网络暴露 `codex-creator:8681`，不配置公网端口。OpenAPI/Swagger、管理 API 和 `/mcp` 均为私有面；如确需访问，运维人员必须手工建立带源地址 allowlist、VPN/认证、有效期和撤销记录的 APISIX 路由。
+
+根 Compose 使用 `CODEX_CREATOR_INTERNAL_SHARED_SECRET` 作为宿主机 `.env` 中的唯一 HMAC 来源，并将同一个值分别注入 WindBlog 的 `WINDBLOG_CODEX_CREATOR_SHARED_SECRET` 和 Codex Creator 的 `CODEX_CREATOR_INTERNAL_SHARED_SECRET` 容器变量。不要再在根 `.env` 中维护两个不同名称的值；修改后需要重建两个应用容器。
 
 在已有 PostgreSQL 卷上切换 `pgvector/pg18` 前，按仓库内的 [Codex Creator 部署手册](../codex-creator/docs/runbook.md) 完成备份和回滚演练。新卷初始化脚本以及 Compose/Kubernetes 的幂等启动初始化都会确保 `codex_creator` 存在并在该数据库执行 `CREATE EXTENSION vector`；不会修改 WindBlog 既有表，也不会删除数据卷。
 

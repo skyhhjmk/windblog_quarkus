@@ -111,4 +111,9 @@
     <include file="db/migration/108-create-application-installation.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/109-create-post-ai-metadata.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/110-add-post-repost-policy.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/111-seed-admin-codex-creator-permission.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/112-create-codex-creator-draft-assignments.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/113-seed-admin-codex-creator-write-permission.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/114-create-codex-creator-content-operations.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/115-allow-codex-category-selection.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

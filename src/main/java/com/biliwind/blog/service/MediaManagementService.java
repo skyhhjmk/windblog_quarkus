@@ -49,6 +49,8 @@ public class MediaManagementService {
     );
     // 需要手动加载原图的大小阈值（5MB）
     private static final long MANUAL_LOAD_THRESHOLD_BYTES = 5L * 1024L * 1024L;
+    private static final Set<String> CODEX_IMAGE_MIME_TYPES = Set.of(
+            "image/png", "image/jpeg", "image/gif", "image/webp");
 
     // 识别 Markdown 和 HTML 中 URL 的正则表达式
     private static final Pattern URL_PATTERN = Pattern.compile(
@@ -447,13 +449,63 @@ public class MediaManagementService {
         // 计算当前用户已使用的存储空间
         long currentUsage = sumUsage(operator.id);
 
+        return storeUploadedMediaInternal(source, sanitizedFileName, normalizedMime, operator.id,
+                role.maxSingleUploadBytes, currentUsage, role.maxTotalUploadBytes, new HashMap<>());
+    }
+
+    /**
+     * Stores an image through the private Codex Creator integration boundary.
+     * This path deliberately has no browser user identity and does not accept
+     * caller metadata; the AI marker is supplied by the WindBlog boundary.
+     */
+    public Media storeCodexUploadedImage(InputStream source, String fileName, String mimeType,
+                                         long declaredSize, long maxBytes,
+                                         Map<String, Object> forcedMetadata) {
+        edgeWriteGuard.rejectWriteOnEdge("保存 Codex AI 图片");
+        if (source == null) {
+            throw new BadRequestException("图片内容不能为空");
+        }
+        if (maxBytes <= 0) {
+            throw new IllegalStateException("Codex 图片大小限制未配置");
+        }
+        String sanitizedFileName = sanitizeFileName(fileName);
+        validateExtension(sanitizedFileName);
+        String normalizedMime = (mimeType == null || mimeType.isBlank())
+                ? "" : mimeType.trim().toLowerCase(Locale.ROOT);
+        if (!CODEX_IMAGE_MIME_TYPES.contains(normalizedMime)) {
+            throw new BadRequestException("Codex 只允许上传 PNG、JPEG、GIF 或 WebP 图片");
+        }
+        if (declaredSize <= 0 || declaredSize > maxBytes) {
+            throw new BadRequestException("图片大小超出 Codex 上传限制");
+        }
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (forcedMetadata != null) {
+            metadata.putAll(forcedMetadata);
+        }
+        // These values are authoritative and cannot be removed or replaced by
+        // an integration caller. Ordinary browser uploads use the other path
+        // and therefore remain unmarked.
+        metadata.put("aiUploaded", true);
+        metadata.put("uploadSource", "CODEX_CREATOR");
+        metadata.put("generationMethod", "CODEX_APP_SERVER");
+        return storeUploadedMediaInternal(source, sanitizedFileName, normalizedMime, null,
+                maxBytes, 0L, null, metadata);
+    }
+
+    private Media storeUploadedMediaInternal(InputStream source, String sanitizedFileName,
+                                             String normalizedMime, Long operatorId,
+                                             Long maxSingleUploadBytes, long currentUsage,
+                                             Long maxTotalUploadBytes,
+                                             Map<String, Object> metadata) {
+
         String extension = extractExtension(sanitizedFileName);
         // 使用 UUID 生成唯一的存储键，防止文件名冲突
         String storageKey = UUID.randomUUID().toString() + extension;
         Path target = uploadRoot.resolve(storageKey);
         // 写入文件到磁盘
         try (OutputStream output = Files.newOutputStream(target, StandardOpenOption.CREATE_NEW)) {
-            copySourceWithinLimit(source, output, role.maxSingleUploadBytes);
+            copySourceWithinLimit(source, output, maxSingleUploadBytes);
         } catch (IOException e) {
             deleteTarget(target);
             throw new IllegalStateException("写入媒体文件失败", e);
@@ -495,21 +547,20 @@ public class MediaManagementService {
         }
 
         // 验证单文件大小限制
-        if (role.maxSingleUploadBytes != null && role.maxSingleUploadBytes > 0 && size > role.maxSingleUploadBytes) {
+        if (maxSingleUploadBytes != null && maxSingleUploadBytes > 0 && size > maxSingleUploadBytes) {
             deleteTarget(target);
             throw new BadRequestException("单文件大小超出限制");
         }
         // 验证总上传大小限制
-        if (role.maxTotalUploadBytes != null && role.maxTotalUploadBytes > 0
-                && currentUsage + size > role.maxTotalUploadBytes) {
+        if (maxTotalUploadBytes != null && maxTotalUploadBytes > 0
+                && currentUsage + size > maxTotalUploadBytes) {
             deleteTarget(target);
             throw new BadRequestException("总上传大小超出限制");
         }
 
-        Map<String, Object> metadata = new HashMap<>();
         MediaManagementService transactionalSelf = selfProxy.get();
         Media media = transactionalSelf.createPendingUploadedMedia(
-                storageKey, normalizedMime, sanitizedFileName, size, operator.id, metadata,
+                storageKey, normalizedMime, sanitizedFileName, size, operatorId, metadata,
                 toVirusScanStatus(virusScanResult.status()), OffsetDateTime.now(),
                 sanitizeVirusScanMessage(virusScanResult));
 
@@ -1316,7 +1367,8 @@ public class MediaManagementService {
         }
         Set<String> allowedKeys = Set.of(
                 "placeholderUrl", "webpUrl", "coverUrl", "width", "height",
-                "importStatus", "importError", "lastRetryAt", "processingWarning");
+                "importStatus", "importError", "lastRetryAt", "processingWarning",
+                "aiUploaded", "uploadSource", "generationMethod");
         Map<String, Object> result = new LinkedHashMap<>();
         for (String key : allowedKeys) {
             if (metadata.containsKey(key)) {

@@ -472,6 +472,7 @@ env_generate() {
   ensure_env_value ADMIN_JWT_SECRET "$(generate_secret 32)" true
   ensure_env_value USER_JWT_SECRET "$(generate_secret 32)" true
   ensure_env_value SECURITY_EVENT_HASH_SECRET "$(generate_secret 32)" true
+  ensure_env_value CODEX_CREATOR_INTERNAL_SHARED_SECRET "$(generate_secret 32)" true
   ensure_env_value KIBANA_ENCRYPTION_KEY "$(generate_secret 32)" true
   ensure_env_value KIBANA_REPORTING_KEY "$(generate_secret 32)" true
   ensure_env_value GRPC_SERVER_TRUST_STORE_PASSWORD "$trust_password" true
@@ -615,6 +616,7 @@ env_check() {
   env_check_key ADMIN_JWT_SECRET 32 || failed=1
   env_check_key USER_JWT_SECRET 32 || failed=1
   env_check_key SECURITY_EVENT_HASH_SECRET 32 || failed=1
+  env_check_key CODEX_CREATOR_INTERNAL_SHARED_SECRET 32 || failed=1
   env_check_key GRPC_SERVER_TRUST_STORE_PASSWORD 16 || failed=1
 
   if [[ "$(read_env_value RABBITMQ_DEFAULT_PASS)" != "$(read_env_value RABBITMQ_PASSWORD)" ]]; then

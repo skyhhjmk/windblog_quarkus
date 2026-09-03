@@ -57,33 +57,39 @@ public class AuditService {
             return;
         }
 
-        if (auditRequestContext.getRequestId() != null && !auditRequestContext.getRequestId().isBlank()) {
-            auditLog.requestId = auditRequestContext.getRequestId();
-        }
+        try {
+            if (auditRequestContext.getRequestId() != null && !auditRequestContext.getRequestId().isBlank()) {
+                auditLog.requestId = auditRequestContext.getRequestId();
+            }
 
-        if (auditRequestContext.getRequestMethod() != null && !auditRequestContext.getRequestMethod().isBlank()) {
-            auditLog.requestMethod = auditRequestContext.getRequestMethod();
-        }
+            if (auditRequestContext.getRequestMethod() != null && !auditRequestContext.getRequestMethod().isBlank()) {
+                auditLog.requestMethod = auditRequestContext.getRequestMethod();
+            }
 
-        if (auditRequestContext.getRequestPath() != null && !auditRequestContext.getRequestPath().isBlank()) {
-            auditLog.requestPath = auditRequestContext.getRequestPath();
-        }
+            if (auditRequestContext.getRequestPath() != null && !auditRequestContext.getRequestPath().isBlank()) {
+                auditLog.requestPath = auditRequestContext.getRequestPath();
+            }
 
-        if (auditRequestContext.getClientIp() != null && !auditRequestContext.getClientIp().isBlank()) {
-            auditLog.clientIp = auditRequestContext.getClientIp();
-        }
+            if (auditRequestContext.getClientIp() != null && !auditRequestContext.getClientIp().isBlank()) {
+                auditLog.clientIp = auditRequestContext.getClientIp();
+            }
 
-        if (auditRequestContext.getUserAgent() != null && !auditRequestContext.getUserAgent().isBlank()) {
-            auditLog.userAgent = auditRequestContext.getUserAgent();
+            if (auditRequestContext.getUserAgent() != null && !auditRequestContext.getUserAgent().isBlank()) {
+                auditLog.userAgent = auditRequestContext.getUserAgent();
+            }
+        } catch (RuntimeException ignored) {
+            // Background jobs do not have a request-scoped audit context.
         }
     }
 
     private Long resolveCurrentUserId() {
-        AdminRequestContext adminRequestContext = resolveAdminRequestContext();
-        if (adminRequestContext == null) {
+        try {
+            AdminRequestContext adminRequestContext = resolveAdminRequestContext();
+            return adminRequestContext == null ? null : adminRequestContext.getUserId();
+        } catch (RuntimeException ignored) {
+            // Background jobs carry their operator explicitly when needed.
             return null;
         }
-        return adminRequestContext.getUserId();
     }
 
     private AdminRequestContext resolveAdminRequestContext() {

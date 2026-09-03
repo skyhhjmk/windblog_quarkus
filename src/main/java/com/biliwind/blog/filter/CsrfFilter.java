@@ -67,6 +67,11 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
             return false;
         }
         String normalizedPath = normalizePath(path);
+        // This endpoint is authenticated by the signed service-to-service
+        // contract and is never called from a browser session.
+        if (normalizedPath.startsWith("/api/internal/integrations/codex-creator/")) {
+            return false;
+        }
         return (normalizedPath.startsWith("/api/") && !normalizedPath.startsWith("/api/admin/"))
                 || normalizedPath.startsWith("/user/api/");
     }

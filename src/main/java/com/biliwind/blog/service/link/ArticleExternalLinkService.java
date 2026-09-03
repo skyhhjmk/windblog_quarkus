@@ -220,6 +220,9 @@ public class ArticleExternalLinkService {
         link.sortOrder = 0;
         link.type = LinkType.EXTERNAL_ARTICLE;
         link.status = 1;
+        link.applicationStatus = 1;
+        link.availabilityStatus = "UNKNOWN";
+        link.backlinkStatus = "UNKNOWN";
         link.target = "_blank";
         link.redirectType = 2;
         link.showUrl = true;
