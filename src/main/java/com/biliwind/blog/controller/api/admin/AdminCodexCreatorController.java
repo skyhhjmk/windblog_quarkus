@@ -155,6 +155,23 @@ public class AdminCodexCreatorController {
         return proxy("models.list", Map.of());
     }
 
+    @GET @Path("/test-servers")
+    @Operation(summary = "查询 AI 测试服务器")
+    public CompletionStage<Response> testServers() { return proxy("test-servers.list", Map.of()); }
+
+    @GET @Path("/test-servers/setup-guide")
+    @Operation(summary = "查询 AI 测试服务器接入说明")
+    public CompletionStage<Response> testServerSetupGuide() { return proxy("test-servers.setup-guide", Map.of()); }
+
+    @POST @Path("/test-servers")
+    public CompletionStage<Response> createTestServer(Map<String,Object> payload) { return proxy("test-servers.create", payload == null ? Map.of() : payload); }
+
+    @PUT @Path("/test-servers/{id}")
+    public CompletionStage<Response> updateTestServer(@PathParam("id") Long id, Map<String,Object> payload) { Map<String,Object> p=new LinkedHashMap<>(payload == null ? Map.of() : payload); p.put("id",id); return proxy("test-servers.update",p); }
+
+    @DELETE @Path("/test-servers/{id}")
+    public CompletionStage<Response> deleteTestServer(@PathParam("id") Long id) { return proxy("test-servers.delete", Map.of("id",id)); }
+
     @GET
     @Path("/topic-runs/{id}")
     @Operation(summary = "查询 AI 主题发现运行")
@@ -207,8 +224,10 @@ public class AdminCodexCreatorController {
         String instructions = payload == null ? null : value(payload.get("instructions"));
         String profileId = payload == null ? null : value(payload.get("profileId"));
         Long categoryId = longValue(payload == null ? null : payload.get("categoryId"));
+        boolean requiresPracticalVerification = payload != null && Boolean.TRUE.equals(booleanValue(payload.get("requiresPracticalVerification")));
+        java.util.List<Long> testServerIds = payload == null ? java.util.List.of() : longList(payload.get("testServerIds"));
         try {
-            return draftService.start(id, categoryId, language, instructions, profileId,
+            return draftService.start(id, categoryId, language, instructions, profileId, requiresPracticalVerification, testServerIds,
                             adminRequestContext.getUserId(), traceId())
                     .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
                     .exceptionally(error -> serviceUnavailable(error));
@@ -292,6 +311,11 @@ public class AdminCodexCreatorController {
         if (value instanceof Number number) return number.longValue();
         try { return Long.parseLong(String.valueOf(value)); }
         catch (NumberFormatException ignored) { return null; }
+    }
+
+    private static java.util.List<Long> longList(Object value) {
+        if (!(value instanceof java.util.List<?> values)) return java.util.List.of();
+        return values.stream().map(AdminCodexCreatorController::longValue).filter(java.util.Objects::nonNull).distinct().toList();
     }
 
     private String actorId() {

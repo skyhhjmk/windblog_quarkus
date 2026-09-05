@@ -87,6 +87,18 @@ if [[ -z "${CODEX_CREATOR_INTERNAL_SHARED_SECRET:-}" ]]; then
   export CODEX_CREATOR_INTERNAL_SHARED_SECRET="$(<"${secret_file}")"
 fi
 
+# Keep the test-server key encryption secret in the isolated test data directory;
+# it must survive container recreation but never be committed to the repository.
+if [[ -z "${CODEX_CREATOR_TEST_SERVER_ENCRYPTION_SECRET:-}" ]]; then
+  test_server_secret_file="${DATA_DIR}/test-server-encryption-secret"
+  if [[ ! -s "${test_server_secret_file}" ]]; then
+    mkdir -p "${DATA_DIR}"
+    umask 077
+    openssl rand -hex 32 >"${test_server_secret_file}"
+  fi
+  export CODEX_CREATOR_TEST_SERVER_ENCRYPTION_SECRET="$(<"${test_server_secret_file}")"
+fi
+
 compose_args=(
   compose -p windblog-codex-test --profile security
   -f docker-compose.yml

@@ -93,6 +93,13 @@ public class CodexCreatorDraftService {
     public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
                                                       String language, String instructions, String profileId,
                                                       Long operatorId, String traceId) {
+        return start(topicId, categoryId, language, instructions, profileId, false, List.of(), operatorId, traceId);
+    }
+
+    public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
+                                                      String language, String instructions, String profileId,
+                                                      boolean requiresPracticalVerification, List<Long> testServerIds,
+                                                      Long operatorId, String traceId) {
         validateRequest(topicId, categoryId, language, instructions, operatorId);
         String normalizedLanguage = normalizeLanguage(language);
         String normalizedInstructions = instructions == null ? "" : instructions.trim();
@@ -123,6 +130,8 @@ public class CodexCreatorDraftService {
         payload.put("language", normalizedLanguage);
         payload.put("instructions", normalizedInstructions);
         payload.put("requestKey", requestKey);
+        payload.put("requiresPracticalVerification", requiresPracticalVerification);
+        payload.put("testServerIds", testServerIds == null ? List.of() : testServerIds);
         if (!normalizedProfileId.isBlank()) payload.put("profileId", normalizedProfileId);
         return client.topicCommand("article.start", payload,
                         "windblog-admin:" + operatorId, traceId)
