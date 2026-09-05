@@ -91,12 +91,14 @@ public class CodexCreatorDraftService {
     Instance<CodexCreatorDraftService> self;
 
     public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
-                                                      String language, String instructions,
+                                                      String language, String instructions, String profileId,
                                                       Long operatorId, String traceId) {
         validateRequest(topicId, categoryId, language, instructions, operatorId);
         String normalizedLanguage = normalizeLanguage(language);
         String normalizedInstructions = instructions == null ? "" : instructions.trim();
-        String requestKey = requestKey(topicId, categoryId, normalizedLanguage, normalizedInstructions);
+        String normalizedProfileId = profileId == null ? "" : profileId.trim();
+        String requestKey = requestKey(topicId, categoryId, normalizedLanguage,
+                normalizedInstructions + "\nmodel=" + normalizedProfileId);
         CodexCreatorDraftAssignment assignment;
         try {
             assignment = self.get().ensureAssignment(
@@ -121,6 +123,7 @@ public class CodexCreatorDraftService {
         payload.put("language", normalizedLanguage);
         payload.put("instructions", normalizedInstructions);
         payload.put("requestKey", requestKey);
+        if (!normalizedProfileId.isBlank()) payload.put("profileId", normalizedProfileId);
         return client.topicCommand("article.start", payload,
                         "windblog-admin:" + operatorId, traceId)
                 .thenCompose(response -> {
@@ -140,12 +143,30 @@ public class CodexCreatorDraftService {
                 });
     }
 
+    public CompletionStage<Map<String, Object>> regenerate(Long topicId, String profileId,
+                                                            Long operatorId, String traceId) {
+        if (topicId == null || topicId <= 0) throw new BadRequestException("话题不能为空");
+        if (operatorId == null) throw new jakarta.ws.rs.WebApplicationException("未登录", 401);
+        CodexCreatorDraftAssignment assignment = self.get().prepareRegeneration(topicId, operatorId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", assignment.codexJobId);
+        if (profileId != null && !profileId.isBlank()) payload.put("profileId", profileId.trim());
+        return client.topicCommand("article.regenerate", payload,
+                        "windblog-admin:" + operatorId, traceId)
+                .thenApply(response -> {
+                    JsonNode data = data(response);
+                    requireRemoteJobId(data);
+                    self.get().recordRemoteJob(assignment.id, data);
+                    return self.get().viewById(assignment.id);
+                })
+                .exceptionallyCompose(error -> {
+                    self.get().markFailed(assignment.id, rootMessage(error));
+                    return CompletableFuture.failedFuture(unwrap(error));
+                });
+    }
+
     public CompletionStage<Map<String, Object>> refresh(Long assignmentId, Long operatorId, String traceId) {
         CodexCreatorDraftAssignment assignment = self.get().loadAssignment(assignmentId);
-        if (assignment.postId != null) {
-            return acknowledgeRemoteDraft(assignment.codexJobId, assignment.postId, assignment,
-                    operatorId, traceId);
-        }
         if ("DRAFT_CREATED".equals(assignment.status)) {
             return CompletableFuture.completedFuture(view(assignment));
         }
@@ -165,11 +186,21 @@ public class CodexCreatorDraftService {
                     if (!"SUCCEEDED".equals(status)) {
                         return CompletableFuture.completedFuture(self.get().viewById(assignment.id));
                     }
-                    Map<String, Object> created = self.get().finalizeDraft(assignment.id, data);
-                    Long postId = number(created.get("postId"));
-                    return acknowledgeRemoteDraft(assignment.codexJobId, postId, assignment,
-                                    operatorId, traceId)
-                            .thenApply(ignored -> created);
+                    try {
+                        Map<String, Object> created = self.get().finalizeDraft(assignment.id, data);
+                        Long postId = number(created.get("postId"));
+                        return acknowledgeRemoteDraft(assignment.codexJobId, postId, assignment,
+                                        operatorId, traceId)
+                                .thenApply(ignored -> created);
+                    } catch (RuntimeException exception) {
+                        self.get().markFailed(assignment.id, rootMessage(exception));
+                        if (assignment.postId == null) {
+                            return CompletableFuture.failedFuture(exception);
+                        }
+                        return acknowledgeRemoteDraft(assignment.codexJobId, assignment.postId, assignment,
+                                        operatorId, traceId)
+                                .thenCompose(ignored -> CompletableFuture.failedFuture(exception));
+                    }
                 });
     }
 
@@ -181,6 +212,31 @@ public class CodexCreatorDraftService {
     @Transactional
     CodexCreatorDraftAssignment loadAssignment(Long id) {
         return findAssignment(id);
+    }
+
+    @Transactional
+    CodexCreatorDraftAssignment prepareRegeneration(Long topicId, Long operatorId) {
+        CodexCreatorDraftAssignment assignment = CodexCreatorDraftAssignment.<CodexCreatorDraftAssignment>find(
+                        "topicId = ?1 order by createdAt desc", topicId)
+                .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
+        if (assignment == null || assignment.codexJobId == null || assignment.postId == null) {
+            throw new BadRequestException("该话题没有可重新生成的草稿任务");
+        }
+        if (!"DRAFT_CREATED".equals(assignment.status)) {
+            throw new BadRequestException("草稿正在生成，请等待当前任务完成");
+        }
+        Post post = Post.find("id = ?1", assignment.postId)
+                .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
+        if (post == null) throw new NotFoundException("原草稿不存在");
+        if (post.status != PostStatus.DRAFT) {
+            throw new BadRequestException("仅草稿状态的文章可以重新生成");
+        }
+        assignment.status = "REGENERATING";
+        assignment.errorMessage = null;
+        assignment.updatedAt = OffsetDateTime.now();
+        auditService.log("post", post.id, "codex_creator_draft_regenerate_requested", null,
+                Map.of("topicId", topicId, "codexJobId", assignment.codexJobId), null, operatorId);
+        return assignment;
     }
 
     @Transactional
@@ -240,12 +296,13 @@ public class CodexCreatorDraftService {
         CodexCreatorDraftAssignment assignment = CodexCreatorDraftAssignment.find("id", assignmentId)
                 .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
         if (assignment == null) throw new NotFoundException("草稿任务不存在");
-        if (assignment.postId != null) return view(assignment);
+        boolean regeneration = assignment.postId != null;
         JsonNode content = jobData.path("content");
         String title = text(content, "title", 160, true);
         String summary = text(content, "summary", 2_000, false);
         String markdown = text(content, "contentMarkdown", 100_000, true);
         JsonNode provenance = jobData.path("provenance");
+        requireQualityContract(jobData);
         User operator = User.find("id = ?1 and status = 1 and deletedAt is null", assignment.createdBy).firstResult();
         if (operator == null) throw new jakarta.ws.rs.WebApplicationException("管理员不存在或已禁用", 401);
         Category category = resolveCategory(assignment, jobData);
@@ -253,21 +310,31 @@ public class CodexCreatorDraftService {
         OffsetDateTime now = OffsetDateTime.now();
         Map<String, String> titleMap = Map.of(assignment.language, title);
         Map<String, String> summaryMap = summary.isBlank() ? Map.of() : Map.of(assignment.language, summary);
-        Post post = new Post();
-        post.slug = uniqueSlug(title, assignment.id);
+        Post post;
+        if (regeneration) {
+            post = Post.find("id = ?1", assignment.postId)
+                    .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
+            if (post == null) throw new NotFoundException("原草稿不存在");
+            if (post.status != PostStatus.DRAFT) {
+                throw new BadRequestException("原文章已不再是草稿，拒绝覆盖其当前修订");
+            }
+        } else {
+            post = new Post();
+            post.slug = uniqueSlug(title, assignment.id);
+            post.status = PostStatus.DRAFT;
+            post.visibility = 0;
+            post.renderType = PostRenderType.MARKDOWN;
+            post.user = operator;
+            post.createdAt = now;
+            post.contentDeclarations = DECLARATIONS;
+            post.repostPolicyCode = repostPolicyCatalog.require(null).code();
+        }
         post.title = titleMap;
         post.summary = summaryMap;
         post.aiSummary = summaryMap;
         post.aiSummaryStatus = 1;
-        post.status = PostStatus.DRAFT;
-        post.visibility = 0;
-        post.renderType = PostRenderType.MARKDOWN;
-        post.user = operator;
         post.category = category;
-        post.createdAt = now;
         post.updatedAt = now;
-        post.contentDeclarations = DECLARATIONS;
-        post.repostPolicyCode = repostPolicyCatalog.require(null).code();
         post.persist();
 
         PostRevision revision = new PostRevision();
@@ -275,7 +342,7 @@ public class CodexCreatorDraftService {
         revision.title = titleMap;
         revision.contentMarkdown = PostHelper.injectBlockIds(Map.of(assignment.language, markdown));
         revision.editorType = 0;
-        revision.revisionNumber = 1;
+        revision.revisionNumber = regeneration ? nextRevisionNumber(post.id) : 1;
         revision.createdBy = operator;
         revision.createdAt = now;
         revision.persist();
@@ -289,7 +356,7 @@ public class CodexCreatorDraftService {
         result.taskId = jobData.hasNonNull("taskId") ? jobData.path("taskId").asText() : null;
         result.modelId = provenance.path("model").asText("codex-default");
         result.reasoningEffort = provenance.path("reasoningEffort").asText(null);
-        result.generationMode = "MANUAL_ASSIGNMENT";
+        result.generationMode = regeneration ? "MANUAL_REGENERATION" : "MANUAL_ASSIGNMENT";
         result.provenance = provenanceMap(provenance, assignment, jobData);
         postAiMetadataService.record(post.id, revision.id, "article", result, "DRAFT");
 
@@ -300,7 +367,8 @@ public class CodexCreatorDraftService {
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         codexCreatorEventPublisher.postRevisionUpdated(post.id, revision.id,
                 Map.of("title", titleMap, "contentMarkdown", revision.contentMarkdown), null);
-        auditService.log("post", post.id, "codex_creator_draft_created", null,
+        auditService.log("post", post.id,
+                regeneration ? "codex_creator_draft_regenerated" : "codex_creator_draft_created", null,
                 Map.of("topicId", assignment.topicId, "codexJobId", assignment.codexJobId), null,
                 assignment.createdBy);
         return view(assignment);
@@ -309,8 +377,8 @@ public class CodexCreatorDraftService {
     @Transactional
     void markFailed(Long assignmentId, String message) {
         CodexCreatorDraftAssignment assignment = CodexCreatorDraftAssignment.findById(assignmentId);
-        if (assignment == null || assignment.postId != null) return;
-        assignment.status = "FAILED";
+        if (assignment == null) return;
+        assignment.status = assignment.postId == null ? "FAILED" : "DRAFT_CREATED";
         assignment.errorMessage = message == null ? "草稿任务失败" : message;
         assignment.updatedAt = OffsetDateTime.now();
     }
@@ -336,7 +404,7 @@ public class CodexCreatorDraftService {
                                 "draft_acknowledge_retry", null,
                                 Map.of("postId", postId, "error", rootMessage(acknowledgeError)));
                     }
-                    return view(assignment);
+                    return self.get().viewById(assignment.id);
                 });
     }
 
@@ -477,6 +545,11 @@ public class CodexCreatorDraftService {
         return candidate;
     }
 
+    private int nextRevisionNumber(Long postId) {
+        PostRevision latest = PostRevision.find("post.id = ?1 order by revisionNumber desc", postId).firstResult();
+        return latest == null ? 1 : latest.revisionNumber + 1;
+    }
+
     private Map<String, Object> provenanceMap(JsonNode provenance,
                                                CodexCreatorDraftAssignment assignment,
                                                JsonNode jobData) {
@@ -488,7 +561,21 @@ public class CodexCreatorDraftService {
         result.put("codexJobId", assignment.codexJobId);
         result.put("codexTaskId", assignment.codexTaskId);
         if (jobData.path("content").has("sources")) result.put("sources", jobData.path("content").get("sources"));
+        if (jobData.has("qualityReport")) result.put("qualityReport", jobData.get("qualityReport"));
+        if (jobData.has("qualityContractVersion")) {
+            result.put("qualityContractVersion", jobData.get("qualityContractVersion"));
+        }
+        if (jobData.has("promptVersion")) result.put("promptVersion", jobData.get("promptVersion"));
         return result;
+    }
+
+    private void requireQualityContract(JsonNode jobData) {
+        int version = jobData.path("qualityContractVersion").asInt(0);
+        if (version < 2) return; // Existing completed jobs remain importable but are marked as legacy provenance.
+        JsonNode report = jobData.path("qualityReport");
+        if (!report.isObject() || !report.path("passed").asBoolean(false)) {
+            throw new BadRequestException("AI 草稿未通过内容质量门槛，已拒绝创建文章");
+        }
     }
 
     private String text(JsonNode object, String field, int maxLength, boolean required) {

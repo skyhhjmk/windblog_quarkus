@@ -2,6 +2,7 @@ package com.biliwind.blog.common.helper;
 
 import com.biliwind.blog.common.markdown.MdProtocolExtension;
 import com.vladsch.flexmark.html.HtmlRenderer;
+import com.vladsch.flexmark.ext.tables.TablesExtension;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
 import io.quarkus.qute.TemplateData;
@@ -13,7 +14,7 @@ import com.biliwind.blog.service.PublicMediaUrlPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
+import java.util.List;
 
 @TemplateData
 public final class MarkdownHelper {
@@ -86,7 +87,11 @@ public final class MarkdownHelper {
 
     private static MarkdownRuntime createMarkdownRuntime() {
         MutableDataSet flexmarkOptions = new MutableDataSet();
-        flexmarkOptions.set(Parser.EXTENSIONS, Collections.singletonList(MdProtocolExtension.create()));
+        // WindBlog stores Markdown that is also edited by GFM-compatible clients.  Register the
+        // table parser explicitly: flexmark-all provides the extension but does not enable it.
+        flexmarkOptions.set(Parser.EXTENSIONS, List.of(
+                TablesExtension.create(),
+                MdProtocolExtension.create()));
         flexmarkOptions.set(HtmlRenderer.SOFT_BREAK, "<br />\n");
         Parser parser = Parser.builder(flexmarkOptions).build();
         HtmlRenderer htmlRenderer = HtmlRenderer.builder(flexmarkOptions).build();

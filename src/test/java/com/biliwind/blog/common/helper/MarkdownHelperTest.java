@@ -100,6 +100,22 @@ class MarkdownHelperTest {
     }
 
     @Test
+    void shouldRenderGfmTableWithAlignmentAndEscapedPipe() {
+        String markdown = """
+                | 项目 | 结论 | 备注 |
+                | :--- | :---: | ---: |
+                | 渲染 | 正常 | `A|B` |
+                """;
+
+        String html = MarkdownHelper.toHtml(markdown);
+
+        assertTrue(html.contains("<table>"));
+        assertTrue(html.contains("<thead>"));
+        assertTrue(html.contains("align=\"center\""));
+        assertTrue(html.contains("<code>A|B</code>"));
+    }
+
+    @Test
     void shouldReturnEmptyStringForNullInput() {
         String html = MarkdownHelper.toHtml(null);
 

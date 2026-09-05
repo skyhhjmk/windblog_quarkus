@@ -20,14 +20,14 @@ services:
       HTTP_PROXY: "${CODEX_CREATOR_HTTP_PROXY:-}"
       HTTPS_PROXY: "${CODEX_CREATOR_HTTPS_PROXY:-}"
       ALL_PROXY: "${CODEX_CREATOR_ALL_PROXY:-}"
-      NO_PROXY: "${CODEX_CREATOR_NO_PROXY:-}"
+      NO_PROXY: "${CODEX_CREATOR_NO_PROXY:-localhost,127.0.0.1,windblog,db,redis}"
       # Some base images carry lower-case proxy variables. Set both spellings
       # explicitly so an image-level loopback proxy cannot leak into the test
       # container when the host proxy is disabled or translated by the helper.
       http_proxy: "${CODEX_CREATOR_HTTP_PROXY:-}"
       https_proxy: "${CODEX_CREATOR_HTTPS_PROXY:-}"
       all_proxy: "${CODEX_CREATOR_ALL_PROXY:-}"
-      no_proxy: "${CODEX_CREATOR_NO_PROXY:-}"
+      no_proxy: "${CODEX_CREATOR_NO_PROXY:-localhost,127.0.0.1,windblog,db,redis}"
     ports:
       - target: 8681
         published: "${CODEX_CREATOR_HOST_PORT:-58091}"

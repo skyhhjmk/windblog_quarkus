@@ -467,6 +467,34 @@ input::placeholder {
     font-size: 0.9em;
 }
 
+.prose table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    margin: 1.75rem 0;
+    overflow-x: auto;
+    border-collapse: collapse;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.prose thead {
+    background: var(--input-bg);
+}
+
+.prose th,
+.prose td {
+    min-width: 8rem;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+}
+
+.prose tbody tr:nth-child(even) {
+    background: color-mix(in srgb, var(--card-hover) 65%, transparent);
+}
+
 /* Comments */
 .comment-item {
     padding: 1.5rem;

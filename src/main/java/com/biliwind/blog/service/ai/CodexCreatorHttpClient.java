@@ -131,7 +131,8 @@ public class CodexCreatorHttpClient {
                     .thenCompose(response -> {
                         if (response.statusCode() < 200 || response.statusCode() >= 300) {
                             return CompletableFuture.failedFuture(new IllegalStateException(
-                                    "Codex Creator returned HTTP " + response.statusCode()));
+                                    "Codex Creator returned HTTP " + response.statusCode()
+                                            + codexErrorDetail(response.body())));
                         }
                         try {
                             return CompletableFuture.completedFuture(objectMapper.readTree(
@@ -143,6 +144,19 @@ public class CodexCreatorHttpClient {
                     });
         } catch (Exception exception) {
             return CompletableFuture.failedFuture(exception);
+        }
+    }
+
+    private String codexErrorDetail(String body) {
+        if (body == null || body.isBlank()) return "";
+        try {
+            JsonNode value = objectMapper.readTree(body);
+            String message = value.path("message").asText("").trim();
+            if (message.isBlank()) message = value.path("error").asText("").trim();
+            if (message.isBlank()) return "";
+            return ": " + message.substring(0, Math.min(message.length(), 500));
+        } catch (Exception ignored) {
+            return "";
         }
     }
 

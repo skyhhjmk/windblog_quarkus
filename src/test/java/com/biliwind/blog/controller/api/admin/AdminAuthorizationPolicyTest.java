@@ -152,6 +152,10 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/codex-creator/topic-seeds/7"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topics/7/review"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/codex-creator/topics/7/draft"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/codex-creator/topics/7/draft/regenerate"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey(
+                "POST", "/api/admin/codex-creator/topics/7/draft/regenerate"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/permissions/roles/ADMIN").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/database/seed").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/dead-letters/7/retry").superAdminOnly());

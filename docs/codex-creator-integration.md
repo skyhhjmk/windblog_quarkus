@@ -8,6 +8,18 @@ Codex Creator 作为独立仓库 `codex-creator` 挂载在本仓库的 `codex-cr
 - 事件：`POST /api/internal/integrations/windblog/events`，Outbox 只发布 `comment.created`、`link.application.created`、`link.monitor.completed`、`post.revision.updated`、`post.published`。
 - 内容工具：Codex app-server 通过私有 `/mcp` 只获得 `windblog.list_categories`、`windblog.create_category`、`windblog.update_category`、`windblog.list_tags`、`windblog.create_tag`、`windblog.update_tag` 和 `windblog.upload_image`。这些工具再调用 WindBlog 的签名接口 `POST /api/internal/integrations/codex-creator/content`；分类、标签和图片写入均有父服务幂等记录。没有删除、任意 URL、shell、SQL 或文件写入工具。
 - 图片：`windblog.upload_image` 只接收 PNG、JPEG、GIF 或 WebP 的 base64 字节；WindBlog 会重新校验 MIME、Magic Number、病毒扫描和大小，并强制保存 `aiUploaded=true`、`uploadSource=CODEX_CREATOR`、`generationMethod=CODEX_APP_SERVER` 元数据。普通管理员上传不会自动带这个标记。
+
+## 文章生成质量门槛
+
+话题文章采用“研究与写作 → 确定性质检 → 带问题重写 → WindBlog 草稿”的流程。生成结果只有在以下检查全部通过后才会进入 WindBlog：
+
+- 本次任务保留网页搜索证据，至少使用并在正文引用两个独立公开来源；
+- 中文正文默认不少于 1200 个有效汉字（其他语言默认不少于 900 词），包含至少 3 个二级章节和 5 个实质段落；
+- 开头给出明确判断，`editorialThesis` 必须逐字出现在正文中，同时交代反方观点、代价与判断改变条件；
+- 拒绝一级标题重复、模板化 AI 套话、整页网页复制，以及缺少结论/范围/读者价值的摘要；
+- Markdown 表格必须满足 GFM 表头、分隔行、列数、转义和空行规则；前台使用 Flexmark TablesExtension 渲染，并为窄屏提供横向滚动。
+
+首次质检失败会自动把旧稿与逐项问题交给 Codex 重写一次。仍不合格则任务失败，不创建博客草稿；质量报告、提示词版本、实际推理强度和来源会进入任务/文章溯源信息。默认参数可通过 `CODEX_CREATOR_ARTICLE_*`、`CODEX_CREATOR_TOPIC_REASONING_EFFORT` 和 `CODEX_CREATOR_PROMPT_VERSION` 调整，生产调整应基于真实文章样本而不是单纯降低门槛。
 - 签名：`X-Codex-Client-Id`、`X-Codex-Timestamp`、`X-Codex-Nonce`、`X-Codex-Body-SHA256`、`X-Codex-Signature`。签名 canonical string 为 `timestamp + "\\n" + nonce + "\\n" + bodySha256 + "\\n" + clientId`，HMAC-SHA256 输出 hex。时间窗和 nonce 防重放，不能复用管理员 JWT。
 - 来源：`post_ai_metadata` 保存任务、模型、思考级别、生成方式、来源和自动发布状态；AI 专区依赖这些系统级元数据，不依赖特殊分类。
 

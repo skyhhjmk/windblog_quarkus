@@ -83,6 +83,20 @@ spec:
                   key: internal-shared-secret
             - name: CODEX_CREATOR_WINDBLOG_MAX_IMAGE_BYTES
               value: "8388608"
+            - name: CODEX_CREATOR_PROMPT_VERSION
+              value: "2"
+            - name: CODEX_CREATOR_ARTICLE_REASONING_EFFORT
+              value: high
+            - name: CODEX_CREATOR_TOPIC_REASONING_EFFORT
+              value: medium
+            - name: CODEX_CREATOR_ARTICLE_MAX_QUALITY_ATTEMPTS
+              value: "2"
+            - name: CODEX_CREATOR_ARTICLE_MIN_CJK_CHARACTERS
+              value: "1200"
+            - name: CODEX_CREATOR_ARTICLE_MIN_WORDS
+              value: "900"
+            - name: CODEX_CREATOR_ARTICLE_MIN_SOURCES
+              value: "2"
             - name: CODEX_APP_SERVER_ENABLED
               value: "true"
             - name: CODEX_COMMAND

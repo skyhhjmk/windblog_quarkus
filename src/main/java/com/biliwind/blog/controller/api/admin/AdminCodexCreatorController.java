@@ -149,6 +149,13 @@ public class AdminCodexCreatorController {
     }
 
     @GET
+    @Path("/models")
+    @Operation(summary = "查询话题与文章生成可选模型")
+    public CompletionStage<Response> models() {
+        return proxy("models.list", Map.of());
+    }
+
+    @GET
     @Path("/topic-runs/{id}")
     @Operation(summary = "查询 AI 主题发现运行")
     public CompletionStage<Response> topicRun(@PathParam("id") Long id) {
@@ -198,10 +205,25 @@ public class AdminCodexCreatorController {
     public CompletionStage<Response> createDraft(@PathParam("id") Long id, Map<String, Object> payload) {
         String language = payload == null ? null : value(payload.get("language"));
         String instructions = payload == null ? null : value(payload.get("instructions"));
+        String profileId = payload == null ? null : value(payload.get("profileId"));
         Long categoryId = longValue(payload == null ? null : payload.get("categoryId"));
         try {
-            return draftService.start(id, categoryId, language, instructions,
+            return draftService.start(id, categoryId, language, instructions, profileId,
                             adminRequestContext.getUserId(), traceId())
+                    .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
+                    .exceptionally(error -> serviceUnavailable(error));
+        } catch (RuntimeException exception) {
+            return CompletableFuture.completedFuture(badRequest(exception.getMessage()));
+        }
+    }
+
+    @POST
+    @Path("/topics/{id}/draft/regenerate")
+    @Operation(summary = "重新生成已指派主题的 WindBlog 草稿")
+    public CompletionStage<Response> regenerateDraft(@PathParam("id") Long id, Map<String, Object> payload) {
+        String profileId = payload == null ? null : value(payload.get("profileId"));
+        try {
+            return draftService.regenerate(id, profileId, adminRequestContext.getUserId(), traceId())
                     .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
                     .exceptionally(error -> serviceUnavailable(error));
         } catch (RuntimeException exception) {
