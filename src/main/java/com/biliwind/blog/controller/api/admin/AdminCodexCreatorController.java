@@ -223,11 +223,12 @@ public class AdminCodexCreatorController {
         String language = payload == null ? null : value(payload.get("language"));
         String instructions = payload == null ? null : value(payload.get("instructions"));
         String profileId = payload == null ? null : value(payload.get("profileId"));
+        String reasoningEffort = payload == null ? null : value(payload.get("reasoningEffort"));
         Long categoryId = longValue(payload == null ? null : payload.get("categoryId"));
         boolean requiresPracticalVerification = payload != null && Boolean.TRUE.equals(booleanValue(payload.get("requiresPracticalVerification")));
         java.util.List<Long> testServerIds = payload == null ? java.util.List.of() : longList(payload.get("testServerIds"));
         try {
-            return draftService.start(id, categoryId, language, instructions, profileId, requiresPracticalVerification, testServerIds,
+            return draftService.start(id, categoryId, language, instructions, profileId, reasoningEffort, requiresPracticalVerification, testServerIds,
                             adminRequestContext.getUserId(), traceId())
                     .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
                     .exceptionally(error -> serviceUnavailable(error));
@@ -241,8 +242,9 @@ public class AdminCodexCreatorController {
     @Operation(summary = "重新生成已指派主题的 WindBlog 草稿")
     public CompletionStage<Response> regenerateDraft(@PathParam("id") Long id, Map<String, Object> payload) {
         String profileId = payload == null ? null : value(payload.get("profileId"));
+        String reasoningEffort = payload == null ? null : value(payload.get("reasoningEffort"));
         try {
-            return draftService.regenerate(id, profileId, adminRequestContext.getUserId(), traceId())
+            return draftService.regenerate(id, profileId, reasoningEffort, adminRequestContext.getUserId(), traceId())
                     .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
                     .exceptionally(error -> serviceUnavailable(error));
         } catch (RuntimeException exception) {

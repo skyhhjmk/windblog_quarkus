@@ -93,19 +93,21 @@ public class CodexCreatorDraftService {
     public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
                                                       String language, String instructions, String profileId,
                                                       Long operatorId, String traceId) {
-        return start(topicId, categoryId, language, instructions, profileId, false, List.of(), operatorId, traceId);
+        return start(topicId, categoryId, language, instructions, profileId, null, false, List.of(), operatorId, traceId);
     }
 
     public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
                                                       String language, String instructions, String profileId,
+                                                      String reasoningEffort,
                                                       boolean requiresPracticalVerification, List<Long> testServerIds,
                                                       Long operatorId, String traceId) {
         validateRequest(topicId, categoryId, language, instructions, operatorId);
         String normalizedLanguage = normalizeLanguage(language);
         String normalizedInstructions = instructions == null ? "" : instructions.trim();
         String normalizedProfileId = profileId == null ? "" : profileId.trim();
+        String normalizedReasoningEffort = reasoningEffort == null ? "" : reasoningEffort.trim().toLowerCase(java.util.Locale.ROOT);
         String requestKey = requestKey(topicId, categoryId, normalizedLanguage,
-                normalizedInstructions + "\nmodel=" + normalizedProfileId);
+                normalizedInstructions + "\nmodel=" + normalizedProfileId + "\neffort=" + normalizedReasoningEffort);
         CodexCreatorDraftAssignment assignment;
         try {
             assignment = self.get().ensureAssignment(
@@ -133,6 +135,7 @@ public class CodexCreatorDraftService {
         payload.put("requiresPracticalVerification", requiresPracticalVerification);
         payload.put("testServerIds", testServerIds == null ? List.of() : testServerIds);
         if (!normalizedProfileId.isBlank()) payload.put("profileId", normalizedProfileId);
+        if (!normalizedReasoningEffort.isBlank()) payload.put("reasoningEffort", normalizedReasoningEffort);
         return client.topicCommand("article.start", payload,
                         "windblog-admin:" + operatorId, traceId)
                 .thenCompose(response -> {
@@ -152,7 +155,7 @@ public class CodexCreatorDraftService {
                 });
     }
 
-    public CompletionStage<Map<String, Object>> regenerate(Long topicId, String profileId,
+    public CompletionStage<Map<String, Object>> regenerate(Long topicId, String profileId, String reasoningEffort,
                                                             Long operatorId, String traceId) {
         if (topicId == null || topicId <= 0) throw new BadRequestException("话题不能为空");
         if (operatorId == null) throw new jakarta.ws.rs.WebApplicationException("未登录", 401);
@@ -160,6 +163,7 @@ public class CodexCreatorDraftService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", assignment.codexJobId);
         if (profileId != null && !profileId.isBlank()) payload.put("profileId", profileId.trim());
+        if (reasoningEffort != null && !reasoningEffort.isBlank()) payload.put("reasoningEffort", reasoningEffort.trim().toLowerCase(java.util.Locale.ROOT));
         return client.topicCommand("article.regenerate", payload,
                         "windblog-admin:" + operatorId, traceId)
                 .thenApply(response -> {
