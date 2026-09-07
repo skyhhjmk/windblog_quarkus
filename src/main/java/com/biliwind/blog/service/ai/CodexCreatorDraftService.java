@@ -144,7 +144,7 @@ public class CodexCreatorDraftService {
                     if ("FAILED".equals(status)) {
                         self.get().markFailed(assignmentForRequest.id, data.path("error").asText("article job failed"));
                     }
-                    return CompletableFuture.completedFuture(self.get().viewById(assignmentForRequest.id));
+                    return CompletableFuture.completedFuture(self.get().viewWithExecution(assignmentForRequest.id, data));
                 })
                 .exceptionallyCompose(error -> {
                     self.get().markFailed(assignmentForRequest.id, rootMessage(error));
@@ -166,7 +166,7 @@ public class CodexCreatorDraftService {
                     JsonNode data = data(response);
                     requireRemoteJobId(data);
                     self.get().recordRemoteJob(assignment.id, data);
-                    return self.get().viewById(assignment.id);
+                    return self.get().viewWithExecution(assignment.id, data);
                 })
                 .exceptionallyCompose(error -> {
                     self.get().markFailed(assignment.id, rootMessage(error));
@@ -193,7 +193,7 @@ public class CodexCreatorDraftService {
                         return CompletableFuture.completedFuture(self.get().viewById(assignment.id));
                     }
                     if (!"SUCCEEDED".equals(status)) {
-                        return CompletableFuture.completedFuture(self.get().viewById(assignment.id));
+                        return CompletableFuture.completedFuture(self.get().viewWithExecution(assignment.id, data));
                     }
                     try {
                         Map<String, Object> created = self.get().finalizeDraft(assignment.id, data);
@@ -216,6 +216,16 @@ public class CodexCreatorDraftService {
     @Transactional
     public Map<String, Object> viewById(Long id) {
         return view(findAssignment(id));
+    }
+
+    @Transactional
+    Map<String, Object> viewWithExecution(Long id, JsonNode remoteJob) {
+        Map<String, Object> view = view(findAssignment(id));
+        JsonNode execution = remoteJob == null ? null : remoteJob.get("execution");
+        if (execution != null && execution.isObject()) {
+            view.put("execution", objectMapper.convertValue(execution, Map.class));
+        }
+        return view;
     }
 
     @Transactional
