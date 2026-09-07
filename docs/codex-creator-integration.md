@@ -18,6 +18,8 @@ Codex Creator 作为独立仓库 `codex-creator` 挂载在本仓库的 `codex-cr
 - 开头给出明确判断，`editorialThesis` 必须逐字出现在正文中，同时交代反方观点、代价与判断改变条件；
 - 拒绝一级标题重复、模板化 AI 套话、整页网页复制，以及缺少结论/范围/读者价值的摘要；
 - Markdown 表格必须满足 GFM 表头、分隔行、列数、转义和空行规则；前台使用 Flexmark TablesExtension 渲染，并为窄屏提供横向滚动。
+- 每篇草稿必须引用至少两张由本任务生成、经 `windblog.upload_image` 入库的图片；图片须紧邻其解释段落，并包含中文 alt 文本和斜体图注。
+- 启用实操验证时，至少一条当前生成尝试的成功命令记录必须在正文中以自然说明和脱敏输出代码块呈现；旧尝试、模型自述或未执行命令不能作为证据。
 
 首次质检失败会自动把旧稿与逐项问题交给 Codex 重写一次。仍不合格则任务失败，不创建博客草稿；质量报告、提示词版本、实际推理强度和来源会进入任务/文章溯源信息。默认参数可通过 `CODEX_CREATOR_ARTICLE_*`、`CODEX_CREATOR_TOPIC_REASONING_EFFORT` 和 `CODEX_CREATOR_PROMPT_VERSION` 调整，生产调整应基于真实文章样本而不是单纯降低门槛。
 - 签名：`X-Codex-Client-Id`、`X-Codex-Timestamp`、`X-Codex-Nonce`、`X-Codex-Body-SHA256`、`X-Codex-Signature`。签名 canonical string 为 `timestamp + "\\n" + nonce + "\\n" + bodySha256 + "\\n" + clientId`，HMAC-SHA256 输出 hex。时间窗和 nonce 防重放，不能复用管理员 JWT。
