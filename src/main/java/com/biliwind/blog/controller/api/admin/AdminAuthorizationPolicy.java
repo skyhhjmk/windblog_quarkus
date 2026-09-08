@@ -5,6 +5,17 @@ import java.util.Locale;
 /** Central resource/action mapping for the administrator authorization boundary. */
 public final class AdminAuthorizationPolicy {
 
+    /**
+     * Risk is intentionally independent from role and request de-duplication.
+     * A normal administrator action must not become a password prompt merely
+     * because it is a write request.
+     */
+    public enum RiskLevel {
+        LOW,
+        DAILY,
+        HIGH
+    }
+
     private AdminAuthorizationPolicy() {
     }
 
@@ -13,9 +24,11 @@ public final class AdminAuthorizationPolicy {
         String normalizedPath = normalizePath(path);
         String resource = resourceFor(normalizedPath);
         String action = actionFor(normalizedMethod, normalizedPath, resource);
-        boolean superAdminOnly = isSuperAdminOnly(normalizedMethod, normalizedPath);
-        boolean stepUpRequired = isStepUpRequired(normalizedMethod, normalizedPath, action);
-        return new Decision(resource, action, superAdminOnly, stepUpRequired, stepUpRequired);
+        RiskLevel riskLevel = riskFor(normalizedMethod, normalizedPath, action);
+        boolean superAdminOnly = isSuperAdminOnly(normalizedMethod, normalizedPath, riskLevel);
+        boolean stepUpRequired = riskLevel == RiskLevel.HIGH;
+        boolean idempotencyRequired = requiresIdempotency(normalizedMethod, normalizedPath, riskLevel);
+        return new Decision(resource, action, riskLevel, superAdminOnly, stepUpRequired, idempotencyRequired);
     }
 
     public static boolean requiresStepUp(String method, String path) {
@@ -26,7 +39,7 @@ public final class AdminAuthorizationPolicy {
         return decide(method, path).idempotencyRequired();
     }
 
-    private static boolean isSuperAdminOnly(String method, String path) {
+    private static boolean isSuperAdminOnly(String method, String path, RiskLevel riskLevel) {
         if (path.startsWith("/api/admin/security/content-access-tickets")) {
             return true;
         }
@@ -46,18 +59,10 @@ public final class AdminAuthorizationPolicy {
                 || path.startsWith("/api/admin/storage/edge-nodes")) && !"GET".equals(method)) {
             return true;
         }
-        if ((path.startsWith("/api/admin/dead-letters")
-                || path.startsWith("/api/admin/storage/dead-letter"))
-                && ("POST".equals(method) || "DELETE".equals(method))) {
+        if (path.startsWith("/api/admin/settings") && riskLevel == RiskLevel.HIGH) {
             return true;
         }
-        if (path.startsWith("/api/admin/settings") && !"GET".equals(method)) {
-            return true;
-        }
-        if (path.startsWith("/api/admin/codex-creator/config") && !"GET".equals(method)) {
-            return true;
-        }
-        if (path.startsWith("/api/admin/outbox") && !"GET".equals(method)) {
+        if (path.startsWith("/api/admin/codex-creator/config") && riskLevel == RiskLevel.HIGH) {
             return true;
         }
         if (path.startsWith("/api/admin/permissions/roles") && !"GET".equals(method)) {
@@ -66,44 +71,49 @@ public final class AdminAuthorizationPolicy {
         return false;
     }
 
-    private static boolean isStepUpRequired(String method, String path, String action) {
+    private static RiskLevel riskFor(String method, String path, String action) {
         if ("OPTIONS".equals(method)) {
-            return false;
+            return RiskLevel.LOW;
         }
-        if (isSuperAdminOnly(method, path)) {
-            return true;
-        }
-        if (isHighRiskOperationalAction(method, path)) {
-            return true;
-        }
-        if (path.startsWith("/api/admin/codex-creator") && !"GET".equals(method)) {
-            return true;
-        }
-        if ("media.download_original".equals(action)) {
-            return true;
+        if (isHighRiskAction(method, path, action)) {
+            return RiskLevel.HIGH;
         }
         if ("GET".equals(method)) {
-            return false;
+            return RiskLevel.LOW;
         }
-        return "post.publish".equals(action) || "queue.publish".equals(action)
-                || "settings.confirm".equals(action) || "settings.rollback".equals(action);
+        return RiskLevel.DAILY;
     }
 
-    private static boolean isHighRiskOperationalAction(String method, String path) {
+    private static boolean isHighRiskAction(String method, String path, String action) {
+        if (path.endsWith("/deployment-zip") || "media.download_original".equals(action)) {
+            return true;
+        }
+        if (path.startsWith("/api/admin/security/content-access-tickets")
+                || path.startsWith("/api/admin/database")
+                || path.startsWith("/api/admin/import")
+                || path.startsWith("/api/admin/node/certificate")
+                || path.startsWith("/api/admin/edge-nodes")
+                || path.startsWith("/api/admin/storage/edge-nodes")
+                || path.startsWith("/api/admin/permissions/roles")) {
+            return !"GET".equals(method);
+        }
+        if (path.startsWith("/api/admin/codex-creator/config")) {
+            return !"GET".equals(method);
+        }
+        if (path.startsWith("/api/admin/codex-creator/test-servers")) {
+            return !"GET".equals(method);
+        }
+        if (path.startsWith("/api/admin/settings/") && !"GET".equals(method)) {
+            if (path.equals("/api/admin/settings/apply-audit-value")) {
+                return true;
+            }
+            return isSensitiveSettingKey(path);
+        }
         if (path.startsWith("/api/admin/users/") && (path.endsWith("/wallet/adjust")
                 || path.endsWith("/wallet/check-in-reward"))) {
             return "POST".equals(method);
         }
-        if (path.startsWith("/api/admin/email-deliveries/") && path.endsWith("/retry")) {
-            return "POST".equals(method);
-        }
         if (path.equals("/api/admin/email-deliveries/fail-pending")) {
-            return "POST".equals(method);
-        }
-        if (path.startsWith("/api/admin/email-channels/") && path.endsWith("/test")) {
-            return "POST".equals(method);
-        }
-        if (path.startsWith("/api/admin/email-templates/") && path.endsWith("/test")) {
             return "POST".equals(method);
         }
         if ("POST".equals(method) && path.equals("/api/admin/email-campaigns")) {
@@ -114,6 +124,30 @@ public final class AdminAuthorizationPolicy {
         }
         return path.equals("/api/admin/system/decrypt-error")
                 || path.equals("/api/admin/system/sync-cluster-keys");
+    }
+
+    private static boolean requiresIdempotency(String method, String path, RiskLevel riskLevel) {
+        if ("GET".equals(method) || "OPTIONS".equals(method)) {
+            return false;
+        }
+        if (riskLevel == RiskLevel.HIGH) {
+            return true;
+        }
+        return path.endsWith("/publish") || path.contains("/replay") || path.endsWith("/retry")
+                || path.endsWith("/batch-retry") || path.endsWith("/test")
+                || path.endsWith("/topic-runs") || path.endsWith("/draft")
+                || path.endsWith("/draft/regenerate");
+    }
+
+    private static boolean isSensitiveSettingKey(String path) {
+        String prefix = "/api/admin/settings/";
+        String remainder = path.substring(prefix.length());
+        int slash = remainder.indexOf('/');
+        String key = (slash >= 0 ? remainder.substring(0, slash) : remainder).toLowerCase(Locale.ROOT);
+        return key.contains("secret") || key.contains("password") || key.contains("token")
+                || key.contains("credential") || key.contains("key") || key.contains("auth")
+                || key.contains("security") || key.contains("elasticsearch") || key.contains("redis")
+                || key.contains("database") || key.contains("storage") || key.contains("mail");
     }
 
     private static String resourceFor(String path) {
@@ -284,7 +318,7 @@ public final class AdminAuthorizationPolicy {
         return path.startsWith("/") ? path : "/" + path;
     }
 
-    public record Decision(String resource, String action, boolean superAdminOnly,
+    public record Decision(String resource, String action, RiskLevel riskLevel, boolean superAdminOnly,
                            boolean stepUpRequired, boolean idempotencyRequired) {
     }
 }

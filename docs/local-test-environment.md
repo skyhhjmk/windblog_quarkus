@@ -25,6 +25,8 @@
 
 脚本只从宿主机 Codex 登录目录复制 `auth.json` 到隔离测试目录，并按镜像实际运行 UID 设置权限；原始登录目录不会挂载进容器，凭证也不会写入镜像或提交到 Git。启用 app-server 后，Codex Creator 会在容器启动时校验登录状态。
 
+本地启动器还会在测试数据目录生成并复用 `mcp-bearer-token`，供 app-server 和 MCP 端点共同认证；不会将令牌写入 Git。
+
 当前默认使用本地 WindBlog 快照镜像和本地 native Codex Creator 镜像；可通过 `WINDBLOG_IMAGE`、`CODEX_CREATOR_IMAGE` 覆盖。Codex CLI 版本由镜像固定为 `0.150.1`。
 
 可用以下请求验证 Codex app-server 与远端模型目录链路：

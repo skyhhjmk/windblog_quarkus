@@ -107,7 +107,8 @@ public class CodexCreatorDraftService {
         String normalizedProfileId = profileId == null ? "" : profileId.trim();
         String normalizedReasoningEffort = reasoningEffort == null ? "" : reasoningEffort.trim().toLowerCase(java.util.Locale.ROOT);
         String requestKey = requestKey(topicId, categoryId, normalizedLanguage,
-                normalizedInstructions + "\nmodel=" + normalizedProfileId + "\neffort=" + normalizedReasoningEffort);
+                normalizedInstructions + "\nmodel=" + normalizedProfileId + "\neffort=" + normalizedReasoningEffort,
+                requiresPracticalVerification, testServerIds);
         CodexCreatorDraftAssignment assignment;
         try {
             assignment = self.get().ensureAssignment(
@@ -133,7 +134,8 @@ public class CodexCreatorDraftService {
         payload.put("instructions", normalizedInstructions);
         payload.put("requestKey", requestKey);
         payload.put("requiresPracticalVerification", requiresPracticalVerification);
-        payload.put("testServerIds", testServerIds == null ? List.of() : testServerIds);
+        payload.put("testServerIds", testServerIds == null ? List.of()
+                : testServerIds.stream().filter(Objects::nonNull).distinct().sorted().toList());
         if (!normalizedProfileId.isBlank()) payload.put("profileId", normalizedProfileId);
         if (!normalizedReasoningEffort.isBlank()) payload.put("reasoningEffort", normalizedReasoningEffort);
         return client.topicCommand("article.start", payload,
@@ -542,8 +544,14 @@ public class CodexCreatorDraftService {
         return normalized;
     }
 
-    private String requestKey(Long topicId, Long categoryId, String language, String instructions) {
+    static String requestKey(Long topicId, Long categoryId, String language, String instructions,
+                             boolean practicalVerification, List<Long> testServerIds) {
         String value = topicId + "\n" + categoryId + "\n" + language + "\n" + instructions.replaceAll("\\s+", " ");
+        if (practicalVerification) {
+            List<Long> servers = testServerIds == null ? List.of()
+                    : testServerIds.stream().filter(Objects::nonNull).distinct().sorted().toList();
+            value += "\nverification=true\nservers=" + servers;
+        }
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8)));

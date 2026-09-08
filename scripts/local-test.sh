@@ -87,6 +87,17 @@ if [[ -z "${CODEX_CREATOR_INTERNAL_SHARED_SECRET:-}" ]]; then
   export CODEX_CREATOR_INTERNAL_SHARED_SECRET="$(<"${secret_file}")"
 fi
 
+# Both the app-server client and MCP endpoint need the same persistent token.
+if [[ -z "${CODEX_CREATOR_MCP_BEARER_TOKEN:-}" ]]; then
+  mcp_token_file="${DATA_DIR}/mcp-bearer-token"
+  if [[ ! -s "${mcp_token_file}" ]]; then
+    mkdir -p "${DATA_DIR}"
+    umask 077
+    openssl rand -hex 32 >"${mcp_token_file}"
+  fi
+  export CODEX_CREATOR_MCP_BEARER_TOKEN="$(<"${mcp_token_file}")"
+fi
+
 # Keep the test-server key encryption secret in the isolated test data directory;
 # it must survive container recreation but never be committed to the repository.
 if [[ -z "${CODEX_CREATOR_TEST_SERVER_ENCRYPTION_SECRET:-}" ]]; then

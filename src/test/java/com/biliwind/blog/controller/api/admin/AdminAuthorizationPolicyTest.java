@@ -13,7 +13,7 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/database/migrate").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/import").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/node-a/issue-certificate").superAdminOnly());
-        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/storage/dead-letter/1/retry").superAdminOnly());
+        assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/storage/dead-letter/1/retry").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("PUT", "/api/admin/settings/mail.password").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/import"));
@@ -22,7 +22,7 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import/analyze"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/import/analyze-sql"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import/execute"));
-        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/dead-letters/1"));
+        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/dead-letters/1"));
         assertTrue(AdminAuthorizationPolicy.decide("GET", "/api/admin/media").action().equals("media.read"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/posts/1/publish").action().equals("post.publish"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/queues/1/publish").action().equals("queue.publish"));
@@ -38,7 +38,7 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/security/content-access-tickets/rotate-key"));
         assertTrue(AdminAuthorizationPolicy.decide("GET", "/api/admin/edge-nodes/node-a/deployment-zip").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("GET", "/api/admin/edge-nodes/node-a/deployment-zip"));
-        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("GET", "/api/admin/edge-nodes/node-a/deployment-zip"));
+        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("GET", "/api/admin/edge-nodes/node-a/deployment-zip"));
     }
 
     @Test
@@ -76,11 +76,11 @@ class AdminAuthorizationPolicyTest {
                 .action().equals("wallet.write"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/users/7/wallet/adjust"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/users/7/wallet/adjust"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-deliveries/7/retry"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-deliveries/7/retry"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp(
                 "POST", "/api/admin/email-deliveries/fail-pending"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-channels/7/test"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-templates/7/test"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-channels/7/test"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-templates/7/test"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-campaigns"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/system/decrypt-error"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/system/sync-cluster-keys"));
@@ -140,29 +140,57 @@ class AdminAuthorizationPolicyTest {
 
     @Test
     void shouldKeepSensitiveResourceWritesBehindExplicitStepUpOrSuperAdmin() {
-        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/settings/site.confirm").superAdminOnly());
+        assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/settings/site.confirm").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("PUT", "/api/admin/codex-creator/config").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/codex-creator/config"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/codex-creator/config"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-runs"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-runs"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/codex-creator/topic-runs"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/codex-creator/topic-automation"));
-        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/codex-creator/topic-automation"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-seeds"));
-        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/codex-creator/topic-seeds/7"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topics/7/review"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/codex-creator/topic-automation"));
+        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/codex-creator/topic-automation"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-seeds"));
+        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/codex-creator/topic-seeds/7"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topics/7/review"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/codex-creator/topics/7/draft"));
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp(
                 "POST", "/api/admin/codex-creator/topics/7/draft/regenerate"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey(
                 "POST", "/api/admin/codex-creator/topics/7/draft/regenerate"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/permissions/roles/ADMIN").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/database/seed").superAdminOnly());
-        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/dead-letters/7/retry").superAdminOnly());
+        assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/dead-letters/7/retry").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-campaigns"));
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/users/7/wallet/check-in-reward"));
-        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/outbox/7/replay").superAdminOnly());
+        assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/outbox/7/replay").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/outbox/7/replay"));
         assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/categories"));
+    }
+
+    @Test
+    void shouldClassifyDailyAdminWorkWithoutStepUp() {
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.DAILY,
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/posts/7/publish").riskLevel());
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.DAILY,
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/posts/7/revisions/2/publish").riskLevel());
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.DAILY,
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/queues/posts/publish").riskLevel());
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.DAILY,
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/outbox/7/replay").riskLevel());
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.DAILY,
+                AdminAuthorizationPolicy.decide("PUT", "/api/admin/settings/site_info").riskLevel());
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/posts/7/publish"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/posts/7/publish"));
+    }
+
+    @Test
+    void shouldClassifyCredentialsAndIrreversibleChangesAsHighRisk() {
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.HIGH,
+                AdminAuthorizationPolicy.decide("PUT", "/api/admin/settings/elasticsearch").riskLevel());
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.HIGH,
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/codex-creator/test-servers").riskLevel());
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.HIGH,
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/repost/tokens/7/revoke").riskLevel());
+        assertEquals(AdminAuthorizationPolicy.RiskLevel.LOW,
+                AdminAuthorizationPolicy.decide("GET", "/api/admin/posts").riskLevel());
     }
 }
