@@ -40,6 +40,8 @@ public class EdgePersistentChannelClient {
     @Inject
     EdgeSyncDataApplyService syncDataApplyService;
     @Inject
+    WespSyncService wespSyncService;
+    @Inject
     com.biliwind.blog.service.security.EdgeCertificateInstaller edgeCertificateInstaller;
     @Inject
     com.biliwind.blog.service.link.LinkProbeService linkProbeService;
@@ -61,6 +63,10 @@ public class EdgePersistentChannelClient {
         if (!nodeRoleService.isEdgeNode()) {
             return;
         }
+        if (wespSyncService.isEnabled()) {
+            readOnlyState.markPrimaryOffline("WESP 主动 HTTPS 同步模式");
+            return;
+        }
         if (isActivePollMode()) {
             readOnlyState.markPrimaryOffline("等待主节点主动建立数据通道");
             return;
@@ -76,6 +82,9 @@ public class EdgePersistentChannelClient {
     @Scheduled(every = "10s")
     public void sendHeartbeat() {
         if (!nodeRoleService.isEdgeNode()) {
+            return;
+        }
+        if (wespSyncService.isEnabled()) {
             return;
         }
         if (outboundEmitter == null) {

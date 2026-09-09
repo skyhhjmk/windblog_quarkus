@@ -13,6 +13,18 @@ class AdminAuthorizationPolicyTest {
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/database/migrate").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/import").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/node-a/issue-certificate").superAdminOnly());
+        assertEquals("edge.connection.connect",
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/connect").action());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/edge-nodes/connect"));
+        assertEquals("edge.connection.bootstrap",
+                AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/connection/bootstrap").action());
+        assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/connection/bootstrap")
+                .superAdminOnly());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/edge-nodes/connection/bootstrap"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey(
+                "POST", "/api/admin/edge-nodes/connection/bootstrap"));
         assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/storage/dead-letter/1/retry").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("PUT", "/api/admin/settings/mail.password").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/import"));

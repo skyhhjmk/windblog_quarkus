@@ -116,4 +116,6 @@
     <include file="db/migration/113-seed-admin-codex-creator-write-permission.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/114-create-codex-creator-content-operations.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/115-allow-codex-category-selection.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/116-create-wesp-sync.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/118-seed-edge-connection-permission.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

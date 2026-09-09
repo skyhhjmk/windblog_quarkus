@@ -8,6 +8,24 @@ AUTH_DIR="${DATA_DIR}/codex-auth"
 
 cd "${ROOT_DIR}"
 
+# Compose reads .env for interpolation, but these two values are exported by
+# this launcher as well. Read an explicit local override before applying the
+# launcher defaults so a locally built image is not silently replaced by a
+# stale registry tag.
+dotenv_value() {
+  local key="$1"
+  if [[ -r "${ROOT_DIR}/.env" ]]; then
+    sed -n "s/^${key}=//p" "${ROOT_DIR}/.env" | tail -n 1
+  fi
+}
+
+if [[ -z "${WINDBLOG_IMAGE:-}" ]]; then
+  WINDBLOG_IMAGE="$(dotenv_value WINDBLOG_IMAGE)"
+fi
+if [[ -z "${WINDBLOG_PULL_POLICY:-}" ]]; then
+  WINDBLOG_PULL_POLICY="$(dotenv_value WINDBLOG_PULL_POLICY)"
+fi
+
 prepare_auth_cache() {
   if [[ ! -r "${AUTH_SOURCE_DIR}/auth.json" ]]; then
     echo "Missing readable Codex auth cache: ${AUTH_SOURCE_DIR}/auth.json" >&2
@@ -25,10 +43,17 @@ prepare_auth_cache() {
 }
 
 export CODEX_CREATOR_HOST_CODEX_DIR="${CODEX_CREATOR_HOST_CODEX_DIR:-${AUTH_DIR}}"
-export WINDBLOG_IMAGE="${WINDBLOG_IMAGE:-ghcr.io/skyhhjmk/windblog_quarkus:1.0-SNAPSHOT}"
-export WINDBLOG_PULL_POLICY="${WINDBLOG_PULL_POLICY:-never}"
+export WINDBLOG_IMAGE="${WINDBLOG_IMAGE:-docker.io/hhjmk/windblog_quarkus:latest-native}"
+export WINDBLOG_PULL_POLICY="${WINDBLOG_PULL_POLICY:-always}"
 export CODEX_CREATOR_IMAGE="${CODEX_CREATOR_IMAGE:-localhost/codex-creator:native-codex-0.150.1-final}"
 export CODEX_CREATOR_PULL_POLICY="${CODEX_CREATOR_PULL_POLICY:-never}"
+# Both the published primary image and a locally built native tag are compiled
+# with the prod profile. Keep the local HTTP test stack on dev settings while
+# matching the native static-init value for cookie.secure.
+if [[ "${WINDBLOG_IMAGE}" == *native* ]]; then
+  export QUARKUS_PROFILE="${WINDBLOG_LOCAL_TEST_QUARKUS_PROFILE:-dev}"
+  export COOKIE_SECURE="${WINDBLOG_LOCAL_TEST_COOKIE_SECURE:-true}"
+fi
 CODEX_CONTAINER_UID="${CODEX_CONTAINER_UID:-$(podman image inspect "${CODEX_CREATOR_IMAGE}" --format '{{.Config.User}}' | cut -d: -f1)}"
 CODEX_CONTAINER_UID="${CODEX_CONTAINER_UID:-1001}"
 export WINDBLOG_DATA_DIR="${DATA_DIR}"

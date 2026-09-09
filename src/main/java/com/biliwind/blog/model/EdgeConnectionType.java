@@ -5,6 +5,12 @@ package com.biliwind.blog.model;
  */
 public enum EdgeConnectionType {
     /**
+     * WESP v1 outbound HTTPS synchronization. Both sides keep local state and
+     * the home node never needs an inbound listener.
+     */
+    WESP,
+
+    /**
      * 心跳模式 (从节点主动连接主节点)
      */
     HEARTBEAT,
@@ -18,6 +24,7 @@ public enum EdgeConnectionType {
     public static EdgeConnectionType fromString(String value) {
         if (value == null) return null;
         String normalized = value.toUpperCase().replace("-", "_");
+        if (normalized.equals("WESP") || normalized.equals("WESP_V1")) return WESP;
         if (normalized.equals("HEARTBEAT")) return HEARTBEAT;
         if (normalized.equals("ACTIVEPOLL") || normalized.equals("ACTIVE_POLL")) return ACTIVE_POLL;
         // 兼容 Flutter 传来的 lowerCamelCase

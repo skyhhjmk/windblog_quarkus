@@ -91,13 +91,13 @@ topology is fixed during native compilation. Setting only
 `QUARKUS_PROFILE=edge` when starting an image built with `prod` is not enough.
 
 The edge deployment package defaults to
-`ghcr.io/skyhhjmk/windblog_quarkus:latest`. Override the default repository with
+`docker.io/hhjmk/windblog_quarkus:latest`. Override the default repository with
 `EDGE_IMAGE_REPOSITORY`, or pass `image` and `variant` to
 `GET /api/admin/edge-nodes/{nodeId}/deployment-zip`. The `image` parameter is
 the complete image reference written to `.env`, including its tag or digest.
-Because the package is private, the deployment host must authenticate to GHCR
-with a token that has `read:packages` before running `docker compose pull`; keep
-that credential outside `.env`.
+If the Docker Hub repository is private, authenticate the deployment host with
+`docker login` before running `docker compose pull`; keep that credential outside
+`.env`.
 
 If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
 

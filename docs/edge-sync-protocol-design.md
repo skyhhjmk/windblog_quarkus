@@ -1,8 +1,8 @@
 # 面向受限家庭网络与多主节点的边缘同步协议设计
 
-状态：设计草案，未实现、未部署、未经过真实网络验证。日期：2026-09-08。
+状态：协议设计及 WESP v1 基线实现，已在本地双实例验收，尚未生产部署或经过真实公网验证；分页清单、签名检查点和正式仲裁仍属后续工作。日期：2026-09-09。
 
-本文将协议暂命名为 WESP（WindBlog Edge Synchronization Protocol）v1。默认用一台内网主 H 和一台公网主 P 组成双主网络，支持内网仅出站、上行受限和长期离线；可按需要增加保留本地自治能力的边缘节点。这里的“主节点”表示具有创作和计算能力的写入节点，不代表全局唯一数据库主库。本文包含低成本部署档位及 v1 报文约束，均为设计而非已实现能力。
+本文将协议暂命名为 WESP（WindBlog Edge Synchronization Protocol）v1。默认用一台内网主 H 和一台公网主 P 组成双主网络，支持内网仅出站、上行受限和长期离线；可按需要增加保留本地自治能力的边缘节点。这里的“主节点”表示具有创作和计算能力的写入节点，不代表全局唯一数据库主库。本文包含低成本部署档位及 v1 报文约束；实现覆盖范围和未完成能力见第 16 节。
 
 ## 1. 设计结论与适用边界
 
@@ -78,11 +78,35 @@ P 失效后不能仅凭超时自动把 H/E 提升为控制主。人工迁移必�
 
 ### 2.2 成本、存储副本与扩容
 
-A 的块存储使用 P 本地持久卷，outbox/inbox 和任务调度使用已有数据库，不为本协议新增专用消息队列、缓存、对象网关或发现服务器。这仅限制新协议依赖，不表示现有 WindBlog 全栈可直接删除 RabbitMQ/Redis。H 保留原件并主动下载 P 新增内容作为备份；尚未下载的 P 新内容只有一份。
+A 的块存储使用 P 本地持久卷，outbox/inbox 和任务调度使用已有数据库，不为本协议新增专用消息队列、缓存、对象网关或发现服务器。H 保留原件并主动下载 P 新增内容作为备份；尚未下载的 P 新内容只有一份。
+
+#### 2.2.1 轻量自治边缘包（推荐 E 档）
+
+E 不再按完整 WindBlog 主节点部署。部署包固定使用 `edge` 构建 profile 和
+`native-micro` 镜像，只保留公开读服务、WESP 主动同步、本地媒体块存储、PostgreSQL
+元数据和 Redis 热缓存；RabbitMQ、Elasticsearch、Codex Creator、ClamAV、管理端的
+重型任务和搜索集群均不随包部署。数据库使用 `postgres:18-alpine`，不需要 pgvector；
+数据库与 Redis 仅在 Compose 内部网络可见，边缘宿主机默认只公开 HTTP；兼容旧 gRPC
+端口仅绑定回环地址，只有回滚并配置防火墙后才显式改为公网绑定。
+
+这里的“轻量”是运行时与拓扑轻量：native runner 仍复用同一 WindBlog 代码库，因而不会
+误称为另一个完全裁剪的业务二进制。若未来要进一步降到单进程/无数据库代理，需要另建
+`edge-agent` 模块并定义独立的本地查询与附件缓存接口；本版本不把该工作隐含在部署脚本中。
+
+边缘包为应用、数据库、缓存和数据卷设置保守的默认资源上限（合计约 1.75 CPU / 736 MiB），
+并把上传文件、WESP 块、WESP 配置、节点 RSA 密钥和数据库分别持久化。该档位仍保留本地数据库，因而
+可在 P 离线时继续提供已发布内容和排队写入；它不是无状态 CDN，也不会把未同步数据
+伪装成已完成复制。确需全文搜索或完整管理能力时，显式选择完整节点镜像，不应把轻量
+包的资源上限静默放宽。
+
+下载的 ZIP 包包含 `deploy.sh`。在目标机解压后执行 `bash deploy.sh` 即会自动选择
+Docker Compose/Podman Compose、拉取三个镜像、创建卷、启动服务并等待 readiness；
+`bash deploy.sh status|logs|stop` 用于日常运维。脚本不向公网暴露数据库、Redis 或旧
+gRPC，也不要求家庭节点开放入站端口。
 
 `required_public_copies` 在 A 默认 1，在 B/C 默认 2。H 的副本另计 `home_backup_complete`，不能替代公网服务副本。同机角色和 CDN 缓存不算独立持久副本。A 可以单公网副本发布，但必须展示该耐久性级别；B/C 副本不足时等候，不能静默降低要求。外部备份是可选成本项，不是免费的隐藏服务器。
 
-P 新增内容不绕行 H；H 上传一次至 P，P 分发到 E。N 个节点默认 N−1 条以 P 为中心的逻辑同步关系，避免全互联；仅在缺块修复或 P 故障时启用经授权的备用对等连接。B 的访客切换还需预配置 DNS/客户端入口，受缓存和探测时延影响，不由同步协议自动保证。
+P 新增内容不绕行 H；H 上传一次至 P，P 分发到 E。双主模式中 H 是唯一需要配置 `peer-url=P` 的内网主动客户端：H 同时上传自己的 outbox 并从 P 的变更日志拉取 P 的修改；P 无需、也不应配置指向 H 的 peer URL，因为 H 没有入站服务。自治 E 同样配置 `peer-url=P` 并主动拉取。N 个节点默认 N−1 条以 P 为中心的逻辑同步关系，避免全互联；仅在缺块修复或 P 故障时启用经授权的备用对等连接。B 的访客切换还需预配置 DNS/客户端入口，受缓存和探测时延影响，不由同步协议自动保证。
 
 总成本为服务器固定费、存储与备份费、出口字节费、请求费及运维成本之和。无供应商实时报价假设。先测 P 的容量、出口、请求时延及可接受停机时间，再决定是否增加 E；冷历史可选择性复制，但自治服务集必需内容必须常驻，不能省盘后仍声称具备完整离网能力。
 
@@ -126,16 +150,17 @@ P 新增内容不绕行 H；H 上传一次至 P，P 分发到 E。N 个节点默
 
 使用有限批次上传、短轮询或最长 25 秒的可选长轮询。允许连接复用，连接关闭不影响同步正确性。不伪装浏览器指纹，不需要随机垃圾填充；这些做法会增加复杂度或计费流量，也无法提供不可识别保证。退避抖动用于避免重连风暴。
 
-所有以下路径是拟议协议接口，当前仓库未提供实现：
+所有以下路径是协议接口；当前仓库已提供会话、批次、变更、库存、块和回执的基线 HTTP 资源，意图与签名检查点仍需后续实现：
 
 | 接口 | 请求/结果 | 正确性要求 |
 | --- | --- | --- |
 | `POST /sync/v1/sessions` | 身份证明、能力、游标；返回会话、限额和服务端水位 | 会话可重建，不承载唯一恢复状态 |
+| `POST /api/admin/edge-nodes/connection/bootstrap` | 已登录目标管理员写入本地 WESP 运行配置 | 仅接受目标 Admin JWT + step-up；响应不得返回 token |
 | `POST /sync/v1/inventory` | 分页清单和对象摘要；返回准确缺失列表 | 库存结果只是提示，提交时重新检查 |
 | `PUT /sync/v1/blocks/{hash}` | 上传一个完整块 | 哈希、长度和租户授权校验；幂等 |
 | `GET /sync/v1/blocks/{hash}` | 下载块，可使用 Range | 强 ETag 绑定字节表示；范围错配则重取 |
 | `PUT /sync/v1/batches/{batch_id}` | 不可变操作批次及清单 | 返回逐操作状态；重复批次不得改变内容 |
-| `GET /sync/v1/changes?cursor=...` | 拉取变更、业务意图和 next_cursor | 游标不代替本地事务应用确认 |
+| `GET /sync/v1/changes?after=...` | 拉取变更、业务意图和 next_cursor | 游标不代替本地事务应用确认 |
 | `PUT /sync/v1/receipts/{receipt_id}` | 报告持久化、复制或应用水位 | 回执可重复，连续水位不能越过缺口 |
 | `GET /sync/v1/snapshots/{id}` | 获取不可变快照清单 | 清单签名、摘要及检查点匹配 |
 | `PUT /sync/v1/intents/{id}` | 提交发布、审核或用户写入意图 | 对相同幂等键返回同一业务结果 |
@@ -157,14 +182,14 @@ P 新增内容不绕行 H；H 上传一次至 P，P 分发到 E。N 个节点默
 | 媒体类型 | 控制 `application/json`；块 `application/octet-stream`；不匹配返回 415 |
 | 压缩 | 基线必须支持 identity；gzip 仅协商后使用，禁止嵌套编码；解压大小及 32 倍倍率双重限制 |
 | 控制报文 | 编码前及解压后均不超过 1 MiB；单事件规范化后不超过 64 KiB；正文较大时引用对象 |
-| 二进制块 | 原始字节 1–2,097,152；默认 524,288；空文件用零块清单表示 |
+| 二进制块 | 原始字节 1–2,097,152；默认 524,288；空文件用零项清单表示且 file_hash 为 SHA-256(空字节) |
 | HTTP 头 / 路径及查询 | 总头部最大 16 KiB，单字段最大 4 KiB；request-target 最大 4 KiB |
 | 批次 / 清单分页 | 每批最多 256 操作；每页最多 1024 块条目，且仍受 1 MiB 限制 |
 | 因果向量 | 每数据集最多 128 个 actor/世代项，排序且不可重复；超限要求检查点，不得截断 |
 | 字符串 | 普通标识最大 128 ASCII 字节；不透明游标最大 2048 字节；错误说明最大 512 UTF-8 字节 |
 | 整数 | seq/epoch/offset/size/时钟均为无前导零的十进制字符串，范围 0..2^63−1；seq 从 1 开始 |
 | 摘要 | SHA-256 小写十六进制，恰好 64 字符；UUID 为小写带连字符形式 |
-| 签名 | Ed25519，64 字节签名编码为无填充 base64url（86 字符）；key_id 绑定已登记公钥 |
+| 签名 | 基线 HMAC-SHA256 小写十六进制（64 字符）；受控部署可协商 Ed25519（64 字节、无填充 base64url 86 字符）；key_id 绑定登记密钥 |
 
 HTTP 框架负责标准 framing；代理与应用必须使用一致的长度解析，拒绝歧义 Content-Length、冲突的 Transfer-Encoding 与截断消息。读到超过上限立即停止并返回 413，不等待完整 body；413 在认证和业务校验之前即可触发，不能留下已提交的半条事件。
 
@@ -176,9 +201,11 @@ HTTP 框架负责标准 framing；代理与应用必须使用一致的长度解�
 
 会话请求必填 `protocol_major`、`protocol_minor`、`node_id`、`incarnation`、`capabilities`、`datasets` 和 `limits`；datasets 每页最多 64 项，每项含 dataset_id、接收水位、应用水位及可选游标。响应必须含 `session_id`、已选能力/限制、`authority_mode`、`authority_epoch`、授权数据集、`required_public_copies`、`retry_after_seconds`。会话有效期默认 1 小时，会话过期不删除上传进度，离线本地服务也不依赖会话续期。
 
-操作采用 `{"signed": {...}, "signature": "..."}` 外层结构，signature 不参与自身签名；签名字节为 UTF-8 的 `WESP/1/op\n` 前缀与 `JCS(signed)` 拼接。signed 必须包含第 3.1 节字段（signature 除外），另含 `payload`、`required_capabilities` 和 `extensions`；无媒体时 manifest_id 为 null，无扩展时为 `{}`。payload_hash 为 JCS(payload) 的 SHA-256。控制发布、回执和检查点分别使用 `WESP/1/release\n`、`WESP/1/receipt\n`、`WESP/1/checkpoint\n` 域前缀，防止跨类型重放；这些是前缀中的单个 LF 字节，不是字面反斜线加 n。
+操作采用 `{"signed": {...}, "signature": "..."}` 外层结构，signature 不参与自身签名；基线签名字节为 `HMAC-SHA256(shared_token, UTF-8("WESP/1/op\n") || JCS(signed))`，Ed25519 配置使用相同域前缀和输入。signed 必须包含第 3.1 节字段（signature 除外），另含 `payload`、`required_capabilities` 和 `extensions`；无媒体时 manifest_id 为 null，无扩展时为 `{}`。payload_hash 为 JCS(payload) 的 SHA-256。控制发布、回执和检查点分别使用 `WESP/1/release\n`、`WESP/1/receipt\n`、`WESP/1/checkpoint\n` 域前缀，防止跨类型重放；这些是前缀中的单个 LF 字节，不是字面反斜线加 n。
 
-op_id 明确编码为 `tenant_id/dataset_id/actor_id/incarnation/seq`；前四项为 UUID，因此 op_id 上限独立为 168 ASCII 字节，不适用普通标识 128 字节限制。context 是按 `(actor_id, incarnation)` 排序的 `{actor_id, incarnation, seq}` 数组；本 actor 的 context 必须包含 seq−1（首条可省略零项）。hlc 是 `{physical_ms, logical}` 对象，两个成员均为整数串。同一事件必须保持逐字节语义不变地转发，不能由中继替换 context、签名或载荷。
+op_id 可采用 `tenant_id/dataset_id/actor_id/incarnation/seq` 的可复算形式，也可采用随机 UUID；接收方只按不透明唯一值去重，最大 200 ASCII 字符。context 是按 `(actor_id, incarnation)` 排序的 `{actor_id, incarnation, seq}` 数组；本 actor 的 context 必须包含 seq−1（首条可省略零项）。hlc 是 `{physical_ms, logical}` 对象，两个成员均为整数串。同一事件必须保持逐字节语义不变地转发，不能由中继替换 context、签名或载荷。
+
+实现保留一个控制事件 `entity_type=SYNC_REQUEST`、`operation=UPSERT` 用于全量重放。其 payload 必须包含目标 `target_node_id`、模式 `mode=FULL`、布尔 `force`，以及由目标节点 peer URL 确定的 `peer_id`（公网 peer URL 的 SHA-256）。接收端只接受目标节点自身的请求，将该 peer 的本地游标标记为待重置；下一次主动拉取从游标 0 开始，重复操作按 op_id/摘要幂等处理。
 
 下例仅展示结构，尖括号为占位符，不是可验签的测试向量；所有实际值必须满足上述格式与摘要约束。
 
@@ -208,14 +235,14 @@ op_id 明确编码为 `tenant_id/dataset_id/actor_id/incarnation/seq`；前四�
       "required_capabilities": [],
       "extensions": {}
     },
-    "signature": "<86-base64url>"
+      "signature": "<64-lowercase-hex-hmac>"
   }]
 }
 ```
 
 batch_id 是 UUID，路径和 body 值必须相同；批次去重摘要为完整请求 JSON 的 JCS 摘要。请求重试可换 request_id，但必须保留 batch_id、操作 ID、内容与签名。新会话和新接入节点不重置去重语义。
 
-首次批次持久接收返回 201，重复且内容一致返回 200；两者都不表示公众可见。结构错误整批拒绝且不应用；结构合法后可逐事件接收，响应 `results` 必须逐一对应输入 op_id，状态为 `ACCEPTED_LOCAL`、`DUPLICATE`、`WAITING_DEPENDENCY` 或 `REJECTED`，禁止只返回一个 success=true。异步业务意图返回 202。APPLIED/VISIBLE 等后续进度通过签名回执获取。
+首次批次持久接收返回 201，重复且内容一致返回 200；两者都不表示公众可见。结构错误整批拒绝且不应用；结构合法后可逐事件接收，响应 `results` 必须逐一对应输入 op_id，状态为 `ACCEPTED_LOCAL`、`DUPLICATE`、`WAITING_DEPENDENCY`、`CONFLICT` 或 `REJECTED`，禁止只返回一个 success=true。异步业务意图返回 202。APPLIED/VISIBLE 等后续进度通过签名回执获取。
 
 错误响应固定为 `{"request_id":"<uuid>","error":{"code":"OP_ID_CONFLICT","retryable":false,"message":"...","details":{}}}`，details 不超过 4 KiB。400 表示 framing/JSON 错误，422 表示字段或语义错误，409 表示身份/内容冲突；鉴权、限流与资源状态沿用第 4 节。不得在错误中返回正文、token、私钥或跨租户库存。
 
@@ -223,7 +250,7 @@ batch_id 是 UUID，路径和 body 值必须相同；批次去重摘要为完整
 
 块 PUT 的 URL 摘要必须等于解码后原始字节摘要；上传流采用临时文件，长度与摘要通过后原子落入块库。重复相同块返回原对象状态；哈希不符返回 422 `HASH_MISMATCH` 并丢弃临时内容。库存查询要求 `{hash,size}` 条目，响应逐项给出 present/missing，未返回条目不能视为存在。
 
-文件清单含 `schema_version`、`file_size`、`file_hash`、`chunking` 和有序 `blocks[{hash,size}]`；块大小之和必须等于 file_size，块原文拼接摘要必须等于 file_hash，manifest_id 是清单 JCS 摘要。超过单页时改用根清单引用页摘要，每页至多 1024 项、根至多 1024 页，页序与块序均参加哈希；v1 单文件上限 1 TiB，禁止循环清单引用。清单是一类 JSON 对象，可通过 blocks 接口以其 JCS 字节存储。
+文件清单含 `schema_version`、`file_size`、`file_hash`、`chunking` 和有序 `blocks[{hash,size}]`；块大小之和必须等于 file_size，块原文拼接摘要必须等于 file_hash，manifest_id 是去掉自身字段后的清单 JCS 摘要。超过单页时改用根清单引用页摘要，每页至多 1024 项、根至多 1024 页，页序与块序均参加哈希；v1 单文件上限 1 TiB，禁止循环清单引用。清单是一类 JSON 对象，可通过 blocks 接口以其 JCS 字节存储。
 
 块 GET 的 Range 仅支持单一字节区间且必须配合 If-Range/强 ETag；范围传输采用 identity，防止压缩前后偏移混淆。收到 200 必须替换此前局部缓存，不能盲目追加；416 重新校验大小与本地进度。
 
@@ -407,7 +434,7 @@ TLS 负责传输保护，独立操作签名负责经过多个接入节点转存�
 
 公开快照必须完整保留文章许可、署名、原文地址、内容声明和访问属性；不能仅同步 HTML 而丢失这些语义。数据库自增 ID 不能在多主之间直接合并，迁移期建立 `(旧节点身份, 旧 ID) → 全局 UUID` 映射。Quarkus、Flutter Admin 与 Codex Creator 各自保持数据库边界；生成服务提交草稿意图，不直接修改复制层或其他服务数据库。
 
-未来迁移建议分阶段：先引入 outbox/inbox 与主动接入；再构建完整边缘只读 release 和对象池；随后迁移评论等异步写入；最后开放多主 revision 与仲裁发布。过渡期按数据集指定唯一写入路径，禁止新旧同步管道各自写入再相互回灌。本文不修改现有 API、配置、数据库或部署文件。
+未来迁移建议分阶段：先引入 outbox/inbox 与主动接入；再构建完整边缘只读 release 和对象池；随后迁移评论等异步写入；最后开放多主 revision 与仲裁发布。当前实现已增加 WESP API、配置项、同步表和管理端“新增节点”连接引导；过渡期按数据集指定唯一写入路径，禁止新旧同步管道各自写入再相互回灌。
 
 ## 14. 故障推演与后续验收标准
 
@@ -444,3 +471,19 @@ TLS 负责传输保护，独立操作签名负责经过多个接入节点转存�
 - [RFC 9000：QUIC](https://www.rfc-editor.org/rfc/rfc9000.html)：基于 UDP 的传输、连接与路径迁移；因此 v1 保留 TCP 上的 HTTPS 基线。
 - [RFC 8785：JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785.html)：签名输入规范化。
 - [Ink & Switch：Local-first software](https://www.inkandswitch.com/essay/local-first/)：离线拥有数据及多副本协作的设计背景；本文仅对适合的数据类型采用自动合并。
+
+## 16. 当前实现状态与迁移开关
+
+仓库当前已提供 WESP v1 的持久化 outbox/inbox、双向批次交换、游标、内容寻址块存储、附件库存、回执和 HTTP 接收资源。`WINDBLOG_WESP_ENABLED=true` 时，`EdgeDataSyncService` 不再调用旧 gRPC 广播，而是把公开实体事件写入 `wesp_sync_operations`；节点在配置 `WINDBLOG_WESP_PEER_URL` 后每 30 秒主动发送和拉取。接收端需要配置相同的 `WINDBLOG_WESP_AUTH_TOKEN`，否则请求按 401 拒绝。空 peer URL 只会积压本地 outbox，不会自动回退到旧 gRPC。快照端点在尚无签名检查点时明确返回 410，避免把操作日志误报成可恢复快照。
+
+节点登记已切换到“新增节点”连接引导：主节点先探测目标 `/q/health/ready`，再用目标管理员账号登录并取得短时 step-up，最后调用目标 `/api/admin/edge-nodes/connection/bootstrap` 写入 peer、租户/数据集、随机 incarnation 和共享 token。密码、JWT 和共享 token 都不出现在响应或日志中；目标随后只通过主动 HTTPS 会话访问公网主节点。WESP 节点的“全量同步”不再调用旧 gRPC，而是写入 `SYNC_REQUEST` 操作；目标家庭节点主动拉到后重置对应 peer 游标并幂等重放完整操作日志。主节点可登记多个家庭或公网目标节点。
+
+当前实现的基础认证是 HTTPS 服务端证书校验加共享 Bearer token；操作载荷校验 SHA-256、批次和 op_id 幂等，并用共享 token 对 signed 操作做 HMAC-SHA256 校验。基线对同一实体、同一数据集、同一序号的不同节点写入报告冲突，跨节点后续序号可继续应用；需要严格因果合并时应升级到带版本向量的实现，并可用 FORCE_UPSERT 走人工确认。mTLS、Ed25519 独立操作签名和正式快照恢复属于下一阶段增强，不能把当前实现描述成已具备这些能力。启用 mTLS 时应在反向代理或 Quarkus TLS 层完成客户端证书校验，并继续保留 token/操作授权。
+
+当前实现已增加 `WespAttachmentSyncService`：每分钟有限扫描少量未生成清单的媒体，从可用存储类读取 `ORIGINAL`，按 512 KiB 固定块生成 SHA-256 内容寻址块和 `MEDIA_MANIFEST` 操作；块先本地原子落盘，再尽力主动上传，失败时由下次扫描/批次重试。接收端在拉取清单后会逐块校验、验证整文件摘要、原子组装到本地媒体目录，并更新现有 `StorageService` 的 ORIGINAL 路径，因此家庭节点离线期间仍可继续生成清单和积累 outbox。当前版本对单清单仍受 64 KiB 操作上限约束，超过约 1000 个块的文件会记录告警并等待分页清单实现；不会声称已覆盖所有变体或任意外部 URL。只有达到 `DURABLE_R` 或单节点明确接受的数据耐久级别后，才允许清理家庭 outbox。
+
+### 16.1 mTLS 是否必要
+
+对当前低成本拓扑（公网主节点 + 一个或多个主动出站的家庭节点），mTLS 不是协议正确性的必要条件：公网入口使用正常 HTTPS 服务端证书，节点使用强随机 Bearer token，操作再用同一密钥做 HMAC，已经同时提供传输保密、请求授权、报文完整性和幂等重放防护。mTLS 不会改变流量是否被识别，也不能解决运营商上行限速；它只加强“哪个节点获得了入口权限”的身份绑定。
+
+建议按风险分档：单一自管家庭与公网主、入口前有 WAF/限流时先不上 mTLS，以减少证书签发、轮换和断网维护成本；存在多个相互不完全信任的主节点、token 泄露后果较高、或入口没有可靠的应用层 ACL 时，再在反向代理或 Quarkus TLS 层启用双向证书校验。启用后仍保留 token 和 HMAC 作为应用层授权/报文校验，并采用“新旧凭据并行一段时间 → 轮换家庭客户端证书 → 撤销旧证书”的迁移顺序。

@@ -32,6 +32,8 @@ public class EdgeNodeRegistry {
     @Inject
     NodeRoleService nodeRoleService;
     @Inject
+    WespSyncService wespSyncService;
+    @Inject
     @GrpcService // 必须带上此限定符，因为 EdgeNodeGrpcService 在 CDI 容器中仅带有 @GrpcService 限定符。由于注入类型是具体的实现类而非接口或 Stub，这依然是纯本地方法调用，不会产生 gRPC 网络请求。
     EdgeNodeGrpcService edgeNodeGrpcService;
 
@@ -138,7 +140,7 @@ public class EdgeNodeRegistry {
      */
     @Scheduled(every = "30s")
     public void pollActiveNodes() {
-        if (nodeRoleService.isEdgeNode()) {
+        if (nodeRoleService.isEdgeNode() || wespSyncService.isEnabled()) {
             return;
         }
         if (!legacyActivePollEnabled) {

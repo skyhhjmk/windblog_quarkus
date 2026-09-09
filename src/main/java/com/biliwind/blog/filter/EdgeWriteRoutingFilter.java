@@ -105,6 +105,15 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
         if (path.equals("/api/admin/auth/login")) {
             return true;
         }
+        if (path.equals("/api/admin/auth/step-up")) {
+            return true;
+        }
+        // The primary writes the WESP runtime bootstrap only after logging in
+        // to this target node. Keep that authenticated local operation on the
+        // edge; forwarding it would send the request back to the primary.
+        if (path.equals("/api/admin/edge-nodes/connection/bootstrap")) {
+            return true;
+        }
         if (path.equals("/api/admin/install")) {
             return true;
         }

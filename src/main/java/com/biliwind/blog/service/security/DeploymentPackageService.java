@@ -71,12 +71,12 @@ public class DeploymentPackageService {
     @Inject
     @ConfigProperty(
             name = "windblog.edge.deployment.image-repository",
-            defaultValue = "ghcr.io/skyhhjmk/windblog_quarkus"
+            defaultValue = "docker.io/hhjmk/windblog_quarkus"
     )
     String edgeImageRepository;
 
     /**
-     * 为边缘节点生成完整的部署 ZIP 包。
+     * 为边缘节点生成轻量化的一键部署 ZIP 包。
      * ZIP 解压后对应目录结构：
      * <pre>
      * windblog-edge-{nodeId}/
@@ -90,6 +90,7 @@ public class DeploymentPackageService {
      *       truststore.p12
      *   .env
      *   docker-compose.yml
+     *   deploy.sh
      *   README.txt
      * </pre>
      */
@@ -141,6 +142,8 @@ public class DeploymentPackageService {
         String dockerComposeContent = buildDockerCompose(node);
         addTextEntry(zipOutputStream, baseDir + "/docker-compose.yml", dockerComposeContent);
 
+        addTextEntry(zipOutputStream, baseDir + "/deploy.sh", buildDeployScript());
+
         String readmeContent = buildReadme(node, imageReference, effectiveImageVariant);
         addTextEntry(zipOutputStream, baseDir + "/README.txt", readmeContent);
 
@@ -173,6 +176,7 @@ public class DeploymentPackageService {
 
         sb.append("EDGE_GRPC_PORT=").append(grpcPort).append("\n");
         sb.append("EDGE_APP_GRPC_PORT=").append(grpcPort).append("\n");
+        sb.append("EDGE_GRPC_BIND_IP=127.0.0.1\n");
 
         sb.append("EDGE_CONNECTION_TYPE=").append(node.connectionType.name()).append("\n");
         sb.append("WINDBLOG_NODE_ROLE=edge\n");
@@ -195,8 +199,16 @@ public class DeploymentPackageService {
         sb.append("SECURITY_HEADERS_HSTS_ENABLED=true\n");
         sb.append("SWAGGER_UI_ENABLED=false\n");
         sb.append("SECURITY_EVENT_HASH_SECRET=").append(eventHashSecret).append("\n");
+        sb.append("WINDBLOG_OUTBOX_ENABLED=false\n");
+        sb.append("WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED=false\n");
+        sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED=false\n");
+        sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED=false\n");
+        sb.append("WINDBLOG_STORAGE_METRICS_ENABLED=false\n");
+        sb.append("WINDBLOG_LOG_COMPRESSION_ENABLED=false\n");
+        sb.append("QUARKUS_LOG_FILE_ENABLED=false\n");
 
         sb.append("EDGE_DB_USER=windblog\n");
+        sb.append("EDGE_DB_IMAGE=postgres:18-alpine\n");
         sb.append("EDGE_DB_PASSWORD=").append(edgeDatabasePassword).append("\n");
         sb.append("EDGE_DB_NAME=windblog_edge\n");
         sb.append("EDGE_DATASOURCE_URL=jdbc:postgresql://edge-db:5432/windblog_edge\n");
@@ -207,6 +219,11 @@ public class DeploymentPackageService {
         sb.append("EDGE_APP_HTTP_PORT=").append(httpPort).append("\n");
         sb.append("WINDBLOG_EDGE_IMAGE=").append(imageReference).append("\n");
         sb.append("WINDBLOG_EDGE_IMAGE_VARIANT=").append(imageVariant.getRequestValue()).append("\n");
+        sb.append("WINDBLOG_EDGE_LIGHTWEIGHT=true\n");
+        sb.append("WINDBLOG_WESP_ENABLED=true\n");
+        sb.append("WINDBLOG_WESP_CONFIG_FILE=/work/wesp-config/wesp-config.json\n");
+        sb.append("WINDBLOG_WESP_BLOCK_STORE=/work/wesp-blocks\n");
+        sb.append("MEDIA_UPLOAD_DIR=/work/uploads\n");
 
         sb.append("USER_JWT_SECRET=").append(this.userJwtSecret).append("\n");
         sb.append("USER_JWT_ISSUER=").append(this.userJwtIssuer).append("\n");
@@ -261,8 +278,10 @@ public class DeploymentPackageService {
 
         sb.append("  edge-db:\n");
         sb.append("    container_name: ").append(containerPrefix).append("-db\n");
-        sb.append("    image: pgvector/pgvector:pg18\n");
+        sb.append("    image: ${EDGE_DB_IMAGE:-postgres:18-alpine}\n");
         sb.append("    restart: unless-stopped\n");
+        sb.append("    cpus: \"0.50\"\n");
+        sb.append("    mem_limit: 256m\n");
         sb.append("    networks:\n");
         sb.append("      - app-network\n");
         sb.append("    environment:\n");
@@ -282,6 +301,8 @@ public class DeploymentPackageService {
         sb.append("    container_name: ").append(containerPrefix).append("-redis\n");
         sb.append("    image: redis:8-alpine\n");
         sb.append("    restart: unless-stopped\n");
+        sb.append("    cpus: \"0.25\"\n");
+        sb.append("    mem_limit: 96m\n");
         sb.append("    networks:\n");
         sb.append("      - app-network\n");
         sb.append("    volumes:\n");
@@ -300,13 +321,20 @@ public class DeploymentPackageService {
         sb.append("    container_name: ").append(containerPrefix).append("-node\n");
         sb.append("    image: ${WINDBLOG_EDGE_IMAGE}\n");
         sb.append("    restart: unless-stopped\n");
+        sb.append("    cpus: \"1.00\"\n");
+        sb.append("    mem_limit: 384m\n");
+        sb.append("    user: \"${EDGE_RUNTIME_UID:-1000}:${EDGE_RUNTIME_GID:-1000}\"\n");
         sb.append("    networks:\n");
         sb.append("      - app-network\n");
         sb.append("    ports:\n");
-        sb.append("      - \"${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\"\n");
+        sb.append("      - \"${EDGE_GRPC_BIND_IP:-127.0.0.1}:${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\"\n");
         sb.append("      - \"${EDGE_APP_HTTP_PORT}:8081\"\n");
         sb.append("    volumes:\n");
         sb.append("      - ./certs:/work/certs\n");
+        sb.append("      - ./data/uploads:/work/uploads\n");
+        sb.append("      - ./data/wesp-blocks:/work/wesp-blocks\n");
+        sb.append("      - ./data/wesp-config:/work/wesp-config\n");
+        sb.append("      - ./data/rsa-keys:/work/rsa_keys\n");
         sb.append("    env_file:\n");
         sb.append("      - .env\n");
         sb.append("    environment:\n");
@@ -314,6 +342,10 @@ public class DeploymentPackageService {
         sb.append("      - QUARKUS_DATASOURCE_USERNAME=${EDGE_DB_USER}\n");
         sb.append("      - QUARKUS_DATASOURCE_PASSWORD=${EDGE_DB_PASSWORD}\n");
         sb.append("      - QUARKUS_REDIS_HOSTS=${EDGE_REDIS_URL}\n");
+        sb.append("      - MEDIA_UPLOAD_DIR=${MEDIA_UPLOAD_DIR:-/work/uploads}\n");
+        sb.append("      - WINDBLOG_WESP_CONFIG_FILE=${WINDBLOG_WESP_CONFIG_FILE:-/work/wesp-config/wesp-config.json}\n");
+        sb.append("      - WINDBLOG_WESP_BLOCK_STORE=${WINDBLOG_WESP_BLOCK_STORE:-/work/wesp-blocks}\n");
+        sb.append("      - WINDBLOG_EDGE_LIGHTWEIGHT=${WINDBLOG_EDGE_LIGHTWEIGHT:-true}\n");
         sb.append("      - QUARKUS_HTTP_PORT=8081\n");
         sb.append("      - QUARKUS_GRPC_SERVER_HOST=0.0.0.0\n");
         sb.append("      - QUARKUS_GRPC_SERVER_PORT=${EDGE_GRPC_PORT}\n");
@@ -363,6 +395,74 @@ public class DeploymentPackageService {
         return sb.toString();
     }
 
+    private String buildDeployScript() {
+        return """
+                #!/usr/bin/env bash
+                set -Eeuo pipefail
+
+                ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+                cd "${ROOT_DIR}"
+
+                # Bind-mounted data must remain writable by the non-root host user.
+                export EDGE_RUNTIME_UID="${EDGE_RUNTIME_UID:-$(id -u)}"
+                export EDGE_RUNTIME_GID="${EDGE_RUNTIME_GID:-$(id -g)}"
+                mkdir -p data/uploads data/wesp-blocks data/wesp-config data/rsa-keys
+                chmod 700 data/uploads data/wesp-blocks data/wesp-config data/rsa-keys
+
+                if [[ -r .env ]]; then
+                  set -a
+                  # shellcheck disable=SC1091
+                  source ./.env
+                  set +a
+                fi
+
+                if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+                  compose=(docker compose)
+                elif command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
+                  compose=(podman compose)
+                elif command -v docker-compose >/dev/null 2>&1; then
+                  compose=(docker-compose)
+                else
+                  echo "需要 Docker Compose 或 Podman Compose。" >&2
+                  exit 1
+                fi
+
+                case "${1:-up}" in
+                  up|start)
+                    "${compose[@]}" pull edge-db edge-redis edge-node
+                    "${compose[@]}" up -d --remove-orphans
+                    if command -v curl >/dev/null 2>&1; then
+                      port="${EDGE_APP_HTTP_PORT:-8081}"
+                      for attempt in $(seq 1 60); do
+                        if curl -fsS --max-time 3 "http://127.0.0.1:${port}/q/health/ready" >/dev/null; then
+                          echo "边缘节点已就绪: http://127.0.0.1:${port}"
+                          exit 0
+                        fi
+                        sleep 2
+                      done
+                      echo "边缘节点已启动，但健康检查超时；请查看日志。" >&2
+                      "${compose[@]}" logs --tail 120 edge-node >&2 || true
+                      exit 1
+                    fi
+                    "${compose[@]}" ps
+                    ;;
+                  stop|down)
+                    "${compose[@]}" down
+                    ;;
+                  status)
+                    "${compose[@]}" ps
+                    ;;
+                  logs)
+                    "${compose[@]}" logs --tail="${2:-120}" edge-node
+                    ;;
+                  *)
+                    echo "用法: $0 {up|stop|status|logs [lines]}" >&2
+                    exit 2
+                    ;;
+                esac
+                """;
+    }
+
     private String buildReadme(
             EdgeNode node,
             String imageReference,
@@ -370,7 +470,7 @@ public class DeploymentPackageService {
     ) {
         StringBuilder sb = new StringBuilder();
         sb.append("========================================\n");
-        sb.append("WindBlog 边缘节点部署包\n");
+        sb.append("WindBlog 轻量边缘节点部署包\n");
         sb.append("========================================\n");
         sb.append("\n");
         sb.append("节点 ID: ").append(node.nodeId).append("\n");
@@ -386,7 +486,9 @@ public class DeploymentPackageService {
         sb.append("（证书到期前主节点会自动签发新证书，需要重新部署更新）\n");
         sb.append("注意: 从节点启动时会自动生成自签名证书到 certs/ 目录\n");
         sb.append("       主节点签发的证书用于 mTLS 身份验证\n");
-        sb.append("       使用 edge profile 启动时会关闭 RabbitMQ 通道，只保留 gRPC 回源和本地数据库/Redis。\n");
+        sb.append("       使用 native-micro edge 镜像；不部署 RabbitMQ、Elasticsearch、Codex Creator 或 ClamAV。\n");
+        sb.append("       仅保留本地 PostgreSQL、Redis、WESP 同步、缓存和公开读服务。\n");
+        sb.append("       deploy.sh 会创建 data/uploads、data/wesp-blocks、data/wesp-config、data/rsa-keys 并持久化。\n");
         sb.append("\n");
         sb.append("========================================\n");
         sb.append("部署步骤\n");
@@ -397,19 +499,20 @@ public class DeploymentPackageService {
         sb.append("2. 进入解压后的目录:\n");
         sb.append("   cd windblog-edge-").append(node.nodeId).append("\n");
         sb.append("\n");
-        sb.append("3. 确保 Docker 和 Docker Compose 已安装\n");
+        sb.append("3. 确保 Docker Compose 或 Podman Compose 已安装，并登录镜像仓库（私有仓库时）\n");
         sb.append("\n");
-        sb.append("4. 本节点使用 bridge 网络模式，仅映射受控的 HTTP 和 gRPC 入口；数据库与 Redis 只在内部网络可见。\n");
-        sb.append("   编辑 .env 文件确认 EDGE_APP_HTTP_PORT、EDGE_GRPC_PORT 未被占用，并保留 gRPC mTLS 配置。\n");
+        sb.append("4. 本节点使用 bridge 网络模式，公网默认只映射 HTTP；数据库、Redis 和旧 gRPC 不映射到公网。\n");
+        sb.append("   如需更换端口或镜像，编辑 .env；默认镜像为 native-micro 轻量变体。\n");
         sb.append("\n");
-        sb.append("5. 如果主节点不在 host.docker.internal 上,\n");
-        sb.append("   请编辑 .env 文件修改 MAIN_NODE_GRPC_HOST 为实际主节点地址\n");
+        sb.append("5. 首次接入请在主节点管理端选择“新增节点”，填写本节点地址并用本节点管理员登录；服务端会自动写入 WESP 运行配置，家庭节点只主动访问 HTTPS peer。\n");
+        sb.append("   旧 gRPC 回滚场景才需要编辑 .env 中的 MAIN_NODE_GRPC_HOST/MAIN_NODE_GRPC_PORT。\n");
         sb.append("\n");
-        sb.append("6. 启动服务:\n");
-        sb.append("   docker compose up -d\n");
+        sb.append("6. 一键启动（自动拉取镜像、创建数据卷并等待健康检查）:\n");
+        sb.append("   bash deploy.sh\n");
         sb.append("\n");
-        sb.append("7. 查看日志确认正常:\n");
-        sb.append("   docker compose logs -f edge-node\n");
+        sb.append("7. 查看日志或停止服务:\n");
+        sb.append("   bash deploy.sh logs\n");
+        sb.append("   bash deploy.sh stop\n");
         sb.append("\n");
         sb.append("========================================\n");
         return sb.toString();
@@ -427,7 +530,7 @@ public class DeploymentPackageService {
 
         String imageRepository = edgeImageRepository;
         if (imageRepository == null || imageRepository.isBlank()) {
-            imageRepository = "ghcr.io/skyhhjmk/windblog_quarkus";
+            imageRepository = "docker.io/hhjmk/windblog_quarkus";
         }
 
         imageRepository = removeTrailingTag(imageRepository.trim());

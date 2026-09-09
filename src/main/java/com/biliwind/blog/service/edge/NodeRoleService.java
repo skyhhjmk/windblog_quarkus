@@ -6,6 +6,9 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class NodeRoleService {
 
+    @jakarta.inject.Inject
+    WespRuntimeConfig wespRuntimeConfig;
+
     @ConfigProperty(name = "windblog.node.role", defaultValue = "primary")
     String nodeRole;
 
@@ -21,6 +24,11 @@ public class NodeRoleService {
     }
 
     public String getNodeId() {
+        String enrolledNodeId = wespRuntimeConfig == null ? null
+                : wespRuntimeConfig.nodeId().orElse(null);
+        if (enrolledNodeId != null && !enrolledNodeId.isBlank()) {
+            return enrolledNodeId.trim();
+        }
         if (nodeId == null || nodeId.isBlank()) {
             return "main";
         }

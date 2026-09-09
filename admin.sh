@@ -479,7 +479,7 @@ env_generate() {
 
   # 非密码项只在缺失或为空时补齐，不覆盖用户现有配置。
   ensure_env_value WINDBLOG_SITE_PUBLIC_URL 'https://your-domain.example'
-  ensure_env_value WINDBLOG_IMAGE 'ghcr.io/skyhhjmk/windblog_quarkus:latest-native'
+  ensure_env_value WINDBLOG_IMAGE 'docker.io/hhjmk/windblog_quarkus:latest-native'
   ensure_env_value WINDBLOG_PULL_POLICY always
   ensure_env_value WINDBLOG_HOST_PORT 8080
   ensure_env_value WINDBLOG_GRPC_HOST_PORT 9000

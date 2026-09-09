@@ -29,6 +29,8 @@ public class ActivePollPersistentChannelService {
 
     @Inject
     NodeRoleService nodeRoleService;
+    @Inject
+    WespSyncService wespSyncService;
 
     @Inject
     GrpcChannelFactory channelFactory;
@@ -47,7 +49,7 @@ public class ActivePollPersistentChannelService {
 
     @Scheduled(every = "30s")
     public void ensureActivePollChannels() {
-        if (!nodeRoleService.isPrimaryNode()) {
+        if (!nodeRoleService.isPrimaryNode() || wespSyncService.isEnabled()) {
             return;
         }
 
@@ -69,7 +71,7 @@ public class ActivePollPersistentChannelService {
 
     @Scheduled(every = "10s")
     public void keepActivePollChannelsAlive() {
-        if (!nodeRoleService.isPrimaryNode()) {
+        if (!nodeRoleService.isPrimaryNode() || wespSyncService.isEnabled()) {
             return;
         }
 

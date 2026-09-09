@@ -53,6 +53,9 @@ public class EdgeDataSyncService {
     @Inject
     jakarta.enterprise.inject.Instance<com.biliwind.blog.service.OutboxEventService> outboxEventService;
 
+    @Inject
+    WespSyncService wespSyncService;
+
     void onStart(@Observes StartupEvent ev) {
         if (nodeRoleService.isEdgeNode()) {
             log.info("当前节点是边缘节点，跳过主节点数据广播初始化");
@@ -452,6 +455,13 @@ public class EdgeDataSyncService {
     }
 
     private void broadcastSync(String entityType, String action, String entityId, String payload) {
+        if (wespSyncService.isEnabled()) {
+            // WESP persists the operation first and delivers it from the node that
+            // initiated the request. This prevents the old primary-to-edge gRPC
+            // push from opening an inbound path to a home node.
+            wespSyncService.enqueueLocalOperation(entityType, action, entityId, payload);
+            return;
+        }
         List<EdgeNode> allNodes = registry.getAllNodes();
         java.util.ArrayList<EdgeNode> nodes = new java.util.ArrayList<>();
         for (EdgeNode node : allNodes) {

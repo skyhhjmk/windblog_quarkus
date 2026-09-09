@@ -27,7 +27,22 @@
 
 本地启动器还会在测试数据目录生成并复用 `mcp-bearer-token`，供 app-server 和 MCP 端点共同认证；不会将令牌写入 Git。
 
-当前默认使用本地 WindBlog 快照镜像和本地 native Codex Creator 镜像；可通过 `WINDBLOG_IMAGE`、`CODEX_CREATOR_IMAGE` 覆盖。Codex CLI 版本由镜像固定为 `0.150.1`。
+当前工作区的 `.env` 使用从源码构建的 `localhost/windblog:local-native`，并设为
+`WINDBLOG_PULL_POLICY=never`，所以本地测试不会被未更新的 Docker Hub 镜像覆盖。重新构建：
+
+```bash
+./mvnw -q -Dmaven.test.skip=true -Dnative -Dquarkus.profile=prod \
+  -Dquarkus.container-image.build=false package
+podman build -f src/main/docker/Dockerfile.native -t localhost/windblog:local-native .
+bash scripts/local-test.sh up
+```
+
+如需临时使用 Docker Hub 版本，可在命令前显式设置
+`WINDBLOG_IMAGE=docker.io/hhjmk/windblog_quarkus:latest-native WINDBLOG_PULL_POLICY=always`。
+native 镜像按 `prod` profile 构建，启动器会在本地 HTTP 测试栈中使用 `dev` profile 并将
+Cookie 安全标志设为 `true`，避免静态初始化值不一致；可用
+`WINDBLOG_LOCAL_TEST_QUARKUS_PROFILE`、`WINDBLOG_LOCAL_TEST_COOKIE_SECURE` 覆盖。
+Codex CLI 版本由镜像固定为 `0.150.1`。
 
 可用以下请求验证 Codex app-server 与远端模型目录链路：
 

@@ -40,6 +40,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static boolean isSuperAdminOnly(String method, String path, RiskLevel riskLevel) {
+        if (path.equals("/api/admin/edge-nodes/connection/bootstrap")) {
+            return false;
+        }
         if (path.startsWith("/api/admin/security/content-access-tickets")) {
             return true;
         }
@@ -223,6 +226,12 @@ public final class AdminAuthorizationPolicy {
     private static String actionFor(String method, String path, String resource) {
         if (path.endsWith("/original-download-ticket")) {
             return "media.download_original";
+        }
+        if (path.equals("/api/admin/edge-nodes/connect")) {
+            return "edge.connection.connect";
+        }
+        if (path.equals("/api/admin/edge-nodes/connection/bootstrap")) {
+            return "edge.connection.bootstrap";
         }
         if (path.startsWith("/api/admin/security/content-access-tickets")) {
             return "security.ticket.rotate";

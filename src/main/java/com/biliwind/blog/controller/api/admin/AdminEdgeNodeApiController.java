@@ -6,6 +6,9 @@ import com.biliwind.blog.model.EdgeConnectionType;
 import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.model.EdgeSyncRecord;
 import com.biliwind.blog.service.edge.EdgeNodeRegistry;
+import com.biliwind.blog.service.edge.WespRuntimeConfig;
+import com.biliwind.blog.service.edge.WespNodeConnectionService;
+import com.biliwind.blog.service.edge.WespSyncService;
 import com.biliwind.blog.service.security.CertificateRenewalService;
 import com.biliwind.blog.service.security.DeploymentPackageService;
 import com.biliwind.blog.service.security.EdgeImageVariant;
@@ -17,6 +20,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -45,11 +49,96 @@ public class AdminEdgeNodeApiController {
     @Inject
     DeploymentPackageService deploymentPackageService;
 
+    @Inject
+    WespSyncService wespSyncService;
+
+    @Inject
+    WespNodeConnectionService wespNodeConnectionService;
+
+    @Inject
+    WespRuntimeConfig wespRuntimeConfig;
+
     @GET
     @Operation(summary = "获取所有边缘节点", description = "获取所有已注册的边缘节点及其状态")
     @Transactional
     public List<EdgeNode> list() {
         return registry.getAllNodes();
+    }
+
+    @POST
+    @Path("/connect")
+    @Operation(summary = "新增并连接边缘节点",
+            description = "先探测目标节点，再使用目标管理员凭据登录并写入 WESP 主动连接配置")
+    public Response connect(WespNodeConnectionService.ConnectionRequest request) {
+        try {
+            return Response.ok(wespNodeConnectionService.connect(request)).build();
+        } catch (WebApplicationException exception) {
+            Response response = exception.getResponse();
+            int status = response == null ? Response.Status.BAD_GATEWAY.getStatusCode() : response.getStatus();
+            return Response.status(status).type(MediaType.APPLICATION_JSON_TYPE)
+                    .entity(java.util.Map.of("success", false, "message",
+                            exception.getMessage() == null ? "节点连接失败" : exception.getMessage()))
+                    .build();
+        } catch (RuntimeException exception) {
+            return Response.status(Response.Status.BAD_GATEWAY).type(MediaType.APPLICATION_JSON_TYPE)
+                    .entity(java.util.Map.of("success", false, "message", "节点连接失败，请检查目标地址和管理员凭据"))
+                    .build();
+        }
+    }
+
+    @GET
+    @Path("/connect/probe")
+    @Operation(summary = "探测目标边缘节点", description = "仅检查目标节点健康状态，不发送管理员凭据")
+    public WespNodeConnectionService.ProbeResult probe(@QueryParam("targetUrl") String targetUrl) {
+        return wespNodeConnectionService.probe(targetUrl);
+    }
+
+    /**
+     * Target-side endpoint used only after a successful target admin login.
+     * It is intentionally local on an edge node so the write-routing filter
+     * cannot forward the bootstrap back to the primary.
+     */
+    @POST
+    @Path("/connection/bootstrap")
+    @Transactional
+    @Operation(summary = "写入 WESP 运行配置", description = "由已登录的目标管理员完成一次性节点引导")
+    public Response bootstrap(ConnectionBootstrapRequest request) {
+        if (request == null || blank(request.nodeId()) || blank(request.peerUrl())
+                || blank(request.authToken()) || blank(request.tenantId())
+                || blank(request.datasetId()) || blank(request.incarnation())) {
+            throw new BadRequestException("WESP 连接引导参数不完整");
+        }
+        if (request.nodeId().length() > 100 || request.authToken().length() < 32
+                || request.authToken().length() > 512 || request.incarnation().length() > 100) {
+            throw new BadRequestException("WESP 连接引导参数无效");
+        }
+        try {
+            wespRuntimeConfig.applyBootstrap(request.nodeId().trim(), request.peerUrl().trim(),
+                    request.authToken().trim(), request.tenantId().trim(), request.datasetId().trim(),
+                    request.incarnation().trim());
+            wespSyncService.refreshRuntimeConfig();
+
+            EdgeNode node = EdgeNode.findByNodeId(request.nodeId().trim());
+            if (node == null) {
+                node = new EdgeNode();
+                node.nodeId = request.nodeId().trim();
+            }
+            node.name = blank(request.nodeName()) ? node.nodeId : request.nodeName().trim();
+            node.region = request.region() == null ? BlogRegion.GLOBAL : request.region();
+            node.connectionType = EdgeConnectionType.WESP;
+            node.apiUrl = request.peerUrl().trim().replaceAll("/+$", "");
+            node.externalUrl = blank(request.externalUrl()) ? null : request.externalUrl().trim();
+            node.status = "CONFIGURED";
+            node.isEnabled = true;
+            node.isTrusted = true;
+            if (node.metrics == null) node.metrics = new java.util.HashMap<>();
+            node.metrics.put("connection", "admin-login-bootstrap");
+            node.persist();
+            return Response.ok(java.util.Map.of("success", true, "nodeId", node.nodeId,
+                    "status", node.status, "message", "WESP 运行配置已保存，节点将主动连接主节点")).build();
+        } catch (IllegalArgumentException exception) {
+            throw new BadRequestException(exception.getMessage());
+        }
     }
 
     @GET
@@ -108,6 +197,8 @@ public class AdminEdgeNodeApiController {
         node.edgeDbPort = Integer.valueOf(generateRandomHighPort());
         node.edgeRedisPort = Integer.valueOf(generateRandomHighPort());
         node.edgeHttpPort = Integer.valueOf(generateRandomHighPort());
+        node.externalUrl = request.externalUrl();
+        node.apiUrl = request.apiUrl();
 
         // 主动连接模式校验和通信地址填充
         if (node.connectionType == EdgeConnectionType.ACTIVE_POLL) {
@@ -117,6 +208,16 @@ public class AdminEdgeNodeApiController {
             }
             node.grpcAddress = ip.trim() + ":" + node.edgeGrpcPort;
             node.isTrusted = true;
+        }
+
+        if (node.connectionType == EdgeConnectionType.WESP) {
+            if (node.apiUrl == null || node.apiUrl.isBlank()) {
+                throw new BadRequestException("WESP 模式必须填写主节点连接域名");
+            }
+            if (!(node.apiUrl.startsWith("http://") || node.apiUrl.startsWith("https://"))) {
+                throw new BadRequestException("WESP 主节点连接域名必须是 http(s) 地址");
+            }
+            node.status = "CONFIGURED";
         }
 
         node.persist();
@@ -171,6 +272,15 @@ public class AdminEdgeNodeApiController {
     @Path("/{nodeId}/sync")
     @Operation(summary = "手动触发同步", description = "触发主节点向指定边缘节点全量推送所有标签和文章")
     public Response triggerSync(@PathParam("nodeId") String nodeId, @QueryParam("force") @DefaultValue("false") boolean force) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node != null && node.connectionType == EdgeConnectionType.WESP
+                && wespSyncService.isEnabled()) {
+            // WESP has no inbound path to a home node. A full-sync request is
+            // therefore appended to the public operation log and consumed by
+            // the node during its next outbound pull.
+            wespSyncService.triggerFullSync(nodeId, force);
+            return Response.accepted().build();
+        }
         syncService.triggerFullSync(nodeId, force);
         return Response.accepted().build();
     }
@@ -232,16 +342,23 @@ public class AdminEdgeNodeApiController {
             throw new NotFoundException("节点不存在");
         }
 
-        boolean channelOnline = primaryEdgeChannelRegistry.hasOnlineChannel(nodeId);
+        boolean wespNode = node.connectionType == EdgeConnectionType.WESP;
+        boolean wespRecentlySeen = node.lastHeartbeat != null
+                && java.time.Duration.between(node.lastHeartbeat,
+                java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)).getSeconds() <= 90;
+        boolean channelOnline = wespNode
+                ? "ONLINE".equals(node.status) && wespRecentlySeen
+                : primaryEdgeChannelRegistry.hasOnlineChannel(nodeId);
         String effectiveNodeStatus = node.status;
-        if (channelOnline) {
-            effectiveNodeStatus = "ONLINE";
-        }
+        if (channelOnline) effectiveNodeStatus = "ONLINE";
+        else if (wespNode && "ONLINE".equals(node.status)) effectiveNodeStatus = "OFFLINE";
         boolean primaryOnline = channelOnline;
         boolean readOnly = !channelOnline;
         String readOnlyMessage = "";
         if (readOnly) {
-            readOnlyMessage = "持久数据通道未连接，节点离线时应处于只读模式";
+            readOnlyMessage = wespNode
+                    ? "WESP 尚未收到节点主动会话，节点离线时应处于只读模式"
+                    : "持久数据通道未连接，节点离线时应处于只读模式";
         }
 
         if (node.metrics != null) {
@@ -268,7 +385,7 @@ public class AdminEdgeNodeApiController {
                 primaryOnline,
                 readOnly,
                 readOnlyMessage,
-                primaryEdgeChannelRegistry.getConnectedAt(nodeId),
+                wespNode ? node.lastHeartbeat : primaryEdgeChannelRegistry.getConnectedAt(nodeId),
                 node.lastHeartbeat,
                 node.metrics,
                 edgeNodeAvailabilityService.calculateRates(nodeId),
@@ -338,8 +455,33 @@ public class AdminEdgeNodeApiController {
             BlogRegion region,
             EdgeConnectionType connectionType,
             Integer edgeGrpcPort,
-            String nodeIp
+            String nodeIp,
+            String externalUrl,
+            String apiUrl
     ) {
+        public CreateNodeRequest(String nodeId, String nodeName, BlogRegion region,
+                                 EdgeConnectionType connectionType, Integer edgeGrpcPort,
+                                 String nodeIp) {
+            this(nodeId, nodeName, region, connectionType, edgeGrpcPort, nodeIp, null, null);
+        }
+    }
+
+    @RegisterForReflection
+    public record ConnectionBootstrapRequest(
+            String nodeId,
+            String nodeName,
+            BlogRegion region,
+            String peerUrl,
+            String externalUrl,
+            String tenantId,
+            String datasetId,
+            String authToken,
+            String incarnation
+    ) {
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 
     private int generateRandomHighPort() {

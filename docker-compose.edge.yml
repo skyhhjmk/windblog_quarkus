@@ -2,14 +2,12 @@ services:
   # 边缘节点专用数据库 (用于存储逻辑复制的只读副本)
   edge-db:
     container_name: windblog-edge-db
-    image: pgvector/pgvector:pg18
+    image: ${EDGE_DB_IMAGE:-postgres:18-alpine}
     restart: unless-stopped
+    cpus: "0.50"
+    mem_limit: 256m
     networks:
       - app-network
-    ports:
-      - target: 5432
-        published: "${EDGE_DB_PORT:-5434}"
-        host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
     environment:
       POSTGRES_USER: ${EDGE_DB_USER}
       POSTGRES_PASSWORD: ${EDGE_DB_PASSWORD}
@@ -27,12 +25,10 @@ services:
     container_name: windblog-edge-redis
     image: redis:8-alpine
     restart: unless-stopped
+    cpus: "0.25"
+    mem_limit: 96m
     networks:
       - app-network
-    ports:
-      - target: 6379
-        published: "${EDGE_REDIS_PORT:-6381}"
-        host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
     environment:
       REDIS_PASSWORD: ${EDGE_REDIS_PASSWORD:?EDGE_REDIS_PASSWORD must be set}
     volumes:
@@ -47,14 +43,16 @@ services:
   # 边缘节点应用
   edge-node:
     container_name: windblog-edge-node
-    image: ${WINDBLOG_EDGE_IMAGE:-ghcr.io/skyhhjmk/windblog_quarkus:latest}
+    image: ${WINDBLOG_EDGE_IMAGE:-docker.io/hhjmk/windblog_quarkus:latest}
     restart: unless-stopped
+    cpus: "1.00"
+    mem_limit: 384m
     networks:
       - app-network
     ports:
       - target: ${EDGE_GRPC_PORT:-9001}
         published: "${EDGE_GRPC_PORT:-9001}"
-        host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
+        host_ip: "${EDGE_GRPC_BIND_IP:-127.0.0.1}"
       - target: 8081
         published: "${EDGE_APP_HTTP_PORT:-8081}"
         host_ip: "${EDGE_HOST_BIND_IP:-0.0.0.0}"
@@ -87,8 +85,23 @@ services:
       - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_CERTIFICATE=certs/ca/client.crt
       - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_KEY=certs/ca/client.key
       - QUARKUS_GRPC_CLIENTS_MAIN_NODE_SSL_TRUST_CERTIFICATE=certs/ca/ca.crt
+      - MEDIA_UPLOAD_DIR=/work/uploads
+      - WINDBLOG_WESP_CONFIG_FILE=/work/wesp-config/wesp-config.json
+      - WINDBLOG_WESP_BLOCK_STORE=/work/wesp-blocks
+      - WINDBLOG_EDGE_LIGHTWEIGHT=${WINDBLOG_EDGE_LIGHTWEIGHT:-true}
+      - WINDBLOG_OUTBOX_ENABLED=${WINDBLOG_OUTBOX_ENABLED:-false}
+      - WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED=${WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED:-false}
+      - WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED=${WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED:-false}
+      - WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED=${WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED:-false}
+      - WINDBLOG_STORAGE_METRICS_ENABLED=${WINDBLOG_STORAGE_METRICS_ENABLED:-false}
+      - WINDBLOG_LOG_COMPRESSION_ENABLED=${WINDBLOG_LOG_COMPRESSION_ENABLED:-false}
+      - QUARKUS_LOG_FILE_ENABLED=${QUARKUS_LOG_FILE_ENABLED:-false}
     volumes:
       - ./certs:/work/certs
+      - edge-media-uploads:/work/uploads
+      - edge-wesp-blocks:/work/wesp-blocks
+      - edge-wesp-config:/work/wesp-config
+      - edge-rsa-keys:/work/rsa_keys
     depends_on:
       edge-db:
         condition: service_healthy
@@ -103,3 +116,7 @@ networks:
 volumes:
   edge-db-data:
   edge-redis-data:
+  edge-media-uploads:
+  edge-wesp-blocks:
+  edge-wesp-config:
+  edge-rsa-keys:

@@ -524,7 +524,7 @@ public class StorageService {
 
         String sql = "UPDATE media SET "
                 + "storage_classes = jsonb_set("
-                + "  jsonb_set(storage_classes, ARRAY[?1::text], COALESCE(storage_classes -> ?1, '{}'::jsonb), true),"
+                + "  jsonb_set(COALESCE(storage_classes, '{}'::jsonb), ARRAY[?1::text], COALESCE(storage_classes -> ?1, '{}'::jsonb), true),"
                 + "  ARRAY[?1::text, ?2::text],"
                 + "  CAST(?3 AS jsonb)"
                 + "), "

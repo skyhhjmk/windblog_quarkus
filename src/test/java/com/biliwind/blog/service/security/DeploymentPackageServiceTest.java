@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -68,6 +71,7 @@ public class DeploymentPackageServiceTest {
 
         String envContent = null;
         String dockerComposeContent = null;
+        String deployScriptContent = null;
         boolean hasServerCertificate = false;
         boolean hasServerKey = false;
         boolean hasCaCertificate = false;
@@ -80,6 +84,9 @@ public class DeploymentPackageServiceTest {
             }
             if (name.endsWith("docker-compose.yml")) {
                 dockerComposeContent = readEntryContent(zis);
+            }
+            if (name.endsWith("deploy.sh")) {
+                deployScriptContent = readEntryContent(zis);
             }
             if (name.endsWith("certs/ca/server.crt")) {
                 hasServerCertificate = true;
@@ -112,8 +119,18 @@ public class DeploymentPackageServiceTest {
         assertFalse(envContent.contains("EDGE_REDIS_PORT="));
         assertTrue(envContent.contains("EDGE_APP_HTTP_PORT="));
         assertTrue(envContent.contains("EDGE_APP_GRPC_PORT=9005"));
-        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=ghcr.io/skyhhjmk/windblog_quarkus:latest"));
+        assertTrue(envContent.contains("EDGE_GRPC_BIND_IP=127.0.0.1"));
+        assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE=docker.io/hhjmk/windblog_quarkus:latest"));
         assertTrue(envContent.contains("WINDBLOG_EDGE_IMAGE_VARIANT=native-micro"));
+        assertTrue(envContent.contains("EDGE_DB_IMAGE=postgres:18-alpine"));
+        assertTrue(envContent.contains("WINDBLOG_EDGE_LIGHTWEIGHT=true"));
+        assertTrue(envContent.contains("WINDBLOG_WESP_CONFIG_FILE=/work/wesp-config/wesp-config.json"));
+        assertTrue(envContent.contains("WINDBLOG_WESP_BLOCK_STORE=/work/wesp-blocks"));
+        assertTrue(envContent.contains("MEDIA_UPLOAD_DIR=/work/uploads"));
+        assertTrue(envContent.contains("WINDBLOG_OUTBOX_ENABLED=false"));
+        assertTrue(envContent.contains("WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED=false"));
+        assertTrue(envContent.contains("WINDBLOG_STORAGE_METRICS_ENABLED=false"));
+        assertTrue(envContent.contains("QUARKUS_LOG_FILE_ENABLED=false"));
         assertTrue(envContent.contains("USER_JWT_SECRET="));
         assertTrue(envContent.contains("USER_JWT_ISSUER="));
         assertTrue(envContent.contains("ADMIN_JWT_SECRET="));
@@ -140,7 +157,7 @@ public class DeploymentPackageServiceTest {
         // 验证 docker-compose.yml 内容
         assertNotNull(dockerComposeContent);
         assertTrue(dockerComposeContent.contains("edge-db:"));
-        assertTrue(dockerComposeContent.contains("image: pgvector/pgvector:pg18"));
+        assertTrue(dockerComposeContent.contains("image: ${EDGE_DB_IMAGE:-postgres:18-alpine}"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-db"));
         assertFalse(dockerComposeContent.contains("${EDGE_DB_PORT}:5432"));
         assertTrue(dockerComposeContent.contains("edge-redis:"));
@@ -148,8 +165,11 @@ public class DeploymentPackageServiceTest {
         assertFalse(dockerComposeContent.contains("${EDGE_REDIS_PORT}:6379"));
         assertTrue(dockerComposeContent.contains("edge-node:"));
         assertTrue(dockerComposeContent.contains("container_name: windblog-edge-test-node-123-node"));
+        assertTrue(dockerComposeContent.contains("user: \"${EDGE_RUNTIME_UID:-1000}:${EDGE_RUNTIME_GID:-1000}\""));
         assertTrue(dockerComposeContent.contains("\"${EDGE_APP_HTTP_PORT}:8081\""));
-        assertTrue(dockerComposeContent.contains("\"${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\""));
+        assertTrue(dockerComposeContent.contains(
+                "\"${EDGE_GRPC_BIND_IP:-127.0.0.1}:${EDGE_GRPC_PORT}:${EDGE_GRPC_PORT}\""
+        ));
         assertTrue(dockerComposeContent.contains("QUARKUS_DATASOURCE_JDBC_URL=${EDGE_DATASOURCE_URL}"));
         assertTrue(dockerComposeContent.contains("QUARKUS_PROFILE=${QUARKUS_PROFILE}"));
         assertFalse(dockerComposeContent.contains("ADMIN_INIT_PASSWORD=${ADMIN_INIT_PASSWORD}"));
@@ -168,6 +188,30 @@ public class DeploymentPackageServiceTest {
         assertTrue(dockerComposeContent.contains("volumes:"));
         assertTrue(dockerComposeContent.contains("edge-db-data-test-node-123:"));
         assertTrue(dockerComposeContent.contains("edge-redis-data-test-node-123:"));
+        assertTrue(dockerComposeContent.contains("mem_limit: 384m"));
+        assertTrue(dockerComposeContent.contains("./data/wesp-blocks:/work/wesp-blocks"));
+        assertTrue(dockerComposeContent.contains("./data/wesp-config:/work/wesp-config"));
+        assertTrue(dockerComposeContent.contains("./data/rsa-keys:/work/rsa_keys"));
+
+        assertNotNull(deployScriptContent);
+        assertTrue(deployScriptContent.contains("export EDGE_RUNTIME_UID=\"${EDGE_RUNTIME_UID:-$(id -u)}\""));
+        assertTrue(deployScriptContent.contains("compose=(docker compose)"));
+        assertTrue(deployScriptContent.contains("mkdir -p data/uploads data/wesp-blocks data/wesp-config data/rsa-keys"));
+        assertTrue(deployScriptContent.contains("pull edge-db edge-redis edge-node"));
+        assertTrue(deployScriptContent.contains("/q/health/ready"));
+        assertTrue(deployScriptContent.contains("compose[@]}"));
+
+        Path deployScript = Files.createTempFile("windblog-edge-deploy-", ".sh");
+        try {
+            Files.writeString(deployScript, deployScriptContent, StandardCharsets.UTF_8);
+            Process syntaxCheck = new ProcessBuilder("bash", "-n", deployScript.toString())
+                    .redirectErrorStream(true)
+                    .start();
+            String syntaxOutput = new String(syntaxCheck.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            assertEquals(0, syntaxCheck.waitFor(), syntaxOutput);
+        } finally {
+            Files.deleteIfExists(deployScript);
+        }
     }
 
     @Test
