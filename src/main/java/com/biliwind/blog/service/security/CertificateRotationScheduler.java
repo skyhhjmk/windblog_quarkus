@@ -4,6 +4,7 @@ import com.biliwind.blog.model.EdgeNode;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,9 +25,17 @@ public class CertificateRotationScheduler {
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
+    /**
+     * Certificate renewal belongs to the legacy edge transport. Keep it
+     * disabled while WESP is the active synchronization protocol; it can be
+     * explicitly re-enabled for a controlled migration window.
+     */
+    @ConfigProperty(name = "windblog.edge.certificate-rotation.enabled", defaultValue = "false")
+    boolean certificateRotationEnabled;
+
     @Scheduled(every = "1h")
     public void rotateCertificates() {
-        if (nodeRoleService.isEdgeNode()) {
+        if (!certificateRotationEnabled || nodeRoleService.isEdgeNode()) {
             return;
         }
         LOGGER.info("正在执行边缘节点证书过期检查...");

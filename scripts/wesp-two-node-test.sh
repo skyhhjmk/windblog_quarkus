@@ -144,7 +144,11 @@ GRPC_SERVER_TRUST_STORE_PASSWORD=${GRPC_SERVER_TRUST_STORE_PASSWORD}
 WINDBLOG_NODE_ROLE=${node_role}
 WINDBLOG_NODE_ID=wesp-${node}
 WINDBLOG_SITE_PUBLIC_URL=http://127.0.0.1:${host_port}
-COOKIE_SECURE=true
+# The two-node harness is bound to local plain HTTP ports.  Keep this aligned
+# with the native image's build-time default; secure cookies would be unusable
+# over the harness' http://127.0.0.1 endpoints and trigger Quarkus static-init
+# mismatch checks when the image is rebuilt in a container.
+COOKIE_SECURE=false
 CORS_ORIGINS=http://127.0.0.1:${host_port}
 SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=false
 WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED=false
@@ -212,8 +216,12 @@ build_app() {
   # path remains available for fast debugging when explicitly requested.
   case "${BUILD_MODE}" in
     native-micro)
+      # The local edge harness uses plain HTTP cookies. Keep the build-time
+      # value identical to the generated env file; Quarkus validates
+      # static-init config against the runtime environment.
       (cd "${ROOT_DIR}" && ./mvnw -q -Dmaven.test.skip=true -Dnative \
-        -Dquarkus.profile=edge -Dquarkus.container-image.build=false package)
+        -Dquarkus.profile=edge -Dcookie.secure=false \
+        -Dquarkus.container-image.build=false package)
       podman build -q -f "${ROOT_DIR}/src/main/docker/Dockerfile.native-micro" \
         -t "${IMAGE}" "${ROOT_DIR}" >/dev/null
       ;;
