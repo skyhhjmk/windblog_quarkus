@@ -31,7 +31,7 @@
 `WINDBLOG_PULL_POLICY=never`，所以本地测试不会被未更新的 Docker Hub 镜像覆盖。重新构建：
 
 ```bash
-./mvnw -q -Dmaven.test.skip=true -Dnative -Dquarkus.profile=prod \
+./mvnw -q -Dmaven.test.skip=true -Dnative -Dquarkus.profile=dev \
   -Dquarkus.container-image.build=false package
 podman build -f src/main/docker/Dockerfile.native -t localhost/windblog:local-native .
 bash scripts/local-test.sh up
@@ -39,8 +39,10 @@ bash scripts/local-test.sh up
 
 如需临时使用 Docker Hub 版本，可在命令前显式设置
 `WINDBLOG_IMAGE=docker.io/hhjmk/windblog_quarkus:latest-native WINDBLOG_PULL_POLICY=always`。
-native 镜像按 `prod` profile 构建，启动器会在本地 HTTP 测试栈中使用 `dev` profile 并将
-Cookie 安全标志设为 `true`，避免静态初始化值不一致；可用
+本地命令使用 `dev` profile 构建 native 镜像，并将 `.env` 中的 `COOKIE_SECURE` 传给容器；
+因此默认的 HTTP 测试地址应设为 `COOKIE_SECURE=false`，否则浏览器不会回传登录和 CSRF Cookie。
+使用 Docker Hub 的生产 native 镜像时，启动器会自动恢复 `COOKIE_SECURE=true`；生产 native
+镜像仍应使用 `prod` profile、HTTPS 和安全 Cookie。可用
 `WINDBLOG_LOCAL_TEST_QUARKUS_PROFILE`、`WINDBLOG_LOCAL_TEST_COOKIE_SECURE` 覆盖。
 Codex CLI 版本由镜像固定为 `0.150.1`。
 

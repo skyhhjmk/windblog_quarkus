@@ -89,8 +89,26 @@ public class AdminEdgeNodeApiController {
     @GET
     @Path("/connect/probe")
     @Operation(summary = "探测目标边缘节点", description = "仅检查目标节点健康状态，不发送管理员凭据")
-    public WespNodeConnectionService.ProbeResult probe(@QueryParam("targetUrl") String targetUrl) {
-        return wespNodeConnectionService.probe(targetUrl);
+    public Response probe(@QueryParam("targetUrl") String targetUrl) {
+        try {
+            return Response.ok(wespNodeConnectionService.probe(targetUrl)).build();
+        } catch (WebApplicationException exception) {
+            Response response = exception.getResponse();
+            int status = response == null ? Response.Status.BAD_GATEWAY.getStatusCode() : response.getStatus();
+            return Response.status(status).type(MediaType.APPLICATION_JSON_TYPE)
+                    .entity(java.util.Map.of(
+                            "success", false,
+                            "reachable", false,
+                            "message", exception.getMessage() == null ? "目标节点不可达" : exception.getMessage()))
+                    .build();
+        } catch (RuntimeException exception) {
+            return Response.status(Response.Status.BAD_GATEWAY).type(MediaType.APPLICATION_JSON_TYPE)
+                    .entity(java.util.Map.of(
+                            "success", false,
+                            "reachable", false,
+                            "message", "目标节点不可达，请检查地址、端口和节点是否已启动"))
+                    .build();
+        }
     }
 
     /**

@@ -138,6 +138,12 @@ services:
       WINDBLOG_WESP_AUTH_TOKEN: ${WINDBLOG_WESP_AUTH_TOKEN:-}
       WINDBLOG_WESP_TENANT_ID: ${WINDBLOG_WESP_TENANT_ID:-default}
       WINDBLOG_WESP_DATASET_ID: ${WINDBLOG_WESP_DATASET_ID:-public}
+      # Optional container-network aliases for local loopback targets. When an
+      # operator enters 127.0.0.1:58181 from the host UI, the request is made
+      # inside this container; these aliases translate it to the peer service.
+      WINDBLOG_WESP_LOCAL_TARGET_ALIAS: ${WINDBLOG_WESP_LOCAL_TARGET_ALIAS:-}
+      WINDBLOG_WESP_LOCAL_TARGET_PORT: ${WINDBLOG_WESP_LOCAL_TARGET_PORT:-}
+      WINDBLOG_WESP_LOCAL_PEER_ALIAS: ${WINDBLOG_WESP_LOCAL_PEER_ALIAS:-}
       WINDBLOG_WESP_CONFIG_FILE: /deployments/wesp-config/wesp-config.json
       WINDBLOG_WESP_BLOCK_STORE: /deployments/wesp-blocks
       WINDBLOG_WESP_MAX_EGRESS_BYTES_PER_MINUTE: ${WINDBLOG_WESP_MAX_EGRESS_BYTES_PER_MINUTE:-0}

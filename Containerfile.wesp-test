@@ -6,4 +6,9 @@ COPY target/quarkus-app/app/ /app/app/
 COPY target/quarkus-app/quarkus/ /app/quarkus/
 COPY target/quarkus-app/quarkus-run.jar /app/quarkus-run.jar
 
+# The Maven fast-jar directories can retain owner-only execute bits on a
+# rootless host. WESP test nodes intentionally run as the invoking UID, so
+# make the runtime class path readable/traversable without making it writable.
+RUN chmod -R a+rX /app
+
 ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]

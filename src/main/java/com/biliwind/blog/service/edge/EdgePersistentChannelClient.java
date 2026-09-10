@@ -117,6 +117,12 @@ public class EdgePersistentChannelClient {
     }
 
     public RoutedHttpExchange.Response forwardWriteRequest(RoutedHttpExchange.Request request) {
+        if (wespSyncService.isEnabled()) {
+            // WESP is the outbound-only replacement for the legacy gRPC stream.
+            // Establish the session on demand so the first write does not have
+            // to wait for the 30-second scheduler tick.
+            return wespSyncService.forwardWriteRequest(request);
+        }
         if (outboundEmitter == null || readOnlyState.isReadOnly()) {
             return unavailableResponse();
         }

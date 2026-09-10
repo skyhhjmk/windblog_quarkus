@@ -47,12 +47,22 @@ export WINDBLOG_IMAGE="${WINDBLOG_IMAGE:-docker.io/hhjmk/windblog_quarkus:latest
 export WINDBLOG_PULL_POLICY="${WINDBLOG_PULL_POLICY:-always}"
 export CODEX_CREATOR_IMAGE="${CODEX_CREATOR_IMAGE:-localhost/codex-creator:native-codex-0.150.1-final}"
 export CODEX_CREATOR_PULL_POLICY="${CODEX_CREATOR_PULL_POLICY:-never}"
-# Both the published primary image and a locally built native tag are compiled
-# with the prod profile. Keep the local HTTP test stack on dev settings while
-# matching the native static-init value for cookie.secure.
+# Keep the runtime profile and Cookie flag aligned with the native image's
+# build profile. A local dev-profile native image can therefore use plain HTTP
+# (COOKIE_SECURE=false), while a prod-profile image still defaults to secure
+# cookies. WINDBLOG_LOCAL_TEST_COOKIE_SECURE remains an explicit override.
 if [[ "${WINDBLOG_IMAGE}" == *native* ]]; then
   export QUARKUS_PROFILE="${WINDBLOG_LOCAL_TEST_QUARKUS_PROFILE:-dev}"
-  export COOKIE_SECURE="${WINDBLOG_LOCAL_TEST_COOKIE_SECURE:-true}"
+  local_cookie_secure="$(dotenv_value COOKIE_SECURE)"
+  if [[ -n "${WINDBLOG_LOCAL_TEST_COOKIE_SECURE:-}" ]]; then
+    export COOKIE_SECURE="${WINDBLOG_LOCAL_TEST_COOKIE_SECURE}"
+  elif [[ "${WINDBLOG_IMAGE}" == localhost/* && -n "${local_cookie_secure}" ]]; then
+    export COOKIE_SECURE="${local_cookie_secure}"
+  else
+    # Registry images are production-profile natives and therefore have the
+    # secure static-init value baked in.
+    export COOKIE_SECURE=true
+  fi
 fi
 CODEX_CONTAINER_UID="${CODEX_CONTAINER_UID:-$(podman image inspect "${CODEX_CREATOR_IMAGE}" --format '{{.Config.User}}' | cut -d: -f1)}"
 CODEX_CONTAINER_UID="${CODEX_CONTAINER_UID:-1001}"

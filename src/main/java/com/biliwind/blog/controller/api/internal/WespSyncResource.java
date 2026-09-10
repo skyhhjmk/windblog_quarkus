@@ -1,6 +1,12 @@
 package com.biliwind.blog.controller.api.internal;
 
 import com.biliwind.blog.service.edge.WespSyncService;
+import com.biliwind.blog.service.edge.NodeRoleService;
+import com.biliwind.blog.service.edge.PrimaryRoutedHttpExecutor;
+import com.biliwind.blog.service.edge.RoutedHttpExchange;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -19,6 +25,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -31,6 +38,9 @@ import java.util.UUID;
 @Tag(name = "WESP internal synchronization")
 public class WespSyncResource {
     @Inject WespSyncService sync;
+    @Inject NodeRoleService nodeRoleService;
+    @Inject PrimaryRoutedHttpExecutor primaryRoutedHttpExecutor;
+    @Inject ObjectMapper mapper;
     @Context HttpHeaders requestHeaders;
 
     @POST
@@ -52,6 +62,57 @@ public class WespSyncResource {
                     "accepted_capabilities", new String[]{"blocks", "manifests", "changes", "idempotent_batches"})).build();
         } catch (WespSyncService.WespProtocolException exception) {
             return protocolError(requestId, exception);
+        }
+    }
+
+    @POST
+    @Path("/requests")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Execute an outbound edge write on the primary")
+    public Response routedRequest(String body, @HeaderParam("Authorization") String authorization,
+                                  @HeaderParam("X-WESP-Node-Id") String nodeId,
+                                  @HeaderParam("X-WESP-Request-Id") String requestId) {
+        Response auth = authorize(authorization, nodeId, requestId, body);
+        if (auth != null) return auth;
+        if (!nodeRoleService.isPrimaryNode()) {
+            return error(Response.Status.CONFLICT, requestId, "REQUEST_TARGET_NOT_PRIMARY", true);
+        }
+        try {
+            JsonNode request = mapper.readTree(body);
+            String method = text(request, "method");
+            String path = text(request, "path");
+            if (method == null || path == null || !path.startsWith("/") || path.startsWith("/sync/")) {
+                return error(Response.Status.BAD_REQUEST, requestId, "INVALID_ROUTED_REQUEST", false);
+            }
+            method = method.toUpperCase(java.util.Locale.ROOT);
+            if (!java.util.Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE").contains(method)) {
+                return error(Response.Status.BAD_REQUEST, requestId, "INVALID_ROUTED_METHOD", false);
+            }
+            String encoded = text(request, "body");
+            byte[] requestBody = encoded == null || encoded.isBlank() ? new byte[0] : Base64.getDecoder().decode(encoded);
+            if (requestBody.length > 10_485_760) {
+                return error(Response.Status.REQUEST_ENTITY_TOO_LARGE, requestId, "ROUTED_BODY_TOO_LARGE", false);
+            }
+            Map<String, String> headers = new java.util.HashMap<>();
+            JsonNode headerNode = request.get("headers");
+            if (headerNode != null && headerNode.isObject()) {
+                headerNode.fields().forEachRemaining(entry -> {
+                    if (entry.getKey() != null && entry.getValue().isTextual()) headers.put(entry.getKey(), entry.getValue().asText());
+                });
+            }
+            RoutedHttpExchange.Response routed = primaryRoutedHttpExecutor.execute(new RoutedHttpExchange.Request(
+                    method, text(request, "path"), text(request, "query"), headers, requestBody));
+            ObjectNode result = mapper.createObjectNode();
+            result.put("status", routed.status());
+            ObjectNode responseHeaders = result.putObject("headers");
+            if (routed.headers() != null) routed.headers().forEach(responseHeaders::put);
+            result.put("body", Base64.getEncoder().encodeToString(routed.body() == null ? new byte[0] : routed.body()));
+            result.put("errorMessage", routed.errorMessage() == null ? "" : routed.errorMessage());
+            return Response.ok(result).build();
+        } catch (IllegalArgumentException exception) {
+            return error(Response.Status.BAD_REQUEST, requestId, "INVALID_ROUTED_REQUEST", false);
+        } catch (Exception exception) {
+            return error(Response.Status.BAD_GATEWAY, requestId, "ROUTED_REQUEST_FAILED", true);
         }
     }
 
@@ -218,6 +279,11 @@ public class WespSyncResource {
 
     private Response protocolError(String requestId, WespSyncService.WespProtocolException exception) {
         return error(exception.statusCode, requestId, exception.code, exception.retryable);
+    }
+
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node == null ? null : node.get(field);
+        return value != null && value.isTextual() && !value.asText().isBlank() ? value.asText().trim() : null;
     }
 
     private Response error(Response.Status status, String requestId, String code, boolean retryable) {

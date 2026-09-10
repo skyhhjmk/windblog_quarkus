@@ -132,6 +132,67 @@ public class WespSyncService {
         return normalizePeerUrl() != null;
     }
 
+    /**
+     * Forward a write request over the authenticated outbound WESP connection.
+     * The edge node never accepts a socket from the primary; it creates a
+     * short request/response exchange on the same HTTPS peer URL.
+     */
+    public RoutedHttpExchange.Response forwardWriteRequest(RoutedHttpExchange.Request request) {
+        if (request == null || request.method() == null || request.path() == null) {
+            return unavailableResponse("WESP 回源请求参数无效");
+        }
+        byte[] body = request.body() == null ? new byte[0] : request.body();
+        if (body.length > 10_485_760) {
+            return new RoutedHttpExchange.Response(413,
+                    Map.of("Content-Type", "application/json"),
+                    "{\"success\":false,\"message\":\"回源请求体超过限制\"}"
+                            .getBytes(StandardCharsets.UTF_8), "routed request body too large");
+        }
+        try {
+            negotiateSession();
+            if (nodeRoleService.isEdgeNode()) readOnlyState.markPrimaryOnline();
+            ObjectNode envelope = mapper.createObjectNode();
+            envelope.put("method", request.method());
+            envelope.put("path", request.path());
+            envelope.put("query", request.query() == null ? "" : request.query());
+            ObjectNode headers = envelope.putObject("headers");
+            if (request.headers() != null) request.headers().forEach((key, value) -> {
+                if (key != null && value != null && !key.isBlank()) headers.put(key, value);
+            });
+            envelope.put("body", java.util.Base64.getEncoder().encodeToString(body));
+            HttpResponse<String> response = send("POST", "/sync/v1/requests", mapper.writeValueAsString(envelope),
+                    "application/json");
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("WESP routed request HTTP " + response.statusCode());
+            }
+            JsonNode result = parseObject(response.body());
+            int status = result.path("status").asInt(502);
+            String encodedBody = text(result, "body");
+            byte[] responseBody = encodedBody == null || encodedBody.isBlank()
+                    ? new byte[0] : java.util.Base64.getDecoder().decode(encodedBody);
+            Map<String, String> responseHeaders = new java.util.HashMap<>();
+            JsonNode responseHeadersNode = result.get("headers");
+            if (responseHeadersNode != null && responseHeadersNode.isObject()) {
+                responseHeadersNode.fields().forEachRemaining(entry -> responseHeaders.put(entry.getKey(), entry.getValue().asText()));
+            }
+            String errorMessage = text(result, "errorMessage");
+            return new RoutedHttpExchange.Response(status, responseHeaders, responseBody,
+                    errorMessage == null ? "" : errorMessage);
+        } catch (Exception exception) {
+            if (nodeRoleService.isEdgeNode()) {
+                readOnlyState.markPrimaryOffline("WESP 主节点不可用，当前边缘节点只读");
+            }
+            LOG.debug("WESP 回源写请求失败: {}", safeError(exception.getMessage()));
+            return unavailableResponse("WESP 主节点不可用，当前边缘节点只读");
+        }
+    }
+
+    private RoutedHttpExchange.Response unavailableResponse(String message) {
+        byte[] body = ("{\"success\":false,\"message\":\"" + message + "\"}")
+                .getBytes(StandardCharsets.UTF_8);
+        return new RoutedHttpExchange.Response(503, Map.of("Content-Type", "application/json"), body, message);
+    }
+
     /** Bearer authentication is the low-cost baseline; mTLS can be added at the proxy. */
     public boolean isAuthorized(String authorization, String remoteNodeId, String body) {
         String expectedToken = effectiveAuthToken();
@@ -1083,8 +1144,10 @@ public class WespSyncService {
     }
 
     private String normalizePeerUrl() {
-        String value = configuredPeerUrl.filter(item -> !item.isBlank())
-                .orElseGet(() -> runtimeConfig.peerUrl().orElse(""))
+        // An authenticated bootstrap is the node's active enrollment. It must
+        // take precedence over an image's stale development/default peer.
+        String value = runtimeConfig.peerUrl().filter(item -> !item.isBlank())
+                .orElseGet(() -> configuredPeerUrl.orElse(""))
                 .trim();
         if (value.isBlank()) return null;
         if (!value.startsWith("https://") && !value.startsWith("http://")) return null;
@@ -1290,17 +1353,18 @@ public class WespSyncService {
     }
 
     private String effectiveDatasetId() {
-        return runtimeConfig.datasetId().orElse(datasetId == null || datasetId.isBlank()
-                ? "public" : datasetId.trim());
+        return runtimeConfig.datasetId().filter(value -> !value.isBlank())
+                .orElse(datasetId == null || datasetId.isBlank() ? "public" : datasetId.trim());
     }
 
     private String effectiveTenantId() {
-        return runtimeConfig.tenantId().orElse(tenantId == null || tenantId.isBlank()
-                ? "default" : tenantId.trim());
+        return runtimeConfig.tenantId().filter(value -> !value.isBlank())
+                .orElse(tenantId == null || tenantId.isBlank() ? "default" : tenantId.trim());
     }
 
     private Optional<String> effectiveAuthTokenOptional() {
-        return authToken.filter(value -> !value.isBlank()).or(() -> runtimeConfig.authToken())
+        return runtimeConfig.authToken().filter(value -> !value.isBlank())
+                .or(() -> authToken.filter(value -> !value.isBlank()))
                 .map(String::trim).filter(value -> !value.isBlank());
     }
 

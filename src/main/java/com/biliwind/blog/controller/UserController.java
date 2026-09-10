@@ -13,6 +13,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.smallrye.jwt.build.Jwt;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.constraints.Email;
@@ -653,6 +654,7 @@ public class UserController {
         return new UserProfile(user.id, user.username, user.email, user.roleName);
     }
 
+    @RegisterForReflection
     public record UserProfile(Long id, String username, String email, String roleName) {
     }
 

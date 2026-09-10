@@ -4,6 +4,7 @@ import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
 import com.biliwind.blog.service.edge.EdgeReadOnlyState;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.RoutedHttpExchange;
+import com.biliwind.blog.service.edge.WespSyncService;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -39,6 +40,9 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
     @Inject
     EdgePersistentChannelClient channelClient;
 
+    @Inject
+    WespSyncService wespSyncService;
+
     @Override
     public void filter(ContainerRequestContext requestContext) {
         if (!nodeRoleService.isEdgeNode()) {
@@ -54,7 +58,9 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
             return;
         }
 
-        if (readOnlyState.isReadOnly()) {
+        // WESP is outbound-only and can establish/re-establish its session on
+        // the first write. Legacy gRPC still requires an already-online stream.
+        if (readOnlyState.isReadOnly() && !wespSyncService.isEnabled()) {
             requestContext.abortWith(buildReadOnlyResponse());
             return;
         }
@@ -118,6 +124,12 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
             return true;
         }
         if (path.startsWith("/q/")) {
+            return true;
+        }
+        // WESP receiver endpoints are the authenticated transport boundary.
+        // They must be handled locally so an edge node never forwards a peer's
+        // sync request back through its own write router.
+        if (path.startsWith("/sync/v1/")) {
             return true;
         }
         return path.startsWith("/grpc/");
