@@ -16,6 +16,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,6 +117,13 @@ public class EdgeDataSyncService {
         if (entityId == null || action == null || !isOutboxSyncType(entityType)) {
             return;
         }
+        if (wespSyncService.isEnabled()) {
+            // WESP owns the durable operation log. Persist the public change
+            // directly so the primary does not depend on the lightweight edge
+            // profile's disabled RabbitMQ/outbox dispatcher.
+            self.get().dispatchOutboxSync(entityType, entityId, action);
+            return;
+        }
         outboxEventService.get().enqueue(
                 "EDGE_SYNC:" + entityType + ":" + entityId + ":" + action + ":" + java.util.UUID.randomUUID(),
                 "EDGE_SYNC",
@@ -125,6 +133,7 @@ public class EdgeDataSyncService {
                 null);
     }
 
+    @Transactional
     @jakarta.enterprise.context.control.ActivateRequestContext
     public void dispatchOutboxSync(String entityType, Long entityId, String action) {
         if (entityId == null || action == null) {

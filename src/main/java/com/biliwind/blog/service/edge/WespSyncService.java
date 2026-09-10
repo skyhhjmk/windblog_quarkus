@@ -279,7 +279,7 @@ public class WespSyncService {
     }
 
     /** Persist a local change before attempting network delivery. */
-    @Transactional
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
     public String enqueueLocalOperation(String entityType, String action, String entityId, String payload) {
         requireText(entityType, 64, "entityType");
         requireText(action, 32, "action");
