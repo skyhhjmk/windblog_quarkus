@@ -231,6 +231,10 @@ build_app() {
 
 start_node() {
   local node="$1" container="$2" host_port="$3" grpc_port="$4"
+  local rsa_mount_dir="/work/rsa_keys"
+  if [[ "${BUILD_MODE}" == "jvm" ]]; then
+    rsa_mount_dir="/app/rsa_keys"
+  fi
   stop_node "${container}"
   # Bind mounts are owned by the invoking developer. Keep the rootless user
   # mapping aligned so the native image can persist uploads and WESP blocks
@@ -241,7 +245,7 @@ start_node() {
     -p "127.0.0.1:${host_port}:8080" \
     -p "127.0.0.1:${grpc_port}:9000" \
     -v "${DATA_DIR}/${node}:/data:Z" \
-    -v "${DATA_DIR}/${node}/rsa-keys:/work/rsa_keys:Z" \
+    -v "${DATA_DIR}/${node}/rsa-keys:${rsa_mount_dir}:Z" \
     -v "${ROOT_DIR}/certs:/app/certs:ro,Z" \
     "${IMAGE}" >/dev/null
 }
