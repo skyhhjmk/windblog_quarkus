@@ -99,6 +99,10 @@ public class Post extends PanacheEntityBase {
     @JoinColumn(name = "user_id", nullable = false)
     public User user;
 
+    /** Optional public author label, used for AI-generated articles. */
+    @Column(name = "author_name", length = 200)
+    public String authorName;
+
     /**
      * 所属分类
      */

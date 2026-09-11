@@ -354,6 +354,8 @@ public class CodexCreatorDraftService {
             post.contentDeclarations = DECLARATIONS;
             post.repostPolicyCode = repostPolicyCatalog.require(null).code();
         }
+        String modelName = resolveModelName(jobData, provenance);
+        post.authorName = modelName;
         post.title = titleMap;
         post.summary = summaryMap;
         post.aiSummary = summaryMap;
@@ -379,7 +381,7 @@ public class CodexCreatorDraftService {
         AiResult result = new AiResult();
         result.provider = "CODEX_CREATOR";
         result.taskId = jobData.hasNonNull("taskId") ? jobData.path("taskId").asText() : null;
-        result.modelId = provenance.path("model").asText("codex-default");
+        result.modelId = resolveModelId(jobData, provenance);
         result.reasoningEffort = provenance.path("reasoningEffort").asText(null);
         result.generationMode = regeneration ? "MANUAL_REGENERATION" : "MANUAL_ASSIGNMENT";
         result.provenance = provenanceMap(provenance, assignment, jobData);
@@ -588,6 +590,7 @@ public class CodexCreatorDraftService {
         if (provenance != null && provenance.isObject()) {
             provenance.fields().forEachRemaining(entry -> result.put(entry.getKey(), entry.getValue()));
         }
+        result.put("modelName", resolveModelName(jobData, provenance));
         result.put("topicId", assignment.topicId);
         result.put("codexJobId", assignment.codexJobId);
         result.put("codexTaskId", assignment.codexTaskId);
@@ -598,6 +601,27 @@ public class CodexCreatorDraftService {
         }
         if (jobData.has("promptVersion")) result.put("promptVersion", jobData.get("promptVersion"));
         return result;
+    }
+
+    private String resolveModelName(JsonNode jobData, JsonNode provenance) {
+        String value = textValue(jobData, "modelName");
+        if (value == null) value = textValue(provenance, "modelName");
+        if (value == null) value = textValue(jobData, "modelId");
+        if (value == null) value = textValue(provenance, "model");
+        return value == null ? "AI" : value;
+    }
+
+    private String resolveModelId(JsonNode jobData, JsonNode provenance) {
+        String value = textValue(provenance, "model");
+        if (value == null) value = textValue(jobData, "modelId");
+        return value == null ? "codex-default" : value;
+    }
+
+    private String textValue(JsonNode node, String field) {
+        if (node == null) return null;
+        JsonNode value = node.get(field);
+        if (value == null || !value.isTextual() || value.asText().isBlank()) return null;
+        return value.asText().trim();
     }
 
     private void requireQualityContract(JsonNode jobData) {

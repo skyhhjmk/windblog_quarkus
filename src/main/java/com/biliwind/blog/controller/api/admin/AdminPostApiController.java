@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.context.AdminRequestContext;
+import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.MediaManagementService;
@@ -559,7 +560,7 @@ public class AdminPostApiController {
                 post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
                 post.version,
                 post.user == null ? null : post.user.id,
-                post.user == null ? null : post.user.username,
+                PostAuthorHelper.displayName(post),
                 post.category == null ? null : post.category.id,
                 tagIds,
                 post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
@@ -594,7 +595,7 @@ public class AdminPostApiController {
                 postAccessService.getExtraPointsPrice(post),
                 postAccessService.getFreeLines(post),
                 post.user == null ? null : post.user.id,
-                post.user == null ? null : post.user.username,
+                PostAuthorHelper.displayName(post),
                 post.category == null ? null : post.category.id,
                 tagIds,
                 post.visibilityRegions,
@@ -944,7 +945,7 @@ public class AdminPostApiController {
                 com.biliwind.blog.common.helper.PostHelper.getExtraPointsPrice(post),
                 com.biliwind.blog.common.helper.PostHelper.getFreeLines(post),
                 post.user == null ? null : post.user.id,
-                post.user == null ? null : post.user.username,
+                PostAuthorHelper.displayName(post),
                 post.category == null ? null : post.category.id,
                 tagIds,
                 post.visibilityRegions,

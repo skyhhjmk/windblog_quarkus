@@ -364,6 +364,9 @@ public class PublicCacheRefreshService {
     }
 
     private String resolveAuthorName(Post post) {
+        if (post != null && post.authorName != null && !post.authorName.isBlank()) {
+            return post.authorName.trim();
+        }
         if (post == null || post.user == null) {
             return resolveWespAuthorName(post);
         }

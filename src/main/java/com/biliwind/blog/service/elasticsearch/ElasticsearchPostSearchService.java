@@ -3,6 +3,7 @@ package com.biliwind.blog.service.elasticsearch;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
@@ -475,7 +476,7 @@ public class ElasticsearchPostSearchService {
         document.put("status", post.status != null ? post.status.name() : "DRAFT");
         document.put("visibility", post.visibility == 0 ? "PUBLIC" : (post.visibility == 1 ? "PRIVATE" : "PASSWORD"));
         document.put("authorId", post.user != null ? post.user.id : 0);
-        document.put("authorName", post.user != null && post.user.username != null ? post.user.username : "");
+        document.put("authorName", PostAuthorHelper.displayName(post));
         document.put("categoryId", post.category != null ? post.category.id : 0);
         document.put("categoryName", post.category != null && post.category.name != null ?
                 LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "");

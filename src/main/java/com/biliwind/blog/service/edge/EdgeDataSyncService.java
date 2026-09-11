@@ -4,6 +4,7 @@ import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.edge.EdgeServiceProto;
 import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -339,7 +340,7 @@ public class EdgeDataSyncService {
         putReference(publicPost, "user", post.user == null ? null : post.user.id);
         // WESP never transfers account credentials, but the public read model
         // still needs the author's visible name on the edge node.
-        putText(publicPost, "authorName", post.user == null ? null : post.user.username);
+        putText(publicPost, "authorName", PostAuthorHelper.displayName(post));
         putReference(publicPost, "category", post.category == null ? null : post.category.id);
         publicPost.set("extraInfo", safePublicExtraInfo(post.extraInfo));
         publicPost.set("visibilityRegions", objectMapper.valueToTree(post.visibilityRegions));

@@ -591,6 +591,7 @@ public class EdgeSyncDataApplyService {
         Map<String, Object> publicExtraInfo = readPublicExtraInfo(validatedPostNode, "extraInfo");
         String authorName = readOptionalText(validatedPostNode, "authorName");
         if (authorName != null && !authorName.isBlank()) {
+            post.authorName = authorName.trim();
             publicExtraInfo.put("wesp_public_author_name", authorName.trim());
         }
         post.extraInfo = publicExtraInfo;
@@ -676,14 +677,14 @@ public class EdgeSyncDataApplyService {
                     user_id, published_at, created_at, updated_at, deleted_at, version, render_type,
                     password, seo_title, seo_keywords, seo_description, category_id, published_revision_id,
                     view_count, featured, allow_comment, extra_info, visibility_regions,
-                    ai_summary_status, content_declarations, repost_policy_code
+                    ai_summary_status, content_declarations, repost_policy_code, author_name
                 ) values (
                     :id, :slug, cast(:title as jsonb), cast(:summary as jsonb), cast(:aiSummary as jsonb),
                     null, :status, :visibility, :userId, :publishedAt, current_timestamp, current_timestamp,
                     null, 0, :renderType, null, :seoTitle, :seoKeywords, :seoDescription, :categoryId,
                     null, :viewCount, :featured, :allowComment, cast(:extraInfo as jsonb),
                     cast(:visibilityRegions as jsonb), :aiSummaryStatus, cast(:contentDeclarations as jsonb),
-                    :repostPolicyCode
+                    :repostPolicyCode, :authorName
                 )
                 """)
                 .setParameter("id", post.id)
@@ -708,6 +709,7 @@ public class EdgeSyncDataApplyService {
                 .setParameter("aiSummaryStatus", post.aiSummaryStatus)
                 .setParameter("contentDeclarations", writeJsonValue(post.contentDeclarations))
                 .setParameter("repostPolicyCode", post.repostPolicyCode)
+                .setParameter("authorName", post.authorName)
                 .executeUpdate();
         synchronizeSequence("posts");
     }
