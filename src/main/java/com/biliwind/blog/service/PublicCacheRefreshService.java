@@ -14,6 +14,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityNotFoundException;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import org.jboss.logging.Logger;
 
 import java.time.Duration;
@@ -30,6 +32,7 @@ import io.quarkus.panache.common.Page;
 public class PublicCacheRefreshService {
 
     private static final Logger LOG = Logger.getLogger(PublicCacheRefreshService.class);
+    private static final String WESP_PUBLIC_AUTHOR_NAME_KEY = "wesp_public_author_name";
 
     @Inject
     CacheService cacheService;
@@ -303,7 +306,7 @@ public class PublicCacheRefreshService {
                 post.seoDescription,
                 categoryName,
                 categorySlug,
-                post.user == null ? "Unknown" : post.user.username,
+                resolveAuthorName(post),
                 post.publishedAt,
                 post.updatedAt,
                 post.viewCount,
@@ -353,11 +356,35 @@ public class PublicCacheRefreshService {
                     post.createdAt,
                     categoryName,
                     categorySlug,
-                    post.user == null ? "Unknown" : post.user.username,
+                    resolveAuthorName(post),
                     tagsByPost.getOrDefault(post.id, List.of()),
                     copyList(post.visibilityRegions)));
         }
         return result;
+    }
+
+    private String resolveAuthorName(Post post) {
+        if (post == null || post.user == null) {
+            return resolveWespAuthorName(post);
+        }
+        try {
+            return post.user.username == null ? "Unknown" : post.user.username;
+        } catch (EntityNotFoundException exception) {
+            // Public WESP snapshots intentionally do not replicate credentials.
+            // They carry the author's visible name in the article snapshot instead.
+            LOG.warnf("公开文章作者在边缘节点不存在: postId=%s, userId=%s", post.id, post.user.id);
+            return resolveWespAuthorName(post);
+        }
+    }
+
+    private String resolveWespAuthorName(Post post) {
+        if (post != null && post.extraInfo instanceof Map<?, ?> extraInfo) {
+            Object value = extraInfo.get(WESP_PUBLIC_AUTHOR_NAME_KEY);
+            if (value instanceof String authorName && !authorName.isBlank()) {
+                return authorName;
+            }
+        }
+        return "Unknown";
     }
 
     private List<PublicStoreItemSnapshot> resolveRelatedStoreItems(Object extraInfo) {
@@ -444,6 +471,7 @@ public class PublicCacheRefreshService {
         return new ArrayList<>(source);
     }
 
+    @RegisterForReflection
     public record PublicPostSnapshot(
             Long postId,
             String slug,
@@ -475,12 +503,14 @@ public class PublicCacheRefreshService {
             List<PublicStoreItemSnapshot> relatedStoreItems) {
     }
 
+    @RegisterForReflection
     public record PublicStoreItemSnapshot(
             String name,
             String description,
             Long price) {
     }
 
+    @RegisterForReflection
     public record PublicIndexPageSnapshot(
             List<PublicPostListSnapshot> posts,
             long totalPostsCount,
@@ -489,6 +519,7 @@ public class PublicCacheRefreshService {
             String regionCode) {
     }
 
+    @RegisterForReflection
     public record PublicPostListSnapshot(
             String slug,
             Map<String, String> title,
@@ -505,11 +536,13 @@ public class PublicCacheRefreshService {
             List<String> visibilityRegions) {
     }
 
+    @RegisterForReflection
     public record PublicTagSnapshot(
             Map<String, String> name,
             String slug) {
     }
 
+    @RegisterForReflection
     public record PublicAttachmentSnapshot(
             String fileName,
             Long size,
@@ -517,6 +550,7 @@ public class PublicCacheRefreshService {
             List<String> hiddenRegions) {
     }
 
+    @RegisterForReflection
     public record PublicMediaSnapshot(
             String storageKey,
             String fileName,

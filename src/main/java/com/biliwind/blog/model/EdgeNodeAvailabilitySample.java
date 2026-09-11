@@ -21,4 +21,11 @@ public class EdgeNodeAvailabilitySample extends PanacheEntityBase {
 
     @Column(name = "is_online", nullable = false)
     public boolean online;
+
+    /**
+     * At the time of sampling, how old the node heartbeat/session was.
+     * This is a freshness delay, rather than a synthetic network RTT.
+     */
+    @Column(name = "latency_ms")
+    public Long latencyMs;
 }

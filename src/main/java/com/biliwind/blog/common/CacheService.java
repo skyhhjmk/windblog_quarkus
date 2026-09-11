@@ -8,10 +8,12 @@ import io.quarkus.redis.datasource.keys.KeyScanArgs;
 import io.quarkus.redis.datasource.keys.KeyScanCursor;
 import io.quarkus.redis.datasource.value.SetArgs;
 import io.quarkus.redis.datasource.value.ValueCommands;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -25,6 +27,9 @@ public class CacheService {
 
     private final ObjectMapper objectMapper;
     private final Instance<RedisDataSource> redisDataSourceInstance;
+    @ConfigProperty(name = "windblog.site.public-url", defaultValue = "default")
+    String sitePublicUrl;
+    private volatile String cachePrefix = CACHE_PREFIX;
     private ValueCommands<String, String> valueCommands;
     private KeyCommands<String> keyCommands;
     private volatile boolean redisAvailable = false;
@@ -37,6 +42,16 @@ public class CacheService {
         reconnectIfNeeded();
     }
 
+    @PostConstruct
+    void initializeCacheNamespace() {
+        String raw = sitePublicUrl == null ? "" : sitePublicUrl.trim();
+        String namespace = raw.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (namespace.isBlank()) {
+            namespace = "default";
+        }
+        cachePrefix = CACHE_PREFIX + namespace + ":";
+    }
+
     public <T> void set(String key, T value) {
         set(key, value, DEFAULT_TTL);
     }
@@ -45,7 +60,7 @@ public class CacheService {
         if (!isRedisAvailable()) return;
         try {
             String json = objectMapper.writeValueAsString(value);
-            valueCommands.set(CACHE_PREFIX + key, json, new SetArgs().ex(ttl.toSeconds()));
+            valueCommands.set(cachePrefix + key, json, new SetArgs().ex(ttl.toSeconds()));
         } catch (Exception e) {
             markUnavailable();
             LOG.warnf("Failed to set cache value: %s", e.getMessage());
@@ -55,7 +70,7 @@ public class CacheService {
     public <T> Optional<T> get(String key, Class<T> type) {
         if (!isRedisAvailable()) return Optional.empty();
         try {
-            String json = valueCommands.get(CACHE_PREFIX + key);
+            String json = valueCommands.get(cachePrefix + key);
             if (json == null) {
                 return Optional.empty();
             }
@@ -70,7 +85,7 @@ public class CacheService {
     public <T> Optional<T> get(String key, TypeReference<T> typeRef) {
         if (!isRedisAvailable()) return Optional.empty();
         try {
-            String json = valueCommands.get(CACHE_PREFIX + key);
+            String json = valueCommands.get(cachePrefix + key);
             if (json == null) {
                 return Optional.empty();
             }
@@ -85,7 +100,7 @@ public class CacheService {
     public void delete(String key) {
         if (!isRedisAvailable()) return;
         try {
-            valueCommands.getdel(CACHE_PREFIX + key);
+            valueCommands.getdel(cachePrefix + key);
         } catch (Exception e) {
             markUnavailable();
             LOG.warnf("Failed to delete cache: %s", e.getMessage());
@@ -97,7 +112,7 @@ public class CacheService {
             return -1L;
         }
         try {
-            String fullKey = CACHE_PREFIX + key;
+            String fullKey = cachePrefix + key;
             long value = valueCommands.incr(fullKey);
             if (value == 1L) {
                 keyCommands.expire(fullKey, ttl);
@@ -119,7 +134,7 @@ public class CacheService {
             return 0L;
         }
         try {
-            String fullKey = CACHE_PREFIX + key;
+            String fullKey = cachePrefix + key;
             long value = valueCommands.incrby(fullKey, amount);
             if (value == amount) {
                 keyCommands.expire(fullKey, ttl);
@@ -138,7 +153,7 @@ public class CacheService {
             return -1L;
         }
         try {
-            String value = valueCommands.get(CACHE_PREFIX + key);
+            String value = valueCommands.get(cachePrefix + key);
             if (value == null || value.isBlank()) {
                 return 0L;
             }
@@ -156,7 +171,7 @@ public class CacheService {
             return -1L;
         }
         try {
-            String fullKey = CACHE_PREFIX + key;
+            String fullKey = cachePrefix + key;
             long value = valueCommands.decr(fullKey);
             if (value <= 0L) {
                 keyCommands.del(fullKey);
@@ -175,7 +190,7 @@ public class CacheService {
             return;
         }
         try {
-            KeyScanArgs args = new KeyScanArgs().match(CACHE_PREFIX + pattern);
+            KeyScanArgs args = new KeyScanArgs().match(cachePrefix + pattern);
             KeyScanCursor<String> cursor = keyCommands.scan(args);
             while (cursor.hasNext()) {
                 java.util.Set<String> keys = cursor.next();

@@ -118,4 +118,5 @@
     <include file="db/migration/115-allow-codex-category-selection.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/116-create-wesp-sync.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/118-seed-edge-connection-permission.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/119-add-edge-node-availability-latency.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

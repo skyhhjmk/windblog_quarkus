@@ -27,6 +27,7 @@ TEST_ADMIN_USERNAME="${WINDBLOG_WESP_TEST_ADMIN_USERNAME:-wespadmin}"
 TEST_ADMIN_EMAIL="${WINDBLOG_WESP_TEST_ADMIN_EMAIL:-wespadmin@example.test}"
 TEST_ADMIN_PASSWORD="${WINDBLOG_WESP_TEST_ADMIN_PASSWORD:-WespLocalAdmin!2026}"
 TEST_MAX_EGRESS_BYTES_PER_MINUTE="${WINDBLOG_WESP_TEST_MAX_EGRESS_BYTES_PER_MINUTE:-0}"
+RESET_RUNTIME_CONFIG="${WINDBLOG_WESP_TEST_RESET_RUNTIME_CONFIG:-false}"
 
 mkdir -p "${DATA_DIR}" "${LOG_DIR}" "${ENV_DIR}"
 chmod 700 "${DATA_DIR}" "${LOG_DIR}" "${ENV_DIR}"
@@ -199,6 +200,18 @@ EOF
   chmod 600 "${ENV_DIR}/${node}.env"
 }
 
+reset_runtime_config() {
+  [[ "${RESET_RUNTIME_CONFIG}" == "true" ]] || return 0
+  local stamp="$(date +%Y%m%d%H%M%S)"
+  for node in public home; do
+    local config="${DATA_DIR}/${node}/wesp-config.json"
+    if [[ -f "${config}" ]]; then
+      mv "${config}" "${config}.stale-${stamp}"
+      echo "已备份 ${node} 的旧 WESP 运行配置：${config}.stale-${stamp}"
+    fi
+  done
+}
+
 container_running() {
   local container="$1"
   [[ "$(podman inspect "${container}" --format '{{.State.Status}}' 2>/dev/null || true)" == "running" ]]
@@ -300,6 +313,7 @@ write_env home "${HOME_DB}" "${HOME_PORT}" "${HOME_GRPC_PORT}" "http://${PUBLIC_
 case "${1:-up}" in
   up)
     build_app
+    reset_runtime_config
     start_node public "${PUBLIC_CONTAINER}" "${PUBLIC_PORT}" "${PUBLIC_GRPC_PORT}"
     start_node home "${HOME_CONTAINER}" "${HOME_PORT}" "${HOME_GRPC_PORT}"
     wait_ready public "${PUBLIC_CONTAINER}" "${PUBLIC_PORT}"
@@ -317,6 +331,7 @@ case "${1:-up}" in
     ;;
   restart)
     build_app
+    reset_runtime_config
     start_node public "${PUBLIC_CONTAINER}" "${PUBLIC_PORT}" "${PUBLIC_GRPC_PORT}"
     start_node home "${HOME_CONTAINER}" "${HOME_PORT}" "${HOME_GRPC_PORT}"
     wait_ready public "${PUBLIC_CONTAINER}" "${PUBLIC_PORT}"

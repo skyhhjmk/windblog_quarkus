@@ -337,6 +337,9 @@ public class EdgeDataSyncService {
         putText(publicPost, "seoDescription", post.seoDescription);
         putText(publicPost, "renderType", post.renderType == null ? null : post.renderType.name());
         putReference(publicPost, "user", post.user == null ? null : post.user.id);
+        // WESP never transfers account credentials, but the public read model
+        // still needs the author's visible name on the edge node.
+        putText(publicPost, "authorName", post.user == null ? null : post.user.username);
         putReference(publicPost, "category", post.category == null ? null : post.category.id);
         publicPost.set("extraInfo", safePublicExtraInfo(post.extraInfo));
         publicPost.set("visibilityRegions", objectMapper.valueToTree(post.visibilityRegions));

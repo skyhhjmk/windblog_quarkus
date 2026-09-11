@@ -11,6 +11,7 @@ import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
+import jakarta.enterprise.event.Event;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -44,6 +45,12 @@ public class EdgeSyncDataApplyService {
     @Inject
     RepostPolicyCatalog repostPolicyCatalog;
 
+    @Inject
+    Event<PostSyncedEvent> postSyncedEvent;
+
+    @Inject
+    Event<DataSyncEvent> dataSyncEvent;
+
     @Transactional
     public void apply(SyncDataRequest request) {
         if (request == null) {
@@ -61,6 +68,7 @@ public class EdgeSyncDataApplyService {
 
             if ("DELETE".equals(action)) {
                 deleteEntity(entityType, request.getEntityId());
+                publishCacheInvalidation(entityType, request.getEntityId(), action);
                 return;
             }
 
@@ -70,8 +78,19 @@ public class EdgeSyncDataApplyService {
             }
 
             upsertEntity(entityType, request.getEntityId(), request.getPayload());
+            publishCacheInvalidation(entityType, request.getEntityId(), action);
         } catch (Exception exception) {
             LOGGER.error("应用从主节点收到的同步数据失败: {} {}", request.getEntityType(), request.getEntityId(), exception);
+            throw new IllegalStateException("公开同步数据应用失败", exception);
+        }
+    }
+
+    private void publishCacheInvalidation(String entityType, long entityId, String action) {
+        if ("POST".equals(entityType)) {
+            postSyncedEvent.fire(new PostSyncedEvent(entityId));
+        } else if ("CATEGORY".equals(entityType)
+                || "TAG".equals(entityType) || "MEDIA".equals(entityType)) {
+            dataSyncEvent.fire(new DataSyncEvent(entityType, entityId, action));
         }
     }
 
@@ -569,7 +588,12 @@ public class EdgeSyncDataApplyService {
         post.user = entityManager.getReference(User.class, userId);
         Long categoryId = readReferenceId(validatedPostNode, "category");
         post.category = categoryId == null ? null : entityManager.getReference(Category.class, categoryId);
-        post.extraInfo = readPublicExtraInfo(validatedPostNode, "extraInfo");
+        Map<String, Object> publicExtraInfo = readPublicExtraInfo(validatedPostNode, "extraInfo");
+        String authorName = readOptionalText(validatedPostNode, "authorName");
+        if (authorName != null && !authorName.isBlank()) {
+            publicExtraInfo.put("wesp_public_author_name", authorName.trim());
+        }
+        post.extraInfo = publicExtraInfo;
         post.visibilityRegions = readStringList(validatedPostNode, "visibilityRegions");
         post.contentDeclarations = readStringList(validatedPostNode, "contentDeclarations");
         String incomingRepostPolicyCode = readOptionalText(validatedPostNode, "repostPolicyCode");

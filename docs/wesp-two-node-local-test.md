@@ -78,6 +78,10 @@ scripts/wesp-two-node-test.sh env
 WINDBLOG_WESP_TEST_BUILD_MODE=jvm scripts/wesp-two-node-test.sh restart
 ```
 
+双节点脚本默认保留测试目录中已有的 `wesp-config.json`，避免覆盖已经通过管理后台完成的连接引导。
+如需切换回脚本生成的节点 ID、peer 和租户配置，可设置
+`WINDBLOG_WESP_TEST_RESET_RUNTIME_CONFIG=true`；旧配置会先改名备份并保留在对应节点目录中。
+
 ## 2. 健康检查和会话握手
 
 ```bash

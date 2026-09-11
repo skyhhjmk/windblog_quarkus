@@ -18,6 +18,9 @@ import java.util.Map;
 @ApplicationScoped
 public class EdgeNodeAvailabilityService {
 
+    private static final long ONLINE_TIMEOUT_SECONDS = 90L;
+    private static final int MAX_CHART_POINTS = 240;
+
     @Inject
     NodeRoleService nodeRoleService;
 
@@ -41,7 +44,8 @@ public class EdgeNodeAvailabilityService {
             EdgeNodeAvailabilitySample sample = new EdgeNodeAvailabilitySample();
             sample.nodeId = node.nodeId;
             sample.sampledAt = sampledAt;
-            sample.online = primaryEdgeChannelRegistry.hasOnlineChannel(node.nodeId);
+            sample.online = isCurrentlyOnline(node, sampledAt);
+            sample.latencyMs = sample.online ? calculateHeartbeatLatencyMs(node, sampledAt) : null;
             sample.persist();
         }
 
@@ -66,6 +70,38 @@ public class EdgeNodeAvailabilityService {
                 calculateRateFromMemory(samples, now.minusDays(7)),
                 calculateRateFromMemory(samples, now.minusDays(30))
         );
+    }
+
+    /**
+     * Use the same liveness definition for the current status endpoint and
+     * historical samples. WESP has no gRPC channel in the primary process, so
+     * checking the channel registry alone makes every WESP sample offline.
+     */
+    public boolean isCurrentlyOnline(EdgeNode node, OffsetDateTime now) {
+        if (node == null || !Boolean.TRUE.equals(node.isEnabled)) {
+            return false;
+        }
+        if (node.connectionType == com.biliwind.blog.model.EdgeConnectionType.WESP) {
+            return "ONLINE".equals(node.status)
+                    && isHeartbeatFresh(node.lastHeartbeat, now);
+        }
+        return primaryEdgeChannelRegistry.hasOnlineChannel(node.nodeId);
+    }
+
+    private boolean isHeartbeatFresh(OffsetDateTime heartbeatAt, OffsetDateTime now) {
+        if (heartbeatAt == null || now == null || heartbeatAt.isAfter(now)) {
+            return false;
+        }
+        return java.time.Duration.between(heartbeatAt, now).toMillis()
+                <= ONLINE_TIMEOUT_SECONDS * 1000L;
+    }
+
+    private Long calculateHeartbeatLatencyMs(EdgeNode node, OffsetDateTime now) {
+        if (node.lastHeartbeat == null || node.lastHeartbeat.isAfter(now)) {
+            return null;
+        }
+        return Long.valueOf(Math.max(0L,
+                java.time.Duration.between(node.lastHeartbeat, now).toMillis()));
     }
 
     private AvailabilityRate calculateRateFromMemory(List<EdgeNodeAvailabilitySample> samples, OffsetDateTime since) {
@@ -137,8 +173,22 @@ public class EdgeNodeAvailabilityService {
 
     private List<AvailabilitySamplePoint> buildSamplePoints(List<EdgeNodeAvailabilitySample> samples) {
         List<AvailabilitySamplePoint> points = new ArrayList<>();
-        for (EdgeNodeAvailabilitySample sample : samples) {
-            points.add(new AvailabilitySamplePoint(sample.sampledAt, sample.online));
+        if (samples.size() <= MAX_CHART_POINTS) {
+            for (EdgeNodeAvailabilitySample sample : samples) {
+                points.add(new AvailabilitySamplePoint(sample.sampledAt, sample.online, sample.latencyMs));
+            }
+            return points;
+        }
+
+        // Keep the raw samples for rate calculations, but send a compact
+        // representative point to the admin chart (about one point per 3h at
+        // the default 30-day range). The last point of each bucket preserves
+        // the most recent state and latency in that bucket.
+        int bucketSize = (int) Math.ceil((double) samples.size() / MAX_CHART_POINTS);
+        for (int start = 0; start < samples.size(); start += bucketSize) {
+            int end = Math.min(samples.size(), start + bucketSize);
+            EdgeNodeAvailabilitySample sample = samples.get(end - 1);
+            points.add(new AvailabilitySamplePoint(sample.sampledAt, sample.online, sample.latencyMs));
         }
         return points;
     }
@@ -245,7 +295,8 @@ public class EdgeNodeAvailabilityService {
 
     public record AvailabilitySamplePoint(
             OffsetDateTime sampledAt,
-            boolean online
+            boolean online,
+            Long latencyMs
     ) {
     }
 

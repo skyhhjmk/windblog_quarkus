@@ -14,6 +14,7 @@ import io.quarkus.panache.common.Page;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
@@ -166,6 +167,7 @@ public class CategoryController {
                 post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", tags);
     }
 
+    @RegisterForReflection
     public record TagItem(String name, String slug) {}
 
     private java.util.Map<Long, List<TagItem>> loadTagsByPost(List<Post> posts, String lang) {
@@ -320,15 +322,19 @@ public class CategoryController {
         return value == null ? "" : value.trim();
     }
 
+    @RegisterForReflection
     public record CategoryListItem(String slug, String name, String description, String path, long childCount, long postCount, String createdAtText) {
     }
 
+    @RegisterForReflection
     public record CategoryDetailItem(String slug, String name, String description, String path, long childCount, long postCount, String createdAtText) {
     }
 
+    @RegisterForReflection
     public record CategoryBreadcrumb(String slug, String name, String url) {
     }
 
+    @RegisterForReflection
     public record CategoryPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<TagItem> tags) {
     }
 }

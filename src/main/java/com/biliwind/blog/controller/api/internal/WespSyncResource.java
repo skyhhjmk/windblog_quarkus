@@ -66,6 +66,32 @@ public class WespSyncResource {
     }
 
     @POST
+    @Path("/full-sync")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Request a full public snapshot from the primary")
+    public Response fullSync(String body, @HeaderParam("Authorization") String authorization,
+                             @HeaderParam("X-WESP-Node-Id") String nodeId,
+                             @HeaderParam("X-WESP-Request-Id") String requestId) {
+        Response auth = authorize(authorization, nodeId, requestId, body);
+        if (auth != null) return auth;
+        if (!nodeRoleService.isPrimaryNode()) {
+            return error(Response.Status.CONFLICT, requestId, "FULL_SYNC_TARGET_NOT_PRIMARY", true);
+        }
+        try {
+            JsonNode request = body == null || body.isBlank() ? mapper.createObjectNode() : mapper.readTree(body);
+            boolean force = request.path("force").asBoolean(false);
+            sync.triggerFullSync(nodeId, force);
+            return Response.accepted().build();
+        } catch (WespSyncService.WespProtocolException exception) {
+            return protocolError(requestId, exception);
+        } catch (IllegalArgumentException exception) {
+            return error(Response.Status.BAD_REQUEST, requestId, "INVALID_FULL_SYNC_REQUEST", false);
+        } catch (Exception exception) {
+            return error(Response.Status.SERVICE_UNAVAILABLE, requestId, "FULL_SYNC_UNAVAILABLE", true);
+        }
+    }
+
+    @POST
     @Path("/requests")
     @Consumes(MediaType.APPLICATION_JSON)
     @Operation(summary = "Execute an outbound edge write on the primary")

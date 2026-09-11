@@ -9,6 +9,7 @@ import com.biliwind.blog.service.edge.EdgeNodeRegistry;
 import com.biliwind.blog.service.edge.WespRuntimeConfig;
 import com.biliwind.blog.service.edge.WespNodeConnectionService;
 import com.biliwind.blog.service.edge.WespSyncService;
+import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.security.CertificateRenewalService;
 import com.biliwind.blog.service.security.DeploymentPackageService;
 import com.biliwind.blog.service.security.EdgeImageVariant;
@@ -51,6 +52,9 @@ public class AdminEdgeNodeApiController {
 
     @Inject
     WespSyncService wespSyncService;
+
+    @Inject
+    NodeRoleService nodeRoleService;
 
     @Inject
     WespNodeConnectionService wespNodeConnectionService;
@@ -293,10 +297,22 @@ public class AdminEdgeNodeApiController {
         EdgeNode node = EdgeNode.findByNodeId(nodeId);
         if (node != null && node.connectionType == EdgeConnectionType.WESP
                 && wespSyncService.isEnabled()) {
-            // WESP has no inbound path to a home node. A full-sync request is
-            // therefore appended to the public operation log and consumed by
-            // the node during its next outbound pull.
-            wespSyncService.triggerFullSync(nodeId, force);
+            if (nodeRoleService.isEdgeNode()) {
+                // A home admin must ask the primary to create the snapshot;
+                // appending a SYNC_REQUEST locally would be rejected by the
+                // primary because its target node is the home itself.
+                try {
+                    wespSyncService.requestFullSyncFromPrimary(force);
+                } catch (IllegalStateException exception) {
+                    throw new WebApplicationException(
+                            "无法向 WESP 主节点请求全量同步", Response.Status.BAD_GATEWAY);
+                }
+            } else {
+                // WESP has no inbound path to a home node. The primary appends
+                // the request and current public snapshot to its operation log;
+                // the home consumes them during its next outbound pull.
+                wespSyncService.triggerFullSync(nodeId, force);
+            }
             return Response.accepted().build();
         }
         syncService.triggerFullSync(nodeId, force);
@@ -361,12 +377,8 @@ public class AdminEdgeNodeApiController {
         }
 
         boolean wespNode = node.connectionType == EdgeConnectionType.WESP;
-        boolean wespRecentlySeen = node.lastHeartbeat != null
-                && java.time.Duration.between(node.lastHeartbeat,
-                java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)).getSeconds() <= 90;
-        boolean channelOnline = wespNode
-                ? "ONLINE".equals(node.status) && wespRecentlySeen
-                : primaryEdgeChannelRegistry.hasOnlineChannel(nodeId);
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC);
+        boolean channelOnline = edgeNodeAvailabilityService.isCurrentlyOnline(node, now);
         String effectiveNodeStatus = node.status;
         if (channelOnline) effectiveNodeStatus = "ONLINE";
         else if (wespNode && "ONLINE".equals(node.status)) effectiveNodeStatus = "OFFLINE";

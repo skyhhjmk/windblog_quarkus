@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.annotation.PostConstruct;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -67,6 +68,7 @@ public class WespSyncService {
     @Inject EdgeReadOnlyState readOnlyState;
     @Inject StorageService storageService;
     @Inject WespRuntimeConfig runtimeConfig;
+    @Inject Instance<EdgeDataSyncService> edgeDataSyncService;
 
     @ConfigProperty(name = "windblog.wesp.enabled", defaultValue = "true") boolean enabled;
     @ConfigProperty(name = "windblog.wesp.peer-url") Optional<String> configuredPeerUrl;
@@ -79,6 +81,7 @@ public class WespSyncService {
     @ConfigProperty(name = "windblog.wesp.request-timeout", defaultValue = "30S") Duration requestTimeout;
     @ConfigProperty(name = "windblog.wesp.max-pull-items", defaultValue = "256") int maxPullItems;
     @ConfigProperty(name = "windblog.wesp.max-egress-bytes-per-minute", defaultValue = "0") long maxEgressBytesPerMinute;
+    @ConfigProperty(name = "windblog.wesp.local-peer-alias") Optional<String> localPeerAlias;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -238,9 +241,9 @@ public class WespSyncService {
     }
 
     /**
-     * Ask one registered WESP peer to replay the complete public operation log.
-     * The request itself is an outbox operation, so a public node never opens
-     * an inbound connection to the home node.
+     * Ask one registered WESP peer to converge to the current public snapshot.
+     * The request and snapshot are both outbox operations, so a public node
+     * never opens an inbound connection to the home node.
      */
     @Transactional
     public String triggerFullSync(String targetNodeId, boolean force) {
@@ -256,9 +259,67 @@ public class WespSyncService {
         request.put("target_node_id", targetNodeId);
         request.put("mode", "FULL");
         request.put("force", force);
-        request.put("peer_id", sha256(peerUrl));
+        request.put("peer_id", sha256(peerUrlForTarget(target)));
         request.put("requested_at", now().toString());
-        return enqueueLocalOperation("SYNC_REQUEST", "UPSERT", targetNodeId, request.toString());
+        // Put the request before the snapshot items. If the edge receives the
+        // request in the same pull page, it resets its cursor before consuming
+        // the snapshot. If it receives the request first, the next pull starts
+        // after the request and continues with the remaining snapshot.
+        String requestOperationId = enqueueLocalOperation(
+                "SYNC_REQUEST", "UPSERT", targetNodeId, request.toString());
+        int snapshotItems = 0;
+        for (EdgeDataSyncService.FullSyncItem item
+                : edgeDataSyncService.get().buildPublicFullSyncSnapshot(force)) {
+            enqueueLocalOperation(item.entityType(), item.action(), item.entityId(), item.payload());
+            snapshotItems++;
+        }
+        LOG.info("WESP 已将公开快照加入操作日志，targetNodeId={} items={} force={}",
+                targetNodeId, snapshotItems, force);
+        return requestOperationId;
+    }
+
+    /**
+     * Request a full snapshot from the primary when the admin is operating on
+     * an edge node. The edge cannot enqueue a primary-owned snapshot locally,
+     * so it uses the authenticated outbound WESP control channel.
+     */
+    public void requestFullSyncFromPrimary(boolean force) {
+        if (!isEnabled() || !hasPeer()) {
+            throw new IllegalStateException("WESP 主节点连接未配置");
+        }
+        ObjectNode request = mapper.createObjectNode();
+        request.put("force", force);
+        try {
+            HttpResponse<String> response = send(
+                    "POST", "/sync/v1/full-sync", mapper.writeValueAsString(request),
+                    "application/json");
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("WESP full-sync HTTP " + response.statusCode());
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("无法向 WESP 主节点请求全量同步", exception);
+        }
+    }
+
+    private String peerUrlForTarget(EdgeNode target) {
+        String configured = target.apiUrl == null ? "" : target.apiUrl.trim().replaceAll("/+$", "");
+        if (configured.isBlank()) {
+            return configured;
+        }
+        try {
+            URI uri = URI.create(configured);
+            String host = uri.getHost();
+            if (host != null && ("localhost".equalsIgnoreCase(host)
+                    || "127.0.0.1".equals(host) || "::1".equals(host))) {
+                String alias = localPeerAlias.orElse("").trim().replaceAll("/+$", "");
+                if (!alias.isBlank()) {
+                    return alias;
+                }
+            }
+        } catch (IllegalArgumentException ignored) {
+            // triggerFullSync validates the configured target URL below.
+        }
+        return configured;
     }
 
     public void validateSessionRequest(String body) {
