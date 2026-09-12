@@ -53,30 +53,53 @@
             || normalized.indexOf('mailto:') === 0;
     }
 
-    function sanitizeHtml(value) {
-        var parsed = new DOMParser().parseFromString(String(value || ''), 'text/html');
-        var elements = Array.from(parsed.body.querySelectorAll('*'));
-        elements.forEach(function (element) {
-            var tagName = element.tagName.toLowerCase();
-            if (!allowedElements.has(tagName)) {
-                element.remove();
-                return;
-            }
+    var sanitizingHtml = false;
+    // DOMParser may invoke the default Trusted Types policy while the
+    // sanitizer is already running. Returning a real TrustedHTML value for
+    // that nested call prevents the browser from re-entering the policy.
+    var rawHtmlPolicy = window.trustedTypes.createPolicy('windblog-raw-html', {
+        createHTML: function (value) {
+            return String(value || '');
+        }
+    });
 
-            Array.from(element.attributes).forEach(function (attribute) {
-                var name = attribute.name.toLowerCase();
-                var attributeValue = attribute.value;
-                if (name.indexOf('on') === 0 || name === 'style' || name === 'srcdoc'
-                    || (!allowedAttributes.has(name) && name.indexOf('data-') !== 0 && name.indexOf('aria-') !== 0)) {
-                    element.removeAttribute(attribute.name);
+    function sanitizeHtml(value) {
+        var rawHtml = String(value || '');
+        // Chromium can invoke the default Trusted Types policy again while
+        // DOMParser parses HTML. Return a TrustedHTML value for that nested
+        // call; the outer call continues and sanitizes the resulting document.
+        if (sanitizingHtml) {
+            return rawHtmlPolicy.createHTML(rawHtml);
+        }
+
+        sanitizingHtml = true;
+        try {
+            var parsed = new DOMParser().parseFromString(rawHtml, 'text/html');
+            var elements = Array.from(parsed.body.querySelectorAll('*'));
+            elements.forEach(function (element) {
+                var tagName = element.tagName.toLowerCase();
+                if (!allowedElements.has(tagName)) {
+                    element.remove();
                     return;
                 }
-                if ((name === 'href' || name === 'src' || name === 'action') && !isSafeUrl(attributeValue)) {
-                    element.removeAttribute(attribute.name);
-                }
+
+                Array.from(element.attributes).forEach(function (attribute) {
+                    var name = attribute.name.toLowerCase();
+                    var attributeValue = attribute.value;
+                    if (name.indexOf('on') === 0 || name === 'style' || name === 'srcdoc'
+                        || (!allowedAttributes.has(name) && name.indexOf('data-') !== 0 && name.indexOf('aria-') !== 0)) {
+                        element.removeAttribute(attribute.name);
+                        return;
+                    }
+                    if ((name === 'href' || name === 'src' || name === 'action') && !isSafeUrl(attributeValue)) {
+                        element.removeAttribute(attribute.name);
+                    }
+                });
             });
-        });
-        return parsed.body.innerHTML;
+            return parsed.body.innerHTML;
+        } finally {
+            sanitizingHtml = false;
+        }
     }
 
     function sanitizeScriptUrl(value) {

@@ -812,6 +812,9 @@
             try {
                 const response = await fetch(url, {
                     method: 'GET',
+                    // PJAX responses are fragments, never a reusable document.
+                    // Keep the browser cache from retaining one for this URL.
+                    cache: 'no-store',
                     signal: requestController.signal,
                     headers: {
                         'X-PJAX': 'true',

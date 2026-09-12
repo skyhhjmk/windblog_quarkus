@@ -30,7 +30,7 @@ class PjaxResponseFilterTest {
     }
 
     @Test
-    void shouldDisableCachingForPjaxFragments() {
+    void shouldDisableCachingForHtmlResponses() {
         MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
 
         PjaxResponseFilter.applyNoStore(headers);

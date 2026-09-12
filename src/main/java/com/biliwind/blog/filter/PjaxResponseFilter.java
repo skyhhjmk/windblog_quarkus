@@ -11,7 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.Provider;
 
-/** Prevents fragment responses from being reused as full HTML documents. */
+/** Keeps PJAX fragments and complete HTML documents out of shared caches. */
 @Provider
 @Priority(Priorities.HEADER_DECORATOR)
 @ApplicationScoped
@@ -19,16 +19,16 @@ public class PjaxResponseFilter implements ContainerResponseFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
-        boolean pjaxRequest = PjaxHelper.isPjaxRequest(requestContext.getHeaders());
-        if (!pjaxRequest && !isHtmlResponse(responseContext)) {
+        if (!isHtmlResponse(responseContext)) {
             return;
         }
 
         MultivaluedMap<String, Object> headers = responseContext.getHeaders();
         appendVary(headers, PjaxHelper.PJAX_HEADER);
-        if (pjaxRequest) {
-            applyNoStore(headers);
-        }
+        // A PJAX fragment and a complete document share the same URL. Do not
+        // allow either HTML variant to be stored, because a proxy that ignores
+        // the custom Vary key could otherwise serve a fragment on refresh.
+        applyNoStore(headers);
     }
 
     static boolean isHtmlResponse(ContainerResponseContext responseContext) {
