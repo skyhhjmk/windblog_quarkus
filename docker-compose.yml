@@ -99,6 +99,11 @@ services:
       ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}
       ELASTICSEARCH_SSL_VERIFY: ${ELASTICSEARCH_SSL_VERIFY:-full}
       ELASTICSEARCH_SSL_TRUST_ALL: ${ELASTICSEARCH_SSL_TRUST_ALL:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_DEPLOYMENT_ENVIRONMENT: ${OTEL_DEPLOYMENT_ENVIRONMENT:-production}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      GRAFANA_JWT_SECRET: ${GRAFANA_JWT_SECRET:?GRAFANA_JWT_SECRET must be set}
+      GRAFANA_EMBED_PATH: ${GRAFANA_EMBED_PATH:-/observability/grafana/d/windblog-platform-slo/windblog-platform-slo?orgId=1&kiosk}
       WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED: ${WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED:-true}
       WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED: ${WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED:-true}
       WIND_BLOG_MEDIA_VIRUS_SCAN_AUTO_DETECT: ${WIND_BLOG_MEDIA_VIRUS_SCAN_AUTO_DETECT:-true}
@@ -163,7 +168,9 @@ services:
         condition: service_healthy
     ports:
       - target: 8080
-        published: "${WINDBLOG_HOST_PORT:-8080}"
+        # The local-test overlay reserves WINDBLOG_HOST_PORT for its same-origin
+        # edge and publishes this direct diagnostic port separately.
+        published: "${WINDBLOG_APP_HOST_PORT:-${WINDBLOG_HOST_PORT:-8080}}"
         host_ip: "${WINDBLOG_HOST_BIND_IP:-127.0.0.1}"
       - target: 9000
         published: "${WINDBLOG_GRPC_HOST_PORT:-9000}"
@@ -218,6 +225,9 @@ services:
       CODEX_COMMAND: ${CODEX_COMMAND:-codex}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       CODEX_ACCESS_TOKEN: ${CODEX_ACCESS_TOKEN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_DEPLOYMENT_ENVIRONMENT: ${OTEL_DEPLOYMENT_ENVIRONMENT:-production}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
     volumes:
       - ${WINDBLOG_DATA_DIR:-.}/codex-creator-data:/data/codex-creator
       - ${WINDBLOG_DATA_DIR:-.}/codex-creator-logs:/deployments/logs
@@ -419,6 +429,7 @@ services:
     volumes:
       # 与 WindBlog 共享应用日志卷
       - ${WINDBLOG_DATA_DIR:-.}/windblog-logs:/var/log/windblog:ro
+      - ${WINDBLOG_DATA_DIR:-.}/codex-creator-logs:/var/log/codex-creator:ro
       # 挂载 Filebeat 配置文件
       - ./filebeat.docker.yml:/usr/share/filebeat/filebeat.yml:ro
     environment:
@@ -437,6 +448,128 @@ services:
       start_period: 30s
     # 使用 --strict.perms=false 跳过权限检查（Windows Docker 挂载文件权限问题）
     command: [ "filebeat", "-e", "--strict.perms=false" ]
+
+  otel-collector:
+    container_name: otel-collector
+    image: ${OTEL_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:0.139.0}
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 512m
+    networks:
+      - app-network
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-windblog}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-windblog}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-windblog}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}
+      OTEL_DEPLOYMENT_ENVIRONMENT: ${OTEL_DEPLOYMENT_ENVIRONMENT:-production}
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+
+  prometheus:
+    container_name: prometheus
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.8.1}
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 1g
+    networks:
+      - app-network
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - ${WINDBLOG_DATA_DIR:-.}/prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}
+      - --web.enable-lifecycle
+    depends_on:
+      - otel-collector
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  grafana-jwt-key-init:
+    container_name: grafana-jwt-key-init
+    image: alpine:3.22
+    restart: "no"
+    environment:
+      GRAFANA_JWT_SECRET: ${GRAFANA_JWT_SECRET:?GRAFANA_JWT_SECRET must be set}
+    volumes:
+      - grafana-jwt-key:/secrets
+    command: ["/bin/sh", "-ec", "key=$$(printf '%s' \"$${GRAFANA_JWT_SECRET}\" | base64 | tr -d '\\n' | tr '+/' '-_' | tr -d '='); printf '{\"keys\":[{\"kty\":\"oct\",\"kid\":\"windblog\",\"alg\":\"HS256\",\"k\":\"%s\"}]}' \"$$key\" > /secrets/embed-jwt.jwks; chmod 0444 /secrets/embed-jwt.jwks"]
+
+  grafana:
+    container_name: grafana
+    image: ${GRAFANA_IMAGE:-grafana/grafana:12.3.0}
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 1g
+    networks:
+      - app-network
+    environment:
+      GF_SERVER_ROOT_URL: ${WINDBLOG_SITE_PUBLIC_URL:-https://your-domain.example}/observability/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_SECURITY_COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      GF_SECURITY_COOKIE_SAMESITE: lax
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_JWT_ENABLED: "true"
+      GF_AUTH_JWT_HEADER_NAME: X-JWT-Assertion
+      GF_AUTH_JWT_URL_LOGIN: "true"
+      GF_AUTH_JWT_JWK_SET_FILE: /etc/grafana/secrets/embed-jwt.jwks
+      GF_AUTH_JWT_USERNAME_CLAIM: username
+      GF_AUTH_JWT_EMAIL_CLAIM: email
+      GF_AUTH_JWT_ROLE_ATTRIBUTE_PATH: role
+      GF_AUTH_JWT_AUTO_SIGN_UP: "true"
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}
+    volumes:
+      - ${WINDBLOG_DATA_DIR:-.}/grafana-data:/var/lib/grafana
+      - grafana-jwt-key:/etc/grafana/secrets:ro
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      grafana-jwt-key-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  cadvisor:
+    container_name: cadvisor
+    image: ${CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:v0.52.1}
+    restart: unless-stopped
+    privileged: true
+    networks:
+      - app-network
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    command: ["--docker_only=true", "--housekeeping_interval=30s"]
 
   clamav:
     container_name: clamav
@@ -475,3 +608,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  grafana-jwt-key:

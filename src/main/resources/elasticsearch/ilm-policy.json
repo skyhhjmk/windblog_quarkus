@@ -8,13 +8,13 @@
             "priority": 100
           },
           "rollover": {
-            "max_age": "7d",
+            "max_age": "30d",
             "max_primary_shard_size": "50gb"
           }
         }
       },
       "warm": {
-        "min_age": "7d",
+        "min_age": "30d",
         "actions": {
           "set_priority": {
             "priority": 50
@@ -24,16 +24,8 @@
           }
         }
       },
-      "cold": {
-        "min_age": "30d",
-        "actions": {
-          "set_priority": {
-            "priority": 0
-          }
-        }
-      },
       "delete": {
-        "min_age": "90d",
+        "min_age": "365d",
         "actions": {
           "delete": {}
         }

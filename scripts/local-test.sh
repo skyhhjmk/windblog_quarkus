@@ -71,6 +71,9 @@ export WINDBLOG_SITE_PUBLIC_URL="${WINDBLOG_SITE_PUBLIC_URL:-http://127.0.0.1:58
 export CORS_ORIGINS="${CORS_ORIGINS:-http://127.0.0.1:58080}"
 export WINDBLOG_HOST_BIND_IP="${WINDBLOG_HOST_BIND_IP:-127.0.0.1}"
 export WINDBLOG_HOST_PORT="${WINDBLOG_HOST_PORT:-58080}"
+# 58080 belongs to the local edge so browser-relative Grafana paths stay
+# same-origin. Keep an opt-in direct application port for diagnostics.
+export WINDBLOG_APP_HOST_PORT="${WINDBLOG_APP_HOST_PORT:-58081}"
 export WINDBLOG_GRPC_HOST_PORT="${WINDBLOG_GRPC_HOST_PORT:-59000}"
 export POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-55432}"
 export REDIS_HOST_PORT="${REDIS_HOST_PORT:-56379}"
@@ -85,6 +88,25 @@ export CODEX_COMMAND="${CODEX_COMMAND:-codex}"
 export WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED="${WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED:-true}"
 export WINDBLOG_CODEX_CREATOR_PREFER="${WINDBLOG_CODEX_CREATOR_PREFER:-true}"
 export KIBANA_SERVICE_ACCOUNT_TOKEN="${KIBANA_SERVICE_ACCOUNT_TOKEN:-local-test-bootstrap-token}"
+export OTEL_DEPLOYMENT_ENVIRONMENT="${OTEL_DEPLOYMENT_ENVIRONMENT:-local-test}"
+if [[ -z "${GRAFANA_JWT_SECRET:-}" ]]; then
+  grafana_jwt_file="${DATA_DIR}/grafana-jwt-secret"
+  if [[ ! -s "${grafana_jwt_file}" ]]; then
+    mkdir -p "${DATA_DIR}"
+    umask 077
+    openssl rand -hex 32 >"${grafana_jwt_file}"
+  fi
+  export GRAFANA_JWT_SECRET="$(<"${grafana_jwt_file}")"
+fi
+if [[ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
+  grafana_password_file="${DATA_DIR}/grafana-admin-password"
+  if [[ ! -s "${grafana_password_file}" ]]; then
+    mkdir -p "${DATA_DIR}"
+    umask 077
+    openssl rand -hex 32 >"${grafana_password_file}"
+  fi
+  export GRAFANA_ADMIN_PASSWORD="$(<"${grafana_password_file}")"
+fi
 
 # The Codex process runs inside a container. A host proxy advertised as
 # 127.0.0.1/localhost therefore points back to the container itself. Translate

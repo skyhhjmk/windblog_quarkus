@@ -140,6 +140,8 @@ class AdminAuthorizationPolicyTest {
         assertEquals("region.delete", AdminAuthorizationPolicy.decide("DELETE", "/api/admin/regions/7").action());
         assertEquals("store.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/store").action());
         assertEquals("system.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/system/monitor").action());
+        assertEquals("system.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/system/observability/grafana-embed-url").action());
         assertEquals("codex_creator.read", AdminAuthorizationPolicy.decide(
                 "GET", "/api/admin/codex-creator/config").action());
         assertEquals("codex_creator.write", AdminAuthorizationPolicy.decide(

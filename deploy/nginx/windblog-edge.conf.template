@@ -10,6 +10,28 @@ upstream windblog_quarkus {
     keepalive 32;
 }
 
+upstream windblog_grafana {
+    server ${GRAFANA_UPSTREAM};
+    keepalive 16;
+}
+
+# The first iframe request has a short-lived JWT query parameter. Convert it to
+# an HttpOnly, same-origin cookie and forward it as Grafana's JWT header on all
+# later iframe/API requests. Never log the query string for this location.
+map $arg_auth_token $windblog_grafana_jwt {
+    ""      $cookie_windblog_grafana_jwt;
+    default $arg_auth_token;
+}
+
+map $arg_auth_token $windblog_grafana_set_cookie {
+    ""      "";
+    default "windblog_grafana_jwt=$arg_auth_token; Path=/observability/grafana/; Max-Age=900; Secure; HttpOnly; SameSite=Strict";
+}
+
+log_format windblog_grafana_safe '$remote_addr - $remote_user [$time_local] '
+                                '"$request_method $uri $server_protocol" $status $body_bytes_sent '
+                                '"$http_referer" "$http_user_agent"';
+
 server {
     listen 80;
     server_name ${WINDBLOG_PUBLIC_HOST};
@@ -55,6 +77,25 @@ server {
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_no_cache 1;
+    }
+
+    location ^~ /observability/grafana/ {
+        allow ${WINDBLOG_MANAGEMENT_CIDR};
+        deny all;
+        proxy_pass http://windblog_grafana;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Prefix /observability/grafana;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-JWT-Assertion $windblog_grafana_jwt;
+        proxy_no_cache 1;
+        proxy_buffering off;
+        add_header Cache-Control "no-store" always;
+        add_header Set-Cookie $windblog_grafana_set_cookie always;
+        add_header Referrer-Policy "same-origin" always;
+        access_log /var/log/nginx/windblog_grafana_access.log windblog_grafana_safe;
     }
 
     location ^~ /api/media/download/ {

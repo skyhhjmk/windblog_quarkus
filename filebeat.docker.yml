@@ -24,6 +24,23 @@ filebeat.inputs:
       log_type: application
       environment: ${ENVIRONMENT:-development}
 
+  - type: filestream
+    enabled: true
+    id: codex-creator-app-logs
+    paths:
+      - /var/log/codex-creator/application.log
+      - /var/log/codex-creator/application.log.*
+    parsers:
+      - ndjson:
+          keys_under_root: true
+          overwrite_keys: true
+          add_error_key: true
+    fields:
+      service: codex-creator
+      service_name: codex-creator
+      log_type: application
+      environment: ${ENVIRONMENT:-development}
+
 # processors 配置
 processors:
   # 添加主机元数据

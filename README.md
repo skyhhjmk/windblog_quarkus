@@ -15,8 +15,8 @@ If you want to learn more about Quarkus, please visit its website: <https://quar
 服务器需要 Linux、Docker Engine + Docker Compose Plugin（或兼容的 Podman Compose）、
 `openssl`、Java Runtime 中的 `keytool`，并能访问 Docker Hub 和 GHCR。公网只应开放
 反向代理的 `80/443`；Compose 默认把 WindBlog HTTP 绑定到本机 `127.0.0.1:8080`，
-数据库、Redis、RabbitMQ、Elasticsearch 和 Kibana 端口必须由防火墙限制在管理网，不能直接
-暴露到公网。
+数据库、Redis、RabbitMQ、Elasticsearch、Kibana、Prometheus 和 Grafana 均不得直接
+暴露到公网。Grafana 只经同源反向代理的 `/observability/grafana/` 提供给已登录后台。
 
 如果 `CODEX_CREATOR_IMAGE` 指向私有 GHCR 镜像，先在服务器登录 GHCR；令牌只需要
 `read:packages`，不要写进 `.env`：
@@ -36,6 +36,10 @@ docker login ghcr.io
 ├── admin.sh                          # Compose 管理脚本
 ├── docker-compose.yml                # 主服务编排
 ├── filebeat.docker.yml               # Filebeat 配置
+├── observability/                    # Collector、Prometheus、Grafana 配置和预置 Dashboard
+│   ├── otel-collector-config.yml
+│   ├── prometheus/
+│   └── grafana/provisioning/
 ├── docker/
 │   └── elasticsearch/Dockerfile      # 构建 IK 镜像
 ├── src/main/resources/elasticsearch/ # 建议上传，用于 ES/Kibana 初始化
@@ -53,6 +57,8 @@ docker login ghcr.io
     ├── rabbitmq_data/
     ├── elasticsearch-data/
     ├── kibana-data/
+    ├── prometheus-data/
+    ├── grafana-data/
     ├── clamav-data/
     ├── windblog-logs/
     ├── uploads/
@@ -87,13 +93,13 @@ tar --exclude='.git' \
     --exclude='codex-auth' \
     --exclude='postgres-data' --exclude='redis-data' \
     --exclude='rabbitmq_data' --exclude='elasticsearch-data' \
-    --exclude='kibana-data' --exclude='clamav-data' \
+    --exclude='kibana-data' --exclude='prometheus-data' --exclude='grafana-data' --exclude='clamav-data' \
     --exclude='windblog-logs' --exclude='uploads' \
     --exclude='wesp-blocks' --exclude='wesp-config' \
     --exclude='codex-creator-data' --exclude='codex-creator-logs' \
     -czf windblog-compose.tar.gz \
     README.md AGENTS.md .env.example admin.sh docker-compose.yml filebeat.docker.yml \
-    docker/elasticsearch src/main/resources/elasticsearch deploy/nginx
+    docker/elasticsearch observability src/main/resources/elasticsearch deploy/nginx
 scp windblog-compose.tar.gz user@your-server:/opt/
 ssh user@your-server 'mkdir -p /opt/windblog && tar -xzf /opt/windblog-compose.tar.gz -C /opt/windblog'
 ```
@@ -146,15 +152,16 @@ ES_PASSWORD="$ELASTIC_PASSWORD" \
 ./admin.sh env-check
 ./admin.sh start
 
-# admin.sh start 会启动 WindBlog 及其依赖；以下命令再启动 Kibana 和 Filebeat
-docker compose --env-file .env --profile security up -d --no-build kibana filebeat
+# Grafana、Prometheus、Collector 与 Filebeat 同时启动；Grafana 仅使用 Nginx 同源路径访问。
+docker compose --env-file .env --profile security up -d --no-build \
+  kibana filebeat otel-collector prometheus grafana
 docker compose --env-file .env ps
 ./admin.sh health
 ```
 
-如果只需要博客和后台，不使用日志可视化，可以不启动 `kibana` 和 `filebeat`；
-Elasticsearch 仍由 WindBlog 依赖链启动。首次部署完成后，可按需初始化 Elasticsearch
-索引模板和 Kibana 对象：
+如果只需要博客和后台，可不启动 `kibana` 和 `filebeat`；但 Admin 首页的 SLO Dashboard
+需要 `otel-collector`、`prometheus` 和 `grafana`。首次部署完成后，初始化 Elasticsearch
+日志、OTel metrics/traces 数据流模板与 Kibana 对象：
 
 ```bash
 set -a
@@ -170,7 +177,21 @@ ES_PASSWORD="$ELASTIC_PASSWORD" \
 服务就绪后，访问 `https://blog.example.com`。管理 API 和 `/q/health/ready` 应只通过
 管理网/VPN 或反向代理 allowlist 访问；反向代理可使用
 [`deploy/nginx/windblog-edge.conf.template`](deploy/nginx/windblog-edge.conf.template)，
-但模板中的域名、证书路径、上游地址和管理网段必须由部署环境填写。
+但模板中的域名、证书路径、上游地址（包括 `GRAFANA_UPSTREAM=grafana:3000`）和管理网段必须由部署环境填写。
+该模板会把首页 iframe 第一次请求中的 15 分钟 Viewer JWT 写入同源、`HttpOnly`、`Secure` 的
+`/observability/grafana/` cookie，并仅以 `X-JWT-Assertion` 转发给内部 Grafana；不要绕开模板直接发布
+Grafana 容器端口，也不要记录此路径的 query string。
+
+Kubernetes 也包含同一套 Collector、Prometheus 和预置 Dashboard：填好
+[`k8s/secrets/observability-secrets.env.example`](k8s/secrets/observability-secrets.env.example) 中的真实值，
+根据其中注释生成与 `GRAFANA_JWT_SECRET` 对应的 `GRAFANA_JWT_JWK_SET`，再执行
+`kubectl create secret generic observability-secrets --from-env-file=.env.observability` 和
+`kubectl apply -k k8s`。`k8s/ingress/` 仅创建两个 Ingress（`/` 到 WindBlog、
+`/observability/grafana/` 到 Grafana），不会创建额外 Nginx Deployment；在环境 overlay 中将
+`windblog.example.com` 替换为真实域名，并将 `GRAFANA_ROOT_URL` 设为相同的 HTTPS 子路径。
+Grafana Ingress 使用 ingress-nginx 的 `configuration-snippet` 将 15 分钟 JWT Cookie 转为
+`X-JWT-Assertion`，并关闭该子路径的 Ingress access log 以免保留 URL token；集群需明确启用
+`allow-snippet-annotations`，否则请在既有网关以同样逻辑配置该路由。
 
 ### 4. 目录和服务关系
 
@@ -187,10 +208,15 @@ docker compose 项目
 ├── elasticsearch     # 日志和文章搜索，含 IK 插件
 ├── kibana            # 可选的日志界面
 ├── filebeat          # 可选的日志采集
+├── otel-collector     # OTLP 接收、脱敏、采样，双写 Prometheus 与 Elasticsearch
+├── prometheus         # 30 天本地 PromQL 时序数据
+├── grafana            # 内部 Viewer Dashboard，经 Nginx 同源嵌入后台首页
+├── grafana-jwt-key-init # 仅写入 Grafana JWT 验证密钥后退出
+├── cadvisor           # Compose 容器状态与资源指标
 └── clamav            # security profile，媒体病毒扫描
 ```
 
-`postgres-data/`、`uploads/`、`windblog-logs/`、`wesp-*`、`codex-creator-*` 和证书目录
+`postgres-data/`、`uploads/`、`windblog-logs/`、`wesp-*`、`codex-creator-*`、`prometheus-data/`、`grafana-data/` 和证书目录
 都是运行数据。升级镜像或重新上传代码时只替换代码/编排文件，不能删除这些目录，也不要执行
 带 `-v` 的 `docker compose down`，否则会删除数据库和其他服务数据。
 
@@ -206,7 +232,7 @@ cd /opt/windblog
 ```
 
 更新时先备份 `.env`、数据库和 `uploads/`，再上传新的 `docker-compose.yml`、
-`admin.sh`、`filebeat.docker.yml`、`docker/` 等代码文件；保留服务器现有 `.env`、`certs/`
+`admin.sh`、`filebeat.docker.yml`、`observability/`、`docker/` 等代码文件；保留服务器现有 `.env`、`certs/`
 和所有持久化目录。修改镜像 tag 后，先执行 `./admin.sh config`，确认无误再执行
 `./admin.sh restart`，最后用 `./admin.sh status`、`./admin.sh health` 和公开域名请求验证。
 
@@ -594,6 +620,8 @@ Create your first JPA entity
 - **Kibana**: http://localhost:5601
   - 用户名：`elastic`
   - 密码：`.env` 文件中配置的 `ELASTIC_PASSWORD`
+- **Grafana**: 仅通过 `https://<域名>/observability/grafana/` 同源路径嵌入 Admin 首页；不可发布 Grafana 容器端口。
+- **Prometheus**: 仅容器网络访问，用于 Grafana PromQL 查询；数据在本地保留 30 天。
 
 #### 3. 查看日志
 
@@ -610,28 +638,22 @@ Create your first JPA entity
 
 ### 日志生命周期管理 (ILM)
 
-系统自动管理日志的生命周期，分为三个阶段：
+日志、OTel traces 和 OTel metrics 使用统一的生命周期，适用于单节点 Elasticsearch：
 
-#### 热存储 (Hot Tier) - 0-7 天
-- **压缩方式**: LZ4
+#### 热存储 (Hot Tier) - 0-30 天
+- **压缩方式**: `best_compression`
 - **优先级**: 高 (100)
 - **特点**: 快速索引和查询
 - **适用场景**: 最新日志，频繁查询
 
-#### 温存储 (Warm Tier) - 7-30 天
-- **压缩方式**: ZSTD
+#### 温存储 (Warm Tier) - 30-90 天
+- **压缩方式**: `best_compression`
 - **优先级**: 中 (50)
 - **特点**: 平衡存储和查询性能
 - **操作**: 强制合并为 1 个段，减少分片
 
-#### 冷存储 (Cold Tier) - 30 天以上
-- **压缩方式**: best_compression (DEFLATE)
-- **优先级**: 低 (0)
-- **特点**: 最高压缩率，冻结索引
-- **适用场景**: 归档日志，偶尔查询
-
-#### 自动删除 - 90 天以上
-- 超过 90 天的日志自动删除
+#### 自动删除 - 365 天以上
+- 超过 365 天的日志、追踪和指标自动删除。单节点不配置跨节点冷层迁移；warm 阶段强制合并为一个段以节省磁盘。
 
 ### 配置说明
 
@@ -655,18 +677,11 @@ kibana:
 
 #### 应用日志配置
 ```properties
-# 基础配置
-quarkus.log.handler.elasticsearch.enabled=true
-quarkus.log.handler.elasticsearch.index=windblog-logs
-quarkus.log.handler.elasticsearch.hosts=${ELASTICSEARCH_HOSTS:http://elasticsearch:9200}
-quarkus.log.handler.elasticsearch.format=json
-
-# 认证配置（从环境变量读取）
-quarkus.log.handler.elasticsearch.username=${ELASTICSEARCH_USERNAME:}
-quarkus.log.handler.elasticsearch.password=${ELASTICSEARCH_PASSWORD:}
-
-# SSL 配置（生产环境启用）
-quarkus.log.handler.elasticsearch.ssl-trust-all=${ELASTICSEARCH_SSL_TRUST_ALL:false}
+# 应用 traces/metrics 通过 OTLP 发送到内部 Collector；Collector 将指标暴露给
+# Prometheus，并将 metrics/traces 写入 Elasticsearch。结构化 JSON 日志仍由 Filebeat
+# 采集，避免同一日志由 OTLP 与 Filebeat 重复入库。
+quarkus.otel.exporter.otlp.endpoint=http://otel-collector:4317
+quarkus.otel.metrics.enabled=true
 ```
 
 ### 常用 Kibana 查询

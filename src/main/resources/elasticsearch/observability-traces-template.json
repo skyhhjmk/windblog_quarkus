@@ -1,0 +1,14 @@
+{
+  "index_patterns": ["traces-windblog.otel-*"],
+  "data_stream": {},
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.codec": "best_compression",
+      "index.lifecycle.name": "windblog-observability-policy"
+    }
+  },
+  "priority": 650,
+  "_meta": {"description": "OTel trace data streams for WindBlog"}
+}

@@ -104,6 +104,15 @@ spec:
                   key: internal-shared-secret
             - name: QUARKUS_LOG_FILE_ENABLED
               value: "false"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4317
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: development
+            - name: GRAFANA_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: observability-secrets
+                  key: GRAFANA_JWT_SECRET
           ports:
             - name: http
               containerPort: 8080

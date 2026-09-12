@@ -1,0 +1,22 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+  - name: Elasticsearch
+    uid: elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    basicAuth: true
+    basicAuthUser: ${ELASTICSEARCH_USERNAME}
+    secureJsonData:
+      basicAuthPassword: ${ELASTIC_PASSWORD}
+    jsonData:
+      index: metrics-windblog.otel-*
+      timeField: '@timestamp'

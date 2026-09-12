@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: windblog
+    orgId: 1
+    folder: WindBlog
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

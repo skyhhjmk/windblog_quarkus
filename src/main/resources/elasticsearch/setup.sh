@@ -79,6 +79,25 @@ else
     exit 1
 fi
 
+# OTLP Collector writes metrics and traces to Elasticsearch data streams. Keep
+# their lifecycle independent from article search indexes while applying the
+# same retention and compression contract as application logs.
+OBSERVABILITY_ILM_FILE="${SCRIPT_DIR}/observability-ilm-policy.json"
+for artifact in "$OBSERVABILITY_ILM_FILE"; do
+    if [ ! -f "$artifact" ]; then
+        echo "✗ 找不到可观测性 ILM 文件：$artifact"
+        exit 1
+    fi
+done
+curl -sS -f $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/_ilm/policy/windblog-observability-policy" \
+    -H "Content-Type: application/json" -d @"$OBSERVABILITY_ILM_FILE" >/dev/null
+for template in observability-metrics-template observability-traces-template; do
+    file="${SCRIPT_DIR}/${template}.json"
+    curl -sS -f $CURL_OPTS $AUTH_HEADER -X PUT "${ES_URL}/_index_template/${template}" \
+        -H "Content-Type: application/json" -d @"$file" >/dev/null
+done
+echo "✓ OTel metrics/traces 生命周期与模板已创建"
+
 # 删除可能冲突的遗留模板
 echo ""
 echo "步骤 3: 清理遗留模板..."

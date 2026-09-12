@@ -4,6 +4,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.health.HealthCheck;
 import org.eclipse.microprofile.health.HealthCheckResponse;
@@ -26,6 +27,12 @@ import java.util.Map;
 @SecurityRequirement(name = "adminBearerAuth")
 public class AdminSystemController {
 
+    @Inject
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
+
+    @Inject
+    com.biliwind.blog.service.security.GrafanaEmbedTokenService grafanaEmbedTokenService;
+
     // 注入所有 HealthCheck 实现（由 CDI 自动收集所有实现类）
     @Inject
     jakarta.enterprise.inject.Instance<HealthCheck> allHealthChecks;
@@ -42,6 +49,28 @@ public class AdminSystemController {
         result.put("health", buildHealthSection());
 
         return result;
+    }
+
+    /**
+     * The Flutter application keeps its Admin JWT in request headers, which an iframe cannot reuse.
+     * This endpoint is therefore the only bridge: it exchanges an already-authorized Admin request
+     * for a Grafana Viewer token that expires in one minute.
+     */
+    @GET
+    @Path("/observability/grafana-embed-url")
+    @Operation(summary = "获取 Grafana 嵌入地址", description = "返回短时效、只读的 Grafana Dashboard 地址")
+    public Response grafanaEmbedUrl() {
+        try {
+            var embedUrl = grafanaEmbedTokenService.issue(adminRequestContext.getUserId(),
+                    adminRequestContext.getUsername());
+            return Response.ok(Map.of(
+                    "url", embedUrl.url(),
+                    "expiresAt", embedUrl.expiresAtEpochSeconds())).build();
+        } catch (IllegalStateException exception) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(Map.of("success", false, "message", "Grafana observability is not configured"))
+                    .build();
+        }
     }
 
     private Map<String, Object> buildJvmSection() {

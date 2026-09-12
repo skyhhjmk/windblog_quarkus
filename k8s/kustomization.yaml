@@ -5,3 +5,5 @@ resources:
   - services/windblog
   - services/dependencies
   - deployments
+  - observability
+  - ingress

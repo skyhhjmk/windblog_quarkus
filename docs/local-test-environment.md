@@ -9,11 +9,12 @@
 ./scripts/local-test.sh down
 ```
 
-测试栈包含 WindBlog、Codex Creator、PostgreSQL/pgvector、Redis、RabbitMQ、Elasticsearch、Kibana、Filebeat 和 ClamAV。业务数据与日志保存在被 Git 忽略的 `.codex-test-data/`，Elasticsearch/Kibana 使用同一测试项目下的隔离 named volume；`down` 不删除数据卷。
+测试栈包含同源 edge、WindBlog、Codex Creator、PostgreSQL/pgvector、Redis、RabbitMQ、Elasticsearch、Kibana、Filebeat、OpenTelemetry Collector、Prometheus、Grafana 和 ClamAV。业务数据与日志保存在被 Git 忽略的 `.codex-test-data/`，Elasticsearch/Kibana 使用同一测试项目下的隔离 named volume；`down` 不删除数据卷。
 
 默认入口：
 
-- WindBlog HTTP：`http://127.0.0.1:58080`
+- WindBlog HTTP（同源 edge）：`http://127.0.0.1:58080`
+- WindBlog 直连诊断端口：`http://127.0.0.1:58081`
 - WindBlog gRPC：`127.0.0.1:59000`
 - Codex Creator：`http://127.0.0.1:58091`
 - Kibana：`http://127.0.0.1:55601`
@@ -22,6 +23,8 @@
 - RabbitMQ：`127.0.0.1:55672`，管理界面 `127.0.0.1:55673`
 - Elasticsearch：`127.0.0.1:59200`
 - ClamAV：`127.0.0.1:55310`
+
+Admin 首页中的 Grafana iframe 通过 `58080/observability/grafana/` 转发。edge 只存在于本地 Compose：它将首次 iframe 请求的短时 JWT 转为本机 HTTP Cookie，并以 `X-JWT-Assertion` 转发给 Grafana；它不是 Kubernetes 工作负载。
 
 脚本只从宿主机 Codex 登录目录复制 `auth.json` 到隔离测试目录，并按镜像实际运行 UID 设置权限；原始登录目录不会挂载进容器，凭证也不会写入镜像或提交到 Git。启用 app-server 后，Codex Creator 会在容器启动时校验登录状态。
 

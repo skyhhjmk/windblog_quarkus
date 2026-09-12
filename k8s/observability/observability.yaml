@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: prometheus-data}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 20Gi}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: grafana-data}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 5Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: otel-collector, labels: {app.kubernetes.io/name: otel-collector}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: otel-collector}}
+  template:
+    metadata: {labels: {app: otel-collector, app.kubernetes.io/name: otel-collector}}
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.139.0
+          args: [--config=/etc/otel/config.yaml]
+          envFrom: [{secretRef: {name: observability-secrets}}]
+          ports: [{name: otlp-grpc, containerPort: 4317}, {name: otlp-http, containerPort: 4318}, {name: telemetry, containerPort: 8888}, {name: metrics, containerPort: 8889}]
+          volumeMounts: [{name: config, mountPath: /etc/otel}]
+          readinessProbe: {httpGet: {path: /, port: 13133}, initialDelaySeconds: 5, periodSeconds: 10}
+      volumes: [{name: config, configMap: {name: otel-collector-config}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: otel-collector}
+spec:
+  selector: {app: otel-collector}
+  ports: [{name: otlp-grpc, port: 4317, targetPort: otlp-grpc}, {name: otlp-http, port: 4318, targetPort: otlp-http}, {name: telemetry, port: 8888, targetPort: telemetry}, {name: metrics, port: 8889, targetPort: metrics}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: prometheus, labels: {app.kubernetes.io/name: prometheus}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: prometheus}}
+  template:
+    metadata: {labels: {app: prometheus}}
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.8.1
+          args: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=30d]
+          ports: [{name: http, containerPort: 9090}]
+          volumeMounts: [{name: config, mountPath: /etc/prometheus}, {name: data, mountPath: /prometheus}]
+      volumes: [{name: config, configMap: {name: prometheus-config}}, {name: data, persistentVolumeClaim: {claimName: prometheus-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: prometheus}
+spec: {selector: {app: prometheus}, ports: [{name: http, port: 9090, targetPort: http}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: grafana, labels: {app.kubernetes.io/name: grafana}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: grafana}}
+  template:
+    metadata: {labels: {app: grafana}}
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.3.0
+          env:
+            - {name: GF_SERVER_ROOT_URL, value: "$(GRAFANA_ROOT_URL)"}
+            - {name: GF_SERVER_SERVE_FROM_SUB_PATH, value: "true"}
+            - {name: GF_SECURITY_ALLOW_EMBEDDING, value: "true"}
+            - {name: GF_AUTH_ANONYMOUS_ENABLED, value: "false"}
+            - {name: GF_AUTH_DISABLE_LOGIN_FORM, value: "true"}
+            - {name: GF_AUTH_JWT_ENABLED, value: "true"}
+            - {name: GF_AUTH_JWT_HEADER_NAME, value: X-JWT-Assertion}
+            - {name: GF_AUTH_JWT_URL_LOGIN, value: "true"}
+            - {name: GF_AUTH_JWT_JWK_SET_FILE, value: /etc/grafana/secrets/embed-jwt.jwks}
+            - {name: GF_AUTH_JWT_USERNAME_CLAIM, value: username}
+            - {name: GF_AUTH_JWT_EMAIL_CLAIM, value: email}
+            - {name: GF_AUTH_JWT_ROLE_ATTRIBUTE_PATH, value: role}
+            - {name: GF_SECURITY_ADMIN_PASSWORD, value: "$(GRAFANA_ADMIN_PASSWORD)"}
+          envFrom: [{secretRef: {name: observability-secrets}}]
+          ports: [{name: http, containerPort: 3000}]
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/grafana}
+            - {name: secret, mountPath: /etc/grafana/secrets, readOnly: true}
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/datasources/datasources.yml, subPath: datasources.yml, readOnly: true}
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml, subPath: dashboards.yml, readOnly: true}
+            - {name: dashboard, mountPath: /etc/grafana/provisioning/dashboards/json/windblog-platform-slo.json, subPath: windblog-platform-slo.json, readOnly: true}
+      volumes:
+        - {name: data, persistentVolumeClaim: {claimName: grafana-data}}
+        - {name: secret, secret: {secretName: observability-secrets, items: [{key: GRAFANA_JWT_JWK_SET, path: embed-jwt.jwks}]}}
+        - {name: provisioning, configMap: {name: grafana-provisioning}}
+        - {name: dashboard, configMap: {name: grafana-dashboard}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: grafana}
+spec: {selector: {app: grafana}, ports: [{name: http, port: 3000, targetPort: http}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: kube-state-metrics}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: kube-state-metrics}}
+  template:
+    metadata: {labels: {app: kube-state-metrics}}
+    spec:
+      serviceAccountName: kube-state-metrics
+      containers: [{name: kube-state-metrics, image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.17.0, ports: [{name: http, containerPort: 8080}]}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: kube-state-metrics}
+spec: {selector: {app: kube-state-metrics}, ports: [{name: http, port: 8080, targetPort: http}]}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: kube-state-metrics}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: windblog-kube-state-metrics}
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes, namespaces, services, resourcequotas, replicationcontrollers, persistentvolumeclaims]
+    verbs: [list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, daemonsets, statefulsets, replicasets]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: windblog-kube-state-metrics}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: windblog-kube-state-metrics}
+subjects: [{kind: ServiceAccount, name: kube-state-metrics, namespace: default}]

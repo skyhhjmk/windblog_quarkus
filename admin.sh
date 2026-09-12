@@ -475,6 +475,8 @@ env_generate() {
   ensure_env_value CODEX_CREATOR_INTERNAL_SHARED_SECRET "$(generate_secret 32)" true
   ensure_env_value KIBANA_ENCRYPTION_KEY "$(generate_secret 32)" true
   ensure_env_value KIBANA_REPORTING_KEY "$(generate_secret 32)" true
+  ensure_env_value GRAFANA_ADMIN_PASSWORD "$(generate_secret 32)" true
+  ensure_env_value GRAFANA_JWT_SECRET "$(generate_secret 32)" true
   ensure_env_value GRPC_SERVER_TRUST_STORE_PASSWORD "$trust_password" true
 
   # 非密码项只在缺失或为空时补齐，不覆盖用户现有配置。
@@ -500,6 +502,14 @@ env_generate() {
   ensure_env_value REDIS_HOST_PORT 6379
   ensure_env_value ELASTICSEARCH_HOST_PORT 9200
   ensure_env_value KIBANA_HOST_PORT 5601
+  ensure_env_value OTEL_COLLECTOR_IMAGE otel/opentelemetry-collector-contrib:0.139.0
+  ensure_env_value PROMETHEUS_IMAGE prom/prometheus:v3.8.1
+  ensure_env_value GRAFANA_IMAGE grafana/grafana:12.3.0
+  ensure_env_value CADVISOR_IMAGE gcr.io/cadvisor/cadvisor:v0.52.1
+  ensure_env_value OTEL_DEPLOYMENT_ENVIRONMENT production
+  ensure_env_value OTEL_TRACES_SAMPLER parentbased_always_on
+  ensure_env_value PROMETHEUS_RETENTION_TIME 30d
+  ensure_env_value GRAFANA_EMBED_PATH '/observability/grafana/d/windblog-platform-slo/windblog-platform-slo?orgId=1&kiosk'
   ensure_env_value ELASTICSEARCH_USERNAME elastic
   ensure_env_value ELASTICSEARCH_SSL_VERIFY full
   ensure_env_value ELASTICSEARCH_SSL_TRUST_ALL false
@@ -613,6 +623,8 @@ env_check() {
   env_check_key KIBANA_ENCRYPTION_KEY 32 || failed=1
   env_check_key KIBANA_REPORTING_KEY 32 || failed=1
   env_check_key KIBANA_SERVICE_ACCOUNT_TOKEN 16 || failed=1
+  env_check_key GRAFANA_ADMIN_PASSWORD 16 || failed=1
+  env_check_key GRAFANA_JWT_SECRET 32 || failed=1
   env_check_key ADMIN_JWT_SECRET 32 || failed=1
   env_check_key USER_JWT_SECRET 32 || failed=1
   env_check_key SECURITY_EVENT_HASH_SECRET 32 || failed=1

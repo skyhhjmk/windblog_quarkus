@@ -1,0 +1,5 @@
+groups:
+  - name: windblog-platform-slo
+    rules:
+      - record: windblog:collector_export_success:ratio
+        expr: sum(rate(otelcol_exporter_sent_metric_points[5m])) / clamp_min(sum(rate(otelcol_exporter_sent_metric_points[5m])) + sum(rate(otelcol_exporter_send_failed_metric_points[5m])), 1)
