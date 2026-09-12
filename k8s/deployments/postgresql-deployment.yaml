@@ -52,13 +52,7 @@ spec:
           volumeMounts:
             - name: postgresql-data
               mountPath: /var/lib/postgresql
-            - name: postgresql-init
-              mountPath: /docker-entrypoint-initdb.d/010-create-codex-creator.sql
-              subPath: 010-create-codex-creator.sql
       volumes:
         - name: postgresql-data
           persistentVolumeClaim:
             claimName: postgresql-data
-        - name: postgresql-init
-          configMap:
-            name: postgresql-init

@@ -20,7 +20,6 @@ services:
       start_period: 30s
     volumes:
       - ${WINDBLOG_DATA_DIR:-.}/postgres-data:/var/lib/postgresql
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       - target: 5432
         published: "${POSTGRES_HOST_PORT:-5432}"

@@ -4,6 +4,212 @@ This project uses Quarkus, the Supersonic Subatomic Java Framework.
 
 If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
 
+## 生产部署 Quick Start（Docker Compose）
+
+下面的流程适用于使用仓库已经发布的 native 镜像启动 WindBlog。服务器不需要上传
+`admin-flutter/`、`codex-creator/` 源码、Maven `target/` 或 Flutter `build/`；Compose
+会拉取 WindBlog 和 Codex Creator 镜像，Elasticsearch 的 IK 镜像则在服务器本地构建。
+
+### 1. 服务器要求
+
+服务器需要 Linux、Docker Engine + Docker Compose Plugin（或兼容的 Podman Compose）、
+`openssl`、Java Runtime 中的 `keytool`，并能访问 Docker Hub 和 GHCR。公网只应开放
+反向代理的 `80/443`；Compose 默认把 WindBlog HTTP 绑定到本机 `127.0.0.1:8080`，
+数据库、Redis、RabbitMQ、Elasticsearch 和 Kibana 端口必须由防火墙限制在管理网，不能直接
+暴露到公网。
+
+如果 `CODEX_CREATOR_IMAGE` 指向私有 GHCR 镜像，先在服务器登录 GHCR；令牌只需要
+`read:packages`，不要写进 `.env`：
+
+```bash
+docker login ghcr.io
+```
+
+### 2. 上传文件
+
+建议将以下文件上传到服务器的 `/opt/windblog/`，并始终从这个目录执行命令：
+
+```text
+/opt/windblog/
+├── .env                              # 必须，生产配置和密钥，权限 600
+├── .env.example                       # 配置模板，不含真实密钥
+├── admin.sh                          # Compose 管理脚本
+├── docker-compose.yml                # 主服务编排
+├── filebeat.docker.yml               # Filebeat 配置
+├── docker/
+│   └── elasticsearch/Dockerfile      # 构建 IK 镜像
+├── src/main/resources/elasticsearch/ # 建议上传，用于 ES/Kibana 初始化
+│   ├── create-kibana-token.sh
+│   ├── setup.sh
+│   ├── ilm-policy*.json
+│   ├── index-template*.json
+│   └── kibana-*.json
+├── deploy/nginx/windblog-edge.conf.template # 可选，反向代理模板
+├── certs/                             # 首次可不上传，由 admin.sh prepare 生成
+│   └── ca/                            # 已有环境必须整体保留
+└── 持久化目录/                         # 新服务器可由脚本创建，不要放进代码压缩包
+    ├── postgres-data/
+    ├── redis-data/
+    ├── rabbitmq_data/
+    ├── elasticsearch-data/
+    ├── kibana-data/
+    ├── clamav-data/
+    ├── windblog-logs/
+    ├── uploads/
+    ├── wesp-blocks/
+    ├── wesp-config/
+    ├── codex-creator-data/
+    └── codex-creator-logs/
+```
+
+`.env` 应从 `.env.example` 复制后在服务器生成或填写，不能上传真实的 `.env.example`
+占位值作为生产配置。不要上传 `.git/`、日志、数据库目录、上传文件、私钥或本机的
+`codex-auth/`；已有实例迁移时，`postgres-data/`、`uploads/`、`certs/` 和其他持久化目录
+必须单独备份并原样迁移。
+
+数据库结构不通过额外的 PostgreSQL init SQL 文件维护。WindBlog 的业务表由
+`src/main/resources/db/migration/` 下的 Liquibase changeset 在 WindBlog 启动时迁移；
+Codex Creator 的独立数据库表由
+`codex-creator/src/main/resources/db/changelog/` 下的 Liquibase changeset 在
+Codex Creator 启动时迁移。当前 `docker-compose.yml` 的 `codex-creator-db-init` 服务会在
+PostgreSQL healthy 后幂等地创建 `codex_creator` 数据库并启用 `vector` 扩展，然后由
+Codex Creator 自己执行 Liquibase 迁移；因此不再需要额外上传或手工执行数据库 init SQL。
+
+可用下面的命令从本地仓库制作不包含运行数据和密钥的上传包：
+
+```bash
+tar --exclude='.git' \
+    --exclude='.env' \
+    --exclude='target' \
+    --exclude='admin-flutter/build' \
+    --exclude='admin-flutter/.dart_tool' \
+    --exclude='codex-creator/target' \
+    --exclude='codex-auth' \
+    --exclude='postgres-data' --exclude='redis-data' \
+    --exclude='rabbitmq_data' --exclude='elasticsearch-data' \
+    --exclude='kibana-data' --exclude='clamav-data' \
+    --exclude='windblog-logs' --exclude='uploads' \
+    --exclude='wesp-blocks' --exclude='wesp-config' \
+    --exclude='codex-creator-data' --exclude='codex-creator-logs' \
+    -czf windblog-compose.tar.gz \
+    README.md AGENTS.md .env.example admin.sh docker-compose.yml filebeat.docker.yml \
+    docker/elasticsearch src/main/resources/elasticsearch deploy/nginx
+scp windblog-compose.tar.gz user@your-server:/opt/
+ssh user@your-server 'mkdir -p /opt/windblog && tar -xzf /opt/windblog-compose.tar.gz -C /opt/windblog'
+```
+
+### 3. 首次启动
+
+进入服务器目录，生成生产配置并准备挂载目录和 gRPC mTLS 证书：
+
+```bash
+cd /opt/windblog
+cp .env.example .env
+chmod 600 .env
+./admin.sh env-generate
+./admin.sh prepare
+```
+
+然后编辑 `.env`，至少修改这些值：
+
+```dotenv
+WINDBLOG_SITE_PUBLIC_URL=https://blog.example.com
+CORS_ORIGINS=https://blog.example.com
+WINDBLOG_WESP_AUTH_TOKEN=<与其他节点一致的强随机 token>
+```
+
+`env-generate` 会补全大多数随机密钥；`WINDBLOG_SITE_PUBLIC_URL` 和 `CORS_ORIGINS`
+必须改成真实的 HTTPS 域名。生产保持 `QUARKUS_PROFILE=prod`、`COOKIE_SECURE=true`、
+`SECURITY_FAIL_ON_DEFAULT_SECRETS_IN_PROD=true`，不要用关闭安全检查的方式绕过配置错误。
+如果启用 AI 文章生成，再按需配置 `CODEX_APP_SERVER_ENABLED=true` 以及
+`OPENAI_API_KEY` 或 `CODEX_ACCESS_TOKEN`；凭据不要提交 Git。
+
+Kibana 服务账户令牌需要先让 Elasticsearch 启动一次。由于完整 Compose 配置要求该令牌，
+首次启动依次执行：
+
+```bash
+# 仅用临时占位值启动基础依赖；它不会写入 .env
+KIBANA_SERVICE_ACCOUNT_TOKEN=bootstrap-placeholder \
+  docker compose --env-file .env --profile security \
+  up -d db redis rabbitmq elasticsearch clamav
+
+# 等 Elasticsearch healthy 后创建真实令牌，并自动回写 .env
+set -a
+. ./.env
+set +a
+ES_HOST=127.0.0.1 \
+ES_PORT="${ELASTICSEARCH_HOST_PORT:-9200}" \
+ES_USERNAME=elastic \
+ES_PASSWORD="$ELASTIC_PASSWORD" \
+  ./src/main/resources/elasticsearch/create-kibana-token.sh
+
+./admin.sh env-check
+./admin.sh start
+
+# admin.sh start 会启动 WindBlog 及其依赖；以下命令再启动 Kibana 和 Filebeat
+docker compose --env-file .env --profile security up -d --no-build kibana filebeat
+docker compose --env-file .env ps
+./admin.sh health
+```
+
+如果只需要博客和后台，不使用日志可视化，可以不启动 `kibana` 和 `filebeat`；
+Elasticsearch 仍由 WindBlog 依赖链启动。首次部署完成后，可按需初始化 Elasticsearch
+索引模板和 Kibana 对象：
+
+```bash
+set -a
+. ./.env
+set +a
+ES_HOST=127.0.0.1 \
+ES_PORT="${ELASTICSEARCH_HOST_PORT:-9200}" \
+ES_USERNAME=elastic \
+ES_PASSWORD="$ELASTIC_PASSWORD" \
+  ./src/main/resources/elasticsearch/setup.sh
+```
+
+服务就绪后，访问 `https://blog.example.com`。管理 API 和 `/q/health/ready` 应只通过
+管理网/VPN 或反向代理 allowlist 访问；反向代理可使用
+[`deploy/nginx/windblog-edge.conf.template`](deploy/nginx/windblog-edge.conf.template)，
+但模板中的域名、证书路径、上游地址和管理网段必须由部署环境填写。
+
+### 4. 目录和服务关系
+
+所有相对路径都相对于 `/opt/windblog`（即 Compose 项目目录）。数据库和应用数据通过
+`WINDBLOG_DATA_DIR` 挂载，gRPC 证书通过 `WINDBLOG_CERT_DIR` 挂载：
+
+```text
+docker compose 项目
+├── windblog          # 主博客、后台 API，HTTP 8080，gRPC 9000
+├── codex-creator     # AI 编排服务，容器网络内 8681
+├── db                # PostgreSQL + pgvector
+├── redis             # 缓存和限流
+├── rabbitmq          # 异步任务队列
+├── elasticsearch     # 日志和文章搜索，含 IK 插件
+├── kibana            # 可选的日志界面
+├── filebeat          # 可选的日志采集
+└── clamav            # security profile，媒体病毒扫描
+```
+
+`postgres-data/`、`uploads/`、`windblog-logs/`、`wesp-*`、`codex-creator-*` 和证书目录
+都是运行数据。升级镜像或重新上传代码时只替换代码/编排文件，不能删除这些目录，也不要执行
+带 `-v` 的 `docker compose down`，否则会删除数据库和其他服务数据。
+
+### 5. 日常操作和更新
+
+```bash
+cd /opt/windblog
+./admin.sh status                 # 查看容器状态
+./admin.sh logs                   # 跟踪 WindBlog 日志
+./admin.sh health                 # 检查 readiness
+./admin.sh config                 # 校验 Compose 配置
+./admin.sh restart                # 拉取最新 WindBlog 镜像并重启
+```
+
+更新时先备份 `.env`、数据库和 `uploads/`，再上传新的 `docker-compose.yml`、
+`admin.sh`、`filebeat.docker.yml`、`docker/` 等代码文件；保留服务器现有 `.env`、`certs/`
+和所有持久化目录。修改镜像 tag 后，先执行 `./admin.sh config`，确认无误再执行
+`./admin.sh restart`，最后用 `./admin.sh status`、`./admin.sh health` 和公开域名请求验证。
+
 ## Running the application in dev mode
 
 You can run your application in dev mode that enables live coding using:
