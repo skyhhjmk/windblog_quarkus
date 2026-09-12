@@ -126,7 +126,7 @@ jobs:
             -Dquarkus.profile=prod \
             -Dquarkus.application.version="${{ steps.release.outputs.version }}" \
             -Dquarkus.native.container-build=true \
-            -Dquarkus.native.native-image-xmx=8g \
+            -Dquarkus.native.native-image-xmx=6g \
             -Dquarkus.container-image.build=false \
             -Dquarkus.container-image.push=false \
             -Dquarkus.container-image.registry=ghcr.io \
@@ -159,7 +159,7 @@ jobs:
             -Dquarkus.profile=edge \
             -Dquarkus.application.version="${{ steps.release.outputs.version }}" \
             -Dquarkus.native.container-build=true \
-            -Dquarkus.native.native-image-xmx=8g \
+            -Dquarkus.native.native-image-xmx=6g \
             -Dquarkus.container-image.build=false \
             -Dquarkus.container-image.push=false \
             -Dquarkus.container-image.registry=ghcr.io \
