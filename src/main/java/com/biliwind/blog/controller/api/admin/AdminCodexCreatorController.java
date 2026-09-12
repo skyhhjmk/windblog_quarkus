@@ -224,11 +224,12 @@ public class AdminCodexCreatorController {
         String instructions = payload == null ? null : value(payload.get("instructions"));
         String profileId = payload == null ? null : value(payload.get("profileId"));
         String reasoningEffort = payload == null ? null : value(payload.get("reasoningEffort"));
+        String repostPolicyCode = payload == null ? null : value(payload.get("repostPolicyCode"));
         Long categoryId = longValue(payload == null ? null : payload.get("categoryId"));
         boolean requiresPracticalVerification = payload != null && Boolean.TRUE.equals(booleanValue(payload.get("requiresPracticalVerification")));
         java.util.List<Long> testServerIds = payload == null ? java.util.List.of() : longList(payload.get("testServerIds"));
         try {
-            return draftService.start(id, categoryId, language, instructions, profileId, reasoningEffort, requiresPracticalVerification, testServerIds,
+            return draftService.start(id, categoryId, language, instructions, profileId, reasoningEffort, repostPolicyCode, requiresPracticalVerification, testServerIds,
                             adminRequestContext.getUserId(), traceId())
                     .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
                     .exceptionally(error -> serviceUnavailable(error));

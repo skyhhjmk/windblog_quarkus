@@ -24,6 +24,9 @@ public class CodexCreatorDraftAssignment extends PanacheEntityBase {
     @Column(name = "category_id")
     public Long categoryId;
 
+    @Column(name = "repost_policy_code", nullable = false, length = 64)
+    public String repostPolicyCode = "REQUEST_REQUIRED";
+
     @Column(nullable = false, length = 16)
     public String language = "zh-CN";
 

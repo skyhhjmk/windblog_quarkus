@@ -120,4 +120,5 @@
     <include file="db/migration/118-seed-edge-connection-permission.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/119-add-edge-node-availability-latency.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/120-add-post-author-name.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/121-add-codex-draft-repost-policy.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

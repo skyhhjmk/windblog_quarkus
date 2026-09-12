@@ -93,12 +93,13 @@ public class CodexCreatorDraftService {
     public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
                                                       String language, String instructions, String profileId,
                                                       Long operatorId, String traceId) {
-        return start(topicId, categoryId, language, instructions, profileId, null, false, List.of(), operatorId, traceId);
+        return start(topicId, categoryId, language, instructions, profileId, null, null, false, List.of(), operatorId, traceId);
     }
 
     public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
                                                       String language, String instructions, String profileId,
                                                       String reasoningEffort,
+                                                      String repostPolicyCode,
                                                       boolean requiresPracticalVerification, List<Long> testServerIds,
                                                       Long operatorId, String traceId) {
         validateRequest(topicId, categoryId, language, instructions, operatorId);
@@ -106,17 +107,21 @@ public class CodexCreatorDraftService {
         String normalizedInstructions = instructions == null ? "" : instructions.trim();
         String normalizedProfileId = profileId == null ? "" : profileId.trim();
         String normalizedReasoningEffort = reasoningEffort == null ? "" : reasoningEffort.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalizedRepostPolicyCode = repostPolicyCatalog.require(repostPolicyCode).code();
         String requestKey = requestKey(topicId, categoryId, normalizedLanguage,
                 normalizedInstructions + "\nmodel=" + normalizedProfileId + "\neffort=" + normalizedReasoningEffort,
+                normalizedRepostPolicyCode,
                 requiresPracticalVerification, testServerIds);
         CodexCreatorDraftAssignment assignment;
         try {
             assignment = self.get().ensureAssignment(
-                    topicId, categoryId, normalizedLanguage, normalizedInstructions, requestKey, operatorId);
+                    topicId, categoryId, normalizedLanguage, normalizedInstructions, normalizedRepostPolicyCode,
+                    requestKey, operatorId);
         } catch (RuntimeException exception) {
             CodexCreatorDraftAssignment winner = self.get().findByRequestKey(requestKey);
             if (winner == null) throw exception;
-            if (!matches(winner, topicId, categoryId, normalizedLanguage, normalizedInstructions)) {
+            if (!matches(winner, topicId, categoryId, normalizedLanguage, normalizedInstructions,
+                    normalizedRepostPolicyCode)) {
                 throw new BadRequestException("草稿幂等键已绑定到其他请求");
             }
             assignment = winner;
@@ -132,6 +137,8 @@ public class CodexCreatorDraftService {
         payload.put("categoryId", categoryId);
         payload.put("language", normalizedLanguage);
         payload.put("instructions", normalizedInstructions);
+        payload.put("repostPolicyCode", normalizedRepostPolicyCode);
+        payload.put("repostPolicy", repostPolicyView(normalizedRepostPolicyCode));
         payload.put("requestKey", requestKey);
         payload.put("requiresPracticalVerification", requiresPracticalVerification);
         payload.put("testServerIds", testServerIds == null ? List.of()
@@ -164,6 +171,8 @@ public class CodexCreatorDraftService {
         CodexCreatorDraftAssignment assignment = self.get().prepareRegeneration(topicId, operatorId);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", assignment.codexJobId);
+        payload.put("repostPolicyCode", repostPolicyCatalog.require(assignment.repostPolicyCode).code());
+        payload.put("repostPolicy", repostPolicyView(assignment.repostPolicyCode));
         if (profileId != null && !profileId.isBlank()) payload.put("profileId", profileId.trim());
         if (reasoningEffort != null && !reasoningEffort.isBlank()) payload.put("reasoningEffort", reasoningEffort.trim().toLowerCase(java.util.Locale.ROOT));
         return client.topicCommand("article.regenerate", payload,
@@ -256,6 +265,7 @@ public class CodexCreatorDraftService {
         if (post.status != PostStatus.DRAFT) {
             throw new BadRequestException("仅草稿状态的文章可以重新生成");
         }
+        assignment.repostPolicyCode = repostPolicyCatalog.require(post.repostPolicyCode).code();
         assignment.status = "REGENERATING";
         assignment.errorMessage = null;
         assignment.updatedAt = OffsetDateTime.now();
@@ -266,14 +276,16 @@ public class CodexCreatorDraftService {
 
     @Transactional
     CodexCreatorDraftAssignment ensureAssignment(Long topicId, Long categoryId, String language,
-                                                 String instructions, String requestKey, Long operatorId) {
+                                                 String instructions, String repostPolicyCode,
+                                                 String requestKey, Long operatorId) {
         CodexCreatorDraftAssignment existing = CodexCreatorDraftAssignment.find(
                 "requestKey", requestKey).firstResult();
         if (existing != null) {
             if (!Objects.equals(existing.topicId, topicId)
                     || (categoryId != null && !Objects.equals(existing.categoryId, categoryId))
                     || !Objects.equals(existing.language, language)
-                    || !Objects.equals(existing.instructions == null ? "" : existing.instructions, instructions)) {
+                    || !Objects.equals(existing.instructions == null ? "" : existing.instructions, instructions)
+                    || !Objects.equals(existing.repostPolicyCode, repostPolicyCode)) {
                 throw new BadRequestException("草稿幂等键已绑定到其他请求");
             }
             return existing;
@@ -284,6 +296,7 @@ public class CodexCreatorDraftService {
         CodexCreatorDraftAssignment assignment = new CodexCreatorDraftAssignment();
         assignment.topicId = topicId;
         assignment.categoryId = categoryId;
+        assignment.repostPolicyCode = repostPolicyCode;
         assignment.language = language;
         assignment.instructions = instructions;
         assignment.requestKey = requestKey;
@@ -352,8 +365,8 @@ public class CodexCreatorDraftService {
             post.user = operator;
             post.createdAt = now;
             post.contentDeclarations = DECLARATIONS;
-            post.repostPolicyCode = repostPolicyCatalog.require(null).code();
         }
+        post.repostPolicyCode = repostPolicyCatalog.require(assignment.repostPolicyCode).code();
         String modelName = resolveModelName(jobData, provenance);
         post.authorName = modelName;
         post.title = titleMap;
@@ -436,11 +449,12 @@ public class CodexCreatorDraftService {
     }
 
     private boolean matches(CodexCreatorDraftAssignment assignment, Long topicId, Long categoryId,
-                            String language, String instructions) {
+                            String language, String instructions, String repostPolicyCode) {
         return Objects.equals(assignment.topicId, topicId)
                 && (categoryId == null || Objects.equals(assignment.categoryId, categoryId))
                 && Objects.equals(assignment.language, language)
-                && Objects.equals(assignment.instructions == null ? "" : assignment.instructions, instructions);
+                && Objects.equals(assignment.instructions == null ? "" : assignment.instructions, instructions)
+                && Objects.equals(assignment.repostPolicyCode, repostPolicyCode);
     }
 
     private void requireRemoteJobId(JsonNode data) {
@@ -455,6 +469,8 @@ public class CodexCreatorDraftService {
         view.put("id", assignment.id);
         view.put("topicId", assignment.topicId);
         view.put("categoryId", assignment.categoryId);
+        view.put("repostPolicyCode", repostPolicyCatalog.require(assignment.repostPolicyCode).code());
+        view.put("repostPolicy", repostPolicyView(assignment.repostPolicyCode));
         view.put("language", assignment.language);
         view.put("instructions", assignment.instructions == null ? "" : assignment.instructions);
         view.put("status", assignment.status);
@@ -464,6 +480,18 @@ public class CodexCreatorDraftService {
         view.put("error", assignment.errorMessage == null ? "" : assignment.errorMessage);
         view.put("createdAt", assignment.createdAt);
         view.put("updatedAt", assignment.updatedAt);
+        return view;
+    }
+
+    private Map<String, Object> repostPolicyView(String code) {
+        RepostPolicyCatalog.Policy policy = repostPolicyCatalog.require(code);
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("code", policy.code());
+        view.put("name", policy.name());
+        view.put("summary", policy.summary());
+        view.put("conditions", policy.conditions());
+        view.put("licenseUrl", policy.licenseUrl());
+        view.put("requiresApplication", policy.requiresApplication());
         return view;
     }
 
@@ -548,7 +576,14 @@ public class CodexCreatorDraftService {
 
     static String requestKey(Long topicId, Long categoryId, String language, String instructions,
                              boolean practicalVerification, List<Long> testServerIds) {
-        String value = topicId + "\n" + categoryId + "\n" + language + "\n" + instructions.replaceAll("\\s+", " ");
+        return requestKey(topicId, categoryId, language, instructions, "REQUEST_REQUIRED",
+                practicalVerification, testServerIds);
+    }
+
+    static String requestKey(Long topicId, Long categoryId, String language, String instructions,
+                             String repostPolicyCode, boolean practicalVerification, List<Long> testServerIds) {
+        String value = topicId + "\n" + categoryId + "\n" + language + "\n" + instructions.replaceAll("\\s+", " ")
+                + "\nrepostPolicy=" + (repostPolicyCode == null ? "REQUEST_REQUIRED" : repostPolicyCode);
         if (practicalVerification) {
             List<Long> servers = testServerIds == null ? List.of()
                     : testServerIds.stream().filter(Objects::nonNull).distinct().sorted().toList();
@@ -594,6 +629,8 @@ public class CodexCreatorDraftService {
         result.put("topicId", assignment.topicId);
         result.put("codexJobId", assignment.codexJobId);
         result.put("codexTaskId", assignment.codexTaskId);
+        result.put("repostPolicyCode", repostPolicyCatalog.require(assignment.repostPolicyCode).code());
+        result.put("repostPolicy", repostPolicyView(assignment.repostPolicyCode));
         if (jobData.path("content").has("sources")) result.put("sources", jobData.path("content").get("sources"));
         if (jobData.has("qualityReport")) result.put("qualityReport", jobData.get("qualityReport"));
         if (jobData.has("qualityContractVersion")) {
