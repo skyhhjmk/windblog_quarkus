@@ -91,6 +91,10 @@ public class CodexCreatorHttpClient {
         return send(connection.endpoint() + "/api/internal/integrations/windblog/topic-automation", body, secret);
     }
 
+    public CompletionStage<JsonNode> quota() {
+        return topicCommand("quota.read", Map.of(), "windblog-admin", UUID.randomUUID().toString());
+    }
+
     public CompletionStage<JsonNode> status() {
         try {
             CodexCreatorConnectionService.ConnectionSettings connection = connectionService.current();

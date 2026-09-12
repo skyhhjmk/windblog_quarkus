@@ -20,6 +20,8 @@ Run backend commands from the repository root:
 
 Run `bash mvnw test` inside `codex-creator/` separately. Inside `admin-flutter/`, use `flutter pub get`, `flutter analyze`, and `flutter test`.
 
+After any code update, update the corresponding local development environment before considering the work complete. For Quarkus services, rebuild or restart the affected service/container and verify its health or startup logs; for Flutter, restart or hot-reload the active development app and verify that the changed behavior is loaded. Do not report a code change as completed while the local runtime is still using stale artifacts.
+
 ## Coding Style & Naming Conventions
 
 Follow surrounding Java style: four-space indentation, `PascalCase` classes, `camelCase` methods and fields, and lowercase packages. Keep controllers focused on HTTP handling and business logic in services. For Dart, use two-space indentation, `snake_case.dart` filenames, and `dart format lib test`; analysis uses `flutter_lints`.

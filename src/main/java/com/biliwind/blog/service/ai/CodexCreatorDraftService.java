@@ -102,6 +102,16 @@ public class CodexCreatorDraftService {
                                                       String repostPolicyCode,
                                                       boolean requiresPracticalVerification, List<Long> testServerIds,
                                                       Long operatorId, String traceId) {
+        return start(topicId, categoryId, language, instructions, profileId, reasoningEffort,
+                repostPolicyCode, requiresPracticalVerification, testServerIds, false, operatorId, traceId);
+    }
+
+    public CompletionStage<Map<String, Object>> start(Long topicId, Long categoryId,
+                                                      String language, String instructions, String profileId,
+                                                      String reasoningEffort,
+                                                      String repostPolicyCode,
+                                                      boolean requiresPracticalVerification, List<Long> testServerIds,
+                                                      boolean forceQuota, Long operatorId, String traceId) {
         validateRequest(topicId, categoryId, language, instructions, operatorId);
         String normalizedLanguage = normalizeLanguage(language);
         String normalizedInstructions = instructions == null ? "" : instructions.trim();
@@ -143,6 +153,7 @@ public class CodexCreatorDraftService {
         payload.put("requiresPracticalVerification", requiresPracticalVerification);
         payload.put("testServerIds", testServerIds == null ? List.of()
                 : testServerIds.stream().filter(Objects::nonNull).distinct().sorted().toList());
+        payload.put("forceQuota", forceQuota);
         if (!normalizedProfileId.isBlank()) payload.put("profileId", normalizedProfileId);
         if (!normalizedReasoningEffort.isBlank()) payload.put("reasoningEffort", normalizedReasoningEffort);
         return client.topicCommand("article.start", payload,
@@ -166,6 +177,11 @@ public class CodexCreatorDraftService {
 
     public CompletionStage<Map<String, Object>> regenerate(Long topicId, String profileId, String reasoningEffort,
                                                             Long operatorId, String traceId) {
+        return regenerate(topicId, profileId, reasoningEffort, operatorId, traceId, false);
+    }
+
+    public CompletionStage<Map<String, Object>> regenerate(Long topicId, String profileId, String reasoningEffort,
+                                                            Long operatorId, String traceId, boolean forceQuota) {
         if (topicId == null || topicId <= 0) throw new BadRequestException("话题不能为空");
         if (operatorId == null) throw new jakarta.ws.rs.WebApplicationException("未登录", 401);
         CodexCreatorDraftAssignment assignment = self.get().prepareRegeneration(topicId, operatorId);
@@ -175,6 +191,7 @@ public class CodexCreatorDraftService {
         payload.put("repostPolicy", repostPolicyView(assignment.repostPolicyCode));
         if (profileId != null && !profileId.isBlank()) payload.put("profileId", profileId.trim());
         if (reasoningEffort != null && !reasoningEffort.isBlank()) payload.put("reasoningEffort", reasoningEffort.trim().toLowerCase(java.util.Locale.ROOT));
+        payload.put("forceQuota", forceQuota);
         return client.topicCommand("article.regenerate", payload,
                         "windblog-admin:" + operatorId, traceId)
                 .thenApply(response -> {

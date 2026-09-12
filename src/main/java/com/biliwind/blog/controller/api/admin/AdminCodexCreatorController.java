@@ -55,6 +55,16 @@ public class AdminCodexCreatorController {
     }
 
     @GET
+    @Path("/quota")
+    @Operation(summary = "查询 Codex ChatGPT 额度状态")
+    public CompletionStage<Response> quota() {
+        return client.quota()
+                .thenApply(response -> Response.ok(Map.of("success", true,
+                        "data", response.path("data"))).build())
+                .exceptionally(error -> serviceUnavailable(error));
+    }
+
+    @GET
     @Path("/config")
     @Operation(summary = "查询 Codex Creator 连接配置（密钥仅返回配置状态）")
     @Blocking
@@ -227,9 +237,10 @@ public class AdminCodexCreatorController {
         String repostPolicyCode = payload == null ? null : value(payload.get("repostPolicyCode"));
         Long categoryId = longValue(payload == null ? null : payload.get("categoryId"));
         boolean requiresPracticalVerification = payload != null && Boolean.TRUE.equals(booleanValue(payload.get("requiresPracticalVerification")));
+        boolean forceQuota = payload != null && Boolean.TRUE.equals(booleanValue(payload.get("forceQuota")));
         java.util.List<Long> testServerIds = payload == null ? java.util.List.of() : longList(payload.get("testServerIds"));
         try {
-            return draftService.start(id, categoryId, language, instructions, profileId, reasoningEffort, repostPolicyCode, requiresPracticalVerification, testServerIds,
+            return draftService.start(id, categoryId, language, instructions, profileId, reasoningEffort, repostPolicyCode, requiresPracticalVerification, testServerIds, forceQuota,
                             adminRequestContext.getUserId(), traceId())
                     .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
                     .exceptionally(error -> serviceUnavailable(error));
@@ -244,8 +255,9 @@ public class AdminCodexCreatorController {
     public CompletionStage<Response> regenerateDraft(@PathParam("id") Long id, Map<String, Object> payload) {
         String profileId = payload == null ? null : value(payload.get("profileId"));
         String reasoningEffort = payload == null ? null : value(payload.get("reasoningEffort"));
+        boolean forceQuota = payload != null && Boolean.TRUE.equals(booleanValue(payload.get("forceQuota")));
         try {
-            return draftService.regenerate(id, profileId, reasoningEffort, adminRequestContext.getUserId(), traceId())
+            return draftService.regenerate(id, profileId, reasoningEffort, adminRequestContext.getUserId(), traceId(), forceQuota)
                     .thenApply(data -> Response.accepted(Map.of("success", true, "data", data)).build())
                     .exceptionally(error -> serviceUnavailable(error));
         } catch (RuntimeException exception) {
