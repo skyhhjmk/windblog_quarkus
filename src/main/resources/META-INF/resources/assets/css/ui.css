@@ -307,3 +307,26 @@ button:disabled {
     background: var(--card-bg) !important;
     border: 1px solid var(--border) !important;
 }
+.pjax-status {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    max-width: calc(100vw - 2rem);
+    padding: .75rem 1rem;
+    border: 1px solid var(--border-color, #64748b);
+    border-radius: .75rem;
+    background: var(--panel-bg, #fff);
+    color: var(--text-primary, #111827);
+    box-shadow: 0 4px 20px #0002;
+}
+.pjax-status[hidden] { display: none; }
+.pjax-status button, .pjax-status a {
+    margin-left: .75rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+    #pjax-progress { transition: none !important; }
+}

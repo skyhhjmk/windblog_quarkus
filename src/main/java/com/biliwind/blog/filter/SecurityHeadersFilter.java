@@ -56,7 +56,7 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
                 + "img-src " + imageSources + "; style-src 'self' 'nonce-" + nonce + "'; "
                 + "script-src 'self' 'nonce-" + nonce + "'; connect-src " + connectSources + "; font-src 'self'";
         if (trustedTypesEnabled) {
-            csp = csp + "; require-trusted-types-for 'script'; trusted-types default";
+            csp = csp + "; require-trusted-types-for 'script'; trusted-types default windblog-raw-html";
         }
         responseContext.getHeaders().putSingle(cspEnforce ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only", csp);
         if (hstsEnabled) {

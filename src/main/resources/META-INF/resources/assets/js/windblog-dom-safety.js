@@ -28,7 +28,8 @@
         'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'i', 'img', 'input',
         'label', 'li', 'main', 'nav', 'ol', 'option', 'p', 'path', 'polyline', 'polygon',
         'pre', 'section', 'select', 'small', 'span', 'strong', 'sub', 'sup', 'svg', 'table',
-        'tbody', 'td', 'textarea', 'tfoot', 'th', 'thead', 'tr', 'u', 'ul', 'video'
+        'tbody', 'td', 'textarea', 'tfoot', 'th', 'thead', 'tr', 'u', 'ul', 'video',
+        'template', 'time', 'aside', 'details', 'summary', 'picture', 'source'
     ]);
     var allowedAttributes = new Set([
         'alt', 'aria-controls', 'aria-current', 'aria-describedby', 'aria-hidden', 'aria-label',
@@ -37,11 +38,12 @@
         'disabled', 'download', 'fill', 'for', 'height', 'href', 'id', 'loading', 'max', 'maxlength',
         'method', 'min', 'name', 'placeholder', 'points', 'rel', 'required', 'role', 'selected', 'action',
         'size', 'spellcheck', 'step', 'stroke', 'stroke-linecap', 'stroke-linejoin', 'stroke-width',
-        'target', 'title', 'type', 'value', 'viewbox', 'width', 'x', 'x1', 'x2', 'y', 'y1', 'y2'
+        'target', 'title', 'type', 'value', 'viewbox', 'width', 'x', 'x1', 'x2', 'y', 'y1', 'y2',
+        'src', 'datetime', 'open', 'controls', 'preload'
     ]);
 
     function isSafeUrl(value) {
-        var normalized = String(value || '').trim().toLowerCase();
+        var normalized = String(value || '').replace(/[\u0000-\u0020\u007f]/g, '').toLowerCase();
         if (normalized === '' || normalized.charAt(0) === '#') {
             return true;
         }
@@ -53,7 +55,6 @@
             || normalized.indexOf('mailto:') === 0;
     }
 
-    var sanitizingHtml = false;
     // DOMParser may invoke the default Trusted Types policy while the
     // sanitizer is already running. Returning a real TrustedHTML value for
     // that nested call prevents the browser from re-entering the policy.
@@ -65,19 +66,24 @@
 
     function sanitizeHtml(value) {
         var rawHtml = String(value || '');
-        // Chromium can invoke the default Trusted Types policy again while
-        // DOMParser parses HTML. Return a TrustedHTML value for that nested
-        // call; the outer call continues and sanitizes the resulting document.
-        if (sanitizingHtml) {
-            return rawHtmlPolicy.createHTML(rawHtml);
-        }
-
-        sanitizingHtml = true;
-        try {
-            var parsed = new DOMParser().parseFromString(rawHtml, 'text/html');
-            var elements = Array.from(parsed.body.querySelectorAll('*'));
+        // The private raw policy is used only for inert parsing, never insertion.
+        var parsed = new DOMParser().parseFromString(rawHtmlPolicy.createHTML(rawHtml), 'text/html');
+        function sanitizeTree(root) {
+            var elements = Array.from(root.querySelectorAll('*'));
             elements.forEach(function (element) {
                 var tagName = element.tagName.toLowerCase();
+                if (tagName === 'script' && element.getAttribute('type') === 'application/ld+json') {
+                    try {
+                        JSON.parse(element.textContent);
+                        Array.from(element.attributes).forEach(function (attribute) {
+                            if (attribute.name !== 'type') element.removeAttribute(attribute.name);
+                        });
+                        return;
+                    } catch (error) {
+                        element.remove();
+                        return;
+                    }
+                }
                 if (!allowedElements.has(tagName)) {
                     element.remove();
                     return;
@@ -95,11 +101,11 @@
                         element.removeAttribute(attribute.name);
                     }
                 });
+                if (tagName === 'template') sanitizeTree(element.content);
             });
-            return parsed.body.innerHTML;
-        } finally {
-            sanitizingHtml = false;
         }
+        sanitizeTree(parsed.body);
+        return parsed.body.innerHTML;
     }
 
     function sanitizeScriptUrl(value) {

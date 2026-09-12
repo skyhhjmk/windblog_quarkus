@@ -111,25 +111,66 @@
         const bar = document.getElementById('pjax-progress');
         let progressTimer = null;
         let activePjaxController = null;
+        let progressStartTimer = null;
+        let progressResetTimer = null;
+        let slowRequestTimer = null;
+        let activeTransitionItems = [];
+        let displayedUrl = window.location.href;
+        let displayedHistoryState = window.history.state;
+        const navigationStatus = document.createElement('div');
+        navigationStatus.className = 'pjax-status';
+        navigationStatus.hidden = true;
+        navigationStatus.setAttribute('role', 'status');
+        navigationStatus.setAttribute('aria-live', 'polite');
+        document.body.appendChild(navigationStatus);
+
+        function clearProgressTimers() {
+            clearTimeout(progressTimer);
+            clearTimeout(progressStartTimer);
+            clearTimeout(progressResetTimer);
+            clearTimeout(slowRequestTimer);
+        }
+
+        function showNavigationError(url, retry) {
+            navigationStatus.replaceChildren(document.createTextNode('页面加载失败，请重试。 '));
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = '重试';
+            button.addEventListener('click', retry);
+            const link = document.createElement('a');
+            link.href = url;
+            link.dataset.noPjax = 'true';
+            link.textContent = '完整打开';
+            navigationStatus.append(button, link);
+            navigationStatus.hidden = false;
+        }
 
         function showProgress() {
+            clearProgressTimers();
+            navigationStatus.hidden = true;
+            document.getElementById('pjax-container')?.setAttribute('aria-busy', 'true');
+            slowRequestTimer = setTimeout(() => {
+                navigationStatus.textContent = '正在加载…';
+                navigationStatus.hidden = false;
+            }, 800);
             if (!bar) return;
             bar.style.transition = 'none';
             bar.style.width = '0';
             void bar.offsetWidth;
             bar.style.transition = 'width .25s ease';
-            bar.style.width = '60%';
-            clearTimeout(progressTimer);
+            progressStartTimer = setTimeout(() => { bar.style.width = '60%'; }, 120);
             progressTimer = setTimeout(() => {
                 bar.style.width = '85%';
             }, 300);
         }
 
         function hideProgress() {
+            clearProgressTimers();
+            navigationStatus.hidden = true;
+            document.getElementById('pjax-container')?.removeAttribute('aria-busy');
             if (!bar) return;
-            clearTimeout(progressTimer);
-            bar.style.width = '100%';
-            setTimeout(() => {
+            if (bar.style.width !== '0px' && bar.style.width !== '0%') bar.style.width = '100%';
+            progressResetTimer = setTimeout(() => {
                 bar.style.transition = 'none';
                 bar.style.width = '0';
             }, 200);
@@ -732,7 +773,7 @@
                     buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
                     buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
                 ], {
-                    duration: 460,
+                    duration: 320,
                     easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
                     fill: 'forwards'
                 });
@@ -748,6 +789,7 @@
 
         function cleanupArticleTransitionItems(preparedItems) {
             preparedItems.forEach(function (preparedItem) {
+                preparedItem.cloneElement.getAnimations?.().forEach(animation => animation.cancel());
                 preparedItem.targetElement.classList.remove('pjax-article-transition-target-hidden');
                 preparedItem.cloneElement.remove();
             });
@@ -777,12 +819,16 @@
         async function loadByPjax(url, pushState, transitionSlug, navigationOptions) {
             const container = document.getElementById('pjax-container');
             if (!container) {
-                window.location.href = url;
+                showNavigationError(url, () => loadByPjax(url, pushState, transitionSlug, navigationOptions));
                 return;
             }
 
             const currentUrl = window.location.href;
             const sourceScrollPosition = getCurrentScrollPosition();
+            if (pushState) {
+                displayedUrl = currentUrl;
+                displayedHistoryState = { ...window.history.state, windblogScroll: sourceScrollPosition };
+            }
             const restoreScrollPosition = pushState
                 ? null
                 : getHistoryScrollPosition(window.history.state);
@@ -803,12 +849,19 @@
                 transitionSlug: transitionSlug || ''
             };
 
-            document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
             if (activePjaxController) {
                 activePjaxController.abort();
             }
+            cleanupArticleTransitionItems(activeTransitionItems);
+            activeTransitionItems = [];
+            container.getAnimations?.().forEach(animation => animation.cancel());
             const requestController = new AbortController();
             activePjaxController = requestController;
+            document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
+            const previousHtml = container.innerHTML;
+            const previousTitle = document.title;
+            const previousHead = Array.from(document.head.querySelectorAll('meta, link[rel="canonical"], script[type="application/ld+json"]')).map(node => node.cloneNode(true));
+            let committed = false;
             try {
                 const response = await fetch(url, {
                     method: 'GET',
@@ -825,40 +878,67 @@
                 if (!response.ok) {
                     throw new Error('PJAX request failed: ' + response.status);
                 }
+                if (!response.headers.get('content-type')?.includes('text/html')) {
+                    throw new Error('PJAX response is not HTML');
+                }
+                if (new URL(response.url).origin !== window.location.origin) {
+                    throw new Error('PJAX redirect leaves this site');
+                }
+                const resolvedUrl = new URL(response.url);
+                resolvedUrl.hash = new URL(url, window.location.href).hash;
+                url = resolvedUrl.href;
 
                 const html = await response.text();
+                if (activePjaxController !== requestController || requestController.signal.aborted) return;
                 const hasArticleTransitionSourceOnCurrentPage = transitionSlug && hasArticleTransitionSource(document, transitionSlug);
                 const extractedHtml = extractPjaxHtml(html, transitionSlug);
 
-                if (hasArticleTransitionSourceOnCurrentPage) {
-                    const capturedItems = captureArticleTransitionItems(transitionSlug);
+                const capturedItems = hasArticleTransitionSourceOnCurrentPage ? captureArticleTransitionItems(transitionSlug) : [];
+                try {
                     updatePjaxContainerState(container, extractedHtml, url, pushState, pjaxUpdateOptions);
-                    const preparedItems = prepareArticleTransitionTargets(transitionSlug, capturedItems);
-
-                    if (preparedItems.length > 0) {
-                        logArticleTransitionMode(url, transitionSlug, true, '');
-                        animateArticleTransitionItems(preparedItems).then(function () {
-                            finalizePjaxLoad(url);
-                        });
-                    } else {
-                        logArticleTransitionMode(url, transitionSlug, false, 'target page does not expose a matching article transition target');
-                        finalizePjaxLoad(url);
-                    }
-                } else {
-                    let fallbackReason = '';
-                    if (transitionSlug && !hasArticleTransitionSourceOnCurrentPage) {
-                        fallbackReason = 'current page does not expose a matching article transition source';
-                    }
-                    logArticleTransitionMode(url, transitionSlug, false, fallbackReason);
-                    updatePjaxContainerState(container, extractedHtml, url, pushState, pjaxUpdateOptions);
-                    finalizePjaxLoad(url);
+                    committed = true;
+                    displayedUrl = window.location.href;
+                    displayedHistoryState = window.history.state;
+                } catch (error) {
+                    container.innerHTML = previousHtml;
+                    document.title = previousTitle;
+                    document.head.querySelectorAll('meta, link[rel="canonical"], script[type="application/ld+json"]').forEach(node => node.remove());
+                    previousHead.forEach(node => document.head.appendChild(node));
+                    document.dispatchEvent(new CustomEvent('page:ready', { detail: { url: displayedUrl } }));
+                    throw error;
                 }
+                // Animation failures must never invalidate successful navigation.
+                try {
+                    if (hasArticleTransitionSourceOnCurrentPage) {
+                        const preparedItems = prepareArticleTransitionTargets(transitionSlug, capturedItems);
+                        activeTransitionItems = preparedItems;
+                        if (preparedItems.length > 0) {
+                            logArticleTransitionMode(url, transitionSlug, true, '');
+                            await animateArticleTransitionItems(preparedItems);
+                        } else {
+                            logArticleTransitionMode(url, transitionSlug, false, 'target page does not expose a matching article transition target');
+                        }
+                    } else {
+                        logArticleTransitionMode(url, transitionSlug, false, 'current page does not expose a matching article transition source');
+                        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && container.animate) {
+                            await container.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' }).finished;
+                        }
+                    }
+                } catch (animationError) {
+                    if (activePjaxController === requestController) cleanupArticleTransitionItems(activeTransitionItems);
+                }
+                if (activePjaxController === requestController) finalizePjaxLoad(url);
             } catch (error) {
-                document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url, error: error } }));
-                if (error && error.name === 'AbortError') {
+                if (activePjaxController !== requestController || (error && error.name === 'AbortError')) {
                     return;
                 }
-                window.location.href = url;
+                document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url, error: error } }));
+                if (!committed) {
+                    window.history.replaceState(displayedHistoryState, '', displayedUrl);
+                    scrollToPositionInstantly(sourceScrollPosition);
+                    showNavigationError(url, () => loadByPjax(url, true, transitionSlug, navigationOptions));
+                }
+                console.warn('[PJAX] navigation failed', error);
             } finally {
                 if (activePjaxController === requestController) {
                     activePjaxController = null;
@@ -868,7 +948,7 @@
 
         function extractPjaxHtml(html, transitionSlug) {
             if (!html) {
-                return '';
+                throw new Error('Empty PJAX response');
             }
 
             const parser = new DOMParser();
@@ -883,7 +963,7 @@
                 return pjaxContainer.innerHTML;
             }
 
-            return html;
+            throw new Error('PJAX response has no content container');
         }
 
         function formatTimestamps(root = document) {
@@ -1119,6 +1199,7 @@
         } else if (!window.history.state.windblogScroll) {
             replaceCurrentHistoryState({ windblogScroll: getCurrentScrollPosition() });
         }
+        displayedHistoryState = window.history.state;
 
         document.addEventListener('click', (event) => {
             if (event.defaultPrevented) return;
@@ -1142,9 +1223,10 @@
             if (!canUsePjax(anchor)) return;
 
             const url = new URL(anchor.href, window.location.href);
-            if (url.href === window.location.href) return;
+            if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
 
             event.preventDefault();
+            if (url.href === window.location.href) return;
             loadByPjax(
                 url.href,
                 true,
@@ -1154,6 +1236,12 @@
         });
 
         window.addEventListener('popstate', () => {
+            if (window.location.pathname === new URL(displayedUrl).pathname &&
+                window.location.search === new URL(displayedUrl).search) {
+                displayedUrl = window.location.href;
+                displayedHistoryState = window.history.state;
+                return;
+            }
             loadByPjax(window.location.href, false, resolveArticleTransitionSlug(window.location.href, null));
         });
 
@@ -1174,7 +1262,6 @@
 
         document.addEventListener('pjax:start', showProgress);
         document.addEventListener('pjax:end', hideProgress);
-        document.addEventListener('pjax:complete', hideProgress);
 
         // Global Form Debouncing
         document.addEventListener('submit', (e) => {
