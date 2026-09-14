@@ -160,6 +160,22 @@ public class ConfigInitializer {
 
         list.add(new SettingDefinition("feature_toggles", featureValue, "object", "功能设置", featureSchema, "功能开关"));
 
+        ObjectNode analyticsSchema = mapper.createObjectNode();
+        analyticsSchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode analyticsFields = analyticsSchema.putArray("fields");
+        analyticsFields.addObject().put("key", "enabled").put("label", "启用访问分析").put("widget", "switch")
+                .put("hint", "关闭后不向第三方分析服务加载脚本或发送访问事件。");
+        analyticsFields.addObject().put("key", "scriptUrl").put("label", "追踪脚本 URL").put("widget", "input")
+                .put("hint", "HTTPS 地址；本地开发可使用 http://localhost:8080/tracker.js。");
+        analyticsFields.addObject().put("key", "siteId").put("label", "Lens 站点 ID").put("widget", "input")
+                .put("hint", "从 SeeRay Lens 的站点集成页面复制 data-site-id 值。");
+        ObjectNode analyticsValue = mapper.createObjectNode();
+        analyticsValue.put("enabled", false);
+        analyticsValue.put("scriptUrl", "");
+        analyticsValue.put("siteId", "");
+        list.add(new SettingDefinition("analytics_tracking", analyticsValue, "object", "访问分析", analyticsSchema,
+                "由数据库管理的 SeeRay Lens 追踪配置；保存后自动更新页面 CSP。"));
+
         // AI Comment Audit
         ObjectNode aiAuditSchema = mapper.createObjectNode();
         aiAuditSchema.put("type", "object");

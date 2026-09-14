@@ -81,6 +81,18 @@ public class ConfigTemplateData {
         return configManager().getString("site_footer", "custom_html", "");
     }
 
+    public static boolean analyticsTrackingEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().enabled();
+    }
+
+    public static String analyticsTrackingScriptUrl() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().scriptUrl();
+    }
+
+    public static String analyticsTrackingSiteId() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().siteId();
+    }
+
     public static String logoUrl() {
         return configManager().getString("appearance", "logo_url", "/logo.png");
     }

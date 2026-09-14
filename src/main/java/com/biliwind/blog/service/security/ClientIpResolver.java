@@ -4,6 +4,7 @@ import com.biliwind.blog.service.ConfigManager;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -180,6 +181,7 @@ public class ClientIpResolver {
         return true;
     }
 
+    @RegisterForReflection
     public record ClientIpResolution(String clientIp, String remoteIp, String headerValue, boolean trustedProxy, String message) {
     }
 }

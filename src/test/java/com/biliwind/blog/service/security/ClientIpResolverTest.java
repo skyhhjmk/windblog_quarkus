@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.security;
 
 import com.biliwind.blog.service.ConfigManager;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -8,6 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClientIpResolverTest {
+
+    @Test
+    void shouldRegisterIpResolutionForNativeJsonSerialization() {
+        assertTrue(ClientIpResolver.ClientIpResolution.class
+                .isAnnotationPresent(RegisterForReflection.class));
+    }
 
     @Test
     void shouldAcceptOnlyIpv4AndIpv6Literals() {

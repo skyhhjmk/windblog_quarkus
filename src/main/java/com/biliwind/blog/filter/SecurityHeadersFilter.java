@@ -8,6 +8,7 @@ import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.ext.Provider;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.AnalyticsTrackingSettings;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @Provider
@@ -33,6 +34,9 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
     @Inject
     com.biliwind.blog.context.CspNonceContext cspNonceContext;
 
+    @Inject
+    AnalyticsTrackingSettings analyticsTracking;
+
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
         responseContext.getHeaders().putSingle("X-Content-Type-Options", "nosniff");
@@ -52,9 +56,15 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
         String nonce = cspNonceContext.getNonce();
         String imageSources = appendConfiguredSources("'self'", cspImageSources);
         String connectSources = appendConfiguredSources("'self'", cspConnectSources);
+        AnalyticsTrackingSettings.Settings tracking = analyticsTracking == null
+                ? AnalyticsTrackingSettings.Settings.disabled()
+                : analyticsTracking.current();
+        String scriptSources = tracking.enabled() ? "'self' 'nonce-" + nonce + "' " + tracking.origin()
+                : "'self' 'nonce-" + nonce + "'";
+        if (tracking.enabled()) connectSources = connectSources + " " + tracking.origin();
         String csp = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
                 + "img-src " + imageSources + "; style-src 'self' 'nonce-" + nonce + "'; "
-                + "script-src 'self' 'nonce-" + nonce + "'; connect-src " + connectSources + "; font-src 'self'";
+                + "script-src " + scriptSources + "; connect-src " + connectSources + "; font-src 'self'";
         if (trustedTypesEnabled) {
             csp = csp + "; require-trusted-types-for 'script'; trusted-types default windblog-raw-html";
         }

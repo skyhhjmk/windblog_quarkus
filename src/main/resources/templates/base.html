@@ -71,6 +71,10 @@
 
     <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js?v=pjax-20260912"></script>
 
+    {#if config:analyticsTrackingEnabled}
+        <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}"></script>
+    {/if}
+
     <!-- 本地化 Tailwind CDN 运行时脚本，保持现有模板写法不变 -->
     <script src="/assets/vendor/tailwind/tailwind-cdn.min.js"></script>
     <script nonce="{cspNonce}">
