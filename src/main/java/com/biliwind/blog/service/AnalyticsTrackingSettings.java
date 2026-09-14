@@ -24,13 +24,32 @@ public class AnalyticsTrackingSettings {
         try {
             URI uri = URI.create(scriptUrl);
             if (!("https".equalsIgnoreCase(uri.getScheme())
-                    || "http".equalsIgnoreCase(uri.getScheme())
-                            && ("localhost".equalsIgnoreCase(uri.getHost())
-                                    || "127.0.0.1".equals(uri.getHost())))
+                    || "http".equalsIgnoreCase(uri.getScheme()) && isLocalOrTailscale(uri.getHost()))
                     || uri.getHost() == null) return Settings.disabled();
             return new Settings(true, uri.toString(), uri.getScheme() + "://" + uri.getAuthority(), siteId);
         } catch (IllegalArgumentException ignored) {
             return Settings.disabled();
+        }
+    }
+
+    private static boolean isLocalOrTailscale(String host) {
+        if ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)) return true;
+        String[] parts = host == null ? new String[0] : host.split("\\.");
+        if (parts.length != 4) return false;
+        try {
+            int first = Integer.parseInt(parts[0]);
+            int second = Integer.parseInt(parts[1]);
+            return first == 100 && second >= 64 && second <= 127
+                    && java.util.Arrays.stream(parts).allMatch(part -> {
+                        try {
+                            int value = Integer.parseInt(part);
+                            return value >= 0 && value <= 255;
+                        } catch (NumberFormatException ignored) {
+                            return false;
+                        }
+                    });
+        } catch (NumberFormatException ignored) {
+            return false;
         }
     }
 
