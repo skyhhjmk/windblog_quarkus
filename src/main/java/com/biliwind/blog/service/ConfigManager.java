@@ -127,4 +127,18 @@ public class ConfigManager {
             systemConfigService.evictCache(event.key);
         }
     }
+
+    /**
+     * Applies a configuration change received from another application node.
+     * Redis already holds the authoritative shared cache entry, so this must
+     * only update this node's L1 cache and never publish another event.
+     */
+    public void applyRemoteConfigChange(String key, JsonNode newValue) {
+        if (newValue != null && !newValue.isNull()) {
+            localCache.put(key, newValue);
+        } else {
+            localCache.remove(key);
+        }
+        LOG.infof("已应用来自其他节点的配置变更: %s", key);
+    }
 }

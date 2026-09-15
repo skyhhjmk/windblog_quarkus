@@ -7,7 +7,7 @@ const source = fs.readFileSync('src/main/resources/META-INF/resources/assets/js/
 const navigation = source.slice(source.indexOf('        async function loadByPjax('), source.indexOf('        function extractPjaxHtml('));
 
 function harness(fetch) {
-    const events = [], commits = [], failures = [], history = [];
+    const events = [], commits = [], failures = [], history = [], analytics = [];
     const container = { innerHTML: 'original', getAnimations: () => [] };
     const context = {
         URL, AbortController, console: { warn() {} },
@@ -31,6 +31,8 @@ function harness(fetch) {
         showNavigationError: (url, retry) => failures.push({ url, retry }),
         extractPjaxHtml: html => { if (html === 'invalid') throw Error('Invalid fragment'); return html; },
         hasArticleTransitionSource: () => false, logArticleTransitionMode() {},
+        analyticsBeginNavigation: () => analytics.push('begin'),
+        analyticsCancelNavigation: () => analytics.push('cancel'),
         updatePjaxContainerState: (_, html, url) => {
             container.innerHTML = html;
             commits.push(url);
@@ -40,7 +42,7 @@ function harness(fetch) {
     };
     vm.createContext(context);
     vm.runInContext(navigation, context);
-    return { context, container, commits, events, failures, history };
+    return { context, container, commits, events, failures, history, analytics };
 }
 
 const response = (url, html = 'new', type = 'text/html') => ({
@@ -89,6 +91,20 @@ test('animation rejection does not turn a successful navigation into a failure',
     assert.deepEqual(h.commits, ['http://localhost/tag']);
     assert.equal(h.failures.length, 0);
     assert.equal(h.events.filter(event => event === 'complete').length, 1);
+});
+
+test('a validated PJAX replacement begins exactly one manual analytics lifecycle', async () => {
+    const h = harness(async url => response(url));
+    await h.context.loadByPjax('http://localhost/tag', true, '');
+    assert.deepEqual(h.analytics, ['begin']);
+});
+
+test('a replacement failure cancels the manual analytics lifecycle', async () => {
+    const h = harness(async url => response(url));
+    h.context.updatePjaxContainerState = () => { throw Error('replacement failed'); };
+    await h.context.loadByPjax('http://localhost/tag', true, '');
+    assert.deepEqual(h.analytics, ['begin', 'cancel']);
+    assert.equal(h.container.innerHTML, 'original');
 });
 
 test('same-address clicks are intercepted, while modifier clicks keep native behavior', () => {

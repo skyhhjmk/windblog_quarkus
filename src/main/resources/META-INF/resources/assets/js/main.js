@@ -124,6 +124,68 @@
         navigationStatus.setAttribute('aria-live', 'polite');
         document.body.appendChild(navigationStatus);
 
+        // WindBlog owns PJAX, History, and scroll restoration. Lens is deliberately
+        // driven in manual mode so its automatic History wrapper cannot create a
+        // second lifecycle for the same replacement. Every call remains a no-op
+        // when analytics is disabled, blocked, or not yet available.
+        let analyticsContainerUnregister = [];
+        function analyticsTracker() {
+            const tracker = window.SeeRay;
+            return tracker && typeof tracker.beginNavigation === 'function' &&
+                typeof tracker.pageReady === 'function' ? tracker : null;
+        }
+
+        function analyticsPageOptions(url, root) {
+            const contentRoot = root && root.querySelector
+                ? root.querySelector('#pjax-content-root')
+                : document.querySelector('#pjax-content-root');
+            return {
+                url: url || window.location.href,
+                layoutVersion: contentRoot?.getAttribute('data-seeray-layout-version') || 'windblog-unversioned'
+            };
+        }
+
+        function unregisterAnalyticsContainers() {
+            analyticsContainerUnregister.forEach(unregister => {
+                try { unregister(); } catch (_) { /* A detached PJAX node must never block navigation. */ }
+            });
+            analyticsContainerUnregister = [];
+        }
+
+        function registerAnalyticsContainers(root) {
+            const tracker = analyticsTracker();
+            if (!tracker || !root?.querySelectorAll || typeof tracker.registerScrollContainer !== 'function') return;
+            root.querySelectorAll('[data-seeray-scroll-container]').forEach(element => {
+                const id = element.getAttribute('data-seeray-scroll-container')?.trim();
+                if (!id || !(element instanceof HTMLElement)) return;
+                const unregister = tracker.registerScrollContainer({ id, element });
+                if (typeof unregister === 'function') analyticsContainerUnregister.push(unregister);
+            });
+        }
+
+        function analyticsBeginNavigation() {
+            unregisterAnalyticsContainers();
+            analyticsTracker()?.beginNavigation();
+        }
+
+        function analyticsCancelNavigation() {
+            const tracker = analyticsTracker();
+            if (tracker && typeof tracker.cancelNavigation === 'function') tracker.cancelNavigation();
+            registerAnalyticsContainers(document);
+        }
+
+        function analyticsPageReady(url, root) {
+            const tracker = analyticsTracker();
+            if (!tracker) return;
+            tracker.pageReady(analyticsPageOptions(url, root || document));
+            registerAnalyticsContainers(root || document);
+        }
+
+        document.addEventListener('page:ready', event => {
+            analyticsPageReady(event.detail?.url, document);
+        });
+        analyticsPageReady(window.location.href, document);
+
         function clearProgressTimers() {
             clearTimeout(progressTimer);
             clearTimeout(progressStartTimer);
@@ -895,11 +957,13 @@
 
                 const capturedItems = hasArticleTransitionSourceOnCurrentPage ? captureArticleTransitionItems(transitionSlug) : [];
                 try {
+                    analyticsBeginNavigation();
                     updatePjaxContainerState(container, extractedHtml, url, pushState, pjaxUpdateOptions);
                     committed = true;
                     displayedUrl = window.location.href;
                     displayedHistoryState = window.history.state;
                 } catch (error) {
+                    analyticsCancelNavigation();
                     container.innerHTML = previousHtml;
                     document.title = previousTitle;
                     document.head.querySelectorAll('meta, link[rel="canonical"], script[type="application/ld+json"]').forEach(node => node.remove());

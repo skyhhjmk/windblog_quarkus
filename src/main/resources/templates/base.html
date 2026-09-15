@@ -72,7 +72,7 @@
     <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js?v=pjax-20260912"></script>
 
     {#if config:analyticsTrackingEnabled}
-        <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}"></script>
+        <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-heatmap data-navigation-mode="manual"></script>
     {/if}
 
     <!-- 本地化 Tailwind CDN 运行时脚本，保持现有模板写法不变 -->
@@ -289,7 +289,7 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js" defer></script>
-<script src="/assets/js/main.js?v=pjax-20260912" defer></script>
+<script src="/assets/js/main.js?v=pjax-20260914-lens" defer></script>
 <script src="/assets/js/user.js" defer></script>
 <script src="/assets/js/comment.js" defer></script>
 <script src="/assets/js/ads.js" defer></script>
