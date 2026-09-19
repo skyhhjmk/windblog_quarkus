@@ -39,7 +39,7 @@
             </div>
 
             <div class="card p-6 md:p-8 space-y-6 md:space-y-8">
-                <form action="/search" method="get" class="relative group" data-shortcut-form="search">
+                <form action="/search" method="get" class="relative group" data-shortcut-form="search" data-seeray-search-results-count="{totalCount ?: 0}" data-seeray-search-category="{searchType ?: 'all'}">
                     <input type="text"
                            name="q"
                            value="{searchKeyword ?: ''}"
