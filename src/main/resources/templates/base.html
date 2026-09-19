@@ -79,8 +79,8 @@
                 {#if config:analyticsTrackingFormsEnabled}data-track-forms{/if}
                 {#if config:analyticsTrackingMediaEnabled}data-track-media{/if}
                 {#if config:analyticsTrackingErrorsEnabled}data-track-errors{/if}
-                {#if config:analyticsTrackingTagManagerEnabled}data-tag-manager{/if}
-                {#if config:analyticsTrackingExperimentsEnabled}data-experiments{/if}></script>
+                {#if config:analyticsTrackingTagManagerEnabled}data-tag-manager="true"{/if}
+                {#if config:analyticsTrackingExperimentsEnabled}data-experiments="true"{/if}></script>
         {#if config:analyticsTrackingRequireConsent}
             <script src="{config:analyticsTrackingConsentScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-language="{language ?: 'zh-CN'}" defer></script>
         {/if}
