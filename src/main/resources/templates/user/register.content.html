@@ -3,7 +3,7 @@
     <div class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
         <h1 class="text-xl font-bold mb-6 text-center">用户注册</h1>
 
-        <form id="registerForm" data-no-debounce="true" action="/user/api/register" method="post" class="space-y-4">
+        <form id="registerForm" data-no-debounce="true" data-seeray-form="register" action="/user/api/register" method="post" class="space-y-4">
             <input type="hidden" name="redirect" value="{redirect}"/>
 
             <div>
@@ -69,6 +69,7 @@
 
             <button type="submit"
                     id="registerSubmit"
+                    data-seeray-goal="registration_submit"
                     data-shortcut="enter"
                     aria-keyshortcuts="Enter"
                     class="w-full py-2 bg-[var(--accent)] text-[var(--accent-foreground)] font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">

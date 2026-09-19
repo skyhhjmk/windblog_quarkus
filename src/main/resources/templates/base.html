@@ -78,7 +78,9 @@
                 {#if config:analyticsTrackingWebVitalsEnabled}data-web-vitals{/if}
                 {#if config:analyticsTrackingFormsEnabled}data-track-forms{/if}
                 {#if config:analyticsTrackingMediaEnabled}data-track-media{/if}
-                {#if config:analyticsTrackingErrorsEnabled}data-track-errors{/if}></script>
+                {#if config:analyticsTrackingErrorsEnabled}data-track-errors{/if}
+                {#if config:analyticsTrackingTagManagerEnabled}data-tag-manager{/if}
+                {#if config:analyticsTrackingExperimentsEnabled}data-experiments{/if}></script>
         {#if config:analyticsTrackingRequireConsent}
             <script src="{config:analyticsTrackingConsentScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-language="{language ?: 'zh-CN'}" defer></script>
         {/if}
@@ -281,6 +283,14 @@
             {/if}
             <a href="/feed" class="meta-mono hover:text-accent transition-colors">RSS 订阅</a>
             <a href="/sitemap.xml" class="meta-mono hover:text-accent transition-colors">站点地图</a>
+            {#if config:analyticsTrackingPrivacyPreferencesEnabled}
+                <details class="relative">
+                    <summary class="meta-mono cursor-pointer hover:text-accent transition-colors">隐私偏好</summary>
+                    <div class="absolute right-0 bottom-full mb-3 z-50 w-[min(420px,calc(100vw-2rem))] rounded-lg border border-border bg-card p-2 shadow-2xl">
+                        <iframe data-seeray-privacy src="{config:analyticsTrackingPrivacyPreferencesUrl}" title="隐私偏好" class="w-full h-64 rounded border-0"></iframe>
+                    </div>
+                </details>
+            {/if}
         </div>
     </div>
     {#if config:footerHtml}

@@ -318,6 +318,7 @@
                 form.reset();
                 currentReply = null;
                 updateReplyUi(root);
+                window.WindBlogAnalytics?.trackFormResult('comment', true);
                 window.showToast(window.i18n.comment_submitted || 'Comment submitted and is waiting for review.', 'success');
                 setFeedback(root, window.i18n.comment_submitted || 'Comment submitted and is waiting for review.', 'success');
                 
@@ -327,6 +328,7 @@
                     syncLoginState(root);
                 }, 2000);
             } catch (error) {
+                window.WindBlogAnalytics?.trackFormResult('comment', false);
                 window.showToast(error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
                 setFeedback(root, error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
                 window.setLoading(submit, false);

@@ -125,7 +125,7 @@
                     </div>
                     <div class="flex flex-wrap items-center gap-3">
                         <button type="submit" id="saveUserPost" class="btn-minimal rounded border border-[var(--border)] px-4 py-2">保存草稿</button>
-                        <button type="button" id="submitUserPost" class="btn-minimal rounded bg-[var(--accent)] px-4 py-2 text-[var(--accent-foreground)]">提交审核</button>
+                        <button type="button" id="submitUserPost" data-seeray-goal="post_submit" class="btn-minimal rounded bg-[var(--accent)] px-4 py-2 text-[var(--accent-foreground)]">提交审核</button>
                         <button type="button" id="resetUserPost" class="rounded border border-[var(--border)] px-4 py-2 text-sm">新建</button>
                     </div>
                     <div id="userPostFeedback" class="hidden rounded border px-3 py-2 text-sm"></div>
@@ -152,7 +152,7 @@
                 <form id="subscriptionForm" data-seeray-form="subscription-preferences" class="space-y-3">
                     <label class="flex items-center gap-2"><input id="subscribeArticleUpdates" type="checkbox"> 接收新文章更新</label>
                     <label class="flex items-center gap-2"><input id="subscribePromotions" type="checkbox"> 接收推广通知</label>
-                    <button id="saveSubscriptions" type="submit"
+                    <button id="saveSubscriptions" type="submit" data-seeray-goal="subscription_save"
                             class="btn-minimal px-4 py-2 border border-[var(--border)] rounded">保存订阅偏好
                     </button>
                 </form>

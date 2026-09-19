@@ -11,6 +11,103 @@
         document.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
     }
 
+    // WindBlog keeps analytics markup declarative so PJAX fragments receive the
+    // same Lens coverage as the initial document. No form values or article
+    // text are sent; only stable semantic identifiers are added.
+    let analyticsGoalBound = false;
+    function analyticsTrackerFacade() {
+        return window.SeeRay && typeof window.SeeRay.trackGoal === 'function' ? window.SeeRay : null;
+    }
+
+    function decorateAnalyticsMarkup(root) {
+        const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+        const searchForms = scope.querySelectorAll('form[data-shortcut-form="search"], form[action="/search"]');
+        searchForms.forEach(form => form.setAttribute('data-seeray-search', ''));
+
+        const formIds = {
+            '#registerForm': 'register',
+            '#loginForm': 'login',
+            '#comment-form': 'comment',
+            '#linkApplicationForm': 'link-application',
+            '#userPostForm': 'user-post-editor',
+            '#subscriptionForm': 'subscription-preferences',
+            '#forgotPasswordForm': 'forgot-password',
+            '#resendVerificationForm': 'resend-verification',
+            '#resetPasswordForm': 'reset-password'
+        };
+        Object.entries(formIds).forEach(([selector, id]) => {
+            scope.querySelectorAll(selector).forEach(form => form.setAttribute('data-seeray-form', id));
+        });
+
+        scope.querySelectorAll('article[data-article-transition-slug]').forEach(article => {
+            const slug = article.getAttribute('data-article-transition-slug')?.trim();
+            if (!slug || article.hasAttribute('data-seeray-content-name')) return;
+            article.setAttribute('data-seeray-content-name', `article:${slug}`);
+            article.setAttribute('data-seeray-content-piece', 'article-card');
+            article.setAttribute('data-seeray-content-target', `/post/${encodeURIComponent(slug)}`);
+        });
+
+        let mediaIndex = 0;
+        scope.querySelectorAll('audio, video').forEach(media => {
+            if (media.hasAttribute('data-seeray-no-track') || media.hasAttribute('data-seeray-media')) return;
+            const source = media.getAttribute('src') || media.querySelector('source')?.getAttribute('src') || '';
+            const slug = source.split(/[?#]/, 1)[0].split('/').pop()?.replace(/[^a-zA-Z0-9._-]/g, '-') || `media-${mediaIndex}`;
+            media.setAttribute('data-seeray-media', `windblog-${slug.slice(0, 48)}-${mediaIndex++}`.slice(0, 64));
+        });
+
+        const tracker = window.SeeRay;
+        tracker?.refreshContentTracking?.();
+        tracker?.refreshFormTracking?.();
+        applyAnalyticsExperiments(scope);
+    }
+
+    function applyAnalyticsExperiments(root) {
+        const tracker = window.SeeRay;
+        if (!tracker || typeof tracker.assignExperiment !== 'function') return;
+        const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+        scope.querySelectorAll('[data-seeray-experiment]').forEach(element => {
+            const name = element.getAttribute('data-seeray-experiment')?.trim();
+            const variants = (element.getAttribute('data-seeray-experiment-variants') || '')
+                .split(',').map(value => value.trim()).filter(Boolean);
+            if (!name || variants.length < 2 || element.dataset.seerayExperimentBound === 'true') return;
+            element.dataset.seerayExperimentBound = 'true';
+            const assign = () => {
+                const variant = tracker.assignExperiment(name, variants);
+                if (!variant) return;
+                element.setAttribute('data-seeray-experiment-variant', variant);
+                scope.querySelectorAll('[data-seeray-variant]').forEach(candidate => {
+                    candidate.hidden = candidate.getAttribute('data-seeray-variant') !== variant;
+                });
+                dispatch('seeray:experiment', {name, variant, element});
+            };
+            Promise.resolve(tracker.ready?.()).then(assign).catch(() => undefined);
+        });
+    }
+
+    function bindAnalyticsGoals() {
+        if (analyticsGoalBound) return;
+        analyticsGoalBound = true;
+        document.addEventListener('click', event => {
+            const target = event.target instanceof Element ? event.target.closest('[data-seeray-goal]') : null;
+            const tracker = analyticsTrackerFacade();
+            const name = target?.getAttribute('data-seeray-goal')?.trim();
+            if (!tracker || !name || target?.closest('[data-seeray-no-track]')) return;
+            tracker.trackGoal(name, {
+                category: target.getAttribute('data-seeray-goal-category') || 'conversion',
+                action: target.getAttribute('data-seeray-goal-action') || 'click',
+                target: target.getAttribute('href') || undefined
+            });
+        }, true);
+    }
+
+    window.WindBlogAnalytics = Object.freeze({
+        trackGoal(name, options) { analyticsTrackerFacade()?.trackGoal(name, options); },
+        trackFormResult(formId, successful) { window.SeeRay?.trackFormResult?.(formId, successful); },
+        decorate(root) { decorateAnalyticsMarkup(root); },
+        applyExperiments(root) { applyAnalyticsExperiments(root); }
+    });
+    window.addEventListener('seeray:consent', () => applyAnalyticsExperiments(document));
+
     // Source-of-truth for the public web shortcut labels and bindings.
     // Custom key mapping is intentionally not exposed to users.
     const SHORTCUTS = Object.freeze({
@@ -177,6 +274,7 @@
         function analyticsPageReady(url, root) {
             const tracker = analyticsTracker();
             if (!tracker) return;
+            decorateAnalyticsMarkup(root || document);
             tracker.pageReady(analyticsPageOptions(url, root || document));
             registerAnalyticsContainers(root || document);
         }
@@ -184,6 +282,7 @@
         document.addEventListener('page:ready', event => {
             analyticsPageReady(event.detail?.url, document);
         });
+        bindAnalyticsGoals();
         analyticsPageReady(window.location.href, document);
 
         function clearProgressTimers() {

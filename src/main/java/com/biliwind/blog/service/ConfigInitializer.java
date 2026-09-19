@@ -181,6 +181,12 @@ public class ConfigInitializer {
                 .put("hint", "仅统计显式标记 data-seeray-media 的音视频播放进度，不发送媒体地址或内容。");
         analyticsFields.addObject().put("key", "errors").put("label", "启用浏览器错误分析").put("widget", "switch")
                 .put("hint", "发送 Lens 脱敏后的浏览器错误摘要；不发送完整堆栈、页面标题或访客标识。");
+        analyticsFields.addObject().put("key", "tagManager").put("label", "启用 Tag Manager").put("widget", "switch")
+                .put("hint", "加载 Lens 中为本站发布的标签容器；仅执行已发布且符合触发条件的标签。");
+        analyticsFields.addObject().put("key", "experiments").put("label", "启用 A/B 实验").put("widget", "switch")
+                .put("hint", "加载 Lens 实验定义；页面通过 data-seeray-experiment 标记申请变体。");
+        analyticsFields.addObject().put("key", "privacyPreferences").put("label", "显示隐私偏好入口").put("widget", "switch")
+                .put("hint", "在页脚提供 Lens 隐私偏好中心入口，允许访客随时修改同意选择。");
         ObjectNode analyticsValue = mapper.createObjectNode();
         analyticsValue.put("enabled", false);
         analyticsValue.put("scriptUrl", "");
@@ -191,6 +197,9 @@ public class ConfigInitializer {
         analyticsValue.put("forms", false);
         analyticsValue.put("media", false);
         analyticsValue.put("errors", false);
+        analyticsValue.put("tagManager", false);
+        analyticsValue.put("experiments", false);
+        analyticsValue.put("privacyPreferences", true);
         list.add(new SettingDefinition("analytics_tracking", analyticsValue, "object", "访问分析", analyticsSchema,
                 "由数据库管理的 SeeRay Lens 追踪配置；保存后自动更新页面 CSP。"));
 

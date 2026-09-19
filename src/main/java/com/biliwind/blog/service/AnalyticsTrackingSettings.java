@@ -36,7 +36,10 @@ public class AnalyticsTrackingSettings {
                     value.path("webVitals").asBoolean(false),
                     value.path("forms").asBoolean(false),
                     value.path("media").asBoolean(false),
-                    value.path("errors").asBoolean(false));
+                    value.path("errors").asBoolean(false),
+                    value.path("tagManager").asBoolean(false),
+                    value.path("experiments").asBoolean(false),
+                    value.path("privacyPreferences").asBoolean(true));
         } catch (IllegalArgumentException ignored) {
             return Settings.disabled();
         }
@@ -73,9 +76,12 @@ public class AnalyticsTrackingSettings {
             boolean webVitals,
             boolean forms,
             boolean media,
-            boolean errors) {
+            boolean errors,
+            boolean tagManager,
+            boolean experiments,
+            boolean privacyPreferences) {
         public static Settings disabled() {
-            return new Settings(false, "", "", "", false, false, false, false, false, false);
+            return new Settings(false, "", "", "", false, false, false, false, false, false, false, false, false);
         }
     }
 }

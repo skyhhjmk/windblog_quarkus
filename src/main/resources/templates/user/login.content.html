@@ -3,7 +3,7 @@
     <div class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
         <h1 class="text-xl font-bold mb-6 text-center">用户登录</h1>
 
-        <form id="loginForm" data-no-debounce="true" action="/user/api/login" method="post" class="space-y-4">
+        <form id="loginForm" data-no-debounce="true" data-seeray-form="login" action="/user/api/login" method="post" class="space-y-4">
             <input type="hidden" name="redirect" value="{redirect}"/>
 
             <div>
@@ -37,7 +37,7 @@
 
             <div id="errorMessage" class="hidden text-red-400 text-sm text-center"></div>
 
-            <button type="submit" data-shortcut="enter" aria-keyshortcuts="Enter"
+            <button type="submit" data-shortcut="enter" data-seeray-goal="login_submit" aria-keyshortcuts="Enter"
                     class="w-full py-2 bg-[var(--accent)] text-[var(--accent-foreground)] font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
                 <span class="btn-text">登录（回车）</span>
                 <span class="spinner hidden"></span>

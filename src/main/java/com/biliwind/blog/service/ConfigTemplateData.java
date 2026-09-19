@@ -123,6 +123,29 @@ public class ConfigTemplateData {
         return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().errors();
     }
 
+    public static boolean analyticsTrackingTagManagerEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().tagManager();
+    }
+
+    public static boolean analyticsTrackingExperimentsEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().experiments();
+    }
+
+    public static boolean analyticsTrackingPrivacyPreferencesEnabled() {
+        AnalyticsTrackingSettings.Settings settings =
+                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        return settings.privacyPreferences() && !settings.origin().isBlank() && !settings.siteId().isBlank();
+    }
+
+    public static String analyticsTrackingPrivacyPreferencesUrl() {
+        AnalyticsTrackingSettings.Settings settings =
+                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        return settings.origin().isBlank() || settings.siteId().isBlank()
+                ? ""
+                : settings.origin() + "/privacy/preferences?siteId=" + java.net.URLEncoder.encode(
+                        settings.siteId(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     public static String logoUrl() {
         return configManager().getString("appearance", "logo_url", "/logo.png");
     }

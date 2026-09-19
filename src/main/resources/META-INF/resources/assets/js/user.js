@@ -2,6 +2,10 @@
 (function () {
     'use strict';
 
+    function analyticsFormResult(formId, successful) {
+        window.WindBlogAnalytics?.trackFormResult(formId, successful === true);
+    }
+
     function ready(fn) {
         if (document.readyState !== 'loading') fn();
         else document.addEventListener('DOMContentLoaded', fn);
@@ -142,12 +146,14 @@
                 const result = await response.json();
 
                 if (result.success) {
+                    analyticsFormResult('login', true);
                     isRedirecting = true;
                     window.showToast(result.message || window.i18n.login_success || 'Login successful', 'success');
                     setTimeout(() => {
                         window.location.href = result.redirect || '/';
                     }, 1000);
                 } else {
+                    analyticsFormResult('login', false);
                     window.showToast(result.message || window.i18n.login_failed || 'Login failed', 'error');
                     if (errorDiv) {
                         errorDiv.textContent = result.message || window.i18n.login_failed || 'Login failed';
@@ -155,6 +161,7 @@
                     }
                 }
             } catch (err) {
+                analyticsFormResult('login', false);
                 window.showToast(window.i18n.network_error || 'Network error', 'error');
                 if (errorDiv) {
                     errorDiv.textContent = window.i18n.network_error || 'Network error';
@@ -207,8 +214,10 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) throw new Error(result.message || '订阅偏好保存失败');
+                analyticsFormResult('subscription-preferences', true);
                 window.showToast('订阅偏好已保存', 'success');
             } catch (error) {
+                analyticsFormResult('subscription-preferences', false);
                 window.showToast(error.message || '订阅偏好保存失败，请稍后重试', 'error');
             } finally {
                 window.setLoading(saveButton, false);
@@ -373,8 +382,10 @@
             window.setLoading(saveButton, true, {text: '保存中...'});
             try {
                 await saveDraft(true);
+                analyticsFormResult('user-post-editor', true);
                 showFeedback('草稿已保存，可以继续编辑或提交审核。', false);
             } catch (error) {
+                analyticsFormResult('user-post-editor', false);
                 showFeedback(error.message || '草稿保存失败', true);
             } finally {
                 window.setLoading(saveButton, false);
@@ -390,10 +401,12 @@
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message || '提交审核失败');
+                analyticsFormResult('user-post-editor', true);
                 window.showToast('文章已提交审核', 'success');
                 showFeedback('已提交审核，审核结果会通过站内通知告知你。', false);
                 await loadPosts();
             } catch (error) {
+                analyticsFormResult('user-post-editor', false);
                 showFeedback(error.message || '提交审核失败', true);
             } finally {
                 window.setLoading(submitButton, false);
@@ -525,6 +538,7 @@
                 const result = await response.json();
 
                 if (result.success) {
+                    analyticsFormResult('register', true);
                     isRedirecting = true;
                     window.showToast(result.message || window.i18n.register_success || 'Registration successful', 'success');
                     // 延迟跳转，让用户看到成功提示
@@ -532,6 +546,7 @@
                         window.location.href = result.redirect || '/';
                     }, 1500);
                 } else {
+                    analyticsFormResult('register', false);
                     window.showToast(result.message || window.i18n.register_failed || 'Registration failed', 'error');
                     if (errorDiv) {
                         errorDiv.textContent = result.message || window.i18n.register_failed || 'Registration failed';
@@ -539,6 +554,7 @@
                     }
                 }
             } catch (err) {
+                analyticsFormResult('register', false);
                 window.showToast(window.i18n.network_error || 'Network error', 'error');
                 if (errorDiv) {
                     errorDiv.textContent = window.i18n.network_error || 'Network error';
@@ -841,8 +857,10 @@
                     message.textContent = result.message || '请求已提交';
                     message.classList.remove('hidden');
                 }
+                analyticsFormResult('forgot-password', result.success === true);
                 window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error');
             } catch (_) {
+                analyticsFormResult('forgot-password', false);
                 window.showToast(window.i18n.network_error || '网络错误，请稍后重试', 'error');
             } finally {
                 window.setLoading(button, false);
@@ -879,11 +897,13 @@
                 });
                 const result = await response.json();
                 if (!result.success) throw new Error(result.message || '密码重置失败');
+                analyticsFormResult('reset-password', true);
                 window.showToast(result.message || '密码已重置', 'success');
                 window.setTimeout(() => {
                     window.location.href = result.redirect || '/user/login';
                 }, 800);
             } catch (error) {
+                analyticsFormResult('reset-password', false);
                 if (message) {
                     message.textContent = error.message || '密码重置失败';
                     message.classList.remove('hidden');
@@ -912,8 +932,10 @@
                     body: new URLSearchParams(new FormData(form)).toString()
                 });
                 const result = await response.json();
+                analyticsFormResult('resend-verification', result.success === true);
                 window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error');
             } catch (_) {
+                analyticsFormResult('resend-verification', false);
                 window.showToast(window.i18n.network_error || '网络错误，请稍后重试', 'error');
             } finally {
                 window.setLoading(button, false);

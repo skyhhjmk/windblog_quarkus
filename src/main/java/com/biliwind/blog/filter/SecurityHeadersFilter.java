@@ -64,7 +64,8 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
         if (tracking.enabled()) connectSources = connectSources + " " + tracking.origin();
         String csp = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
                 + "img-src " + imageSources + "; style-src 'self' 'nonce-" + nonce + "'; "
-                + "script-src " + scriptSources + "; connect-src " + connectSources + "; font-src 'self'";
+                + "script-src " + scriptSources + "; connect-src " + connectSources + "; font-src 'self'; "
+                + "frame-src 'self'" + (tracking.enabled() ? " " + tracking.origin() : "");
         if (trustedTypesEnabled) {
             csp = csp + "; require-trusted-types-for 'script'; trusted-types default windblog-raw-html";
         }

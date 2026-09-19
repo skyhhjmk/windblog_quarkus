@@ -285,8 +285,10 @@
             applicationForm.dataset.testedUrl = '';
             document.getElementById('linkPlacementCommonFields').classList.add('hidden');
             resetConnectivityStatus();
+            window.WindBlogAnalytics?.trackFormResult('link-application', true);
             window.showToast(responseBody.message, 'success');
         } catch (error) {
+            window.WindBlogAnalytics?.trackFormResult('link-application', false);
             window.showToast(readErrorMessage(error, '提交失败，请稍后重试'), 'error');
         } finally {
             window.setLoading(submitButton, false);

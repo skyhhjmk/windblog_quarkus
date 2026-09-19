@@ -365,7 +365,7 @@
                             <a href="/user/login?redirect=/post/{postSlug}" class="btn-action-primary comment-login-link">立即登录</a>
                         </div>
 
-                        <form id="comment-form" data-no-debounce="true" class="space-y-6">
+                        <form id="comment-form" data-no-debounce="true" data-seeray-form="comment" class="space-y-6">
                             <div id="comment-replying"
                                  class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center">
                                 <span class="text-sm">正在回复 <span id="comment-replying-user"
@@ -391,7 +391,7 @@
                                 <p class="text-xs text-gray-500 max-w-md">
                                     支持 Markdown 语法。
                                 </p>
-                                <button type="submit" id="comment-submit" class="btn-minimal min-w-[140px]">
+                                <button type="submit" id="comment-submit" data-seeray-goal="comment_submit" class="btn-minimal min-w-[140px]">
                                     <span class="btn-text">发表评论</span>
                                     <span class="spinner hidden"></span>
                                 </button>
