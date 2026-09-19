@@ -1,3 +1,10 @@
 <div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1" data-page-title="隐私政策">
     <article class="prose prose-invert max-w-none">{legalContent.raw}</article>
+    {#if config:legalPrivacyAnalyticsOptOutEnabled}
+        <section class="mt-10 rounded-xl border border-border bg-card p-5 md:p-6" aria-labelledby="analytics-opt-out-title">
+            <h2 id="analytics-opt-out-title" class="mb-2 text-xl font-semibold text-main">选择退出统计</h2>
+            <p class="mb-4 text-body">你可以随时选择退出匿名访问分析。退出后，此浏览器不会再向 SeeRay Lens 发送统计数据。</p>
+            <iframe data-seeray-privacy src="{config:legalPrivacyAnalyticsOptOutUrl}" title="选择退出统计" class="h-64 w-full rounded-lg border-0"></iframe>
+        </section>
+    {/if}
 </div>

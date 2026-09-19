@@ -137,6 +137,23 @@ public class ConfigTemplateData {
         return settings.privacyPreferences() && !settings.origin().isBlank() && !settings.siteId().isBlank();
     }
 
+    public static boolean legalPrivacyAnalyticsOptOutEnabled() {
+        return configManager().getBoolean("legal_privacy", "showAnalyticsOptOut", false)
+                && analyticsTrackingPrivacyPreferencesAvailable();
+    }
+
+    public static String legalPrivacyAnalyticsOptOutUrl() {
+        return analyticsTrackingPrivacyPreferencesAvailable()
+                ? analyticsTrackingPrivacyPreferencesUrl()
+                : "";
+    }
+
+    private static boolean analyticsTrackingPrivacyPreferencesAvailable() {
+        AnalyticsTrackingSettings.Settings settings =
+                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        return !settings.origin().isBlank() && !settings.siteId().isBlank();
+    }
+
     public static String analyticsTrackingPrivacyPreferencesUrl() {
         AnalyticsTrackingSettings.Settings settings =
                 Arc.container().instance(AnalyticsTrackingSettings.class).get().current();

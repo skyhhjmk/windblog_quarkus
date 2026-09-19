@@ -123,4 +123,5 @@
     <include file="db/migration/121-add-codex-draft-repost-policy.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/122-add-editable-legal-content.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/123-migrate-seeray-tracking-setting.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/124-add-privacy-analytics-opt-out.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>
