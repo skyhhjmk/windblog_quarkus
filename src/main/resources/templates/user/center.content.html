@@ -105,7 +105,7 @@
                     <span class="text-xs text-gray-500">草稿 → 审核 → 发布</span>
                 </div>
                 <p class="text-sm text-gray-400 mb-5">先保存草稿，确认内容后提交审核；审核中的文章不能直接修改。</p>
-                <form id="userPostForm" class="space-y-4">
+                <form id="userPostForm" data-seeray-form="user-post-editor" class="space-y-4">
                     <input type="hidden" id="userPostId" value="">
                     <div>
                         <label for="userPostTitle" class="block text-sm text-gray-400 mb-1">标题</label>
@@ -149,7 +149,7 @@
             <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-6">
                 <h2 class="text-lg font-bold mb-4">邮件订阅</h2>
                 <p id="subscriptionVerificationHint" class="text-sm text-gray-400 mb-4"></p>
-                <form id="subscriptionForm" class="space-y-3">
+                <form id="subscriptionForm" data-seeray-form="subscription-preferences" class="space-y-3">
                     <label class="flex items-center gap-2"><input id="subscribeArticleUpdates" type="checkbox"> 接收新文章更新</label>
                     <label class="flex items-center gap-2"><input id="subscribePromotions" type="checkbox"> 接收推广通知</label>
                     <button id="saveSubscriptions" type="submit"

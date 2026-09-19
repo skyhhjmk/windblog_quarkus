@@ -93,6 +93,26 @@ public class ConfigTemplateData {
         return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().siteId();
     }
 
+    public static boolean analyticsTrackingHeatmapsEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().heatmaps();
+    }
+
+    public static boolean analyticsTrackingWebVitalsEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().webVitals();
+    }
+
+    public static boolean analyticsTrackingFormsEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().forms();
+    }
+
+    public static boolean analyticsTrackingMediaEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().media();
+    }
+
+    public static boolean analyticsTrackingErrorsEnabled() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().errors();
+    }
+
     public static String logoUrl() {
         return configManager().getString("appearance", "logo_url", "/logo.png");
     }

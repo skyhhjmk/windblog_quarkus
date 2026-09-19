@@ -169,10 +169,25 @@ public class ConfigInitializer {
                 .put("hint", "HTTPS 地址；本地开发可使用 http://localhost:8080/tracker.js。");
         analyticsFields.addObject().put("key", "siteId").put("label", "Lens 站点 ID").put("widget", "input")
                 .put("hint", "从 SeeRay Lens 的站点集成页面复制 data-site-id 值。");
+        analyticsFields.addObject().put("key", "heatmaps").put("label", "启用行为热图").put("widget", "switch")
+                .put("hint", "仅发送 Lens 已配置采样的页面行为热图；关闭后不加载热图采集器。");
+        analyticsFields.addObject().put("key", "webVitals").put("label", "启用 Web Vitals").put("widget", "switch")
+                .put("hint", "发送当前页面的 LCP、INP、CLS 指标，不读取页面文本或表单值。");
+        analyticsFields.addObject().put("key", "forms").put("label", "启用表单分析").put("widget", "switch")
+                .put("hint", "仅统计显式标记 data-seeray-form 的表单；不会发送字段名、标签或输入值。");
+        analyticsFields.addObject().put("key", "media").put("label", "启用媒体分析").put("widget", "switch")
+                .put("hint", "仅统计显式标记 data-seeray-media 的音视频播放进度，不发送媒体地址或内容。");
+        analyticsFields.addObject().put("key", "errors").put("label", "启用浏览器错误分析").put("widget", "switch")
+                .put("hint", "发送 Lens 脱敏后的浏览器错误摘要；不发送完整堆栈、页面标题或访客标识。");
         ObjectNode analyticsValue = mapper.createObjectNode();
         analyticsValue.put("enabled", false);
         analyticsValue.put("scriptUrl", "");
         analyticsValue.put("siteId", "");
+        analyticsValue.put("heatmaps", true);
+        analyticsValue.put("webVitals", false);
+        analyticsValue.put("forms", false);
+        analyticsValue.put("media", false);
+        analyticsValue.put("errors", false);
         list.add(new SettingDefinition("analytics_tracking", analyticsValue, "object", "访问分析", analyticsSchema,
                 "由数据库管理的 SeeRay Lens 追踪配置；保存后自动更新页面 CSP。"));
 

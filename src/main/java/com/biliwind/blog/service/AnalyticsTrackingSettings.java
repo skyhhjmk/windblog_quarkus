@@ -26,7 +26,16 @@ public class AnalyticsTrackingSettings {
             if (!("https".equalsIgnoreCase(uri.getScheme())
                     || "http".equalsIgnoreCase(uri.getScheme()) && isLocalOrTailscale(uri.getHost()))
                     || uri.getHost() == null) return Settings.disabled();
-            return new Settings(true, uri.toString(), uri.getScheme() + "://" + uri.getAuthority(), siteId);
+            return new Settings(
+                    true,
+                    uri.toString(),
+                    uri.getScheme() + "://" + uri.getAuthority(),
+                    siteId,
+                    value.path("heatmaps").asBoolean(true),
+                    value.path("webVitals").asBoolean(false),
+                    value.path("forms").asBoolean(false),
+                    value.path("media").asBoolean(false),
+                    value.path("errors").asBoolean(false));
         } catch (IllegalArgumentException ignored) {
             return Settings.disabled();
         }
@@ -53,9 +62,18 @@ public class AnalyticsTrackingSettings {
         }
     }
 
-    public record Settings(boolean enabled, String scriptUrl, String origin, String siteId) {
+    public record Settings(
+            boolean enabled,
+            String scriptUrl,
+            String origin,
+            String siteId,
+            boolean heatmaps,
+            boolean webVitals,
+            boolean forms,
+            boolean media,
+            boolean errors) {
         public static Settings disabled() {
-            return new Settings(false, "", "", "");
+            return new Settings(false, "", "", "", false, false, false, false, false);
         }
     }
 }

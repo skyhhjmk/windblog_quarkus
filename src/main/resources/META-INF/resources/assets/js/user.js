@@ -7,6 +7,16 @@
         else document.addEventListener('DOMContentLoaded', fn);
     }
 
+    // Lens hashes this opaque site-scoped identifier and only sends it after
+    // the visitor has granted analytics consent. Never pass the username or
+    // email address to the tracker.
+    function syncAnalyticsIdentity(profile) {
+        const tracker = window.SeeRay;
+        if (!tracker || typeof tracker.setUserId !== 'function') return;
+        const id = profile?.success && profile.data?.id;
+        tracker.setUserId(id == null ? null : String(id));
+    }
+
 
     function checkUserStatus() {
         fetch('/user/api/profile')
@@ -18,6 +28,7 @@
                 const mobileNicknames = document.querySelectorAll('[data-mobile-user-nickname]');
 
                 const ok = data && data.success && data.data;
+                syncAnalyticsIdentity(data);
                 if (ok) {
                     loggedOutNodes.forEach(node => {
                         node.classList.add('hidden');
@@ -63,6 +74,7 @@
 
         const doLogout = (e) => {
             if (e) e.preventDefault();
+            syncAnalyticsIdentity({success: false});
             const targetBtn = e.currentTarget;
             showConfirm(window.i18n.logout_title || 'Logout', window.i18n.logout_confirm || 'Are you sure you want to logout?', () => {
                 window.setLoading(targetBtn, true);
