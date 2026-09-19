@@ -225,6 +225,16 @@ services:
       CODEX_COMMAND: ${CODEX_COMMAND:-codex}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       CODEX_ACCESS_TOKEN: ${CODEX_ACCESS_TOKEN:-}
+      # The Codex CLI child process uses these standard proxy variables for
+      # outbound OpenAI requests. Keep internal service traffic direct.
+      HTTP_PROXY: ${CODEX_CREATOR_HTTP_PROXY:-}
+      HTTPS_PROXY: ${CODEX_CREATOR_HTTPS_PROXY:-}
+      ALL_PROXY: ${CODEX_CREATOR_ALL_PROXY:-}
+      NO_PROXY: ${CODEX_CREATOR_NO_PROXY:-localhost,127.0.0.1,::1,db,redis,windblog,otel-collector}
+      http_proxy: ${CODEX_CREATOR_HTTP_PROXY:-}
+      https_proxy: ${CODEX_CREATOR_HTTPS_PROXY:-}
+      all_proxy: ${CODEX_CREATOR_ALL_PROXY:-}
+      no_proxy: ${CODEX_CREATOR_NO_PROXY:-localhost,127.0.0.1,::1,db,redis,windblog,otel-collector}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_DEPLOYMENT_ENVIRONMENT: ${OTEL_DEPLOYMENT_ENVIRONMENT:-production}
       OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}

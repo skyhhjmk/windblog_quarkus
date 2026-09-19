@@ -269,11 +269,21 @@
     <div class="max-w-1400 mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
         <div class="flex flex-col gap-2">
             <span class="meta-mono">{config:copyright}</span>
-            {#if config:icp}
-                <span class="text-xs text-meta">{config:icp}</span>
-            {/if}
-            {#if config:publicSecurityRecord}
-                <span class="text-xs text-meta">{config:publicSecurityRecord}</span>
+            {#if config:footerRecordsVisible}
+                {#if config:icp}
+                    {#if config:icpUrl}
+                        <a href="{config:icpUrl}" target="_blank" rel="noopener noreferrer" class="text-xs text-meta hover:text-accent transition-colors">{config:icp}</a>
+                    {#else}
+                        <span class="text-xs text-meta">{config:icp}</span>
+                    {/if}
+                {/if}
+                {#if config:publicSecurityRecord}
+                    {#if config:publicSecurityRecordUrl}
+                        <a href="{config:publicSecurityRecordUrl}" target="_blank" rel="noopener noreferrer" class="text-xs text-meta hover:text-accent transition-colors">{config:publicSecurityRecord}</a>
+                    {#else}
+                        <span class="text-xs text-meta">{config:publicSecurityRecord}</span>
+                    {/if}
+                {/if}
             {/if}
         </div>
         <div class="flex gap-6 items-center">

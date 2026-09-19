@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.SystemSetting;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -104,13 +105,39 @@ public class ConfigInitializer {
         com.fasterxml.jackson.databind.node.ArrayNode footerFields = footerSchema.putArray("fields");
         footerFields.addObject().put("key", "copyright").put("label", "版权信息").put("widget", "input");
         footerFields.addObject().put("key", "icp").put("label", "ICP备案号").put("widget", "input");
+        footerFields.addObject()
+                .put("key", "icp_url")
+                .put("label", "ICP备案号链接地址")
+                .put("widget", "input")
+                .put("hint", "可选，填写备案号点击后打开的完整网址");
         footerFields.addObject().put("key", "public_security_record").put("label", "公安备案号").put("widget", "input");
+        footerFields.addObject()
+                .put("key", "public_security_record_url")
+                .put("label", "公安备案号链接地址")
+                .put("widget", "input")
+                .put("hint", "可选，填写备案号点击后打开的完整网址");
+        ObjectNode recordDisplayRegionField = footerFields.addObject();
+        recordDisplayRegionField.put("key", "record_display_region");
+        recordDisplayRegionField.put("label", "备案号显示区域");
+        recordDisplayRegionField.put("widget", "select");
+        recordDisplayRegionField.put("hint", "仅在识别为所选区域的请求中显示备案号");
+        com.fasterxml.jackson.databind.node.ArrayNode recordDisplayRegionOptions =
+                recordDisplayRegionField.putArray("options");
+        recordDisplayRegionOptions.addObject().put("label", "全部区域").put("value", "all");
+        for (BlogRegion region : BlogRegion.values()) {
+            recordDisplayRegionOptions.addObject()
+                    .put("label", region.getDisplayName())
+                    .put("value", region.getCode());
+        }
         footerFields.addObject().put("key", "custom_html").put("label", "自定义页脚HTML").put("widget", "textarea");
 
         ObjectNode footerValue = mapper.createObjectNode();
         footerValue.put("copyright", "© 2026 WindBlog. All rights reserved.");
         footerValue.put("icp", "粤ICP备XXXXXXXX号");
+        footerValue.put("icp_url", "");
         footerValue.put("public_security_record", "公网安备 XXXXXXXXXXXX号");
+        footerValue.put("public_security_record_url", "");
+        footerValue.put("record_display_region", "all");
         footerValue.put("custom_html", "");
 
         list.add(new SettingDefinition("site_footer", footerValue, "object", "基础设置", footerSchema, "网站页脚设置"));

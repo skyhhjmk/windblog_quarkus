@@ -1,9 +1,15 @@
 package com.biliwind.blog.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.model.BlogRegion;
 import io.quarkus.arc.Arc;
 import io.quarkus.qute.TemplateData;
 import jakarta.enterprise.context.ApplicationScoped;
+
+import java.net.URI;
+import java.util.Arrays;
+import java.util.Locale;
 
 @TemplateData(namespace = "config")
 @ApplicationScoped
@@ -73,8 +79,55 @@ public class ConfigTemplateData {
         return configManager().getString("site_footer", "icp", "");
     }
 
+    public static String icpUrl() {
+        return safeExternalHttpUrl(configManager().getString("site_footer", "icp_url", ""));
+    }
+
     public static String publicSecurityRecord() {
         return configManager().getString("site_footer", "public_security_record", "");
+    }
+
+    public static String publicSecurityRecordUrl() {
+        return safeExternalHttpUrl(configManager().getString("site_footer", "public_security_record_url", ""));
+    }
+
+    public static boolean footerRecordsVisible() {
+        String configuredRegion = configManager()
+                .getString("site_footer", "record_display_region", "all");
+        RegionContext regionContext = jakarta.enterprise.inject.spi.CDI.current()
+                .select(RegionContext.class).get();
+        return isFooterRecordsVisible(configuredRegion, regionContext.getCurrentRegion());
+    }
+
+    static boolean isFooterRecordsVisible(String configuredRegion, BlogRegion currentRegion) {
+        if (configuredRegion == null || configuredRegion.isBlank()
+                || "all".equalsIgnoreCase(configuredRegion.trim())) {
+            return true;
+        }
+        if (currentRegion == null) {
+            return false;
+        }
+        String normalizedRegion = configuredRegion.trim().toLowerCase(Locale.ROOT);
+        boolean knownRegion = Arrays.stream(BlogRegion.values())
+                .anyMatch(region -> region.getCode().equals(normalizedRegion));
+        return knownRegion && currentRegion.getCode().equals(normalizedRegion);
+    }
+
+    static String safeExternalHttpUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        try {
+            URI uri = URI.create(value.trim());
+            String scheme = uri.getScheme();
+            if (uri.getHost() == null || uri.getUserInfo() != null
+                    || !("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))) {
+                return "";
+            }
+            return uri.toASCIIString();
+        } catch (IllegalArgumentException ignored) {
+            return "";
+        }
     }
 
     public static String footerHtml() {

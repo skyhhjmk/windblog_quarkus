@@ -2,8 +2,10 @@ package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.constant.RoleConstant;
 import com.biliwind.blog.common.security.PasswordHasher;
+import com.biliwind.blog.model.UploadRole;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ApplicationInstallationService;
+import com.biliwind.blog.service.UploadRoleService;
 import io.quarkus.arc.profile.IfBuildProfile;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -23,12 +25,17 @@ public class AdminBootstrapInitializer {
     @Inject
     ApplicationInstallationService installationService;
 
+    @Inject
+    UploadRoleService uploadRoleService;
+
     @Transactional
     void onStart(@Observes StartupEvent ignored) {
         if (hasActiveSuperAdmin()) {
             installationService.markInstalledForTest(null);
             return;
         }
+        uploadRoleService.ensureDefaults();
+        UploadRole.getEntityManager().flush();
         createTestSuperAdmin();
     }
 
