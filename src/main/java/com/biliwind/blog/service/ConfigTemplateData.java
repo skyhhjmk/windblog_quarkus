@@ -93,6 +93,16 @@ public class ConfigTemplateData {
         return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().siteId();
     }
 
+    public static boolean analyticsTrackingRequireConsent() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().requireConsent();
+    }
+
+    public static String analyticsTrackingConsentScriptUrl() {
+        AnalyticsTrackingSettings.Settings settings =
+                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        return settings.origin().isBlank() ? "" : settings.origin() + "/consent.js";
+    }
+
     public static boolean analyticsTrackingHeatmapsEnabled() {
         return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().heatmaps();
     }

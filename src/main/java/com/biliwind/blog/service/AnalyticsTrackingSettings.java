@@ -31,6 +31,7 @@ public class AnalyticsTrackingSettings {
                     uri.toString(),
                     uri.getScheme() + "://" + uri.getAuthority(),
                     siteId,
+                    value.path("requireConsent").asBoolean(false),
                     value.path("heatmaps").asBoolean(true),
                     value.path("webVitals").asBoolean(false),
                     value.path("forms").asBoolean(false),
@@ -67,13 +68,14 @@ public class AnalyticsTrackingSettings {
             String scriptUrl,
             String origin,
             String siteId,
+            boolean requireConsent,
             boolean heatmaps,
             boolean webVitals,
             boolean forms,
             boolean media,
             boolean errors) {
         public static Settings disabled() {
-            return new Settings(false, "", "", "", false, false, false, false, false);
+            return new Settings(false, "", "", "", false, false, false, false, false, false);
         }
     }
 }

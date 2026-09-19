@@ -73,11 +73,15 @@
 
     {#if config:analyticsTrackingEnabled}
         <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-navigation-mode="manual"
+                {#if config:analyticsTrackingRequireConsent}data-require-consent="true"{/if}
                 {#if config:analyticsTrackingHeatmapsEnabled}data-heatmap{/if}
                 {#if config:analyticsTrackingWebVitalsEnabled}data-web-vitals{/if}
                 {#if config:analyticsTrackingFormsEnabled}data-track-forms{/if}
                 {#if config:analyticsTrackingMediaEnabled}data-track-media{/if}
                 {#if config:analyticsTrackingErrorsEnabled}data-track-errors{/if}></script>
+        {#if config:analyticsTrackingRequireConsent}
+            <script src="{config:analyticsTrackingConsentScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-language="{language ?: 'zh-CN'}" defer></script>
+        {/if}
     {/if}
 
     <!-- 本地化 Tailwind CDN 运行时脚本，保持现有模板写法不变 -->

@@ -169,6 +169,8 @@ public class ConfigInitializer {
                 .put("hint", "HTTPS 地址；本地开发可使用 http://localhost:8080/tracker.js。");
         analyticsFields.addObject().put("key", "siteId").put("label", "Lens 站点 ID").put("widget", "input")
                 .put("hint", "从 SeeRay Lens 的站点集成页面复制 data-site-id 值。");
+        analyticsFields.addObject().put("key", "requireConsent").put("label", "要求访客同意").put("widget", "switch")
+                .put("hint", "与 SeeRay Lens 站点的需要同意策略保持一致；开启后访客选择前不会发送分析数据，并显示接受/拒绝弹窗。");
         analyticsFields.addObject().put("key", "heatmaps").put("label", "启用行为热图").put("widget", "switch")
                 .put("hint", "仅发送 Lens 已配置采样的页面行为热图；关闭后不加载热图采集器。");
         analyticsFields.addObject().put("key", "webVitals").put("label", "启用 Web Vitals").put("widget", "switch")
@@ -183,6 +185,7 @@ public class ConfigInitializer {
         analyticsValue.put("enabled", false);
         analyticsValue.put("scriptUrl", "");
         analyticsValue.put("siteId", "");
+        analyticsValue.put("requireConsent", false);
         analyticsValue.put("heatmaps", true);
         analyticsValue.put("webVitals", false);
         analyticsValue.put("forms", false);
