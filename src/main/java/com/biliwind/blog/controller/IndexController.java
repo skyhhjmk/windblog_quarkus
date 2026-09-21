@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 
 /**
  * 首页控制器
@@ -97,6 +99,7 @@ public class IndexController {
         String renderedHtml = template
                 .data("language", language)
                 .data("subPage", subPage)
+                .data("currentPage", subPage)
                 .data("pageSize", PAGE_SIZE)
                 .data("totalPosts", totalPostsCount)
                 .data("totalPages", totalPages)
@@ -104,12 +107,31 @@ public class IndexController {
                 .data("hasNextPage", subPage < totalPages)
                 .data("prevPage", Math.max(1, subPage - 1))
                 .data("nextPage", Math.min(totalPages, subPage + 1))
+                .data("firstPageUrl", "/")
+                .data("lastPageUrl", totalPages == 1 ? "/" : "/page/" + totalPages)
+                .data("paginationPages", buildPaginationPages(subPage, totalPages))
+                .data("paginationN", "n".repeat(Math.min((int) totalPages, 7)))
                 .data("pjaxRequest", pjaxRequest)
                 .data("posts", postItems)
                 .render();
 
         setRenderedPageHtml(renderedPageCacheKey, renderedHtml);
         return buildHtmlResponse(renderedHtml);
+    }
+
+    private List<PaginationPage> buildPaginationPages(int currentPage, long totalPages) {
+        int lastPage = (int) totalPages;
+        int firstPage = paginationWindowStart(currentPage, lastPage);
+        int lastVisiblePage = Math.min(lastPage, firstPage + 6);
+        return IntStream.rangeClosed(firstPage, lastVisiblePage)
+                .mapToObj(page -> new PaginationPage(page,
+                        page == 1 ? "/" : "/page/" + page,
+                        page == currentPage))
+                .toList();
+    }
+
+    private int paginationWindowStart(int currentPage, int totalPages) {
+        return Math.min(Math.max(1, currentPage - 3), Math.max(1, totalPages - 6));
     }
 
     private String buildRenderedPageCacheKey(String cacheKey, boolean pjaxRequest) {
@@ -219,4 +241,3 @@ public class IndexController {
     ) {
     }
 }
-

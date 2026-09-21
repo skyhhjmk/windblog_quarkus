@@ -109,32 +109,7 @@
                 {/for}
             </div>
 
-            <!-- Pagination -->
-            <nav class="flex items-center justify-between pt-10 md:pt-16">
-                <div>
-                    {#if hasPrevPage}
-                        <a class="btn-minimal" href="{#if prevPage == 1}/{#else}/page/{prevPage}{/if}">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                            上一页
-                        </a>
-                    {#else}
-                        <span class="text-xs meta-mono opacity-20">上一页</span>
-                    {/if}
-                </div>
-                <div class="meta-mono">
-                    {subPage ?: 1} <span class="opacity-30 mx-2">/</span> {totalPages ?: 1}
-                </div>
-                <div>
-                    {#if hasNextPage}
-                        <a class="btn-minimal" href="/page/{nextPage}">
-                            下一页
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        </a>
-                    {#else}
-                        <span class="text-xs meta-mono opacity-20">下一页</span>
-                    {/if}
-                </div>
-            </nav>
+            {#include blog/pagination.html /}
         {#else}
             <div class="card p-12 text-center">
                 <p class="text-gray-500 italic">未找到文章。</p>

@@ -338,3 +338,408 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
     #pjax-progress { transition: none !important; }
 }
+
+/* Old WindBlog pagination: the O in BLOG is the page input. */
+.windblog-pagination {
+    --pagination-surface: #f4f7fb;
+    --pagination-border: #d2dbe6;
+    --pagination-ink: #29313b;
+    --pagination-muted: #99a5b5;
+    --pagination-accent: #1668d9;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: clamp(.65rem, 2.5vw, 1.25rem);
+    width: 100%;
+    padding: 2.25rem 0 1rem;
+    color: var(--pagination-ink);
+}
+
+.windblog-pagination-arrows {
+    display: flex;
+    gap: .8rem;
+    padding-top: .15rem;
+}
+
+.windblog-pagination-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.65rem;
+    height: 3.65rem;
+    border: 1px solid var(--pagination-border);
+    border-radius: 999px;
+    color: #566272;
+    font-family: var(--font-mono);
+    font-size: 1.55rem;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color .2s ease, border-color .2s ease, background-color .2s ease, transform .2s ease;
+}
+
+.windblog-pagination-arrow:hover,
+.windblog-pagination-arrow:focus-visible {
+    border-color: var(--pagination-accent);
+    color: var(--pagination-accent);
+    background: color-mix(in srgb, var(--pagination-accent) 7%, transparent);
+    transform: translateY(-1px);
+}
+
+.windblog-pagination-arrow.is-disabled {
+    color: var(--pagination-muted);
+    opacity: .58;
+}
+
+.windblog-pagination-arrow.is-disabled:hover,
+.windblog-pagination-arrow.is-disabled:focus-visible {
+    border-color: var(--pagination-border);
+    color: var(--pagination-muted);
+    background: transparent;
+    transform: none;
+}
+
+@keyframes windblog-pagination-denied {
+    0%, 100% {
+        border-color: #ef4444;
+        color: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        transform: translateX(0);
+    }
+    20% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .18);
+        transform: translateX(-4px);
+    }
+    40% {
+        transform: translateX(4px);
+    }
+    60% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .08);
+        transform: translateX(-3px);
+    }
+    80% {
+        transform: translateX(3px);
+    }
+}
+
+.windblog-pagination-arrow.is-disabled.is-denied {
+    opacity: 1;
+    animation: windblog-pagination-denied .46s ease-in-out;
+}
+
+.windblog-pagination-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: min(31rem, 55vw);
+}
+
+.windblog-pagination-title {
+    display: flex;
+    align-items: center;
+    height: 3.65rem;
+    white-space: nowrap;
+    font-family: var(--font-sans);
+    font-size: clamp(2.15rem, 4vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1;
+}
+
+.windblog-pagination-fixed {
+    display: inline-block;
+    letter-spacing: .19em;
+}
+
+.windblog-pagination-n-pages {
+    display: inline-flex;
+    align-items: stretch;
+    gap: .08em;
+    margin: 0 .04em;
+    height: 3.65rem;
+}
+
+.windblog-pagination-n-page {
+    position: relative;
+    display: inline-flex;
+    height: 3.65rem;
+    min-width: 1.03em;
+}
+
+.windblog-pagination-n-letter {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: block;
+    line-height: 1;
+    letter-spacing: 0;
+    transform: translate(-50%, -50%);
+}
+
+.windblog-pagination-n-page .windblog-pagination-page {
+    position: absolute;
+    top: calc(50% + 1.55rem);
+    left: 50%;
+    min-width: 100%;
+    font-size: 1rem;
+    line-height: 1;
+    transform: translateX(-50%);
+}
+
+.windblog-pagination-page-input {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.85rem;
+    height: 2.85rem;
+    margin-left: .08em;
+    border: 1px solid var(--pagination-border);
+    border-radius: 999px;
+    background: var(--pagination-surface);
+    transition: border-color .25s ease, box-shadow .25s ease, background-color .25s ease;
+}
+
+.windblog-pagination-page-input input {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--pagination-muted);
+    font: inherit;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+    text-align: center;
+    -moz-appearance: textfield;
+}
+
+.windblog-pagination-page-input input::-webkit-outer-spin-button,
+.windblog-pagination-page-input input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+
+.windblog-pagination-form:focus-within .windblog-pagination-page-input {
+    border-color: #a8c2f4;
+    box-shadow: 0 0 0 3px rgba(22, 104, 217, .16);
+}
+
+.windblog-pagination-go {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    width: 2.7rem;
+    height: 3.35rem;
+    margin-left: .12em;
+    overflow: hidden;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--pagination-ink);
+    cursor: pointer;
+    font: inherit;
+    font-size: 2.35rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+    line-height: 1;
+    padding: 0 .35rem;
+    transition: width .34s cubic-bezier(.22, 1, .36, 1), color .2s ease, background-color .34s ease;
+}
+
+.windblog-pagination-go-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .12em;
+    white-space: nowrap;
+}
+
+.windblog-pagination-form:focus-within .windblog-pagination-go {
+    width: 5.7rem;
+    background: var(--pagination-accent);
+    color: #fff;
+    letter-spacing: .01em;
+}
+
+.windblog-pagination-go-extra {
+    opacity: 0;
+    transition: opacity .2s ease;
+}
+
+.windblog-pagination-form:focus-within .windblog-pagination-go-extra {
+    opacity: 1;
+}
+
+.windblog-pagination-go:focus-visible {
+    outline: 3px solid rgba(22, 104, 217, .28);
+    outline-offset: 2px;
+}
+
+.windblog-pagination-page {
+    color: #566272;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
+    transition: color .2s ease, transform .2s ease;
+}
+
+@keyframes windblog-pagination-invalid {
+    0%, 100% {
+        border-color: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        transform: translateX(0);
+    }
+    20% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .18);
+        transform: translateX(-4px);
+    }
+    40% {
+        transform: translateX(4px);
+    }
+    60% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .08);
+        transform: translateX(-3px);
+    }
+    80% {
+        transform: translateX(3px);
+    }
+}
+
+.windblog-pagination-page-input.is-invalid {
+    border-color: #ef4444;
+    animation: windblog-pagination-invalid .46s ease-in-out;
+}
+
+.windblog-pagination-go.is-invalid {
+    opacity: 1;
+    background: #ef4444;
+    color: #fff;
+    animation: windblog-pagination-invalid .46s ease-in-out;
+}
+
+.windblog-pagination-form:focus-within .windblog-pagination-go.is-invalid {
+    background: #ef4444;
+    color: #fff;
+}
+
+.windblog-pagination-page:hover,
+.windblog-pagination-page:focus-visible,
+.windblog-pagination-page.is-current {
+    color: var(--pagination-accent);
+}
+
+.windblog-pagination-page:hover,
+.windblog-pagination-page:focus-visible {
+    transform: translateY(-1px);
+}
+
+.windblog-pagination-n-page .windblog-pagination-page:hover,
+.windblog-pagination-n-page .windblog-pagination-page:focus-visible {
+    transform: translate(-50%, -1px);
+}
+
+.windblog-pagination-status {
+    margin-top: .62rem;
+    color: var(--pagination-muted);
+    font-size: 1.05rem;
+    letter-spacing: .04em;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not(.light) .windblog-pagination {
+        --pagination-surface: #151b24;
+        --pagination-border: #303b4a;
+        --pagination-ink: #e4e9f0;
+        --pagination-muted: #8491a2;
+    }
+}
+
+@media (max-width: 700px) {
+    .windblog-pagination {
+        gap: .35rem;
+        padding-top: 1.5rem;
+    }
+
+    .windblog-pagination-arrows {
+        gap: .3rem;
+    }
+
+    .windblog-pagination-arrow {
+        width: 2.55rem;
+        height: 2.55rem;
+        font-size: 1.2rem;
+    }
+
+    .windblog-pagination-form {
+        min-width: 0;
+        max-width: calc(100vw - 6.2rem);
+    }
+
+    .windblog-pagination-title {
+        font-size: clamp(1.2rem, 6.6vw, 2rem);
+        letter-spacing: .12em;
+    }
+
+    .windblog-pagination-page-input {
+        width: 2.2rem;
+        height: 2.2rem;
+    }
+
+    .windblog-pagination-go {
+        box-sizing: border-box;
+        height: 2.7rem;
+        font-size: 1.7rem;
+    }
+
+    .windblog-pagination-form:focus-within .windblog-pagination-go {
+        width: 5.9rem;
+        font-size: 1.7rem;
+    }
+
+    .windblog-pagination-status {
+        font-size: .82rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .windblog-pagination-arrow,
+    .windblog-pagination-go,
+    .windblog-pagination-page-input,
+    .windblog-pagination-page {
+        transition: none;
+    }
+
+    .windblog-pagination-go-extra {
+        transition: none;
+    }
+
+    .windblog-pagination-page-input.is-invalid {
+        animation: none;
+        border-color: #ef4444;
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .12);
+    }
+
+    .windblog-pagination-go.is-invalid {
+        animation: none;
+        background: #ef4444;
+        color: #fff;
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .12);
+    }
+
+    .windblog-pagination-form:focus-within .windblog-pagination-go.is-invalid {
+        background: #ef4444;
+        color: #fff;
+    }
+
+    .windblog-pagination-arrow.is-disabled.is-denied {
+        animation: none;
+        border-color: #ef4444;
+        color: #ef4444;
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, .12);
+    }
+}

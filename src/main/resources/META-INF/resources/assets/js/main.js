@@ -1412,6 +1412,8 @@
             formatTimestamps();
             injectSidebar();
             decorateShortcutButtons();
+            bindPaginationForms();
+            bindPaginationBoundaryButtons();
             updateArticleReturnLink();
             if (restoreMobileFocusOnPageReady) {
                 restoreMobileFocusOnPageReady = false;
@@ -1466,7 +1468,7 @@
         }
 
         function decorateShortcutButtons() {
-            document.querySelectorAll('form:not([data-shortcut-form="search"]) button[type="submit"]')
+            document.querySelectorAll('form:not([data-shortcut-form="search"]):not([data-pagination-form]) button[type="submit"]')
                 .forEach((button) => {
                     button.dataset.shortcut = button.dataset.shortcut || 'enter';
                     button.setAttribute('aria-keyshortcuts', SHORTCUTS.submit);
@@ -1478,6 +1480,57 @@
                     hint.textContent = '（回车）';
                     button.appendChild(hint);
                 });
+        }
+
+        function bindPaginationForms(root = document) {
+            root.querySelectorAll?.('form[data-pagination-form]').forEach(form => {
+                if (form.dataset.paginationBound === 'true') return;
+                form.dataset.paginationBound = 'true';
+                form.addEventListener('submit', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const input = form.querySelector('input[name="page"]');
+                    const goButton = form.querySelector('.windblog-pagination-go');
+                    const pageLinks = [...form.querySelectorAll('a[data-page]')];
+                    const maxVisiblePage = Math.max(...pageLinks.map(link => Number(link.dataset.page) || 1), 1);
+                    const totalPages = Number(input?.max) || maxVisiblePage;
+                    const requestedPage = Number.parseInt(input?.value || '', 10);
+                    const invalidPage = !Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > totalPages;
+                    if (invalidPage) {
+                        goButton?.classList.remove('is-invalid');
+                        void goButton?.offsetWidth;
+                        goButton?.classList.add('is-invalid');
+                        input?.setAttribute('aria-invalid', 'true');
+                        clearTimeout(form.paginationInvalidTimer);
+                        form.paginationInvalidTimer = setTimeout(() => {
+                            goButton?.classList.remove('is-invalid');
+                            input?.removeAttribute('aria-invalid');
+                        }, 520);
+                        return;
+                    }
+                    input.value = String(requestedPage);
+
+                    const target = pageLinks.find(link => Number(link.dataset.page) === requestedPage);
+                    target?.click();
+                });
+            });
+        }
+
+        function bindPaginationBoundaryButtons(root = document) {
+            root.querySelectorAll?.('button[data-pagination-boundary]').forEach(button => {
+                if (button.dataset.paginationBoundaryBound === 'true') return;
+                button.dataset.paginationBoundaryBound = 'true';
+                button.addEventListener('click', () => {
+                    button.classList.remove('is-denied');
+                    void button.offsetWidth;
+                    button.classList.add('is-denied');
+                    clearTimeout(button.paginationDeniedTimer);
+                    button.paginationDeniedTimer = setTimeout(() => {
+                        button.classList.remove('is-denied');
+                    }, 520);
+                });
+            });
         }
 
         // Application-scoped shortcuts. Do not react while this document is

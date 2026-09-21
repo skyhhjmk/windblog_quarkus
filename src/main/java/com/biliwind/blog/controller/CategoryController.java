@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
@@ -28,6 +29,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.IntStream;
 
 @Path("/category")
 public class CategoryController {
@@ -95,6 +97,11 @@ public class CategoryController {
                 .data("hasNextPage", currentPage < totalPages)
                 .data("prevPageUrl", buildCategoryListUrl(safeKeyword, Math.max(1, currentPage - 1)))
                 .data("nextPageUrl", buildCategoryListUrl(safeKeyword, Math.min(totalPages, currentPage + 1)))
+                .data("firstPageUrl", buildCategoryListUrl(safeKeyword, 1))
+                .data("lastPageUrl", buildCategoryListUrl(safeKeyword, totalPages))
+                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                        pageNumber -> buildCategoryListUrl(safeKeyword, pageNumber)))
+                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
                 .data("categories", pageItems);
     }
 
@@ -146,6 +153,11 @@ public class CategoryController {
                 .data("hasNextPage", currentPage < totalPages)
                 .data("prevPageUrl", buildCategoryDetailUrl(entity.slug, Math.max(1, currentPage - 1)))
                 .data("nextPageUrl", buildCategoryDetailUrl(entity.slug, Math.min(totalPages, currentPage + 1)))
+                .data("firstPageUrl", buildCategoryDetailUrl(entity.slug, 1))
+                .data("lastPageUrl", buildCategoryDetailUrl(entity.slug, totalPages))
+                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                        pageNumber -> buildCategoryDetailUrl(entity.slug, pageNumber)))
+                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
                 .data("currentCategory", toCategoryDetailItem(entity, lang))
                 .data("breadcrumbs", buildBreadcrumbs(entity, lang))
                 .data("children", childItems)
@@ -303,6 +315,19 @@ public class CategoryController {
             url.append("page=").append(page);
         }
         return url.toString();
+    }
+
+    private List<PaginationPage> buildPaginationPages(int currentPage, int totalPages,
+                                                       java.util.function.IntFunction<String> urlBuilder) {
+        int firstPage = paginationWindowStart(currentPage, totalPages);
+        int lastVisiblePage = Math.min(totalPages, firstPage + 6);
+        return IntStream.rangeClosed(firstPage, lastVisiblePage)
+                .mapToObj(page -> new PaginationPage(page, urlBuilder.apply(page), page == currentPage))
+                .toList();
+    }
+
+    private int paginationWindowStart(int currentPage, int totalPages) {
+        return Math.min(Math.max(1, currentPage - 3), Math.max(1, totalPages - 6));
     }
 
     private String buildCategoryDetailUrl(String slug, int page) {

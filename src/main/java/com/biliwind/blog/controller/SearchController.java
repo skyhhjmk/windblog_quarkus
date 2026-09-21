@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
@@ -35,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 @Path("/search")
 public class SearchController {
@@ -155,6 +157,11 @@ public class SearchController {
                 .data("hasNextPage", currentPage < totalPages)
                 .data("prevPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, Math.max(1, currentPage - 1)))
                 .data("nextPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, Math.min(totalPages, currentPage + 1)))
+                .data("firstPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, 1))
+                .data("lastPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, totalPages))
+                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                        pageNumber -> buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, pageNumber)))
+                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
                 .data("typeLinks", buildTypeLinks(searchKeyword, searchType, searchSort, searchDate))
                 .data("sortLinks", buildSortLinks(searchKeyword, searchType, searchSort, searchDate))
                 .data("dateLinks", buildDateLinks(searchKeyword, searchType, searchSort, searchDate))
@@ -844,6 +851,19 @@ public class SearchController {
             url.append("&page=").append(page);
         }
         return url.toString();
+    }
+
+    private List<PaginationPage> buildPaginationPages(int currentPage, int totalPages,
+                                                       java.util.function.IntFunction<String> urlBuilder) {
+        int firstPage = paginationWindowStart(currentPage, totalPages);
+        int lastVisiblePage = Math.min(totalPages, firstPage + 6);
+        return IntStream.rangeClosed(firstPage, lastVisiblePage)
+                .mapToObj(page -> new PaginationPage(page, urlBuilder.apply(page), page == currentPage))
+                .toList();
+    }
+
+    private int paginationWindowStart(int currentPage, int totalPages) {
+        return Math.min(Math.max(1, currentPage - 3), Math.max(1, totalPages - 6));
     }
 
     private String buildDeepSearchUrl(String keyword, String type, String sort, String date) {

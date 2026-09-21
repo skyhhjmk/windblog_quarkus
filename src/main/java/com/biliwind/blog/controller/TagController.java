@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
@@ -25,6 +26,7 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.IntStream;
 
 @Path("/tag")
 public class TagController {
@@ -93,6 +95,11 @@ public class TagController {
                 .data("hasNextPage", currentPage < totalPages)
                 .data("prevPageUrl", buildTagListUrl(safeKeyword, Math.max(1, currentPage - 1)))
                 .data("nextPageUrl", buildTagListUrl(safeKeyword, Math.min(totalPages, currentPage + 1)))
+                .data("firstPageUrl", buildTagListUrl(safeKeyword, 1))
+                .data("lastPageUrl", buildTagListUrl(safeKeyword, totalPages))
+                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                        pageNumber -> buildTagListUrl(safeKeyword, pageNumber)))
+                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
                 .data("tags", pageItems);
     }
 
@@ -144,6 +151,11 @@ public class TagController {
                 .data("hasNextPage", currentPage < totalPages)
                 .data("prevPageUrl", buildTagDetailUrl(entity.slug, Math.max(1, currentPage - 1)))
                 .data("nextPageUrl", buildTagDetailUrl(entity.slug, Math.min(totalPages, currentPage + 1)))
+                .data("firstPageUrl", buildTagDetailUrl(entity.slug, 1))
+                .data("lastPageUrl", buildTagDetailUrl(entity.slug, totalPages))
+                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                        pageNumber -> buildTagDetailUrl(entity.slug, pageNumber)))
+                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
                 .data("currentTag", new TagDetailItem(entity.slug, tagName, tagDescription, totalCount, formatDate(entity.createdAt)))
                 .data("posts", postItems);
     }
@@ -267,6 +279,19 @@ public class TagController {
             url.append("?page=").append(page);
         }
         return url.toString();
+    }
+
+    private List<PaginationPage> buildPaginationPages(int currentPage, int totalPages,
+                                                       java.util.function.IntFunction<String> urlBuilder) {
+        int firstPage = paginationWindowStart(currentPage, totalPages);
+        int lastVisiblePage = Math.min(totalPages, firstPage + 6);
+        return IntStream.rangeClosed(firstPage, lastVisiblePage)
+                .mapToObj(page -> new PaginationPage(page, urlBuilder.apply(page), page == currentPage))
+                .toList();
+    }
+
+    private int paginationWindowStart(int currentPage, int totalPages) {
+        return Math.min(Math.max(1, currentPage - 3), Math.max(1, totalPages - 6));
     }
 
     private String urlEncode(String value) {

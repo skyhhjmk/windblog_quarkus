@@ -175,23 +175,7 @@
                 {/for}
             </div>
 
-            <nav class="flex items-center justify-between pt-16">
-                <div>
-                    {#if hasPrevPage}
-                        <a class="btn-minimal" href="{prevPageUrl}">上一页</a>
-                    {#else}
-                        <span class="text-xs meta-mono opacity-20">上一页</span>
-                    {/if}
-                </div>
-                <div class="meta-mono">页码 {currentPage ?: 1} / {totalPages ?: 1}</div>
-                <div>
-                    {#if hasNextPage}
-                        <a class="btn-minimal" href="{nextPageUrl}">下一页</a>
-                    {#else}
-                        <span class="text-xs meta-mono opacity-20">下一页</span>
-                    {/if}
-                </div>
-            </nav>
+            {#include blog/pagination.html /}
         {#else}
             <div class="card p-24 text-center border-dashed">
                 <p class="text-gray-500 italic mb-6">未找到符合您搜索条件的匹配项。</p>
