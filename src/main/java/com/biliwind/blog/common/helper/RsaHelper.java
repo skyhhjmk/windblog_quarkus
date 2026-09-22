@@ -27,7 +27,10 @@ import java.util.Optional;
 @ApplicationScoped
 public class RsaHelper {
     private static final Logger LOGGER = LoggerFactory.getLogger(RsaHelper.class);
-    private static final String KEY_DIRECTORY = "rsa_keys";
+
+    @ConfigProperty(name = "windblog.rsa.key-directory", defaultValue = "rsa_keys")
+    String keyDirectory;
+
     private PrivateKey privateKey;
     private PublicKey publicKey;
     private PublicKey clusterPublicKey;
@@ -38,8 +41,8 @@ public class RsaHelper {
     @PostConstruct
     public void init() {
         try {
-            File privateKeyFile = new File(KEY_DIRECTORY + "/private.key");
-            File publicKeyFile = new File(KEY_DIRECTORY + "/public.key");
+            File privateKeyFile = new File(keyDirectory, "private.key");
+            File publicKeyFile = new File(keyDirectory, "public.key");
 
             if (privateKeyFile.exists()) {
                 if (publicKeyFile.exists()) {
@@ -83,15 +86,15 @@ public class RsaHelper {
         privateKey = keyPair.getPrivate();
         publicKey = keyPair.getPublic();
 
-        File directory = new File(KEY_DIRECTORY);
+        File directory = new File(keyDirectory);
         if (directory.exists() == false) {
             directory.mkdirs();
         }
 
-        Files.write(new File(KEY_DIRECTORY + "/private.key").toPath(), privateKey.getEncoded());
-        Files.write(new File(KEY_DIRECTORY + "/public.key").toPath(), publicKey.getEncoded());
+        Files.write(new File(keyDirectory, "private.key").toPath(), privateKey.getEncoded());
+        Files.write(new File(keyDirectory, "public.key").toPath(), publicKey.getEncoded());
 
-        LOGGER.info("已生成并保存新的 RSA 密钥对到 " + KEY_DIRECTORY);
+        LOGGER.info("已生成并保存新的 RSA 密钥对到 " + keyDirectory);
     }
 
     /**

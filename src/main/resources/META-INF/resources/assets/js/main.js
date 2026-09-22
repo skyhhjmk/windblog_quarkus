@@ -1512,10 +1512,86 @@
                     input.value = String(requestedPage);
 
                     const target = pageLinks.find(link => Number(link.dataset.page) === requestedPage);
-                    target?.click();
+                    const targetHref = target?.href || buildPaginationPageUrl(form, requestedPage, totalPages);
+                    if (!targetHref || new URL(targetHref, window.location.href).href === window.location.href) return;
+                    startPaginationGoAnimation(form.querySelector('.windblog-pagination-go'));
+                    if (target) {
+                        target.click();
+                    } else {
+                        loadByPjax(targetHref, true, '', {});
+                    }
                 });
             });
         }
+
+        function buildPaginationPageUrl(form, requestedPage, totalPages) {
+            const pagination = form.closest('.windblog-pagination');
+            const firstPageLink = pagination?.querySelector('a[aria-label="第一页"]');
+            if (requestedPage === 1 && firstPageLink) return firstPageLink.href;
+
+            const lastPageLink = pagination?.querySelector('a[aria-label="最后一页"]');
+            if (!lastPageLink) return '';
+
+            const url = new URL(lastPageLink.href, window.location.href);
+            if (url.searchParams.has('page')) {
+                if (requestedPage === 1) url.searchParams.delete('page');
+                else url.searchParams.set('page', String(requestedPage));
+                return url.href;
+            }
+
+            const lastPageSuffix = `/page/${totalPages}`;
+            if (!url.pathname.endsWith(lastPageSuffix)) return '';
+            url.pathname = `${url.pathname.slice(0, -lastPageSuffix.length)}/page/${requestedPage}`;
+            return url.href;
+        }
+
+        let activePaginationGoAnimation = null;
+
+        function startPaginationGoAnimation(button) {
+            if (!button) return;
+            const rect = button.getBoundingClientRect();
+            const flight = document.createElement('div');
+            flight.className = 'windblog-pagination-flight';
+            flight.setAttribute('aria-hidden', 'true');
+            flight.style.setProperty('--pagination-flight-left', `${rect.left}px`);
+            flight.style.setProperty('--pagination-flight-top', `${rect.top}px`);
+            flight.style.setProperty('--pagination-flight-width', `${rect.width}px`);
+            flight.style.setProperty('--pagination-flight-height', `${rect.height}px`);
+
+            const circle = document.createElement('span');
+            circle.className = 'windblog-pagination-flight-circle';
+            const rocket = document.createElement('span');
+            rocket.className = 'windblog-pagination-flight-rocket';
+            rocket.textContent = '🚀';
+            flight.append(circle, rocket);
+            document.body.appendChild(flight);
+            button.classList.add('is-loading');
+            activePaginationGoAnimation = {button, flight};
+        }
+
+        function cleanupPaginationGoAnimation() {
+            if (!activePaginationGoAnimation) return;
+            activePaginationGoAnimation.button?.classList.remove('is-loading');
+            activePaginationGoAnimation.flight?.remove();
+            activePaginationGoAnimation = null;
+        }
+
+        function completePaginationGoAnimation() {
+            const animation = activePaginationGoAnimation;
+            if (!animation) return;
+            window.scrollTo({top: 0, behavior: 'smooth'});
+            animation.flight.classList.add('is-flying');
+            window.setTimeout(() => {
+                if (activePaginationGoAnimation?.flight === animation.flight) {
+                    cleanupPaginationGoAnimation();
+                }
+            }, 1150);
+        }
+
+        document.addEventListener('pjax:complete', completePaginationGoAnimation);
+        document.addEventListener('pjax:end', event => {
+            if (event.detail?.error) cleanupPaginationGoAnimation();
+        });
 
         function bindPaginationBoundaryButtons(root = document) {
             root.querySelectorAll?.('button[data-pagination-boundary]').forEach(button => {

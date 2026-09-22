@@ -137,6 +137,7 @@ services:
       GRPC_CLIENT_KEY: ${GRPC_CLIENT_KEY:-/deployments/certs/ca/client.key}
       GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK: ${GRPC_CLIENT_ALLOW_PLAINTEXT_FALLBACK:-false}
       MEDIA_UPLOAD_DIR: /deployments/uploads
+      WINDBLOG_RSA_KEY_DIRECTORY: ${WINDBLOG_RSA_KEY_DIRECTORY:-/work/rsa_keys}
       WINDBLOG_WESP_ENABLED: ${WINDBLOG_WESP_ENABLED:-true}
       WINDBLOG_WESP_PEER_URL: ${WINDBLOG_WESP_PEER_URL:-}
       WINDBLOG_WESP_AUTH_TOKEN: ${WINDBLOG_WESP_AUTH_TOKEN:-}
@@ -156,6 +157,7 @@ services:
       - ${WINDBLOG_DATA_DIR:-.}/uploads:/deployments/uploads
       - ${WINDBLOG_DATA_DIR:-.}/wesp-blocks:/deployments/wesp-blocks
       - ${WINDBLOG_DATA_DIR:-.}/wesp-config:/deployments/wesp-config
+      - ${WINDBLOG_DATA_DIR:-.}/rsa-keys:/work/rsa_keys
       - ${WINDBLOG_CERT_DIR:-./certs}:/deployments/certs:ro
     depends_on:
       db:

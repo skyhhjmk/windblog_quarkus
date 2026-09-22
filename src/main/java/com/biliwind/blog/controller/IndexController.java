@@ -107,6 +107,10 @@ public class IndexController {
                 .data("hasNextPage", subPage < totalPages)
                 .data("prevPage", Math.max(1, subPage - 1))
                 .data("nextPage", Math.min(totalPages, subPage + 1))
+                .data("prevPageUrl", subPage <= 1 ? "/" : (subPage == 2 ? "/" : "/page/" + (subPage - 1)))
+                .data("nextPageUrl", totalPages <= 1 || subPage >= totalPages
+                        ? (totalPages == 1 ? "/" : "/page/" + totalPages)
+                        : "/page/" + (subPage + 1))
                 .data("firstPageUrl", "/")
                 .data("lastPageUrl", totalPages == 1 ? "/" : "/page/" + totalPages)
                 .data("paginationPages", buildPaginationPages(subPage, totalPages))
