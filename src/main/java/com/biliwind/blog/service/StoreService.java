@@ -8,9 +8,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
+import com.biliwind.blog.service.inventory.BackpackService;
 import org.jboss.logging.Logger;
 
 import java.util.List;
+import java.util.UUID;
 
 @ApplicationScoped
 public class StoreService {
@@ -20,6 +22,9 @@ public class StoreService {
     @Inject
     WalletService walletService;
 
+    @Inject
+    BackpackService backpackService;
+
     /**
      * 购买商店物品
      *
@@ -28,6 +33,14 @@ public class StoreService {
      */
     @Transactional
     public void buyStoreItem(Long userId, Long storeItemId) {
+        buyStoreItem(userId, storeItemId, UUID.randomUUID().toString());
+    }
+
+    @Transactional
+    public void buyStoreItem(Long userId, Long storeItemId, String idempotencyKey) {
+        if (backpackService.isProcessed(userId, idempotencyKey)) {
+            return;
+        }
         User user = User.findById(userId);
         if (user == null) {
             throw new BadRequestException("用户不存在");
@@ -40,24 +53,18 @@ public class StoreService {
 
         // 检查是否已经购买过此物品（假设大部分商品为买断制，或可重复购买？这里限制每种只能买一个）
         long existingCount = UserBackpackItem.count("userId = ?1 and storeItemId = ?2", userId, storeItemId);
-        if (existingCount > 0) {
+        if (!item.stackable && existingCount > 0) {
             throw new BadRequestException("您已经拥有此物品");
         }
 
-        // 检查背包容量
-        long currentItemsCount = UserBackpackItem.count("userId = ?1", userId);
-        if (currentItemsCount >= user.backpackCapacity) {
-            throw new BadRequestException("背包容量已满，无法存放更多物品");
-        }
-
+        // 在扣积分前验证网格空间；BackpackService 会在同一事务中再次锁定并提交
+        String itemCode = item.itemCode == null ? "store:" + item.id : item.itemCode;
+        backpackService.validateGrant(userId, itemCode, 1);
         // 扣除积分
         walletService.deductPoints(userId, item.price, "BUY_STORE_ITEM", storeItemId, "购买商店物品: " + item.name);
 
-        // 添加到背包
-        UserBackpackItem backpackItem = new UserBackpackItem();
-        backpackItem.userId = userId;
-        backpackItem.storeItemId = storeItemId;
-        backpackItem.persist();
+        // 添加到背包（统一处理堆叠、网格位置和实例 UUID）
+        backpackService.grant(userId, storeItemId, 1, "PURCHASE", idempotencyKey);
 
         // 记录购买流水
         UserPurchaseRecord record = new UserPurchaseRecord();

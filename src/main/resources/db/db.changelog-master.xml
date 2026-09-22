@@ -124,4 +124,8 @@
     <include file="db/migration/122-add-editable-legal-content.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/123-migrate-seeray-tracking-setting.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/124-add-privacy-analytics-opt-out.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/125-inventory-v1.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/126-inventory-legacy-item-code.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/127-inventory-root-unique.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/128-inventory-source-item.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

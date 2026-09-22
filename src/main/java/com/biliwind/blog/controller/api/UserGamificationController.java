@@ -26,6 +26,9 @@ public class UserGamificationController {
     StoreService storeService;
 
     @Inject
+    com.biliwind.blog.service.inventory.BackpackService backpackService;
+
+    @Inject
     PostAccessService postAccessService;
 
     @Inject
@@ -53,14 +56,16 @@ public class UserGamificationController {
     @POST
     @Path("/buy-store-item/{itemId}")
     @Transactional
-    public Response buyStoreItem(@PathParam("itemId") Long itemId, @Context HttpHeaders headers) {
+    public Response buyStoreItem(@PathParam("itemId") Long itemId,
+                                 @HeaderParam("Idempotency-Key") String idempotencyKey,
+                                 @Context HttpHeaders headers) {
         Long userId = resolveUserIdFromCookie(headers);
         if (userId == null) {
             return Response.status(Response.Status.UNAUTHORIZED).entity(Map.of("success", false, "message", "请先登录")).build();
         }
 
         try {
-            storeService.buyStoreItem(userId, itemId);
+            storeService.buyStoreItem(userId, itemId, idempotencyKey);
             return Response.ok(Map.of("success", true, "message", "购买成功")).build();
         } catch (Exception e) {
             return Response.status(Response.Status.BAD_REQUEST).entity(Map.of(
@@ -82,47 +87,15 @@ public class UserGamificationController {
             return Response.status(Response.Status.UNAUTHORIZED).entity(Map.of("success", false, "message", "用户不存在")).build();
         }
 
-        List<UserBackpackItem> backpack = storeService.getUserBackpack(userId);
-
-        List<Long> storeItemIds = new java.util.ArrayList<>();
-        for (UserBackpackItem item : backpack) {
-            if (item.storeItemId != null) {
-                storeItemIds.add(item.storeItemId);
-            }
-        }
-        Map<Long, com.biliwind.blog.model.StoreItem> storeItemsById = new HashMap<>();
-        if (!storeItemIds.isEmpty()) {
-            List<com.biliwind.blog.model.StoreItem> storeItems =
-                    com.biliwind.blog.model.StoreItem.find("id in ?1", storeItemIds).list();
-            for (com.biliwind.blog.model.StoreItem storeItem : storeItems) {
-                storeItemsById.put(storeItem.id, storeItem);
-            }
-        }
-
-        // 组装返回数据，包含背包物品的详情
-        List<Map<String, Object>> backpackDetails = new java.util.ArrayList<>();
-        for (UserBackpackItem item : backpack) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", item.id);
-            map.put("storeItemId", item.storeItemId);
-            map.put("acquiredAt", item.acquiredAt);
-
-            com.biliwind.blog.model.StoreItem sItem = storeItemsById.get(item.storeItemId);
-            if (sItem != null) {
-                map.put("name", sItem.name);
-                map.put("rarity", sItem.rarity);
-                map.put("type", sItem.type);
-                map.put("description", sItem.description);
-                map.put("extraInfo", sItem.extraInfo);
-            }
-            backpackDetails.add(map);
-        }
+        com.biliwind.blog.service.inventory.InventorySnapshot inventory = backpackService.getSnapshot(userId);
 
         Map<String, Object> data = new HashMap<>();
         data.put("level", user.level);
         data.put("exp", user.exp);
         data.put("backpackCapacity", user.backpackCapacity);
-        data.put("backpack", backpackDetails);
+        data.put("backpack", inventory.items());
+        data.put("inventoryRevision", inventory.revision());
+        data.put("inventoryContainers", inventory.containers());
 
         return Response.ok(Map.of("success", true, "data", data)).build();
     }

@@ -20,6 +20,15 @@ public class StoreItem extends PanacheEntityBase {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
+    @Column(name = "item_code", length = 128, unique = true)
+    public String itemCode;
+
+    @Column(name = "definition_version", length = 64, nullable = false)
+    public String definitionVersion = "1";
+
+    @Column(name = "deprecated", nullable = false)
+    public boolean deprecated = false;
+
     /**
      * 物品名称
      */
@@ -62,6 +71,24 @@ public class StoreItem extends PanacheEntityBase {
      */
     @Column(nullable = false)
     public short status = 1;
+
+    @Column(nullable = false)
+    public Integer width = 1;
+
+    @Column(nullable = false)
+    public Integer height = 1;
+
+    @Column(name = "stackable", nullable = false)
+    public boolean stackable = false;
+
+    @Column(name = "max_stack_size", nullable = false)
+    public Integer maxStackSize = 1;
+
+    @Column(name = "container_rows")
+    public Integer containerRows;
+
+    @Column(name = "container_columns")
+    public Integer containerColumns;
 
     /**
      * 创建时间

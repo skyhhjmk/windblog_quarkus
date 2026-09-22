@@ -10,6 +10,7 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Path("/api/admin/store")
 @Produces(MediaType.APPLICATION_JSON)
@@ -55,6 +56,14 @@ public class AdminStoreController {
         if (item.price == null || item.price < 0) {
             throw new BadRequestException("物品价格必须大于等于0");
         }
+        if (item.width == null || item.width <= 0 || item.height == null || item.height <= 0) {
+            throw new BadRequestException("物品尺寸必须大于0");
+        }
+        if (item.maxStackSize == null || item.maxStackSize <= 0
+                || (!item.stackable && item.maxStackSize != 1)) {
+            throw new BadRequestException("物品堆叠上限非法");
+        }
+        if (item.itemCode == null || item.itemCode.isBlank()) item.itemCode = "store:" + UUID.randomUUID();
         item.persist();
         return item;
     }
@@ -75,6 +84,12 @@ public class AdminStoreController {
         if (updateData.price != null && updateData.price >= 0) existing.price = updateData.price;
         if (updateData.rarity != null) existing.rarity = updateData.rarity;
         if (updateData.type != null) existing.type = updateData.type;
+        if (updateData.width != null && updateData.width > 0) existing.width = updateData.width;
+        if (updateData.height != null && updateData.height > 0) existing.height = updateData.height;
+        if (updateData.maxStackSize != null && updateData.maxStackSize > 0) existing.maxStackSize = updateData.maxStackSize;
+        existing.stackable = updateData.stackable;
+        existing.containerRows = updateData.containerRows;
+        existing.containerColumns = updateData.containerColumns;
         existing.extraInfo = updateData.extraInfo;
         existing.status = updateData.status;
 
