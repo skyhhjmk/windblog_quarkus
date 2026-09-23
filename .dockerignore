@@ -1,4 +1,8 @@
 *
+!src/
+!src/main/
+!src/main/docker/
+!src/main/docker/install-media-tools.sh
 !target/*-runner
 !target/*-runner.jar
 !target/lib/*

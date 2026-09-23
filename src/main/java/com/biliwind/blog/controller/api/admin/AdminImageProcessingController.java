@@ -4,6 +4,7 @@ import com.biliwind.blog.model.ImageProcessingConfig;
 import com.biliwind.blog.service.ExternalToolResolver;
 import com.biliwind.blog.service.ImageProcessingService;
 import com.biliwind.blog.service.VideoProcessingService;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -132,6 +133,7 @@ public class AdminImageProcessingController {
         return Response.ok(metadata).build();
     }
 
+    @RegisterForReflection
     public record TestToolResult(String tool, boolean available, String resolvedPath,
                                  boolean executable, String version, String message) {
         public static TestToolResult fromResolution(String tool,

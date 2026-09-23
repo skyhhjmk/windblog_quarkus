@@ -80,6 +80,10 @@
 ###
 FROM registry.access.redhat.com/ubi9/openjdk-21:1.23
 
+COPY src/main/docker/install-media-tools.sh /tmp/install-media-tools.sh
+RUN /bin/sh /tmp/install-media-tools.sh \
+    && rm -f /tmp/install-media-tools.sh
+
 ENV LANGUAGE='en_US:en'
 
 
