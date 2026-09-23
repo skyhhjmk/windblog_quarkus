@@ -128,5 +128,5 @@
     <include file="db/migration/126-inventory-legacy-item-code.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/127-inventory-root-unique.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/128-inventory-source-item.sql" relativeToChangelogFile="false"/>
-    <include file="db/migration/129-seed-admin-inventory-permission.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/130-seed-admin-inventory-permission.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>
