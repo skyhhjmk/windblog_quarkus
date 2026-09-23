@@ -139,6 +139,16 @@ class AdminAuthorizationPolicyTest {
         assertEquals("link.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/links").action());
         assertEquals("region.delete", AdminAuthorizationPolicy.decide("DELETE", "/api/admin/regions/7").action());
         assertEquals("store.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/store").action());
+        assertEquals("inventory.grant", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/users/7/inventory/grant").action());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/users/7/inventory/grant"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey(
+                "POST", "/api/admin/users/7/inventory/grant"));
+        assertEquals("inventory.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/users/7/inventory").action());
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp(
+                "GET", "/api/admin/users/7/inventory"));
         assertEquals("system.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/system/monitor").action());
         assertEquals("system.read", AdminAuthorizationPolicy.decide(
                 "GET", "/api/admin/system/observability/grafana-embed-url").action());

@@ -25,8 +25,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -205,58 +203,13 @@ public class UserController {
         User fullUser = User.findById(profile.id());
         int level = fullUser != null ? fullUser.level : 1;
         int exp = fullUser != null ? fullUser.exp : 0;
-        int backpackCapacity = fullUser != null ? fullUser.backpackCapacity : 36;
 
         // 计算当前等级的经验上限
         int nextLevelRequiredExp = (level) * (level + 1) / 2 * 100;
         int currentLevelBaseExp = (level - 1) * level / 2 * 100;
-        int currentLevelExp = exp - currentLevelBaseExp;
+        int currentLevelExp = Math.max(0, exp - currentLevelBaseExp);
         int currentLevelMaxExp = nextLevelRequiredExp - currentLevelBaseExp;
         int expPercent = Math.min(100, Math.max(0, (int) ((float) currentLevelExp / currentLevelMaxExp * 100)));
-
-        List<com.biliwind.blog.model.UserBackpackItem> backpack = storeService.getUserBackpack(profile.id());
-        List<Long> storeItemIds = new ArrayList<>();
-        for (com.biliwind.blog.model.UserBackpackItem item : backpack) {
-            if (item.storeItemId != null && !storeItemIds.contains(item.storeItemId)) {
-                storeItemIds.add(item.storeItemId);
-            }
-        }
-
-        Map<Long, com.biliwind.blog.model.StoreItem> storeItemsById = new HashMap<>();
-        if (!storeItemIds.isEmpty()) {
-            List<com.biliwind.blog.model.StoreItem> storeItems =
-                    com.biliwind.blog.model.StoreItem.find("id in ?1", storeItemIds).list();
-            for (com.biliwind.blog.model.StoreItem storeItem : storeItems) {
-                storeItemsById.put(storeItem.id, storeItem);
-            }
-        }
-
-        List<Map<String, Object>> backpackDetails = new ArrayList<>();
-        for (com.biliwind.blog.model.UserBackpackItem item : backpack) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", item.id);
-            map.put("storeItemId", item.storeItemId);
-            com.biliwind.blog.model.StoreItem storeItem = storeItemsById.get(item.storeItemId);
-            if (storeItem != null) {
-                map.put("name", storeItem.name);
-                String rarity = storeItem.rarity;
-                if (rarity == null || rarity.isBlank()) {
-                    rarity = "#4b5563";
-                }
-                map.put("rarity", rarity);
-                map.put("type", storeItem.type);
-                map.put("description", storeItem.description);
-            } else {
-                map.put("name", "未知物品");
-                map.put("rarity", "#4b5563");
-            }
-            backpackDetails.add(map);
-        }
-
-        // 填充空白格子以满足容量
-        while (backpackDetails.size() < backpackCapacity) {
-            backpackDetails.add(null);
-        }
 
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? centerContentTemplate : centerTemplate;
@@ -269,9 +222,10 @@ public class UserController {
                 .data("exp", exp)
                 .data("currentLevelExp", currentLevelExp)
                 .data("currentLevelMaxExp", currentLevelMaxExp)
+                .data("expToNextLevel", Math.max(0, currentLevelMaxExp - currentLevelExp))
                 .data("expPercent", expPercent)
-                .data("backpackCapacity", backpackCapacity)
-                .data("backpackItems", backpackDetails);
+                .data("allowUserPostSubmission",
+                        configManager.getBoolean("feature_toggles", "enable_user_post_submission", true));
     }
 
     // ==================== API接口 ====================
@@ -439,6 +393,102 @@ public class UserController {
                     .build();
         }
         return Response.ok(Map.of("success", true, "data", profile)).build();
+    }
+
+    @POST
+    @Path("/api/account/email")
+    @Transactional
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response changeEmail(ChangeEmailRequest request, @Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(Map.of("success", false, "message", "登录已过期，请重新登录"))
+                    .build();
+        }
+        if (request == null || request.currentPassword() == null || request.currentPassword().isBlank()
+                || request.newEmail() == null || request.newEmail().isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "请输入当前密码和新邮箱"))
+                    .build();
+        }
+
+        User user = User.findById(profile.id());
+        if (user == null || !passwordHasher.matches(request.currentPassword(), user.password)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "当前密码错误"))
+                    .build();
+        }
+
+        String normalizedEmail = request.newEmail().trim().toLowerCase(Locale.ROOT);
+        if (!normalizedEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "邮箱格式不正确"))
+                    .build();
+        }
+        if (normalizedEmail.equalsIgnoreCase(user.email)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "新邮箱不能与当前邮箱相同"))
+                    .build();
+        }
+        User existing = User.find("email = ?1 and id <> ?2 and deletedAt is null", normalizedEmail, user.id)
+                .firstResult();
+        if (existing != null) {
+            return Response.status(Response.Status.CONFLICT)
+                    .entity(Map.of("success", false, "message", "新邮箱已被其他账号使用"))
+                    .build();
+        }
+
+        user.email = normalizedEmail;
+        user.emailVerifiedAt = null;
+        emailVerificationService.sendVerification(user);
+        return Response.ok(Map.of(
+                "success", true,
+                "message", "邮箱已更新，请查收新邮箱中的验证邮件",
+                "email", normalizedEmail
+        )).build();
+    }
+
+    @POST
+    @Path("/api/account/password")
+    @Transactional
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response changePassword(ChangePasswordRequest request, @Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(Map.of("success", false, "message", "登录已过期，请重新登录"))
+                    .build();
+        }
+        if (request == null || request.currentPassword() == null || request.currentPassword().isBlank()
+                || request.newPassword() == null || request.newPassword().isBlank()
+                || !Objects.equals(request.newPassword(), request.confirmPassword())) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "请完整填写密码并确认两次输入一致"))
+                    .build();
+        }
+        if (request.newPassword().length() < 6 || request.newPassword().length() > 32) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "新密码长度应为 6-32 位"))
+                    .build();
+        }
+
+        User user = User.findById(profile.id());
+        if (user == null || !passwordHasher.matches(request.currentPassword(), user.password)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "当前密码错误"))
+                    .build();
+        }
+        if (passwordHasher.matches(request.newPassword(), user.password)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "新密码不能与当前密码相同"))
+                    .build();
+        }
+
+        user.password = passwordHasher.hash(request.newPassword());
+        return Response.ok(Map.of("success", true, "message", "密码修改成功")).build();
     }
 
     /**
@@ -659,5 +709,11 @@ public class UserController {
     }
 
     public record SubscriptionRequest(boolean subscribeArticleUpdates, boolean subscribePromotions) {
+    }
+
+    public record ChangeEmailRequest(String currentPassword, String newEmail) {
+    }
+
+    public record ChangePasswordRequest(String currentPassword, String newPassword, String confirmPassword) {
     }
 }

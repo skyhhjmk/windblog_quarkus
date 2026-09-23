@@ -28,7 +28,7 @@ public class UserNotificationService {
         if (post != null && post.user != null) {
             create(post.user, "POST_SUBMITTED", "文章已提交审核",
                     "你的文章已进入审核队列，审核完成后会在这里通知你。",
-                    "/user/center#user-post-editor");
+                    "/user/center#user-tab-posts");
         }
     }
 
@@ -48,7 +48,7 @@ public class UserNotificationService {
                     ? "请修改后重新提交。"
                     : "审核意见：" + post.reviewNote.trim();
             create(post.user, "POST_REJECTED", "文章需要修改",
-                    note, "/user/center#user-post-editor");
+                    note, "/user/center#user-tab-posts");
         }
     }
 
@@ -58,7 +58,7 @@ public class UserNotificationService {
                 || comment.parent.user.id.equals(comment.user == null ? null : comment.user.id)) {
             return;
         }
-        String target = comment.post == null ? "/user/center#user-notifications"
+        String target = comment.post == null ? "/user/center#user-tab-notifications"
                 : "/post/" + comment.post.slug + "#comment-" + comment.id;
         create(comment.parent.user, "COMMENT_REPLY", "你收到一条评论回复",
                 "有人回复了你的评论。", target);

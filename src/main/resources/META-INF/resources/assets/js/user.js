@@ -178,7 +178,8 @@
 
     function bindSubscriptions() {
         const form = document.getElementById('subscriptionForm');
-        if (!form) return;
+        if (!form || form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
         const articleUpdates = document.getElementById('subscribeArticleUpdates');
         const promotions = document.getElementById('subscribePromotions');
         const hint = document.getElementById('subscriptionVerificationHint');
@@ -223,6 +224,114 @@
                 window.setLoading(saveButton, false);
             }
         };
+    }
+
+    function bindUserTabs() {
+        const tabs = Array.from(document.querySelectorAll('[data-user-tab]'));
+        const panels = Array.from(document.querySelectorAll('[data-user-tab-panel]'));
+        if (!tabs.length || !panels.length) return;
+
+        const available = new Set(tabs.map(tab => tab.dataset.userTab));
+        const activate = (requested, updateHash) => {
+            const tab = available.has(requested) ? requested : 'overview';
+            tabs.forEach(button => {
+                const selected = button.dataset.userTab === tab;
+                button.setAttribute('aria-selected', String(selected));
+                button.classList.toggle('is-active', selected);
+            });
+            panels.forEach(panel => {
+                panel.classList.toggle('hidden', panel.dataset.userTabPanel !== tab);
+            });
+            if (updateHash) {
+                const url = new URL(window.location.href);
+                url.hash = 'user-tab-' + tab;
+                window.history.replaceState(window.history.state, '', url.href);
+            }
+        };
+
+        tabs.forEach(button => {
+            if (button.dataset.bound === 'true') return;
+            button.dataset.bound = 'true';
+            button.onclick = () => activate(button.dataset.userTab, true);
+        });
+        document.querySelectorAll('[data-user-tab-target]').forEach(link => {
+            if (link.dataset.bound === 'true') return;
+            link.dataset.bound = 'true';
+            link.onclick = (event) => {
+                event.preventDefault();
+                const target = link.dataset.userTabTarget;
+                activate(target, true);
+                document.getElementById('user-tab-' + target)?.scrollIntoView({behavior: 'smooth', block: 'start'});
+            };
+        });
+
+        const hash = window.location.hash.replace(/^#/, '');
+        activate(hash.startsWith('user-tab-') ? hash.substring('user-tab-'.length) : 'overview', false);
+    }
+
+    function bindAccountSettings() {
+        const emailForm = document.getElementById('changeEmailForm');
+        const passwordForm = document.getElementById('changePasswordForm');
+
+        if (emailForm && emailForm.dataset.bound !== 'true') {
+            emailForm.dataset.bound = 'true';
+            emailForm.onsubmit = async (event) => {
+                event.preventDefault();
+                const button = emailForm.querySelector('button[type="submit"]');
+                window.setLoading(button, true, {text: '发送中...'});
+                try {
+                    const response = await fetch('/user/api/account/email', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': window.getCsrfToken()},
+                        body: JSON.stringify({
+                            currentPassword: document.getElementById('changeEmailCurrentPassword')?.value || '',
+                            newEmail: document.getElementById('changeEmailNewEmail')?.value || ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) throw new Error(result.message || '邮箱换绑失败');
+                    document.querySelectorAll('[data-user-email]').forEach(node => node.textContent = result.email || '');
+                    emailForm.reset();
+                    analyticsFormResult('change-email', true);
+                    window.showToast(result.message || '验证邮件已发送', 'success');
+                } catch (error) {
+                    analyticsFormResult('change-email', false);
+                    window.showToast(error.message || '邮箱换绑失败，请稍后重试', 'error');
+                } finally {
+                    window.setLoading(button, false);
+                }
+            };
+        }
+
+        if (passwordForm && passwordForm.dataset.bound !== 'true') {
+            passwordForm.dataset.bound = 'true';
+            passwordForm.onsubmit = async (event) => {
+                event.preventDefault();
+                const button = passwordForm.querySelector('button[type="submit"]');
+                window.setLoading(button, true, {text: '保存中...'});
+                try {
+                    const response = await fetch('/user/api/account/password', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': window.getCsrfToken()},
+                        body: JSON.stringify({
+                            currentPassword: document.getElementById('changePasswordCurrent')?.value || '',
+                            newPassword: document.getElementById('changePasswordNew')?.value || '',
+                            confirmPassword: document.getElementById('changePasswordConfirm')?.value || ''
+                        })
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) throw new Error(result.message || '密码修改失败');
+                    passwordForm.reset();
+                    analyticsFormResult('change-password', true);
+                    window.showToast(result.message || '密码修改成功', 'success');
+                } catch (error) {
+                    analyticsFormResult('change-password', false);
+                    window.showToast(error.message || '密码修改失败，请稍后重试', 'error');
+                } finally {
+                    window.setLoading(button, false);
+                }
+            };
+        }
     }
 
     function bindFavoriteButton() {
@@ -826,7 +935,10 @@
         bindResetPasswordForm();
         bindUserWallet();
         bindBackpackItems();
+        bindInventoryBoard();
+        bindUserTabs();
         bindSubscriptions();
+        bindAccountSettings();
         bindFavoriteButton();
         bindUserPosts();
         bindFavoriteList();
@@ -941,6 +1053,170 @@
                 window.setLoading(button, false);
             }
         };
+    }
+
+    function renderInventoryBoard(snapshot) {
+        const board = document.getElementById('userInventoryGrid');
+        const capacity = document.getElementById('inventoryCapacity');
+        const nestedSection = document.getElementById('nestedInventoryItems');
+        const nestedList = document.getElementById('nestedInventoryList');
+        if (!board) return;
+
+        const root = (snapshot.containers || []).find(container => !container.parentItemUuid);
+        const columns = root?.columns || 10;
+        const rows = root?.rows || 10;
+        const items = snapshot.items || [];
+        const rootItems = items.filter(item => item.containerId === root?.id || item.containerId == null);
+        const nestedItems = items.filter(item => item.containerId != null && item.containerId !== root?.id);
+        board.style.setProperty('--inventory-columns', columns);
+        board.style.setProperty('--inventory-rows', rows);
+        board.replaceChildren();
+
+        rootItems.forEach(item => {
+            const width = item.rotation ? item.height : item.width;
+            const height = item.rotation ? item.width : item.height;
+            const metadata = item.metadata || {};
+            const element = document.createElement('button');
+            element.type = 'button';
+            element.className = 'inventory-item';
+            element.draggable = true;
+            element.style.gridColumn = `${Number(item.x) + 1} / span ${width}`;
+            element.style.gridRow = `${Number(item.y) + 1} / span ${height}`;
+            element.style.setProperty('--backpack-rarity', safeColor(metadata.rarity));
+            element.dataset.inventoryUuid = item.instanceUuid;
+            element.dataset.inventoryItem = 'true';
+            element.setAttribute('aria-label', `${metadata.name || item.itemCode}, ${width}乘${height}格，数量${item.quantity}`);
+            element.title = `${metadata.name || item.itemCode} · ${width}×${height} 格 · ×${item.quantity}`;
+            const name = document.createElement('span');
+            name.className = 'inventory-item-name';
+            name.textContent = metadata.name || item.itemCode;
+            const size = document.createElement('span');
+            size.className = 'inventory-item-size';
+            size.textContent = `${width}×${height}`;
+            element.append(name, size);
+            if (item.quantity > 1) {
+                const quantity = document.createElement('span');
+                quantity.className = 'inventory-item-quantity';
+                quantity.textContent = `×${item.quantity}`;
+                element.appendChild(quantity);
+            }
+            element.addEventListener('dragstart', event => {
+                event.dataTransfer?.setData('text/plain', item.instanceUuid);
+                if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+            });
+            element.addEventListener('click', () => {
+                if (typeof window.showItemDetails === 'function') {
+                    window.showItemDetails(item.instanceUuid, metadata.name || item.itemCode,
+                        metadata.description || '', safeColor(metadata.rarity), metadata.type || '');
+                }
+            });
+            board.appendChild(element);
+        });
+
+        if (nestedSection && nestedList) {
+            nestedList.replaceChildren();
+            nestedItems.forEach(item => {
+                const metadata = item.metadata || {};
+                const element = document.createElement('button');
+                element.type = 'button';
+                element.className = 'inventory-nested-item';
+                element.draggable = true;
+                element.dataset.inventoryUuid = item.instanceUuid;
+                element.dataset.inventoryItem = 'true';
+                element.textContent = `${metadata.name || item.itemCode} · ${item.width}×${item.height} · ×${item.quantity}`;
+                element.addEventListener('dragstart', event => {
+                    event.dataTransfer?.setData('text/plain', item.instanceUuid);
+                    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+                });
+                nestedList.appendChild(element);
+            });
+            nestedSection.classList.toggle('hidden', nestedItems.length === 0);
+        }
+        if (capacity) capacity.textContent = `${rootItems.length} 件物品 · ${columns}×${rows} 格`;
+    }
+
+    function bindInventoryBoard() {
+        const board = document.getElementById('userInventoryGrid');
+        if (!board || board.dataset.bound === 'true') return;
+        board.dataset.bound = 'true';
+        const feedback = document.getElementById('inventoryFeedback');
+        const refresh = document.getElementById('inventoryRefresh');
+        let snapshot = null;
+        let busy = false;
+
+        const showFeedback = (message, error = false) => {
+            if (!feedback) return;
+            feedback.textContent = message;
+            feedback.classList.remove('hidden', 'border-red-500/40', 'text-red-400', 'border-green-500/40', 'text-green-400');
+            feedback.classList.add(error ? 'border-red-500/40' : 'border-green-500/40', error ? 'text-red-400' : 'text-green-400');
+        };
+        const clearFeedback = () => {
+            if (!feedback) return;
+            feedback.textContent = '';
+            feedback.classList.add('hidden');
+        };
+        const load = async () => {
+            if (busy) return;
+            try {
+                const response = await fetch('/api/user/inventory', {headers: {'Accept': 'application/json'}});
+                if (!response.ok) throw new Error(response.status === 401 ? '登录状态已过期' : '仓库加载失败');
+                snapshot = await response.json();
+                renderInventoryBoard(snapshot);
+                if (feedback) feedback.classList.add('hidden');
+            } catch (error) {
+                showFeedback(error.message || '仓库加载失败，请刷新重试', true);
+            }
+        };
+        const dropAt = async (event) => {
+            const uuid = event.dataTransfer?.getData('text/plain');
+            const dragged = snapshot?.items?.find(item => item.instanceUuid === uuid);
+            if (!dragged || busy || !snapshot) return;
+            const bounds = board.getBoundingClientRect();
+            const columns = Number(board.style.getPropertyValue('--inventory-columns')) || 10;
+            const rows = Number(board.style.getPropertyValue('--inventory-rows')) || 10;
+            const cell = (bounds.width - 2) / columns;
+            const width = dragged.rotation ? dragged.height : dragged.width;
+            const height = dragged.rotation ? dragged.width : dragged.height;
+            const x = Math.max(0, Math.min(columns - width, Math.floor((event.clientX - bounds.left) / cell)));
+            const y = Math.max(0, Math.min(rows - height, Math.floor((event.clientY - bounds.top) / cell)));
+            const root = (snapshot.containers || []).find(container => !container.parentItemUuid);
+            const original = snapshot;
+            const nextItems = snapshot.items.map(item => item.instanceUuid === uuid
+                ? {...item, x, y, containerId: root?.id ?? null, parentInstanceUuid: null}
+                : item);
+            const next = {...snapshot, items: nextItems};
+            const operationId = crypto.randomUUID();
+            busy = true;
+            board.classList.add('is-saving');
+            try {
+                const response = await fetch('/api/user/inventory', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': window.getCsrfToken(), 'Idempotency-Key': operationId},
+                    body: JSON.stringify({baseRevision: snapshot.revision, operationId, snapshot: next})
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || '无法移动物品，请检查空间是否重叠');
+                snapshot = result;
+                renderInventoryBoard(snapshot);
+                clearFeedback();
+            } catch (error) {
+                snapshot = original;
+                renderInventoryBoard(snapshot);
+                showFeedback(error.message || '保存位置失败，请重试', true);
+                if (error.message?.includes('版本已变化')) await load();
+            } finally {
+                busy = false;
+                board.classList.remove('is-saving');
+            }
+        };
+
+        board.addEventListener('dragover', event => event.preventDefault());
+        board.addEventListener('drop', event => { event.preventDefault(); dropAt(event); });
+        if (refresh && refresh.dataset.bound !== 'true') {
+            refresh.dataset.bound = 'true';
+            refresh.addEventListener('click', load);
+        }
+        load();
     }
 
     function bindBackpackItems() {

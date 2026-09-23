@@ -116,6 +116,9 @@ public final class AdminAuthorizationPolicy {
                 || path.endsWith("/wallet/check-in-reward"))) {
             return "POST".equals(method);
         }
+        if (path.startsWith("/api/admin/users/") && path.endsWith("/inventory/grant")) {
+            return "POST".equals(method);
+        }
         if (path.equals("/api/admin/email-deliveries/fail-pending")) {
             return "POST".equals(method);
         }
@@ -154,6 +157,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static String resourceFor(String path) {
+        if (path.startsWith("/api/admin/users/") && path.contains("/inventory")) {
+            return "inventory";
+        }
         if (path.startsWith("/api/admin/users/") && path.contains("/wallet")) {
             return "wallet";
         }
@@ -224,6 +230,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static String actionFor(String method, String path, String resource) {
+        if (path.startsWith("/api/admin/users/") && path.endsWith("/inventory/grant")) {
+            return "inventory.grant";
+        }
         if (path.endsWith("/original-download-ticket")) {
             return "media.download_original";
         }

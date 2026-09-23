@@ -80,6 +80,18 @@ public class AdminStoreController {
         if (updateData.name != null && !updateData.name.trim().isEmpty()) {
             existing.name = updateData.name;
         }
+        if ((updateData.width != null && updateData.width <= 0)
+                || (updateData.height != null && updateData.height <= 0)) {
+            throw new BadRequestException("物品尺寸必须大于0");
+        }
+        if (updateData.maxStackSize != null && updateData.maxStackSize <= 0) {
+            throw new BadRequestException("物品堆叠上限必须大于0");
+        }
+        if ((updateData.containerRows != null && updateData.containerRows <= 0)
+                || (updateData.containerColumns != null && updateData.containerColumns <= 0)
+                || (updateData.containerRows == null) != (updateData.containerColumns == null)) {
+            throw new BadRequestException("容器行数和列数需同时设置且大于0");
+        }
         if (updateData.description != null) existing.description = updateData.description;
         if (updateData.price != null && updateData.price >= 0) existing.price = updateData.price;
         if (updateData.rarity != null) existing.rarity = updateData.rarity;
@@ -88,6 +100,9 @@ public class AdminStoreController {
         if (updateData.height != null && updateData.height > 0) existing.height = updateData.height;
         if (updateData.maxStackSize != null && updateData.maxStackSize > 0) existing.maxStackSize = updateData.maxStackSize;
         existing.stackable = updateData.stackable;
+        if (!existing.stackable && existing.maxStackSize != 1) {
+            throw new BadRequestException("不可堆叠物品的最大堆叠数必须为1");
+        }
         existing.containerRows = updateData.containerRows;
         existing.containerColumns = updateData.containerColumns;
         existing.extraInfo = updateData.extraInfo;

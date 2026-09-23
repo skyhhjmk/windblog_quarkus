@@ -178,11 +178,13 @@ public class ConfigInitializer {
         com.fasterxml.jackson.databind.node.ArrayNode featureFields = featureSchema.putArray("fields");
         featureFields.addObject().put("key", "enable_comment").put("label", "开启评论").put("widget", "switch");
         featureFields.addObject().put("key", "enable_registration").put("label", "开启注册").put("widget", "switch");
+        featureFields.addObject().put("key", "enable_user_post_submission").put("label", "允许用户投稿文章").put("widget", "switch");
         featureFields.addObject().put("key", "enable_ai_summary").put("label", "开启AI摘要").put("widget", "switch");
 
         ObjectNode featureValue = mapper.createObjectNode();
         featureValue.put("enable_comment", true);
         featureValue.put("enable_registration", true);
+        featureValue.put("enable_user_post_submission", true);
         featureValue.put("enable_ai_summary", true);
 
         list.add(new SettingDefinition("feature_toggles", featureValue, "object", "功能设置", featureSchema, "功能开关"));

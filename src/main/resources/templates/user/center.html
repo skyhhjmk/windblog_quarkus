@@ -14,20 +14,46 @@
     {#sidebar}
         <div class="space-y-4">
             {#if user}
+                <section class="border border-[var(--border)] bg-[var(--panel-bg)] p-5 user-center-side-card">
+                    <div class="flex items-center gap-3 mb-5">
+                        <div class="w-10 h-10 rounded-xl bg-[var(--accent)]/15 text-[var(--accent)] flex items-center justify-center font-black">
+                            {user.username.substring(0, 1).toUpperCase()}
+                        </div>
+                        <div>
+                            <p class="text-[10px] uppercase tracking-[0.22em] text-gray-500">Account</p>
+                            <h3 class="font-bold">账户档案</h3>
+                        </div>
+                    </div>
+                    <dl class="space-y-3 text-sm">
+                        <div class="border-b border-[var(--border)]/60 pb-3">
+                            <dt class="text-xs text-gray-500 mb-1">用户名</dt>
+                            <dd class="font-medium break-all">{user.username}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs text-gray-500 mb-1">邮箱</dt>
+                            <dd class="font-medium break-all" data-user-email="true">{user.email}</dd>
+                        </div>
+                    </dl>
+                    <p class="mt-5 text-xs text-gray-500 leading-5">在个人设置中管理邮箱、密码和邮件订阅。</p>
+                </section>
+
                 <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
-                    <h3 class="font-bold mb-2">快捷操作</h3>
-                    <ul class="text-sm space-y-2">
-                        <li><a href="#user-post-editor" class="hover:text-[var(--accent)]">→ 发布文章</a></li>
-                        <li><a href="#favorite-posts" class="hover:text-[var(--accent)]">→ 我的收藏</a></li>
-                        <li><a href="#user-notifications" class="hover:text-[var(--accent)]">→ 消息通知</a></li>
-                    </ul>
+                    <h3 class="font-bold mb-3">快捷导航</h3>
+                    <nav class="grid grid-cols-2 gap-2 text-sm" aria-label="用户中心快捷导航">
+                        {#if allowUserPostSubmission}
+                            <a href="#user-tab-posts" data-user-tab-target="posts" class="user-center-quick-link">投稿工作台</a>
+                        {/if}
+                        <a href="#user-tab-favorites" data-user-tab-target="favorites" class="user-center-quick-link">我的收藏</a>
+                        <a href="#user-tab-notifications" data-user-tab-target="notifications" class="user-center-quick-link">消息通知</a>
+                        <a href="#user-tab-settings" data-user-tab-target="settings" class="user-center-quick-link">个人设置</a>
+                    </nav>
                 </section>
             {/if}
 
             <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">
                 <h3 class="font-bold mb-2">用户中心</h3>
                 <p class="text-sm text-gray-400">
-                    管理您的账号信息、查看发布的内容和互动记录。
+                    管理账号、内容与站内互动。
                 </p>
             </section>
         </div>

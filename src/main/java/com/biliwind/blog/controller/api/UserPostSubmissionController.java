@@ -8,6 +8,7 @@ import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.UserNotificationService;
+import com.biliwind.blog.service.ConfigManager;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -38,10 +39,14 @@ public class UserPostSubmissionController {
     @Inject
     UserNotificationService notificationService;
 
+    @Inject
+    ConfigManager configManager;
+
     @GET
     @Transactional
     @Operation(summary = "查询当前用户的投稿")
     public List<PostItem> list(@Context HttpHeaders headers, @QueryParam("status") Short status) {
+        requireSubmissionEnabled();
         User user = requireUser(headers);
         List<Post> posts;
         if (status == null) {
@@ -66,6 +71,7 @@ public class UserPostSubmissionController {
     @Transactional
     @Operation(summary = "查询投稿详情")
     public PostDetail detail(@PathParam("id") Long id, @Context HttpHeaders headers) {
+        requireSubmissionEnabled();
         return toDetail(ownPost(id, requireUser(headers)));
     }
 
@@ -73,6 +79,7 @@ public class UserPostSubmissionController {
     @Transactional
     @Operation(summary = "保存投稿草稿")
     public Response create(PostRequest request, @Context HttpHeaders headers) {
+        requireSubmissionEnabled();
         User user = requireUser(headers);
         validateRequest(request);
 
@@ -106,6 +113,7 @@ public class UserPostSubmissionController {
     @Transactional
     @Operation(summary = "更新投稿草稿")
     public Response update(@PathParam("id") Long id, PostRequest request, @Context HttpHeaders headers) {
+        requireSubmissionEnabled();
         User user = requireUser(headers);
         validateRequest(request);
         Post post = ownPost(id, user);
@@ -139,6 +147,7 @@ public class UserPostSubmissionController {
     @Transactional
     @Operation(summary = "提交投稿审核")
     public Response submit(@PathParam("id") Long id, @Context HttpHeaders headers) {
+        requireSubmissionEnabled();
         User user = requireUser(headers);
         Post post = ownPost(id, user);
         if (post.status != PostStatus.DRAFT) {
@@ -193,6 +202,12 @@ public class UserPostSubmissionController {
             throw new NotAuthorizedException("用户不存在或已禁用");
         }
         return user;
+    }
+
+    private void requireSubmissionEnabled() {
+        if (!configManager.getBoolean("feature_toggles", "enable_user_post_submission", true)) {
+            throw new ForbiddenException("用户投稿功能暂未开放");
+        }
     }
 
     private void validateRequest(PostRequest request) {
