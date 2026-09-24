@@ -158,7 +158,8 @@ public class MediaManagementService {
     @PostConstruct
     void init() {
         // 使用绝对路径并规范化，防止路径遍历攻击
-        uploadRoot = Paths.get(mediaUploadDir).toAbsolutePath().normalize();
+        Path publicRoot = Paths.get(mediaUploadDir).toAbsolutePath().normalize();
+        uploadRoot = publicRoot.resolveSibling(publicRoot.getFileName() + "-staging");
         try {
             Files.createDirectories(uploadRoot);
         } catch (IOException e) {
@@ -714,8 +715,12 @@ public class MediaManagementService {
                 generatedVariants.put(VariantType.COVER,
                         extractStorageKey((String) metadata.get("coverUrl")));
             }
-            return selfProxy.get().completeUploadedMedia(
+            Media completed = selfProxy.get().completeUploadedMedia(
                     mediaId, detachedMedia.width, detachedMedia.height, metadata, generatedVariants);
+            for (String key : generatedVariants.values()) {
+                deleteTarget(uploadRoot.resolve(key));
+            }
+            return completed;
         } catch (Exception exception) {
             Log.error("媒体处理失败: " + mediaId, exception);
             selfProxy.get().updateProcessingStatus(mediaId, "FAILED", 0,
@@ -759,7 +764,7 @@ public class MediaManagementService {
                                             String virusScanMessage) {
         Media media = new Media();
         media.storageKey = storageKey;
-        media.url = buildPublicUrl(storageKey);
+        media.url = "";
         media.mediaType = parseMediaType(normalizedMime);
         media.mimeType = normalizedMime;
         media.fileName = sanitizedFileName;
@@ -794,20 +799,18 @@ public class MediaManagementService {
         media.width = width;
         media.height = height;
         media.metadata = metadata;
+        StorageService.InitialStorage initial = storageService.installProcessedMedia(media, generatedVariants, uploadRoot);
         media.storageClasses = new LinkedHashMap<>();
+        media.storageClasses.put(initial.storageClassName(), initial.variants());
+        media.url = initial.urls().getOrDefault(VariantType.ORIGINAL.name(), "");
+        setVariantUrl(metadata, "webpUrl", initial.urls().get(VariantType.WEBP.name()));
+        setVariantUrl(metadata, "placeholderUrl", initial.urls().get(VariantType.PLACEHOLDER.name()));
+        setVariantUrl(metadata, "coverUrl", initial.urls().get(VariantType.COVER.name()));
 
-        Map<String, Object> primaryProviderJson = new LinkedHashMap<>();
-        for (Map.Entry<VariantType, String> entry : generatedVariants.entrySet()) {
-            VariantType variant = entry.getKey();
-            String variantStorageKey = entry.getValue();
-            Map<String, Object> variantInfo = new LinkedHashMap<>();
-            variantInfo.put("status", "synced");
-            variantInfo.put("path", variantStorageKey);
-            primaryProviderJson.put(variant.name().toLowerCase(), variantInfo);
-        }
-        media.storageClasses.put(storageService.getPrimaryStorageClassName(), primaryProviderJson);
-
-        for (StorageClassEntity nonPrimary : storageService.getNonPrimaryStorageClassEntities()) {
+        for (StorageClassEntity nonPrimary : storageService.getAllStorageClassEntities()) {
+            if (nonPrimary.name.equals(initial.storageClassName())) {
+                continue;
+            }
             Map<String, Object> pendingProviderJson = new LinkedHashMap<>();
             for (VariantType variant : generatedVariants.keySet()) {
                 Map<String, Object> pendingVariant = new LinkedHashMap<>();
@@ -823,6 +826,14 @@ public class MediaManagementService {
         media.persist();
         storageService.scheduleSyncForMedia(media.id);
         return media;
+    }
+
+    private void setVariantUrl(Map<String, Object> metadata, String key, String url) {
+        if (url == null || url.isBlank()) {
+            metadata.remove(key);
+        } else {
+            metadata.put(key, url);
+        }
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
@@ -880,7 +891,7 @@ public class MediaManagementService {
             Log.warn("占位图生成失败，保留原图: " + exception.getMessage());
         }
 
-        String webpKey = baseName + ".webp";
+        String webpKey = baseName + "_webp.webp";
         Path webpPath = uploadRoot.resolve(webpKey);
         try {
             imageProcessingService.convertToWebp(target, webpPath);
@@ -1275,29 +1286,14 @@ public class MediaManagementService {
             }
         }
 
-        String originalUrl = protectedMedia ? null : media.url;
-        if (!protectedMedia && media.storageClasses != null) {
-            String bestOriginalUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
-            if (bestOriginalUrl != null && !bestOriginalUrl.isBlank()) {
-                originalUrl = bestOriginalUrl;
-            }
-        }
+        String originalUrl = protectedMedia ? null : media.storageClasses == null
+                ? media.url : storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
 
-        String thumbnailUrl = protectedMedia ? null : metadataString(media, "thumbnailUrl");
-        if (!protectedMedia && media.storageClasses != null) {
-            String bestThumbnailUrl = storageService.getBestAccessUrl(media, VariantType.WEBP);
-            if (bestThumbnailUrl != null && !bestThumbnailUrl.isBlank()) {
-                thumbnailUrl = bestThumbnailUrl;
-            }
-        }
+        String thumbnailUrl = protectedMedia ? null : media.storageClasses == null
+                ? metadataString(media, "thumbnailUrl") : storageService.getBestAccessUrl(media, VariantType.WEBP);
 
-        String previewUrl = protectedMedia ? null : metadataString(media, "previewUrl");
-        if (!protectedMedia && media.storageClasses != null) {
-            String bestPreviewUrl = storageService.getBestAccessUrl(media, VariantType.PLACEHOLDER);
-            if (bestPreviewUrl != null && !bestPreviewUrl.isBlank()) {
-                previewUrl = bestPreviewUrl;
-            }
-        }
+        String previewUrl = protectedMedia ? null : media.storageClasses == null
+                ? metadataString(media, "previewUrl") : storageService.getBestAccessUrl(media, VariantType.PLACEHOLDER);
         Map<String, Object> safeStorageClasses = protectedMedia
                 ? null : sanitizeStorageClasses(media.storageClasses);
         Map<String, Object> safeMetadata = protectedMedia

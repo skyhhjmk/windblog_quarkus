@@ -6,6 +6,8 @@ import com.biliwind.blog.edge.MutinyEdgeNodeServiceGrpc;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
+import com.biliwind.blog.service.storage.StorageService;
+import com.biliwind.blog.service.storage.VariantType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -48,6 +50,8 @@ public class EdgeDataSyncService {
     NodeRoleService nodeRoleService;
     @Inject
     com.biliwind.blog.service.PostAccessService postAccessService;
+    @Inject
+    StorageService storageService;
 
     @Inject
     RepostPolicyCatalog repostPolicyCatalog;
@@ -191,7 +195,8 @@ public class EdgeDataSyncService {
         ObjectNode publicMedia = objectMapper.createObjectNode();
         putLong(publicMedia, "id", media.id);
         putText(publicMedia, "storageKey", media.storageKey);
-        putText(publicMedia, "url", media.url);
+        putText(publicMedia, "url", media.storageClasses == null ? media.url
+                : storageService.getBestAccessUrl(media, VariantType.ORIGINAL));
         putShort(publicMedia, "mediaType", media.mediaType);
         putText(publicMedia, "mimeType", media.mimeType);
         putText(publicMedia, "fileName", media.fileName);
@@ -200,8 +205,16 @@ public class EdgeDataSyncService {
         putInteger(publicMedia, "width", media.width);
         putInteger(publicMedia, "height", media.height);
         publicMedia.set("alt", objectMapper.valueToTree(media.alt));
-        publicMedia.set("metadata", safePublicMediaMetadata(media.metadata));
-        publicMedia.set("storageClasses", safePublicStorageClasses(media.storageClasses));
+        ObjectNode safeMetadata = safePublicMediaMetadata(media.metadata);
+        if (media.storageClasses != null) {
+            putCompliantVariantUrl(safeMetadata, "webpUrl", media, VariantType.WEBP);
+            putCompliantVariantUrl(safeMetadata, "thumbnailUrl", media, VariantType.WEBP);
+            putCompliantVariantUrl(safeMetadata, "placeholderUrl", media, VariantType.PLACEHOLDER);
+            putCompliantVariantUrl(safeMetadata, "previewUrl", media, VariantType.PLACEHOLDER);
+            putCompliantVariantUrl(safeMetadata, "coverUrl", media, VariantType.COVER);
+        }
+        publicMedia.set("metadata", safeMetadata);
+        publicMedia.set("storageClasses", safePublicStorageClasses(media));
         publicMedia.set("visibilityRegions", objectMapper.valueToTree(media.visibilityRegions));
         publicMedia.set("hiddenRegions", objectMapper.valueToTree(media.hiddenRegions));
         publicMedia.set("syncStorageClasses", objectMapper.valueToTree(media.syncStorageClasses));
@@ -232,19 +245,33 @@ public class EdgeDataSyncService {
         return result;
     }
 
-    private ObjectNode safePublicStorageClasses(Map<String, Object> storageClasses) {
+    private void putCompliantVariantUrl(ObjectNode metadata, String key, Media media, VariantType variant) {
+        String url = storageService.getBestAccessUrl(media, variant);
+        if (url == null || url.isBlank()) {
+            metadata.remove(key);
+        } else {
+            metadata.put(key, url);
+        }
+    }
+
+    private ObjectNode safePublicStorageClasses(Media media) {
         ObjectNode result = objectMapper.createObjectNode();
+        Map<String, Object> storageClasses = media.storageClasses;
         if (storageClasses == null) {
             return result;
         }
         for (Map.Entry<String, Object> providerEntry : storageClasses.entrySet()) {
+            if (!storageService.isNormalAccessAllowed(media, providerEntry.getKey())) {
+                continue;
+            }
             if (!(providerEntry.getValue() instanceof Map<?, ?> providerData)) {
                 continue;
             }
             ObjectNode variants = objectMapper.createObjectNode();
             for (Map.Entry<?, ?> variantEntry : providerData.entrySet()) {
                 if (!(variantEntry.getKey() instanceof String variantName)
-                        || !(variantEntry.getValue() instanceof Map<?, ?> variantData)) {
+                        || !(variantEntry.getValue() instanceof Map<?, ?> variantData)
+                        || !"synced".equals(variantData.get("status"))) {
                     continue;
                 }
                 ObjectNode safeVariant = objectMapper.createObjectNode();

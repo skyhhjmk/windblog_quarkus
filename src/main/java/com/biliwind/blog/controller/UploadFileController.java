@@ -60,13 +60,20 @@ public class UploadFileController {
                 throw new NotFoundException();
             }
             if (media.storageClasses != null) {
-                String bestUrl = storageService.getBestAccessUrl(media, VariantType.ORIGINAL);
-                if (bestUrl != null && !bestUrl.isBlank()) {
-                    if (isSameRequestUrl(bestUrl, uriInfo) == false) {
-                        return Response.status(Response.Status.FOUND)
-                                .header("Location", bestUrl)
-                                .build();
-                    }
+                VariantType variant = fileName.endsWith("_placeholder.jpg")
+                        ? VariantType.PLACEHOLDER : fileName.endsWith("_cover.jpg")
+                        ? VariantType.COVER : fileName.endsWith("_webp.webp")
+                        ? VariantType.WEBP : fileName.endsWith(".webp")
+                        && !fileName.equals(media.storageKey)
+                        ? VariantType.WEBP : VariantType.ORIGINAL;
+                String bestUrl = storageService.getBestAccessUrl(media, variant);
+                if (bestUrl == null || bestUrl.isBlank()) {
+                    throw new NotFoundException();
+                }
+                if (!isSameRequestUrl(bestUrl, uriInfo)) {
+                    return Response.status(Response.Status.FOUND)
+                            .header("Location", bestUrl)
+                            .build();
                 }
             }
         } catch (NotFoundException notFoundException) {
@@ -132,7 +139,7 @@ public class UploadFileController {
     }
 
     static String extractGeneratedVariantBase(String fileName) {
-        String[] suffixes = {"_placeholder.jpg", "_cover.jpg", "_p.jpg", ".webp"};
+        String[] suffixes = {"_placeholder.jpg", "_cover.jpg", "_p.jpg", "_webp.webp", ".webp"};
         for (String suffix : suffixes) {
             if (fileName.endsWith(suffix) && fileName.length() > suffix.length()) {
                 return fileName.substring(0, fileName.length() - suffix.length());

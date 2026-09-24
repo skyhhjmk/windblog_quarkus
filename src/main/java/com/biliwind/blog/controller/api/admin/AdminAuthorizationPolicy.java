@@ -88,6 +88,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static boolean isHighRiskAction(String method, String path, String action) {
+        if (path.startsWith("/api/admin/storage/sync/restore/") && "POST".equals(method)) {
+            return true;
+        }
         if (path.endsWith("/deployment-zip") || "media.download_original".equals(action)) {
             return true;
         }

@@ -17,6 +17,7 @@ public class LocalFsStorageClass implements StorageClass {
 
     private String name;
     private Path rootPath;
+    private Path encryptedBackupRoot;
     private String baseUrl;
 
     @Override
@@ -58,11 +59,15 @@ public class LocalFsStorageClass implements StorageClass {
         } else {
             this.baseUrl = "/uploads";
         }
+        this.rootPath = this.rootPath.toAbsolutePath().normalize();
+        this.encryptedBackupRoot = this.rootPath.resolveSibling(
+                this.rootPath.getFileName() + "-encrypted-backups").normalize();
 
         try {
             if (!Files.exists(this.rootPath)) {
                 Files.createDirectories(this.rootPath);
             }
+            Files.createDirectories(this.encryptedBackupRoot);
         } catch (Exception e) {
             throw new StorageException("Failed to initialize LocalFsStorageClass: " + e.getMessage(), e);
         }
@@ -91,7 +96,7 @@ public class LocalFsStorageClass implements StorageClass {
     @Override
     public String upload(InputStream data, String targetPath, String contentType) throws StorageException {
         try {
-            Path fullPath = rootPath.resolve(targetPath);
+            Path fullPath = resolvePath(targetPath);
             Path parentDir = fullPath.getParent();
             if (parentDir != null) {
                 Files.createDirectories(parentDir);
@@ -109,7 +114,7 @@ public class LocalFsStorageClass implements StorageClass {
     @Override
     public void delete(String storagePath) throws StorageException {
         try {
-            Path fullPath = rootPath.resolve(storagePath);
+            Path fullPath = resolvePath(storagePath);
             Files.deleteIfExists(fullPath);
         } catch (Exception e) {
             throw new StorageException("Failed to delete file from local FS", e);
@@ -118,14 +123,14 @@ public class LocalFsStorageClass implements StorageClass {
 
     @Override
     public boolean exists(String storagePath) {
-        Path fullPath = rootPath.resolve(storagePath);
+        Path fullPath = resolvePath(storagePath);
         return Files.exists(fullPath);
     }
 
     @Override
     public InputStream download(String storagePath) throws StorageException {
         try {
-            Path fullPath = rootPath.resolve(storagePath);
+            Path fullPath = resolvePath(storagePath);
             return Files.newInputStream(fullPath);
         } catch (Exception e) {
             throw new StorageException("Failed to download file from local FS", e);
@@ -139,6 +144,9 @@ public class LocalFsStorageClass implements StorageClass {
 
     @Override
     public String getPublicUrl(String storagePath) {
+        if (storagePath != null && storagePath.startsWith("encrypted-backup/")) {
+            return null;
+        }
         String base = baseUrl;
         if (!base.endsWith("/")) {
             base = base + "/";
@@ -148,5 +156,19 @@ public class LocalFsStorageClass implements StorageClass {
             path = storagePath.substring(1);
         }
         return base + path;
+    }
+
+    private Path resolvePath(String key) {
+        if (key == null || key.startsWith("/") || key.contains("\\") || key.contains("..")) {
+            throw new StorageException("Invalid storage path");
+        }
+        boolean encrypted = key.startsWith("encrypted-backup/");
+        Path root = encrypted ? encryptedBackupRoot : rootPath;
+        Path relative = Path.of(encrypted ? key.substring("encrypted-backup/".length()) : key);
+        Path resolved = root.resolve(relative).normalize();
+        if (!resolved.startsWith(root) || resolved.equals(root)) {
+            throw new StorageException("Invalid storage path");
+        }
+        return resolved;
     }
 }

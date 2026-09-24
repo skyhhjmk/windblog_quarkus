@@ -127,9 +127,13 @@ public class AdminStorageController {
         entity.cdnEnabled = request.cdnEnabled() != null ? request.cdnEnabled() : false;
         entity.serviceRegion = normalizeOptionalText(request.serviceRegion());
         entity.contentRegions = normalizeContentRegions(request.contentRegions());
+        entity.excludedContentRegions = normalizeContentRegions(request.excludedContentRegions());
+        entity.allowEncryptedBackup = Boolean.TRUE.equals(request.allowEncryptedBackup());
         entity.priority = request.priority() != null ? request.priority() : 0;
 
         entity.persist();
+        rejectIfNoNormalPlacement();
+        storageService.reloadProviders();
         invalidateMediaCache();
         return Response.ok(StorageClassResponse.fromEntity(entity, storageConfigProtector)).build();
     }
@@ -203,9 +207,17 @@ public class AdminStorageController {
         if (request.contentRegions() != null) {
             existing.contentRegions = normalizeContentRegions(request.contentRegions());
         }
+        if (request.excludedContentRegions() != null) {
+            existing.excludedContentRegions = normalizeContentRegions(request.excludedContentRegions());
+        }
+        if (request.allowEncryptedBackup() != null) {
+            existing.allowEncryptedBackup = request.allowEncryptedBackup();
+        }
         existing.priority = request.priority() != null ? request.priority() : existing.priority;
 
         existing.persist();
+        rejectIfNoNormalPlacement();
+        storageService.reloadProviders();
         invalidateMediaCache();
         return Response.ok(StorageClassResponse.fromEntity(existing, storageConfigProtector)).build();
     }
@@ -221,6 +233,8 @@ public class AdminStorageController {
         }
         existing.isEnabled = false;
         existing.persist();
+        rejectIfNoNormalPlacement();
+        storageService.reloadProviders();
         invalidateMediaCache();
         return Response.noContent().build();
     }
@@ -280,7 +294,7 @@ public class AdminStorageController {
                                         status = statusObj.toString();
                                     }
                                     totalVariants++;
-                                    if ("synced".equals(status)) {
+                                    if ("synced".equals(status) || "backup_synced".equals(status)) {
                                         syncedCount++;
                                     } else if ("pending".equals(status)) {
                                         pendingCount++;
@@ -352,6 +366,7 @@ public class AdminStorageController {
 
                 Map<String, Object> safeVariant = new LinkedHashMap<>();
                 copySafeScalar(variantValue, safeVariant, "status");
+                copySafeScalar(variantValue, safeVariant, "mode");
                 copySafeScalar(variantValue, safeVariant, "size");
                 safeVariants.put(variantName, safeVariant);
             }
@@ -382,6 +397,32 @@ public class AdminStorageController {
         storageService.scheduleSyncForAllPending();
         return Response.noContent().build();
     }
+
+    @POST
+    @Path("/sync/restore/{mediaId}")
+    public Response restoreEncryptedBackup(@PathParam("mediaId") Long mediaId,
+                                           RestoreBackupRequest request) {
+        edgeWriteGuard.rejectWriteOnEdge("恢复加密媒体备份");
+        if (request == null || request.storageClassName() == null || request.variantType() == null) {
+            throw new BadRequestException("目标存储类和媒体变体不能为空");
+        }
+        com.biliwind.blog.service.storage.VariantType variant;
+        try {
+            variant = com.biliwind.blog.service.storage.VariantType.valueOf(
+                    request.variantType().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new BadRequestException("媒体变体无效");
+        }
+        com.biliwind.blog.service.storage.SyncResult result = storageService.restoreFromEncryptedBackup(
+                mediaId, request.storageClassName(), variant);
+        if (!result.success()) {
+            return Response.status(Response.Status.CONFLICT)
+                    .entity(Map.of("success", false, "message", result.errorMessage())).build();
+        }
+        return Response.ok(Map.of("success", true)).build();
+    }
+
+    public record RestoreBackupRequest(String storageClassName, String variantType) {}
 
     private StorageClass findLoadedStorageClass(String name) {
         StorageClass primary = storageService.getPrimaryStorageClass();
@@ -446,5 +487,13 @@ public class AdminStorageController {
 
     private void invalidateMediaCache() {
         cacheService.deletePattern(CacheService.Keys.MEDIA_META_PREFIX + "*");
+    }
+
+    private void rejectIfNoNormalPlacement() {
+        Long mediaId = storageService.firstMediaWithoutNormalPlacement();
+        if (mediaId != null) {
+            throw new WebApplicationException("存储策略会使媒体 " + mediaId + " 失去全部普通副本落点",
+                    Response.Status.CONFLICT);
+        }
     }
 }

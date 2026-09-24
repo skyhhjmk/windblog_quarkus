@@ -57,6 +57,14 @@ public class StorageClassEntity extends PanacheEntityBase {
     @Column(name = "content_regions", columnDefinition = "jsonb")
     public List<String> contentRegions;
 
+    /** Content regions that may only be stored here as an encrypted backup. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "excluded_content_regions", columnDefinition = "jsonb")
+    public List<String> excludedContentRegions;
+
+    @Column(name = "allow_encrypted_backup", nullable = false)
+    public Boolean allowEncryptedBackup = false;
+
     @Column(nullable = false)
     public Integer priority = 0;
 

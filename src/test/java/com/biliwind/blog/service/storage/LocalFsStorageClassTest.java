@@ -76,4 +76,16 @@ public class LocalFsStorageClassTest {
         String url = provider.getPublicUrl(path);
         assertEquals("/uploads/images/logo.png", url);
     }
+
+    @Test
+    void encryptedBackupUsesPrivateSiblingAndHasNoPublicUrl() throws IOException {
+        String key = "encrypted-backup/v1/original/123e4567-e89b-12d3-a456-426614174000.wbak";
+        provider.upload(new ByteArrayInputStream("ciphertext".getBytes()), key,
+                "application/octet-stream");
+        assertTrue(provider.exists(key));
+        assertFalse(Files.exists(tempDir.resolve("uploads").resolve(key)));
+        assertNull(provider.getPublicUrl(key));
+        assertThrows(StorageException.class, () -> provider.upload(
+                new ByteArrayInputStream(new byte[0]), "../escape", "application/octet-stream"));
+    }
 }

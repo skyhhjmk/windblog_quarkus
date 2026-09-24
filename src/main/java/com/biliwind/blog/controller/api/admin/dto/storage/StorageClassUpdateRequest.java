@@ -11,6 +11,8 @@ public record StorageClassUpdateRequest(
         Boolean cdnEnabled,
         String serviceRegion,
         java.util.List<String> contentRegions,
+        java.util.List<String> excludedContentRegions,
+        Boolean allowEncryptedBackup,
         Integer priority
 ) {
 }

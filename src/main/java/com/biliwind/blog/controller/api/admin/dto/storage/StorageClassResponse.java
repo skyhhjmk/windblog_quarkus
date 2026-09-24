@@ -18,6 +18,8 @@ public record StorageClassResponse(
         Boolean cdnEnabled,
         String serviceRegion,
         java.util.List<String> contentRegions,
+        java.util.List<String> excludedContentRegions,
+        Boolean allowEncryptedBackup,
         Integer priority
 ) {
     public static StorageClassResponse fromEntity(StorageClassEntity entity) {
@@ -35,6 +37,8 @@ public record StorageClassResponse(
                 entity.cdnEnabled,
                 entity.serviceRegion,
                 entity.contentRegions,
+                entity.excludedContentRegions,
+                entity.allowEncryptedBackup,
                 entity.priority
         );
     }
@@ -55,6 +59,8 @@ public record StorageClassResponse(
                 entity.cdnEnabled,
                 entity.serviceRegion,
                 entity.contentRegions,
+                entity.excludedContentRegions,
+                entity.allowEncryptedBackup,
                 entity.priority
         );
     }

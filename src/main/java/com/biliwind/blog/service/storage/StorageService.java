@@ -16,6 +16,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @ApplicationScoped
@@ -24,7 +27,7 @@ public class StorageService {
 
     private static final Logger log = LoggerFactory.getLogger(StorageService.class);
 
-    private final List<StorageClass> enabledProviders = new ArrayList<>();
+    private volatile List<StorageClass> enabledProviders = List.of();
     @Inject
     ObjectMapper objectMapper;
 
@@ -34,7 +37,13 @@ public class StorageService {
     EntityManager entityManager;
     @Inject
     com.biliwind.blog.service.OutboxEventService outboxEventService;
-    private StorageClass primaryProvider;
+    @Inject
+    StorageRegionPolicy regionPolicy;
+    @Inject
+    EncryptedBackupCodec backupCodec;
+    @Inject
+    jakarta.enterprise.inject.Instance<StorageService> selfProxy;
+    private volatile StorageClass primaryProvider;
 
     @PostConstruct
     void init() {
@@ -71,40 +80,41 @@ public class StorageService {
                     defaultProvider.persist();
                 }
 
-                List<StorageClassEntity> entities = StorageClassEntity.list("isEnabled = true ORDER BY priority ASC");
-                for (StorageClassEntity entity : entities) {
-                    StorageClass provider = createProvider(entity);
-                    if (provider == null) {
-                        continue;
-                    }
-                    try {
-                        String runtimeConfigJson = storageConfigProtector.revealForRuntime(entity.configJson);
-                        JsonNode configJson = objectMapper.readTree(runtimeConfigJson);
-                        ArrayList<String> supportedTypes = parseSupportedTypes(entity.supportedTypes);
-                        StorageClassConfig config = new StorageClassConfig(
-                                configJson, supportedTypes, entity.cdnDomain, entity.cdnEnabled);
-                        provider.initialize(config);
-
-                        enabledProviders.add(provider);
-                        if (entity.isPrimary != null && entity.isPrimary) {
-                            if (primaryProvider != null) {
-                                throw new IllegalStateException("Multiple primary storage providers found!");
-                            }
-                            primaryProvider = provider;
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to initialize storage provider: {}", entity.name, e);
-                    }
-                }
-
-                if (primaryProvider == null) {
-                    log.warn("No primary storage provider configured.");
-                } else {
-                    log.info("StorageService initialized with {} providers, primary: {}",
-                            enabledProviders.size(), primaryProvider.getName());
-                }
+                reloadProviders();
             }
         });
+    }
+
+    /** Atomically publish a fresh provider snapshot after admin changes. */
+    @Transactional
+    public synchronized void reloadProviders() {
+        List<StorageClass> loaded = new ArrayList<>();
+        StorageClass primary = null;
+        List<StorageClassEntity> entities = StorageClassEntity.list("isEnabled = true ORDER BY priority ASC");
+        for (StorageClassEntity entity : entities) {
+            StorageClass provider = createProvider(entity);
+            if (provider == null) {
+                continue;
+            }
+            try {
+                String runtimeConfigJson = storageConfigProtector.revealForRuntime(entity.configJson);
+                JsonNode configJson = objectMapper.readTree(runtimeConfigJson);
+                provider.initialize(new StorageClassConfig(configJson,
+                        parseSupportedTypes(entity.supportedTypes), entity.cdnDomain, entity.cdnEnabled));
+                loaded.add(provider);
+                if (Boolean.TRUE.equals(entity.isPrimary)) {
+                    if (primary != null) {
+                        throw new IllegalStateException("Multiple primary storage providers found");
+                    }
+                    primary = provider;
+                }
+            } catch (Exception exception) {
+                log.error("Failed to initialize storage provider: {}", entity.name, exception);
+            }
+        }
+        primaryProvider = primary;
+        enabledProviders = List.copyOf(loaded);
+        log.info("Storage providers reloaded: {} enabled", loaded.size());
     }
 
     private ArrayList<String> parseSupportedTypes(String supportedTypesStr) {
@@ -224,6 +234,91 @@ public class StorageService {
         return new UploadResult(storedPath, 0, "");
     }
 
+    /** Install processed variants from private staging on a region-compliant normal provider. */
+    public InitialStorage installProcessedMedia(Media media, Map<VariantType, String> stagedVariants,
+                                                Path stagingRoot) {
+        StorageClass source = null;
+        for (StorageClass candidate : enabledProviders) {
+            StorageClassEntity entity = getProviderEntityByName(candidate.getName());
+            if (regionPolicy.placement(media, entity) == StorageRegionPolicy.Placement.NORMAL
+                    && candidate.isAvailable()
+                    && stagedVariants.keySet().stream().allMatch(variant ->
+                    candidate.supportsVariant(variantContentType(media.mimeType, variant), variant.name()))) {
+                source = candidate;
+                break;
+            }
+        }
+        if (source == null) {
+            throw new StorageException("No region-compliant storage class for media upload");
+        }
+        Map<String, Object> variants = new LinkedHashMap<>();
+        Map<String, String> urls = new HashMap<>();
+        List<String> uploaded = new ArrayList<>();
+        try {
+            for (Map.Entry<VariantType, String> entry : stagedVariants.entrySet()) {
+                VariantType variant = entry.getKey();
+                Path staged = stagingRoot.resolve(entry.getValue()).normalize();
+                if (!staged.startsWith(stagingRoot) || !Files.isRegularFile(staged)) {
+                    throw new StorageException("Processed media variant is missing");
+                }
+                String uuid = canonicalUuid(media, variant, entry.getValue());
+                String path = canonicalNormalPath(entry.getValue(), uuid, variant, media.mimeType);
+                String stored;
+                try (InputStream input = Files.newInputStream(staged)) {
+                    stored = source.upload(input, path, variantContentType(media.mimeType, variant));
+                }
+                uploaded.add(stored);
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("status", "synced");
+                info.put("mode", "NORMAL");
+                info.put("path", stored);
+                info.put("sha256", EncryptedBackupCodec.sha256Hex(staged));
+                info.put("size", Files.size(staged));
+                variants.put(variant.name().toLowerCase(), info);
+                urls.put(variant.name(), source.getPublicUrl(stored));
+            }
+            return new InitialStorage(source.getName(), variants, urls);
+        } catch (Exception exception) {
+            for (String stored : uploaded) {
+                try {
+                    source.delete(stored);
+                } catch (Exception cleanupFailure) {
+                    log.warn("Unable to remove partial initial media copy from {}", source.getName(), cleanupFailure);
+                }
+            }
+            throw new StorageException("Unable to install media on region-compliant storage", exception);
+        }
+    }
+
+    public record InitialStorage(String storageClassName, Map<String, Object> variants,
+                                 Map<String, String> urls) {}
+
+    public boolean hasNormalPlacement(Media media) {
+        for (StorageClassEntity entity : getAllStorageClassEntities()) {
+            if (regionPolicy.placement(media, entity) == StorageRegionPolicy.Placement.NORMAL) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Long firstMediaWithoutNormalPlacement() {
+        long cursor = 0;
+        while (true) {
+            List<Media> batch = Media.find("deletedAt is null and id > ?1 order by id", cursor)
+                    .page(Page.ofSize(200)).list();
+            if (batch.isEmpty()) {
+                return null;
+            }
+            for (Media media : batch) {
+                if (!hasNormalPlacement(media)) {
+                    return media.id;
+                }
+                cursor = media.id;
+            }
+        }
+    }
+
     private String generateTargetPath(VariantType variant, String contentType) {
         String yearMonth = getCurrentYearMonth();
         String fileExtension = getExtensionFromMime(contentType, variant);
@@ -265,20 +360,41 @@ public class StorageService {
 
     public void scheduleSync(Long mediaId, Set<VariantType> variants) {
         Media media = Media.findById(mediaId);
-        if (media == null) {
+        if (media == null || media.deletedAt != null) {
             return;
         }
-        List<StorageClass> nonPrimaryStorageClasses = getNonPrimaryStorageClasses();
-        StorageClass originStorageClass = findOriginLoadedStorageClass();
-        if (originStorageClass != null) {
-            scheduleSyncToStorageClass(media, originStorageClass, variants);
+        for (StorageClass storageClass : enabledProviders) {
+            StorageClassEntity entity = getProviderEntityByName(storageClass.getName());
+            if (regionPolicy.placement(media, entity) == StorageRegionPolicy.Placement.NORMAL) {
+                scheduleSyncToStorageClass(media, storageClass, variants);
+            }
         }
-        for (StorageClass storageClass : nonPrimaryStorageClasses) {
-            if (originStorageClass != null && originStorageClass.getName().equals(storageClass.getName())) {
+        for (StorageClass storageClass : enabledProviders) {
+            StorageClassEntity entity = getProviderEntityByName(storageClass.getName());
+            if (regionPolicy.placement(media, entity) == StorageRegionPolicy.Placement.ENCRYPTED_BACKUP) {
+                for (VariantType variant : variants) {
+                    if (hasHealthyNormalReplica(media, variant, storageClass.getName())) {
+                        scheduleSyncToStorageClass(media, storageClass, Set.of(variant));
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean hasHealthyNormalReplica(Media media, VariantType variant, String excludedName) {
+        for (StorageClass provider : enabledProviders) {
+            String name = provider.getName();
+            if (name.equals(excludedName) || !isNormalSynced(media, name, variant)) {
                 continue;
             }
-            scheduleSyncToStorageClass(media, storageClass, variants);
+            StorageClassEntity entity = getProviderEntityByName(name);
+            String path = getSourcePathFromStorageClasses(media, variant, name);
+            if (regionPolicy.placement(media, entity) == StorageRegionPolicy.Placement.NORMAL
+                    && path != null && provider.exists(path)) {
+                return true;
+            }
         }
+        return false;
     }
 
     private void scheduleSyncToStorageClass(Media media, StorageClass storageClass, Set<VariantType> variants) {
@@ -287,6 +403,18 @@ public class StorageService {
             return;
         }
         for (VariantType variant : variants) {
+            if (isNormalSynced(media, storageClassName, variant)
+                    && regionPolicy.placement(media, getProviderEntityByName(storageClassName))
+                    == StorageRegionPolicy.Placement.NORMAL
+                    && copyExists(media, storageClass, variant)) {
+                continue;
+            }
+            if (isBackupSynced(media, storageClassName, variant)
+                    && regionPolicy.placement(media, getProviderEntityByName(storageClassName))
+                    == StorageRegionPolicy.Placement.ENCRYPTED_BACKUP
+                    && copyExists(media, storageClass, variant)) {
+                continue;
+            }
             try {
                 outboxEventService.enqueue(
                         "STORAGE_SYNC:" + media.id + ":" + storageClassName + ":" + variant.name(),
@@ -351,7 +479,7 @@ public class StorageService {
     public SyncResult executeSync(Long mediaId, String storageClassName, VariantType variant, int retryCount) {
         try {
             Media media = Media.findById(mediaId);
-            if (media == null) {
+            if (media == null || media.deletedAt != null) {
                 String errorMsg = "Media not found: " + mediaId;
                 log.error(errorMsg);
                 return new SyncResult(false, errorMsg);
@@ -369,21 +497,22 @@ public class StorageService {
                 return new SyncResult(false, errorMsg);
             }
 
-            int currentVersion = media.version;
-            boolean casSuccess = updateVariantStatusWithLock(
-                    mediaId, storageClassName, variant, "syncing", null, null, currentVersion);
-            if (!casSuccess) {
-                log.info("CAS update failed for mediaId={}, provider={}, variant={}, version={}",
-                        mediaId, storageClassName, variant.name(), currentVersion);
-                return new SyncResult(false, "CAS version mismatch");
+            StorageClassEntity targetEntity = getProviderEntityByName(storageClassName);
+            StorageRegionPolicy.Placement placement = regionPolicy.placement(media, targetEntity);
+            if (placement == StorageRegionPolicy.Placement.SKIP) {
+                return new SyncResult(false, "Storage policy excludes this media");
             }
+            if (placement == StorageRegionPolicy.Placement.ENCRYPTED_BACKUP
+                    && !hasHealthyNormalReplica(media, variant, storageClassName)) {
+                return new SyncResult(false, "Awaiting compliant normal copy");
+            }
+
+            String oldPath = getSourcePathFromStorageClasses(media, variant, storageClassName);
 
             StorageClass targetProvider = findProviderByName(storageClassName);
             if (targetProvider == null) {
                 String errorMsg = "Target provider not found: " + storageClassName;
                 log.error(errorMsg);
-                updateVariantStatus(
-                        mediaId, storageClassName, variant, "failed", null, null, currentVersion + 1);
                 return new SyncResult(false, errorMsg);
             }
 
@@ -391,30 +520,63 @@ public class StorageService {
             if (syncSource == null) {
                 String errorMsg = "No source path found for variant: " + variant.name();
                 log.error(errorMsg);
-                updateVariantStatus(
-                        mediaId, storageClassName, variant, "failed", null, null, currentVersion + 1);
                 return new SyncResult(false, errorMsg);
             }
             if (syncSource.waitingForOrigin) {
                 String errorMsg = "Origin storage class is not ready for variant: " + variant.name();
                 log.info(errorMsg);
-                updateVariantStatus(
-                        mediaId, storageClassName, variant, "pending", null, null, currentVersion + 1);
                 return new SyncResult(false, errorMsg);
             }
 
-            String targetPath = generateTargetPath(variant, media.mimeType);
+            String uuid = canonicalUuid(media, variant, syncSource.path);
+            String targetPath = placement == StorageRegionPolicy.Placement.ENCRYPTED_BACKUP
+                    ? "encrypted-backup/v1/" + variant.name().toLowerCase() + "/" + uuid + ".wbak"
+                    : canonicalNormalPath(syncSource.path, uuid, variant, media.mimeType);
             String uploadedPath;
-            try (InputStream downloadStream = syncSource.storageClass.download(syncSource.path)) {
-                uploadedPath = targetProvider.upload(downloadStream, targetPath, media.mimeType);
+            String sha256;
+            Path sourceFile = Files.createTempFile("windblog-sync-source-", ".tmp");
+            Path payload = null;
+            try {
+                try (InputStream downloadStream = syncSource.storageClass.download(syncSource.path)) {
+                    Files.copy(downloadStream, sourceFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+                sha256 = EncryptedBackupCodec.sha256Hex(sourceFile);
+                Object rawSource = media.storageClasses.get(syncSource.storageClass.getName());
+                if (rawSource instanceof Map<?, ?> sourceVariants
+                        && sourceVariants.get(variant.name().toLowerCase()) instanceof Map<?, ?> sourceEntry
+                        && sourceEntry.get("sha256") instanceof String expectedSha
+                        && !expectedSha.equals(sha256)) {
+                    throw new java.io.IOException("Source checksum changed during replication");
+                }
+                payload = placement == StorageRegionPolicy.Placement.ENCRYPTED_BACKUP
+                        ? backupCodec.encrypt(Files.newInputStream(sourceFile), uuid) : sourceFile;
+                try (InputStream data = Files.newInputStream(payload)) {
+                    uploadedPath = targetProvider.upload(data, targetPath,
+                            placement == StorageRegionPolicy.Placement.ENCRYPTED_BACKUP
+                                    ? "application/octet-stream" : variantContentType(media.mimeType, variant));
+                }
+            } finally {
+                Files.deleteIfExists(sourceFile);
+                if (payload != null && !payload.equals(sourceFile)) {
+                    Files.deleteIfExists(payload);
+                }
             }
 
-            long fileSize = 0;
-            String etag = "";
-            Media refreshedMedia = Media.findById(mediaId);
-            int newVersion = refreshedMedia.version;
-            updateVariantStatus(
-                    mediaId, storageClassName, variant, "synced", uploadedPath, fileSize, newVersion);
+            int newVersion = databaseVersion(mediaId);
+            boolean recorded = selfProxy.get().updateVariantStatusWithLock(mediaId, storageClassName, variant,
+                    placement == StorageRegionPolicy.Placement.ENCRYPTED_BACKUP
+                            ? "backup_synced" : "synced", uploadedPath, null, sha256, newVersion);
+            if (!recorded) {
+                return new SyncResult(false, "Concurrent media update");
+            }
+            if (oldPath != null && !oldPath.equals(uploadedPath)) {
+                try {
+                    targetProvider.delete(oldPath);
+                } catch (Exception cleanupFailure) {
+                    log.warn("Unable to remove superseded storage copy: mediaId={}, storageClass={}",
+                            mediaId, storageClassName, cleanupFailure);
+                }
+            }
 
             return new SyncResult(true, null);
         } catch (Exception e) {
@@ -435,25 +597,182 @@ public class StorageService {
 
     private SyncSource findSyncSource(Media media, VariantType variant, String targetStorageClassName) {
         StorageClassEntity originStorageClass = findOriginStorageClass();
-        if (originStorageClass != null && !originStorageClass.name.equals(targetStorageClassName)) {
+        if (originStorageClass != null && !originStorageClass.name.equals(targetStorageClassName)
+                && isNormalSynced(media, originStorageClass.name, variant)) {
             String originPath = getSourcePathFromStorageClasses(media, variant, originStorageClass.name);
             if (originPath != null && !originPath.isEmpty()) {
                 StorageClass originProvider = findProviderByName(originStorageClass.name);
-                if (originProvider != null) {
+                if (originProvider != null && originProvider.exists(originPath)
+                        && sourceMatchesChecksum(media, variant, originProvider, originPath)) {
                     return new SyncSource(originProvider, originPath, false);
                 }
             }
-            if (shouldSyncToStorageClass(media, originStorageClass.name)) {
-                return new SyncSource(null, null, true);
-            }
         }
 
-        String primaryName = getPrimaryProviderName();
-        String primaryPath = getSourcePathFromStorageClasses(media, variant, primaryName);
-        if (primaryPath == null || primaryPath.isEmpty()) {
-            return null;
+        for (StorageClass provider : enabledProviders) {
+            if (provider.getName().equals(targetStorageClassName)) {
+                continue;
+            }
+            if (!isNormalSynced(media, provider.getName(), variant)) {
+                continue;
+            }
+            String path = getSourcePathFromStorageClasses(media, variant, provider.getName());
+            if (path != null && !path.isEmpty() && provider.exists(path)
+                    && sourceMatchesChecksum(media, variant, provider, path)) {
+                return new SyncSource(provider, path, false);
+            }
         }
-        return new SyncSource(primaryProvider, primaryPath, false);
+        return null;
+    }
+
+    private boolean sourceMatchesChecksum(Media media, VariantType variant,
+                                          StorageClass provider, String path) {
+        Object raw = media.storageClasses.get(provider.getName());
+        String expected = null;
+        if (raw instanceof Map<?, ?> variants
+                && variants.get(variant.name().toLowerCase()) instanceof Map<?, ?> entry
+                && entry.get("sha256") instanceof String checksum) {
+            expected = checksum;
+        }
+        Path checked = null;
+        try {
+            checked = Files.createTempFile("windblog-source-check-", ".tmp");
+            try (InputStream data = provider.download(path)) {
+                Files.copy(data, checked, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            if (expected == null || expected.equals(EncryptedBackupCodec.sha256Hex(checked))) {
+                return true;
+            }
+        } catch (Exception exception) {
+            log.warn("Storage source unavailable: mediaId={}, provider={}", media.id,
+                    provider.getName(), exception);
+        } finally {
+            if (checked != null) {
+                try {
+                    Files.deleteIfExists(checked);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        selfProxy.get().updateVariantStatusWithLock(media.id, provider.getName(), variant,
+                "corrupt", path, null, expected, databaseVersion(media.id));
+        return false;
+    }
+
+    private boolean isNormalSynced(Media media, String name, VariantType variant) {
+        if (media.storageClasses == null || !(media.storageClasses.get(name) instanceof Map<?, ?> variants)
+                || !(variants.get(variant.name().toLowerCase()) instanceof Map<?, ?> entry)) {
+            return false;
+        }
+        return "synced".equals(entry.get("status"));
+    }
+
+    private boolean isBackupSynced(Media media, String name, VariantType variant) {
+        if (media.storageClasses == null || !(media.storageClasses.get(name) instanceof Map<?, ?> variants)
+                || !(variants.get(variant.name().toLowerCase()) instanceof Map<?, ?> entry)) {
+            return false;
+        }
+        return "backup_synced".equals(entry.get("status"));
+    }
+
+    private boolean copyExists(Media media, StorageClass provider, VariantType variant) {
+        String path = getSourcePathFromStorageClasses(media, variant, provider.getName());
+        return path != null && provider.exists(path);
+    }
+
+    private String canonicalUuid(Media media, VariantType variant, String sourcePath) {
+        String base = media.storageKey == null ? "" : media.storageKey;
+        base = base.substring(base.lastIndexOf('/') + 1);
+        int dot = base.indexOf('.');
+        String candidate = dot < 0 ? base : base.substring(0, dot);
+        try {
+            return UUID.fromString(candidate).toString();
+        } catch (Exception ignored) {
+            return UUID.nameUUIDFromBytes((media.id + ":" + variant.name())
+                    .getBytes(StandardCharsets.UTF_8)).toString();
+        }
+    }
+
+    private String canonicalNormalPath(String sourcePath, String uuid, VariantType variant, String mimeType) {
+        String base = sourcePath.substring(sourcePath.lastIndexOf('/') + 1);
+        if (base.startsWith(uuid) && base.matches("[a-fA-F0-9-]{36}([_a-zA-Z0-9-]*)?\\.[a-zA-Z0-9]{1,8}")) {
+            return base;
+        }
+        return switch (variant) {
+            case WEBP -> uuid + "_webp.webp";
+            case PLACEHOLDER -> uuid + "_placeholder.jpg";
+            case COVER -> uuid + "_cover.jpg";
+            case RAW -> uuid + "_raw.bin";
+            case ORIGINAL -> uuid + getExtensionFromMime(mimeType, variant);
+        };
+    }
+
+    private String variantContentType(String originalMimeType, VariantType variant) {
+        return switch (variant) {
+            case WEBP -> "image/webp";
+            case PLACEHOLDER, COVER -> "image/jpeg";
+            default -> originalMimeType;
+        };
+    }
+
+    /** Explicit administrator recovery; ordinary download paths never call this method. */
+    public SyncResult restoreFromEncryptedBackup(Long mediaId, String targetName, VariantType variant) {
+        Media media = Media.findById(mediaId);
+        if (media == null || media.deletedAt != null || media.storageClasses == null) {
+            return new SyncResult(false, "Media is not available");
+        }
+        StorageClassEntity targetEntity = getProviderEntityByName(targetName);
+        if (regionPolicy.placement(media, targetEntity) != StorageRegionPolicy.Placement.NORMAL) {
+            return new SyncResult(false, "Target cannot hold a normal copy in this region");
+        }
+        StorageClass target = findProviderByName(targetName);
+        if (target == null) {
+            return new SyncResult(false, "Target storage class is unavailable");
+        }
+        String uuid = canonicalUuid(media, variant, media.storageKey);
+        for (StorageClass backup : enabledProviders) {
+            if (!isBackupSynced(media, backup.getName(), variant)) {
+                continue;
+            }
+            String backupPath = getSourcePathFromStorageClasses(media, variant, backup.getName());
+            if (backupPath == null || !backupPath.contains("encrypted-backup/")) {
+                continue;
+            }
+            Path restored = null;
+            try {
+                try (InputStream encrypted = backup.download(backupPath)) {
+                    restored = backupCodec.decrypt(encrypted, uuid);
+                }
+                String targetPath = canonicalNormalPath("", uuid, variant, media.mimeType);
+                String stored;
+                try (InputStream plaintext = Files.newInputStream(restored)) {
+                    stored = target.upload(plaintext, targetPath, variantContentType(media.mimeType, variant));
+                }
+                int version = databaseVersion(mediaId);
+                if (!selfProxy.get().updateVariantStatusWithLock(mediaId, targetName, variant, "synced", stored,
+                        Files.size(restored), EncryptedBackupCodec.sha256Hex(restored), version)) {
+                    return new SyncResult(false, "Concurrent media update; retry recovery");
+                }
+                return new SyncResult(true, null);
+            } catch (Exception exception) {
+                log.warn("Encrypted media restore failed: mediaId={}, source={}", mediaId,
+                        backup.getName(), exception);
+            } finally {
+                if (restored != null) {
+                    try {
+                        Files.deleteIfExists(restored);
+                    } catch (Exception cleanupFailure) {
+                        log.warn("Unable to delete private restore temporary file", cleanupFailure);
+                    }
+                }
+            }
+        }
+        return new SyncResult(false, "No valid encrypted backup can restore this variant");
+    }
+
+    private int databaseVersion(Long mediaId) {
+        return ((Number) entityManager.createNativeQuery("select version from media where id = ?1")
+                .setParameter(1, mediaId).getSingleResult()).intValue();
     }
 
     private StorageClassEntity findOriginStorageClass() {
@@ -508,11 +827,24 @@ public class StorageService {
     public boolean updateVariantStatusWithLock(Long mediaId, String storageClassName,
                                                VariantType variant, String status,
                                                String path, Long size, int expectedVersion) {
+        return updateVariantStatusWithLock(mediaId, storageClassName, variant,
+                status, path, size, null, expectedVersion);
+    }
+
+    @Transactional
+    public boolean updateVariantStatusWithLock(Long mediaId, String storageClassName,
+                                               VariantType variant, String status,
+                                               String path, Long size, String sha256,
+                                               int expectedVersion) {
         String variantKey = variant.name().toLowerCase();
         Map<String, Object> variantInfo = new LinkedHashMap<>();
         variantInfo.put("status", status);
         variantInfo.put("path", path);
         variantInfo.put("size", size);
+        variantInfo.put("mode", status.startsWith("backup_") ? "ENCRYPTED_BACKUP" : "NORMAL");
+        if (sha256 != null) {
+            variantInfo.put("sha256", sha256);
+        }
 
         String jsonPayload;
         try {
@@ -579,6 +911,9 @@ public class StorageService {
             if (!shouldReadFromStorageClass(media, storageClassName)) {
                 continue;
             }
+            if (!provider.exists(path)) {
+                continue;
+            }
 
             StorageClassEntity entity = getProviderEntityByName(storageClassName);
             if (entity != null && entity.cdnEnabled != null && entity.cdnEnabled
@@ -586,7 +921,10 @@ public class StorageService {
                 return "https://" + entity.cdnDomain + "/" + path;
             }
 
-            return provider.getPublicUrl(path);
+            String publicUrl = provider.getPublicUrl(path);
+            if (publicUrl != null && !publicUrl.isBlank()) {
+                return publicUrl;
+            }
         }
         return null;
     }
@@ -625,8 +963,13 @@ public class StorageService {
                 continue;
             }
             String path = pathObj.toString();
-
-            return provider.getSignedUrl(path, expiration);
+            if (!provider.exists(path)) {
+                continue;
+            }
+            String signedUrl = provider.getSignedUrl(path, expiration);
+            if (signedUrl != null && !signedUrl.isBlank()) {
+                return signedUrl;
+            }
         }
         return null;
     }
@@ -709,7 +1052,7 @@ public class StorageService {
                         providerVariants.put(variantKey, variantStatus);
 
                         status.totalVariants++;
-                        if ("synced".equals(variantStatus)) {
+                        if ("synced".equals(variantStatus) || "backup_synced".equals(variantStatus)) {
                             status.syncedCount++;
                         } else if ("pending".equals(variantStatus)) {
                             status.pendingCount++;
@@ -733,21 +1076,27 @@ public class StorageService {
             return;
         }
 
-        Map<String, Object> primaryStorageClassData = findPrimaryStorageClassData(media);
-        if (primaryStorageClassData == null || primaryStorageClassData.isEmpty()) {
+        Map<String, Object> sourceStorageData = null;
+        for (String name : media.storageClasses.keySet()) {
+            Object value = media.storageClasses.get(name);
+            if (value instanceof Map<?, ?> candidate && !candidate.isEmpty()) {
+                sourceStorageData = (Map<String, Object>) candidate;
+                break;
+            }
+        }
+        if (sourceStorageData == null) {
             return;
         }
 
         List<String> variantNames = new ArrayList<>();
-        for (String variantName : primaryStorageClassData.keySet()) {
+        for (String variantName : sourceStorageData.keySet()) {
             variantNames.add(variantName);
         }
 
-        List<StorageClassEntity> storageClasses = getNonPrimaryStorageClassEntities();
+        List<StorageClassEntity> storageClasses = getAllStorageClassEntities();
         for (StorageClassEntity storageClassEntity : storageClasses) {
             String storageClassName = storageClassEntity.name;
-            if (!shouldSyncToStorageClass(media, storageClassName)) {
-                media.storageClasses.remove(storageClassName);
+            if (regionPolicy.placement(media, storageClassEntity) == StorageRegionPolicy.Placement.SKIP) {
                 continue;
             }
             Object existingData = media.storageClasses.get(storageClassName);
@@ -779,15 +1128,114 @@ public class StorageService {
         return null;
     }
 
+    public void reconcileMedia(Long mediaId) {
+        Media media = Media.findById(mediaId);
+        if (media == null || media.deletedAt != null || media.storageClasses == null) {
+            return;
+        }
+        selfProxy.get().initializeStorageClassesForMedia(mediaId);
+        scheduleSyncForMedia(mediaId);
+        media = Media.findById(mediaId);
+        if (media == null || media.storageClasses == null) {
+            return;
+        }
+        for (StorageClass provider : enabledProviders) {
+            StorageClassEntity entity = getProviderEntityByName(provider.getName());
+            if (regionPolicy.placement(media, entity) != StorageRegionPolicy.Placement.SKIP) {
+                continue;
+            }
+            Object raw = media.storageClasses.get(provider.getName());
+            if (!(raw instanceof Map<?, ?> variants)) {
+                continue;
+            }
+            for (VariantType variant : VariantType.values()) {
+                if (!(variants.get(variant.name().toLowerCase()) instanceof Map<?, ?> entry)) {
+                    continue;
+                }
+                Object rawPath = entry.get("path");
+                if (rawPath == null || !hasHealthyNormalReplica(media, variant, provider.getName())) {
+                    continue;
+                }
+                try {
+                    provider.delete(rawPath.toString());
+                    selfProxy.get().updateVariantStatus(mediaId, provider.getName(), variant,
+                            "skipped", null, null, databaseVersion(mediaId));
+                } catch (Exception exception) {
+                    log.warn("Unable to remove excluded storage copy: mediaId={}, provider={}",
+                            mediaId, provider.getName(), exception);
+                }
+            }
+        }
+    }
+
+    /** Bounded caller controls the rate of full-object verification. */
+    public void verifyMediaCopies(Long mediaId) {
+        Media media = Media.findById(mediaId);
+        if (media == null || media.deletedAt != null || media.storageClasses == null) {
+            return;
+        }
+        for (StorageClass provider : enabledProviders) {
+            Object raw = media.storageClasses.get(provider.getName());
+            if (!(raw instanceof Map<?, ?> variants)) {
+                continue;
+            }
+            for (VariantType variant : VariantType.values()) {
+                if (!(variants.get(variant.name().toLowerCase()) instanceof Map<?, ?> entry)) {
+                    continue;
+                }
+                String status = String.valueOf(entry.get("status"));
+                if (!"synced".equals(status) && !"backup_synced".equals(status)) {
+                    continue;
+                }
+                Object pathValue = entry.get("path");
+                Object hashValue = entry.get("sha256");
+                if (pathValue == null || hashValue == null) {
+                    continue; // Legacy copies receive a checksum when next copied.
+                }
+                Path verified = null;
+                try {
+                    try (InputStream input = provider.download(pathValue.toString())) {
+                        if ("backup_synced".equals(status)) {
+                            verified = backupCodec.decrypt(input,
+                                    canonicalUuid(media, variant, media.storageKey));
+                        } else {
+                            verified = Files.createTempFile("windblog-replica-verify-", ".tmp");
+                            Files.copy(input, verified, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    }
+                    if (!hashValue.equals(EncryptedBackupCodec.sha256Hex(verified))) {
+                        throw new java.io.IOException("Replica SHA-256 mismatch");
+                    }
+                } catch (Exception exception) {
+                    log.warn("Corrupt or unavailable replica: mediaId={}, provider={}, variant={}",
+                            mediaId, provider.getName(), variant, exception);
+                    selfProxy.get().updateVariantStatusWithLock(mediaId, provider.getName(), variant,
+                            "backup_synced".equals(status) ? "backup_corrupt" : "corrupt",
+                            pathValue.toString(), null, hashValue.toString(), databaseVersion(mediaId));
+                } finally {
+                    if (verified != null) {
+                        try {
+                            Files.deleteIfExists(verified);
+                        } catch (Exception cleanupFailure) {
+                            log.warn("Unable to delete replica verification file", cleanupFailure);
+                        }
+                    }
+                }
+            }
+        }
+        scheduleSyncForMedia(mediaId);
+    }
+
+    public boolean isNormalAccessAllowed(Media media, String storageClassName) {
+        return shouldReadFromStorageClass(media, storageClassName);
+    }
+
     private boolean shouldReadFromStorageClass(Media media, String storageClassName) {
         if (media == null || storageClassName == null) {
             return false;
         }
-        String primaryName = getPrimaryProviderName();
-        if (storageClassName.equals(primaryName)) {
-            return true;
-        }
-        return shouldSyncToStorageClass(media, storageClassName);
+        return regionPolicy.placement(media, getProviderEntityByName(storageClassName))
+                == StorageRegionPolicy.Placement.NORMAL;
     }
 
     public boolean shouldSyncToStorageClass(Media media, String storageClassName) {
@@ -795,20 +1243,8 @@ public class StorageService {
             return false;
         }
 
-        String primaryName = getPrimaryProviderName();
-        if (storageClassName.equals(primaryName)) {
-            return false;
-        }
-
-        if (containsName(media.skipStorageClasses, storageClassName)) {
-            return false;
-        }
-
-        if (media.syncStorageClasses == null || media.syncStorageClasses.isEmpty()) {
-            return true;
-        }
-
-        return containsName(media.syncStorageClasses, storageClassName);
+        StorageClassEntity target = getProviderEntityByName(storageClassName);
+        return target != null && regionPolicy.placement(media, target) != StorageRegionPolicy.Placement.SKIP;
     }
 
     private boolean containsName(List<String> names, String expectedName) {

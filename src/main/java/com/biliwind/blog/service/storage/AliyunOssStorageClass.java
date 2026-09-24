@@ -200,6 +200,9 @@ public class AliyunOssStorageClass implements StorageClass {
             if (contentType != null && !contentType.isEmpty()) {
                 requestBuilder.contentType(contentType);
             }
+            if (targetPath.startsWith("encrypted-backup/")) {
+                requestBuilder.objectAcl("private");
+            }
 
             PutObjectRequest request = requestBuilder.build();
             ossClient.putObject(request);
@@ -252,6 +255,9 @@ public class AliyunOssStorageClass implements StorageClass {
 
     @Override
     public String getSignedUrl(String storagePath, Duration expiration) {
+        if (storagePath != null && storagePath.contains("encrypted-backup/")) {
+            return null;
+        }
         try {
             GetObjectRequest request = GetObjectRequest.newBuilder()
                     .bucket(this.bucketName)
@@ -273,6 +279,9 @@ public class AliyunOssStorageClass implements StorageClass {
 
     @Override
     public String getPublicUrl(String storagePath) {
+        if (storagePath != null && storagePath.contains("encrypted-backup/")) {
+            return null;
+        }
         if (cdnEnabled && cdnDomain != null && !cdnDomain.isEmpty()) {
             return "https://" + cdnDomain + "/" + storagePath;
         }

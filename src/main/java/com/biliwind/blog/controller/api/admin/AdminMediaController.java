@@ -253,13 +253,15 @@ public class AdminMediaController {
         if (media == null) {
             throw new NotFoundException("媒体不存在");
         }
+        boolean syncPolicyChanged = false;
         if (request.visibilityRegions() != null) {
             media.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
+            syncPolicyChanged = true;
         }
         if (request.hiddenRegions() != null) {
             media.hiddenRegions = regionValidationService.validateAndFilterRegions(request.hiddenRegions());
+            syncPolicyChanged = true;
         }
-        boolean syncPolicyChanged = false;
         if (request.syncStorageClasses() != null) {
             media.syncStorageClasses = validateStorageClassNames(request.syncStorageClasses());
             syncPolicyChanged = true;
@@ -267,6 +269,10 @@ public class AdminMediaController {
         if (request.skipStorageClasses() != null) {
             media.skipStorageClasses = validateStorageClassNames(request.skipStorageClasses());
             syncPolicyChanged = true;
+        }
+        if (!storageService.hasNormalPlacement(media)) {
+            throw new WebApplicationException("媒体必须保留至少一个合规的普通副本落点",
+                    Response.Status.CONFLICT);
         }
         media.persist();
         if (syncPolicyChanged) {
