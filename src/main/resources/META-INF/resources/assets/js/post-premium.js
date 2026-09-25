@@ -132,14 +132,22 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'X-XSRF-TOKEN': getCsrfToken()
                     },
+                    credentials: 'same-origin',
                     body: JSON.stringify({
                         postSlug: button.dataset.postRef,
                         targetUrl: targetUrl
                     })
                 });
-                const result = await response.json();
+                const responseText = await response.text();
+                let result = {};
+                try {
+                    result = responseText ? JSON.parse(responseText) : {};
+                } catch (parseError) {
+                    result = {};
+                }
                 if (!response.ok || !result.success) {
                     const message = result.message || (optionalRegistration ? '登记失败' : '申请失败');
                     await window.alert(message);
@@ -159,6 +167,10 @@
                         text: optionalRegistration ? '自愿登记转载' : '我要转载'
                     });
                 }
+                button.disabled = false;
+                button.classList.remove('btn-loading');
+                const spinner = button.querySelector('.spinner');
+                if (spinner) spinner.classList.add('hidden');
             }
         });
     }

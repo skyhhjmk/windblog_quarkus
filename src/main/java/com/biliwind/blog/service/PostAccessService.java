@@ -140,6 +140,47 @@ public class PostAccessService {
         return UserPurchaseRecord.count("userId = ?1 and targetType = 'POST' and targetId = ?2 and targetBlockId is null", userId, postId) > 0;
     }
 
+    /** Reject reposting while any paid article content remains locked. */
+    public boolean hasUnlockedAllPaidContent(Post post, Long userId) {
+        if (post == null) {
+            return false;
+        }
+        if (post.user != null && userId != null && userId.equals(post.user.id)) {
+            return true;
+        }
+        if (hasPurchasedPost(userId, post.id)) {
+            return true;
+        }
+        Long fullArticlePrice = getExtraPointsPrice(post);
+        if (fullArticlePrice != null && fullArticlePrice > 0) {
+            return false;
+        }
+
+        com.biliwind.blog.model.PostRevision revision = resolvePublicContentRevision(post);
+        if (revision == null || revision.contentMarkdown == null) {
+            return true;
+        }
+        java.util.regex.Pattern blockPattern = java.util.regex.Pattern.compile(
+                "\\[\\s*(hide-text|hide-attachment)(.*?)\\](.*?)\\[\\s*/\\1\\s*\\]",
+                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
+        for (String content : revision.contentMarkdown.values()) {
+            if (content == null) continue;
+            java.util.regex.Matcher matcher = blockPattern.matcher(content);
+            while (matcher.find()) {
+                String attributes = matcher.group(2);
+                long price = parseBlockPrice(attributes);
+                if (price <= 0) continue;
+                String explicitId = extractAttribute(attributes, "id");
+                String blockId = explicitId == null || explicitId.isBlank()
+                        ? generateBlockId(attributes, matcher.group(3)) : explicitId;
+                if (!hasPurchasedBlock(userId, post.id, blockId)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /**
      * 获取用户为该文章支付过的最高积分（用于阶梯解锁）
      */

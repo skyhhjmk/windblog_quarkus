@@ -5,6 +5,7 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.RepostLicense;
 import com.biliwind.blog.service.repost.RepostLicenseService;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
+import com.biliwind.blog.service.PostAccessService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
@@ -30,6 +31,9 @@ public class UserRepostLicenseController {
     RepostPolicyCatalog repostPolicyCatalog;
 
     @Inject
+    PostAccessService postAccessService;
+
+    @Inject
     UserTokenVerifier tokenVerifier;
 
     @POST
@@ -44,6 +48,12 @@ public class UserRepostLicenseController {
         if (postId == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .entity(Map.of("success", false, "message", "文章不存在"))
+                    .build();
+        }
+        Post post = Post.findById(postId);
+        if (post != null && !postAccessService.hasUnlockedAllPaidContent(post, userId)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "必须解锁全部文章付费区块才能转载"))
                     .build();
         }
         RepostLicenseService.LicenseCreationResult result =

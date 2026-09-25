@@ -121,6 +121,12 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
     }
 
     private boolean isHtmlExpected() {
+        // API clients need a machine-readable error even when the browser sends
+        // Accept: */*. Existing pages may keep older JavaScript cached, so do
+        // not let content negotiation turn an API error into the HTML error page.
+        if (request != null && request.path() != null && request.path().startsWith("/api/")) {
+            return false;
+        }
         if (headers == null) {
             return false;
         }
