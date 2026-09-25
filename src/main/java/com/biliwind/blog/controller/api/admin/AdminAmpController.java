@@ -10,7 +10,6 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -27,11 +26,9 @@ public class AdminAmpController {
     @Inject
     PublicUrlService publicUrlService;
 
-    @ConfigProperty(name = "windblog.amp.enabled", defaultValue = "true")
-    boolean enabled;
-
     @GET
     public Response getInfo() {
+        boolean enabled = ampPageService.isEnabled();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enabled", enabled);
         data.put("publicBaseUrl", publicUrlService.getBaseUrl());
@@ -39,13 +36,14 @@ public class AdminAmpController {
         data.put("localizedRoute", "/{lang}/amp/post/{slug}");
         data.put("cacheMaxAgeSeconds", 300);
         data.put("protectedContentPolicy", "受保护或付费文章不生成 AMP 页面");
-        data.put("configurationSource", "WIND_BLOG_AMP_ENABLED，修改后重启应用");
+        data.put("configurationSource", "系统设置中的 AMP 配置，保存后立即生效");
         return Response.ok(Map.of("success", true, "data", data)).build();
     }
 
     @POST
     @Path("/check")
     public Response check(AmpCheckRequest request) {
+        boolean enabled = ampPageService.isEnabled();
         if (request == null || request.slug() == null || request.slug().isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(Map.of("success", false, "message", "文章 slug 不能为空"))

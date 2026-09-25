@@ -189,6 +189,20 @@ public class ConfigInitializer {
 
         list.add(new SettingDefinition("feature_toggles", featureValue, "object", "功能设置", featureSchema, "功能开关"));
 
+        ObjectNode ampSchema = mapper.createObjectNode();
+        ampSchema.put("type", "object");
+        ampSchema.putArray("fields").addObject()
+                .put("key", "enabled")
+                .put("label", "启用 AMP 页面")
+                .put("widget", "switch")
+                .put("hint", "关闭后不生成 AMP 页面，也不在文章页提供 AMP 链接；保存后立即生效。");
+        ObjectNode ampValue = mapper.createObjectNode();
+        ampValue.put("enabled", ConfigProvider.getConfig()
+                .getOptionalValue("windblog.amp.enabled", Boolean.class)
+                .orElse(true));
+        list.add(new SettingDefinition("amp", ampValue, "object", "功能设置", ampSchema,
+                "AMP 页面功能设置"));
+
         ObjectNode analyticsSchema = mapper.createObjectNode();
         analyticsSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode analyticsFields = analyticsSchema.putArray("fields");

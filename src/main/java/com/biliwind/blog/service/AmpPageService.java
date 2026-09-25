@@ -7,7 +7,6 @@ import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -18,8 +17,8 @@ import java.util.Optional;
 @ApplicationScoped
 public class AmpPageService {
 
-    @ConfigProperty(name = "windblog.amp.enabled", defaultValue = "true")
-    boolean enabled;
+    @Inject
+    ConfigManager configManager;
 
     @Inject
     PublicCacheRefreshService publicCacheRefreshService;
@@ -92,7 +91,7 @@ public class AmpPageService {
     }
 
     public boolean isEnabled() {
-        return enabled;
+        return configManager.getBoolean("amp", "enabled", true);
     }
 
     private String resolveLanguage(String languageCode) {
