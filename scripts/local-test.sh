@@ -212,6 +212,10 @@ case "${1:-up}" in
     env -u ALL_PROXY -u HTTP_PROXY -u HTTPS_PROXY -u all_proxy -u http_proxy -u https_proxy \
       podman "${compose_args[@]}" up -d --no-deps --force-recreate windblog
     ;;
+  refresh-edge)
+    env -u ALL_PROXY -u HTTP_PROXY -u HTTPS_PROXY -u all_proxy -u http_proxy -u https_proxy \
+      podman "${compose_args[@]}" up -d --no-deps --force-recreate edge
+    ;;
   up)
     prepare_auth_cache
     up_core_services
@@ -235,7 +239,7 @@ case "${1:-up}" in
     podman "${compose_args[@]}" config --quiet
     ;;
   *)
-    echo "Usage: $0 {up|refresh-app|down|status|logs [lines] [service]|config}" >&2
+    echo "Usage: $0 {up|refresh-app|refresh-edge|down|status|logs [lines] [service]|config}" >&2
     exit 2
     ;;
 esac

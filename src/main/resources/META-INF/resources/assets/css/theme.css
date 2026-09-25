@@ -878,10 +878,34 @@ h3 { font-size: 1.5rem; }
     justify-content: center;
 }
 
-.premium-icon svg {
+.premium-lock-mark {
+    display: block;
+    position: relative;
     width: 28px;
-    height: 28px;
-    stroke-width: 2;
+    height: 30px;
+}
+
+.premium-lock-mark::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 6px;
+    width: 16px;
+    height: 16px;
+    border: 3px solid currentColor;
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+}
+
+.premium-lock-mark::after {
+    content: "";
+    position: absolute;
+    right: 2px;
+    bottom: 0;
+    left: 2px;
+    height: 18px;
+    border-radius: 4px;
+    background: currentColor;
 }
 
 .premium-text {

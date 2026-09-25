@@ -242,11 +242,6 @@
 
         if (hasButtons || config.postPrice > 0) {
             // The auth cookie is HttpOnly; the protected endpoint is the authority for the current user.
-            document.querySelectorAll('.buy-post-btn').forEach(btn => {
-                if (window.setLoading) {
-                    window.setLoading(btn, true, {text: '验证授权中...'});
-                }
-            });
             loadFullPostContent();
         } else {
             // Free posts without protected blocks do not need a user-specific request.
