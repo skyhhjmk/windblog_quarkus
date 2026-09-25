@@ -34,7 +34,6 @@ public class EncryptedBackupCodec {
     private static final int MEMORY_KIB = 65536;
     private static final int PASSES = 3;
     private static final int LANES = 4;
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     @ConfigProperty(name = "windblog.storage.backup.master-password")
     Optional<String> configuredPassword;
@@ -77,8 +76,9 @@ public class EncryptedBackupCodec {
                     length += count;
                 }
             }
-            byte[] salt = randomBytes(16);
-            byte[] iv = randomBytes(12);
+            SecureRandom random = new SecureRandom();
+            byte[] salt = randomBytes(random, 16);
+            byte[] iv = randomBytes(random, 12);
             byte[] header = header(objectUuid, salt, iv, digest.digest(), length);
             Cipher cipher = cipher(Cipher.ENCRYPT_MODE, password, salt, iv, header);
             try (OutputStream file = Files.newOutputStream(encrypted)) {
@@ -220,9 +220,9 @@ public class EncryptedBackupCodec {
         }
     }
 
-    private static byte[] randomBytes(int size) {
+    private static byte[] randomBytes(SecureRandom random, int size) {
         byte[] bytes = new byte[size];
-        RANDOM.nextBytes(bytes);
+        random.nextBytes(bytes);
         return bytes;
     }
 
