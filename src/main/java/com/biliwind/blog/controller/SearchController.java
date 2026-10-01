@@ -18,6 +18,7 @@ import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.ws.rs.*;
@@ -80,6 +81,7 @@ public class SearchController {
 
     @GET
     @Produces(MediaType.TEXT_HTML)
+    @Transactional
     public TemplateInstance index(@QueryParam("q") String keyword,
                                   @QueryParam("type") @DefaultValue("all") String type,
                                   @QueryParam("sort") @DefaultValue("") String sort,
@@ -177,6 +179,7 @@ public class SearchController {
     @GET
     @Path("/suggest")
     @Produces(MediaType.APPLICATION_JSON)
+    @Transactional
     public List<String> suggest(@QueryParam("q") String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
@@ -536,6 +539,18 @@ public class SearchController {
                 tags.add(new IndexController.TagItem(tagName, tagSlug));
             }
         }
+        List<IndexController.CategoryItem> categories = new ArrayList<>();
+        JsonNode categoryNodes = hitNode.path("categories");
+        if (categoryNodes.isArray()) {
+            for (JsonNode categoryNode : categoryNodes) {
+                categories.add(new IndexController.CategoryItem(
+                        categoryNode.path("name").asText(""), categoryNode.path("slug").asText("")));
+            }
+        }
+        if (categories.isEmpty() && hitNode.hasNonNull("categorySlug")) {
+            categories.add(new IndexController.CategoryItem(
+                    hitNode.path("categoryName").asText(""), hitNode.path("categorySlug").asText("")));
+        }
 
         return new SearchHit(
                 hitNode.path("type").asText("post"),
@@ -552,7 +567,8 @@ public class SearchController {
                 textOrNull(hitNode.path("categoryName")),
                 textOrNull(hitNode.path("categorySlug")),
                 hitNode.path("viewCount").asLong(0),
-                tags
+                tags,
+                categories
         );
     }
 
@@ -634,7 +650,9 @@ public class SearchController {
                         post.categoryName(),
                         post.categorySlug(),
                         post.viewCount(),
-                        List.of() // ES might not return tags in this DTO yet
+                        List.of(),
+                        post.categories().stream().map(category -> new IndexController.CategoryItem(
+                                category.name(), category.slug())).toList()
                 );
                 hits.add(hit);
             }
@@ -699,6 +717,14 @@ public class SearchController {
             categoryName = LanguageHelper.resolveLocalizedValue(post.category.name, lang);
             categorySlug = post.category.slug;
         }
+        List<IndexController.CategoryItem> categories = post.categories.stream()
+                .filter(category -> category != null && category.enabled)
+                .map(category -> new IndexController.CategoryItem(
+                        LanguageHelper.resolveLocalizedValue(category.name, lang), category.slug))
+                .toList();
+        if (categories.isEmpty() && post.category != null && post.category.enabled) {
+            categories = List.of(new IndexController.CategoryItem(categoryName, categorySlug));
+        }
 
         List<IndexController.TagItem> tags = tagsByPost.getOrDefault(post.id, List.of());
 
@@ -722,7 +748,8 @@ public class SearchController {
                 categoryName,
                 categorySlug,
                 viewCount,
-                tags
+                tags,
+                categories
         );
     }
 
@@ -752,6 +779,7 @@ public class SearchController {
                 null,
                 null,
                 0,
+                List.of(),
                 List.of()
         );
     }
@@ -782,6 +810,7 @@ public class SearchController {
                 null,
                 null,
                 0,
+                List.of(),
                 List.of()
         );
     }
@@ -976,7 +1005,8 @@ public class SearchController {
             String categoryName,
             String categorySlug,
             long viewCount,
-            List<IndexController.TagItem> tags
+            List<IndexController.TagItem> tags,
+            List<IndexController.CategoryItem> categories
     ) {
     }
 

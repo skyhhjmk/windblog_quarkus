@@ -14,6 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.persistence.EntityNotFoundException;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import org.jboss.logging.Logger;
@@ -60,6 +61,7 @@ public class PublicCacheRefreshService {
         }
     }
 
+    @Transactional
     public void refreshPostCaches(Long postId) {
         try {
             Post post = Post.findById(postId);
@@ -79,6 +81,7 @@ public class PublicCacheRefreshService {
      * The fallback still uses the source entity, but only to rebuild the explicit
      * whitelist snapshot; callers never receive the entity as their public view.
      */
+    @Transactional
     public Optional<PublicPostSnapshot> findPublishedSnapshot(String slug, String regionCode) {
         if (slug == null || slug.isBlank()) {
             return Optional.empty();
@@ -112,6 +115,7 @@ public class PublicCacheRefreshService {
      * the whitelist projection from PostgreSQL, but the caller never receives a
      * Post entity and the query is always page-bounded.
      */
+    @Transactional
     public PublicIndexPageSnapshot findPublishedIndexPage(int page, int pageSize,
                                                            String language, String regionCode) {
         int safePage = Math.max(1, page);
@@ -272,6 +276,12 @@ public class PublicCacheRefreshService {
         String categorySlug = post.category == null ? null : post.category.slug;
         Map<String, String> categoryName = post.category == null
                 ? Map.of() : copyMap(post.category.name);
+        List<PublicCategorySnapshot> categories = post.categories == null ? new ArrayList<>()
+                : post.categories.stream().filter(category -> category != null && category.enabled)
+                        .map(category -> new PublicCategorySnapshot(copyMap(category.name), category.slug)).toList();
+        if (categories.isEmpty() && post.category != null && post.category.enabled) {
+            categories = List.of(new PublicCategorySnapshot(categoryName, categorySlug));
+        }
         List<PublicTagSnapshot> tags = new ArrayList<>();
         List<PostTag> postTags = PostTag.list("post.id = ?1", post.id);
         for (PostTag postTag : postTags) {
@@ -306,6 +316,7 @@ public class PublicCacheRefreshService {
                 post.seoDescription,
                 categoryName,
                 categorySlug,
+                categories,
                 resolveAuthorName(post),
                 post.publishedAt,
                 post.updatedAt,
@@ -345,6 +356,12 @@ public class PublicCacheRefreshService {
             Map<String, String> categoryName = post.category == null
                     ? Map.of() : copyMap(post.category.name);
             String categorySlug = post.category == null ? null : post.category.slug;
+            List<PublicCategorySnapshot> categories = post.categories == null ? new ArrayList<>()
+                    : post.categories.stream().filter(category -> category != null && category.enabled)
+                            .map(category -> new PublicCategorySnapshot(copyMap(category.name), category.slug)).toList();
+            if (categories.isEmpty() && post.category != null && post.category.enabled) {
+                categories = List.of(new PublicCategorySnapshot(categoryName, categorySlug));
+            }
             result.add(new PublicPostListSnapshot(
                     post.slug,
                     copyMap(post.title),
@@ -356,6 +373,7 @@ public class PublicCacheRefreshService {
                     post.createdAt,
                     categoryName,
                     categorySlug,
+                    categories,
                     resolveAuthorName(post),
                     tagsByPost.getOrDefault(post.id, List.of()),
                     copyList(post.visibilityRegions)));
@@ -490,6 +508,7 @@ public class PublicCacheRefreshService {
             String seoDescription,
             Map<String, String> categoryName,
             String categorySlug,
+            List<PublicCategorySnapshot> categories,
             String authorName,
             OffsetDateTime publishedAt,
             OffsetDateTime updatedAt,
@@ -534,6 +553,7 @@ public class PublicCacheRefreshService {
             OffsetDateTime createdAt,
             Map<String, String> categoryName,
             String categorySlug,
+            List<PublicCategorySnapshot> categories,
             String authorName,
             List<PublicTagSnapshot> tags,
             List<String> visibilityRegions) {
@@ -541,6 +561,12 @@ public class PublicCacheRefreshService {
 
     @RegisterForReflection
     public record PublicTagSnapshot(
+            Map<String, String> name,
+            String slug) {
+    }
+
+    @RegisterForReflection
+    public record PublicCategorySnapshot(
             Map<String, String> name,
             String slug) {
     }

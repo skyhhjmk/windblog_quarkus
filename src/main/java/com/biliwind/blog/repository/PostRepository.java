@@ -1,6 +1,7 @@
 package com.biliwind.blog.repository;
 
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.Category;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -59,8 +60,13 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
             }
         }
         if (categoryId != null) {
-            where.append(" and category.id = :categoryId");
-            parameters.put("categoryId", categoryId);
+            Category category = Category.findById(categoryId);
+            if (category == null) {
+                where.append(" and 1 = 0");
+            } else {
+                where.append(" and (category = :category or :category member of categories)");
+                parameters.put("category", category);
+            }
         }
         if (keyword != null && !keyword.isBlank()) {
             where.append(" and lower(slug) like :keyword");

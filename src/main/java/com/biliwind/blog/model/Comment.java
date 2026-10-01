@@ -34,6 +34,13 @@ public class Comment extends PanacheEntityBase {
     @JoinColumn(name = "user_id")
     public User user;
 
+    /** Imported or guest display identity when no account can be safely linked. */
+    @Column(name = "guest_name", length = 255)
+    public String guestName;
+
+    @Column(name = "guest_email", length = 255)
+    public String guestEmail;
+
     /** 评论内容 */
     @Column(nullable = false, columnDefinition = "text")
     public String content;

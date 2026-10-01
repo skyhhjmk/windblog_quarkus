@@ -259,7 +259,8 @@ public class CommentApiController {
                 comment.id,
                 comment.parent != null ? comment.parent.id : null,
                 comment.user != null ? comment.user.id : null,
-                comment.user != null ? comment.user.username : "Guest",
+                comment.user != null ? comment.user.username
+                        : (comment.guestName == null || comment.guestName.isBlank() ? "Guest" : comment.guestName),
                 comment.content,
                 CommentMarkdownHelper.toSafeHtml(comment.content),
                 comment.createdAt,

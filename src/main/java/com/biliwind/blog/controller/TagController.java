@@ -15,6 +15,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -106,6 +107,7 @@ public class TagController {
     @GET
     @Path("/{slug}")
     @Produces(MediaType.TEXT_HTML)
+    @Transactional
     public TemplateInstance detail(@PathParam("slug") String slug,
                                    @QueryParam("page") @DefaultValue("1") Integer page,
                                    @Context HttpHeaders httpHeaders) {
@@ -204,12 +206,22 @@ public class TagController {
         }
 
         OffsetDateTime date = post.publishedAt != null ? post.publishedAt : post.createdAt;
-        
+        List<CategoryItem> categories = post.categories.stream()
+                .filter(category -> category != null && category.enabled)
+                .map(category -> new CategoryItem(
+                        LanguageHelper.resolveLocalizedValue(category.name, lang), category.slug))
+                .toList();
+        if (categories.isEmpty() && post.category != null && post.category.enabled) {
+            categories = List.of(new CategoryItem(
+                    LanguageHelper.resolveLocalizedValue(post.category.name, lang), post.category.slug));
+        }
         return new TagPostItem(post.slug, title, summary, formatDate(date), 
-                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", tags);
+                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", categories, tags);
     }
 
     public record TagItem(String name, String slug) {}
+
+    public record CategoryItem(String name, String slug) {}
 
     private java.util.Map<Long, List<TagItem>> loadTagsByPost(List<Post> posts, String lang) {
         if (posts.isEmpty()) {
@@ -312,6 +324,6 @@ public class TagController {
     public record TagDetailItem(String slug, String name, String description, long postCount, String createdAtText) {
     }
 
-    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<TagItem> tags) {
+    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags) {
     }
 }

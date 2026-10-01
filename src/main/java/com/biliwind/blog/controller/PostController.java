@@ -11,6 +11,7 @@ import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.PostAccessPolicy;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -258,6 +259,12 @@ public class PostController {
         if (postCategorySlug == null || postCategorySlug.isBlank()) {
             postCategorySlug = "uncategorized";
         }
+        List<PostCategoryItem> postCategories = snapshot.categories() == null ? List.of()
+                : snapshot.categories().stream().map(item -> new PostCategoryItem(
+                        LanguageHelper.resolveLocalizedValue(item.name(), resolvedLang), item.slug())).toList();
+        if (postCategories.isEmpty() && snapshot.categorySlug() != null) {
+            postCategories = List.of(new PostCategoryItem(postCategory, postCategorySlug));
+        }
 
         RepostPolicyCatalog.Policy repostPolicy = repostPolicyCatalog.resolve(
                 snapshot.repostPolicyCode(), snapshot.contentDeclarations());
@@ -284,6 +291,7 @@ public class PostController {
                 .data("postBodyJson", escapeJavaScript(postBody.body()))
                 .data("postCategory", postCategory)
                 .data("postCategorySlug", postCategorySlug)
+                .data("postCategories", postCategories)
                 .data("postPrice", postPrice)
                 // Public pages use the read model; protected pages are no-store and may
                 // render authorized content loaded from the published revision.
@@ -318,6 +326,9 @@ public class PostController {
         }
         return responseBuilder.build();
     }
+
+    @RegisterForReflection
+    public record PostCategoryItem(String name, String slug) {}
 
     private List<String> resolveContentDeclarationLabels(List<String> declarationCodes) {
         List<String> labels = new java.util.ArrayList<>();

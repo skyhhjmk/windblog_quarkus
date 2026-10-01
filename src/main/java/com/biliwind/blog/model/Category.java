@@ -79,4 +79,8 @@ public class Category extends PanacheEntityBase {
      */
     @Column(name = "post_count", nullable = false)
     public Long postCount = 0L;
+
+    /** Whether the category is visible in public navigation. */
+    @Column(nullable = false)
+    public boolean enabled = true;
 }

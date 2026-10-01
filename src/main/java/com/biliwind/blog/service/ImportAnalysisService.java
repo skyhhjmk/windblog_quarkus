@@ -650,11 +650,22 @@ public class ImportAnalysisService {
                 Matcher columns = INSERT_COLUMNS_PATTERN.matcher(trimmed);
                 if (columns.find()) {
                     stats.columns = splitColumns(columns.group(2));
+                } else {
+                    blockers.add("表 " + table + " 的 INSERT 未列出字段名，无法安全匹配旧版表结构");
                 }
             } else {
+                if (!trimmed.toLowerCase(Locale.ROOT).contains("from stdin")) {
+                    blockers.add("表 " + table + " 使用了不支持的 COPY 来源；只支持 COPY ... FROM stdin");
+                    continue;
+                }
+                String copyHeader = trimmed.lines().findFirst().orElse("");
+                if (!copyHeader.matches("(?is)^\\s*COPY\\s+.*\\([^)]*\\)\\s+FROM\\s+STDIN;?$")
+                        || copyHeader.matches("(?is).*\\b(csv|binary|delimiter|null|quote|escape|encoding)\\b.*")) {
+                    blockers.add("表 " + table + " 的 COPY 只支持带字段列表的默认文本格式 FROM stdin");
+                    continue;
+                }
                 stats.rows += countCopyRows(trimmed);
                 stats.copyStatements++;
-                blockers.add("表 " + table + " 使用 COPY 导出，当前执行器仅支持 INSERT 导出，请转换 SQL 后重试");
             }
         }
         if (tableStats.isEmpty()) {
@@ -712,8 +723,26 @@ public class ImportAnalysisService {
         StringBuilder current = new StringBuilder();
         boolean singleQuote = false;
         boolean doubleQuote = false;
+        boolean copyData = false;
+        int lineStart = 0;
         for (int i = 0; i < content.length(); i++) {
             char character = content.charAt(i);
+            if (copyData && i == lineStart) {
+                int lineEnd = content.indexOf('\n', i);
+                if (lineEnd < 0) lineEnd = content.length();
+                String line = content.substring(i, lineEnd).replace("\r", "");
+                current.append(line);
+                if (line.equals("\\.")) {
+                    statements.add(current.toString());
+                    current.setLength(0);
+                    copyData = false;
+                } else {
+                    current.append('\n');
+                }
+                i = lineEnd;
+                lineStart = lineEnd + 1;
+                continue;
+            }
             if (character == '\'' && !doubleQuote) {
                 if (singleQuote && i + 1 < content.length() && content.charAt(i + 1) == '\'') {
                     current.append(character).append(content.charAt(++i));
@@ -724,11 +753,18 @@ public class ImportAnalysisService {
                 doubleQuote = !doubleQuote;
             }
             if (character == ';' && !singleQuote && !doubleQuote) {
-                statements.add(current.toString());
-                current.setLength(0);
+                String sql = current.toString();
+                if (sql.trim().matches("(?is)^\\s*COPY\\b.*\\bFROM\\s+STDIN\\s*$")) {
+                    copyData = true;
+                    current.append(character);
+                } else {
+                    statements.add(sql);
+                    current.setLength(0);
+                }
             } else {
                 current.append(character);
             }
+            if (character == '\n') lineStart = i + 1;
         }
         if (!current.isEmpty()) {
             statements.add(current.toString());
@@ -755,7 +791,9 @@ public class ImportAnalysisService {
         if (marker < 0) {
             return 0;
         }
-        String payload = statement.substring(marker + "from stdin".length());
+        int firstDataLine = statement.indexOf('\n', marker + "from stdin".length());
+        if (firstDataLine < 0) return 0;
+        String payload = statement.substring(firstDataLine + 1);
         int rows = 0;
         for (String line : payload.split("\\R")) {
             if (!line.isBlank() && !line.trim().equals("\\.")) {

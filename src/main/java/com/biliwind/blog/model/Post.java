@@ -9,6 +9,8 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 文章主表实体，对应 posts
@@ -109,6 +111,14 @@ public class Post extends PanacheEntityBase {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     public Category category;
+
+    /** All categories assigned to this post; category remains the primary compatibility field. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "post_categories",
+            joinColumns = @JoinColumn(name = "post_id"),
+            inverseJoinColumns = @JoinColumn(name = "category_id"))
+    @OrderColumn(name = "position")
+    public List<Category> categories = new ArrayList<>();
 
     /** 发布时间 */
     @Column(name = "published_at")

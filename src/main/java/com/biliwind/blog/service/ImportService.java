@@ -7,6 +7,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ImportResult;
 import com.biliwind.blog.common.helper.MediaPathHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
+import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.model.*;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.smallrye.mutiny.Multi;
@@ -27,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.sql.DataSource;
@@ -65,12 +67,30 @@ public class ImportService {
     @Inject
     DataSource targetDataSource;
 
+    @Inject
+    PasswordHasher passwordHasher;
+
     private static final List<String> IMPORT_TABLES = List.of(
             "categories", "tags", "posts", "post_category", "post_tag", "post_author",
             "links", "comments", "media", "wa_users");
     private static final Pattern SQL_TARGET_TABLE = Pattern.compile(
-            "(?is)^(?:insert\\s+into|create\\s+(?:temporary\\s+)?table)\\s+"
+            "(?is)^(?:insert\\s+into|copy|create\\s+(?:temporary\\s+)?table)\\s+"
                     + "(?:if\\s+not\\s+exists\\s+)?(?:[\\\"`\\w]+\\.)?[\\\"`]?([a-zA-Z_][a-zA-Z0-9_]*)");
+    private static final Map<String, List<String>> LEGACY_STAGE_COLUMNS = Map.ofEntries(
+            Map.entry("categories", List.of("id", "name", "slug")),
+            Map.entry("tags", List.of("id", "name", "slug")),
+            Map.entry("posts", List.of("id", "title", "slug", "content", "published_at", "created_at", "deleted_at")),
+            Map.entry("post_category", List.of("post_id", "category_id")),
+            Map.entry("post_tag", List.of("post_id", "tag_id")),
+            Map.entry("post_author", List.of("post_id", "author_id", "is_primary")),
+            Map.entry("links", List.of("id", "name", "url")),
+            Map.entry("comments", List.of("id", "post_id", "content", "created_at")),
+            Map.entry("media", List.of("id", "file_path")),
+            Map.entry("wa_users", List.of("id", "username")));
+    private static final Pattern COPY_HEADER = Pattern.compile(
+            "(?is)^\\s*COPY\\s+(?:ONLY\\s+)?(?:[\\\"`\\w]+\\.)?[\\\"`]?([a-zA-Z_][a-zA-Z0-9_]*)[\\\"`]?\\s*\\((.*?)\\)\\s+FROM\\s+STDIN(?:\\s+.*)?;?");
+    private static final Pattern INSERT_COLUMN_NAMES = Pattern.compile(
+            "(?is)^\\s*INSERT\\s+INTO\\s+(?:[\\\"`\\w]+\\.)?[\\\"`]?([a-zA-Z_][a-zA-Z0-9_]*)[\\\"`]?\\s*\\((.*?)\\)\\s*VALUES\\b");
 
     /**
      * 执行数据导入
@@ -147,8 +167,10 @@ public class ImportService {
             emitOverall(ctx, "媒体", "媒体资源处理完成");
             emit("progress", "媒体库导入主体完成", null);
         }
-        emit("info", "正在处理作者/用户映射...", null);
-        importUsers(conn, ctx);
+        if (types.contains("posts") || types.contains("comments")) {
+            emit("info", "正在处理作者/用户映射...", null);
+            importUsers(conn, ctx);
+        }
         if (types.contains("posts")) {
             emit("info", "正在导入文章并处理附件...", null);
             posts = importPosts(conn, operator, req.assetPrefix(), ctx);
@@ -204,14 +226,16 @@ public class ImportService {
                 } else if (sql.regionMatches(true, 0, "INSERT", 0, 6)) {
                     ensureTemporaryTable(statement, table, materializedTables);
                     if (!isSimpleInsert(sql, table)) {
-                        throw new IllegalArgumentException("表 " + table + " 只支持 INSERT ... VALUES 导入，不允许执行查询或附加 SQL");
+                        throw new IllegalArgumentException("表 " + table + " 只支持带列名的 INSERT ... VALUES 导入，不允许执行查询或附加 SQL");
                     }
+                    ensureInsertColumns(statement, sql, table);
                     String rewritten = sql.replaceFirst(
                             "(?is)^(insert\\s+into\\s+)(?:[\\\"`\\w]+\\.)?[\\\"`]?" + table + "[\\\"`]?",
                             "$1" + table);
                     statement.execute(rewritten);
                 } else if (sql.regionMatches(true, 0, "COPY", 0, 4)) {
-                    throw new IllegalArgumentException("SQL 文件包含 COPY 导出，请先转换为 INSERT 格式");
+                    ensureTemporaryTable(statement, table, materializedTables);
+                    importCopyStatement(conn, sql, table);
                 }
             }
         }
@@ -220,23 +244,164 @@ public class ImportService {
     private void ensureTemporaryTable(java.sql.Statement statement, String table,
             java.util.Set<String> materializedTables) throws SQLException {
         if (materializedTables.contains(table)) return;
-        try {
-            statement.execute("CREATE TEMP TABLE IF NOT EXISTS " + table
-                    + " AS SELECT * FROM public." + table + " WITH NO DATA");
-            materializedTables.add(table);
-        } catch (SQLException exception) {
-            throw new IllegalArgumentException("SQL 文件缺少表 " + table
-                    + " 的定义，且当前数据库无法提供兼容表结构");
+        List<String> columns = LEGACY_STAGE_COLUMNS.get(table);
+        if (columns == null) throw new IllegalArgumentException("不支持导入表: " + table);
+        String definitions = columns.stream().map(column -> quoteSqlIdentifier(column) + " " + legacyStageType(column))
+                .collect(java.util.stream.Collectors.joining(", "));
+        statement.execute("CREATE TEMP TABLE " + quoteSqlIdentifier(table) + " (" + definitions + ")");
+        materializedTables.add(table);
+    }
+
+    private String legacyStageType(String column) {
+        if (Set.of("id", "parent_id", "post_id", "category_id", "tag_id", "author_id", "user_id",
+                "view_count", "sort_order", "size").contains(column)) return "BIGINT";
+        if (Set.of("created_at", "updated_at", "published_at", "deleted_at").contains(column)) return "TIMESTAMP";
+        if (Set.of("featured", "allow_comments", "allow_comment", "approved", "spam", "trash", "is_primary")
+                .contains(column)) return "BOOLEAN";
+        return "TEXT";
+    }
+
+    private void importCopyStatement(Connection connection, String raw, String table) throws Exception {
+        int headerEnd = raw.indexOf('\n');
+        if (headerEnd < 0) throw new IllegalArgumentException("COPY 语句缺少数据行");
+        String header = raw.substring(0, headerEnd).trim();
+        Matcher matcher = COPY_HEADER.matcher(header);
+        if (!matcher.matches() || !matcher.group(1).equalsIgnoreCase(table)) {
+            throw new IllegalArgumentException("仅支持带明确列名的 COPY 表 (...) FROM stdin 导入");
         }
+        if (header.matches("(?is).*\\b(csv|binary|delimiter|null|quote|escape|encoding)\\b.*")) {
+            throw new IllegalArgumentException("COPY 仅支持 PostgreSQL 默认文本格式");
+        }
+        List<String> columns = List.of(matcher.group(2).split(",")).stream()
+                .map(column -> column.replace("\"", "").replace("`", "").trim().toLowerCase(java.util.Locale.ROOT))
+                .toList();
+        if (columns.isEmpty()) {
+            throw new IllegalArgumentException("COPY 缺少字段");
+        }
+        try (java.sql.Statement stage = connection.createStatement()) {
+            ensureStageColumns(stage, table, columns);
+        }
+        String placeholders = String.join(", ", java.util.Collections.nCopies(columns.size(), "?"));
+        String sql = "INSERT INTO " + quoteSqlIdentifier(table) + " ("
+                + columns.stream().map(ImportService::quoteSqlIdentifier).collect(java.util.stream.Collectors.joining(", "))
+                + ") VALUES (" + placeholders + ")";
+        String payload = raw.substring(headerEnd + 1);
+        try (PreparedStatement insert = connection.prepareStatement(sql)) {
+            int pending = 0;
+            for (String line : payload.split("\\R")) {
+                if (line.equals("\\.")) break;
+                if (line.isEmpty()) continue;
+                String[] values = line.split("\\t", -1);
+                if (values.length != columns.size()) {
+                    throw new IllegalArgumentException("COPY 数据列数与表 " + table + " 的列定义不一致");
+                }
+                for (int i = 0; i < values.length; i++) {
+                    String value = decodeCopyText(values[i]);
+                    if (value == null) insert.setNull(i + 1, Types.VARCHAR);
+                    else insert.setString(i + 1, value);
+                }
+                insert.addBatch();
+                if (++pending % 500 == 0) insert.executeBatch();
+            }
+            if (pending % 500 != 0) insert.executeBatch();
+        }
+    }
+
+    private String decodeCopyText(String value) {
+        if (value.equals("\\N")) return null;
+        StringBuilder decoded = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch != '\\' || i + 1 >= value.length()) {
+                decoded.append(ch);
+                continue;
+            }
+            char escaped = value.charAt(++i);
+            switch (escaped) {
+                case 'b' -> decoded.append('\b');
+                case 'f' -> decoded.append('\f');
+                case 'n' -> decoded.append('\n');
+                case 'r' -> decoded.append('\r');
+                case 't' -> decoded.append('\t');
+                case 'v' -> decoded.append('\u000B');
+                case '\\' -> decoded.append('\\');
+                case 'x' -> {
+                    int hexStart = i + 1;
+                    int hexEnd = hexStart;
+                    while (hexEnd < value.length() && hexEnd - hexStart < 2
+                            && Character.digit(value.charAt(hexEnd), 16) >= 0) hexEnd++;
+                    if (hexEnd == hexStart) decoded.append('x');
+                    else {
+                        decoded.append((char) Integer.parseInt(value.substring(hexStart, hexEnd), 16));
+                        i = hexEnd - 1;
+                    }
+                }
+                default -> {
+                    if (escaped >= '0' && escaped <= '7') {
+                        int octal = escaped - '0';
+                        int digits = 1;
+                        while (digits < 3 && i + 1 < value.length()
+                                && value.charAt(i + 1) >= '0' && value.charAt(i + 1) <= '7') {
+                            octal = octal * 8 + (value.charAt(++i) - '0');
+                            digits++;
+                        }
+                        decoded.append((char) octal);
+                    } else decoded.append(escaped);
+                }
+            }
+        }
+        return decoded.toString();
+    }
+
+    private static String quoteSqlIdentifier(String identifier) {
+        if (identifier == null || !identifier.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            throw new IllegalArgumentException("SQL 字段名格式无效");
+        }
+        return "\"" + identifier + "\"";
     }
 
     private boolean isSimpleInsert(String sql, String table) {
         String normalized = sql.trim();
         String target = "(?is)^insert\\s+into\\s+(?:[\\\"`\\w]+\\.)?[\\\"`]?"
-                + Pattern.quote(table) + "[\\\"`]?\\s*(?:\\([^;]*?\\))?\\s+values\\s+.+$";
+                + Pattern.quote(table) + "[\\\"`]?\\s*\\([^;]*?\\)\\s+values\\s+.+$";
         if (!normalized.matches(target)) return false;
         String lower = normalized.toLowerCase(java.util.Locale.ROOT);
-        return !lower.contains(" returning ") && !lower.contains(" on conflict ");
+        if (lower.contains(" returning ") || lower.contains(" on conflict ")) return false;
+        int valuesIndex = lower.indexOf("values");
+        return valuesIndex >= 0 && containsOnlySqlLiterals(normalized.substring(valuesIndex + "values".length()));
+    }
+
+    private boolean containsOnlySqlLiterals(String values) {
+        String withoutStrings = values.replaceAll("(?i)\\bE(?=')", " ")
+                .replaceAll("'(?:''|\\\\.|[^'])*'", " ");
+        return withoutStrings.matches("(?is)[\\s(),]*(?:(?:NULL|TRUE|FALSE)|(?:[+-]?\\d+(?:\\.\\d*)?|[+-]?\\.\\d+)(?:[eE][+-]?\\d+)?|[\\s(),])*");
+    }
+
+    private void ensureInsertColumns(java.sql.Statement statement, String sql, String table) throws SQLException {
+        Matcher matcher = INSERT_COLUMN_NAMES.matcher(sql);
+        if (!matcher.find() || !matcher.group(1).equalsIgnoreCase(table)) {
+            throw new IllegalArgumentException("INSERT 缺少有效的字段列表");
+        }
+        ensureStageColumns(statement, table, splitSqlColumns(matcher.group(2)));
+    }
+
+    private List<String> splitSqlColumns(String value) {
+        return java.util.Arrays.stream(value.split(","))
+                .map(column -> column.replace("\"", "").replace("`", "").trim())
+                .filter(column -> !column.isEmpty())
+                .toList();
+    }
+
+    private void ensureStageColumns(java.sql.Statement statement, String table, List<String> columns)
+            throws SQLException {
+        for (String column : columns) {
+            if (!column.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                throw new IllegalArgumentException("导入字段名格式无效");
+            }
+            statement.execute("ALTER TABLE " + quoteSqlIdentifier(table) + " ADD COLUMN IF NOT EXISTS "
+                    + quoteSqlIdentifier(column.toLowerCase(java.util.Locale.ROOT)) + " "
+                    + legacyStageType(column.toLowerCase(java.util.Locale.ROOT)));
+        }
     }
 
     static String sanitizeErrorMessage(String message) {
@@ -252,11 +417,20 @@ public class ImportService {
             List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 long oldId = rs.getLong("id");
+                if (isDeleted(rs, cols)) {
+                    ctx.tracker().completeEntityItem("categories");
+                    emitEntityProgress(ctx, "分类", "跳过已删除分类");
+                    continue;
+                }
                 String categoryName = rs.getString("name");
                 String slug = sanitizeImportSlug(rs.getString("slug"), categoryName, "cat-", oldId);
 
                 Category existing = Category.find("slug = ?1", slug).firstResult();
                 if (existing != null) {
+                    if (columnExists(cols, "status") && rs.getObject("status") != null) {
+                        existing.enabled = isEnabled(rs, cols);
+                        QuarkusTransaction.requiringNew().run(existing::persist);
+                    }
                     emit("info", "跳过已存在的分类: " + categoryName, slug);
                     ctx.categoryMap().put(oldId, existing.id);
                     ctx.tracker().completeEntityItem("categories");
@@ -266,6 +440,7 @@ public class ImportService {
 
                 final Category c = new Category();
                 c.slug = slug;
+                c.enabled = isEnabled(rs, cols);
                 emit("info", "处理分类: " + categoryName, slug);
                 c.name = Map.of("zh-cn", categoryName);
                 if (columnExists(cols, "description")) {
@@ -426,12 +601,17 @@ public class ImportService {
 
     private int importTags(Connection conn, ImportContext ctx) throws SQLException {
         int count = 0;
-        String sql = "SELECT * FROM tags";
+        String sql = "SELECT * FROM tags ORDER BY id";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 long oldId = rs.getLong("id");
+                if (isDeleted(rs, cols)) {
+                    ctx.tracker().completeEntityItem("tags");
+                    emitEntityProgress(ctx, "标签", "跳过已删除标签");
+                    continue;
+                }
                 String tagName = rs.getString("name");
                 String slug = sanitizeImportSlug(rs.getString("slug"), tagName, "tag-", System.currentTimeMillis());
 
@@ -474,10 +654,16 @@ public class ImportService {
         Map<String, String> discoveryMap = new HashMap<>();
 
         // 1. 从 media 表中发现
-        String mediaSql = "SELECT * FROM media WHERE deleted_at IS NULL";
+        String mediaSql = "SELECT * FROM media";
         try (PreparedStatement ps = conn.prepareStatement(mediaSql);
              ResultSet rs = ps.executeQuery()) {
+            List<String> mediaColumns = getAvailableColumns(rs);
             while (rs.next()) {
+                if (isDeleted(rs, mediaColumns)) {
+                    ctx.tracker().completeEntityItem("media");
+                    emitEntityProgress(ctx, "媒体", "跳过已删除媒体");
+                    continue;
+                }
                 String filePath = rs.getString("file_path");
                 if (filePath == null) {
                     ctx.tracker().completeEntityItem("media");
@@ -604,15 +790,22 @@ public class ImportService {
             }
         }
 
-        String sql = "SELECT * FROM posts WHERE deleted_at IS NULL";
+        String sql = "SELECT * FROM posts ORDER BY id";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
+                if (isDeleted(rs, cols)) {
+                    ctx.tracker().completeEntityItem("posts");
+                    emitEntityProgress(ctx, "文章", "跳过已删除文章");
+                    continue;
+                }
                 String title = rs.getString("title");
                 String slug = sanitizeImportSlug(rs.getString("slug"), title, "post-", rs.getLong("id"));
 
                 if (Post.count("slug = ?1", slug) > 0) {
+                    Post existing = Post.find("slug = ?1", slug).firstResult();
+                    if (existing != null) ctx.postMap().put(rs.getLong("id"), existing.id);
                     emit("info", "跳过已存在的文章: " + title, slug);
                     ctx.tracker().completeEntityItem("posts");
                     emitEntityProgress(ctx, "文章", "文章处理中");
@@ -671,12 +864,19 @@ public class ImportService {
                     }
                 }
                 p.user = postAuthor != null ? postAuthor : operator;
+                if (columnExists(cols, "author_id")) {
+                    long legacyAuthorId = rs.getLong("author_id");
+                    if (!rs.wasNull()) p.authorName = ctx.authorNames().get(legacyAuthorId);
+                } else if (columnExists(cols, "user_id")) {
+                    long legacyUserId = rs.getLong("user_id");
+                    if (!rs.wasNull()) p.authorName = ctx.authorNames().get(legacyUserId);
+                }
 
-                Timestamp publishedAtTs = rs.getTimestamp("published_at");
+                Timestamp publishedAtTs = columnExists(cols, "published_at") ? rs.getTimestamp("published_at") : null;
                 if (publishedAtTs != null)
                     p.publishedAt = OffsetDateTime.ofInstant(publishedAtTs.toInstant(), ZoneId.systemDefault());
 
-                Timestamp createdAtTs = rs.getTimestamp("created_at");
+                Timestamp createdAtTs = columnExists(cols, "created_at") ? rs.getTimestamp("created_at") : null;
                 if (createdAtTs != null)
                     p.createdAt = OffsetDateTime.ofInstant(createdAtTs.toInstant(), ZoneId.systemDefault());
 
@@ -749,11 +949,16 @@ public class ImportService {
 
     private int importLinks(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
         int count = 0;
-        String sql = "SELECT * FROM links";
+        String sql = "SELECT * FROM links ORDER BY id";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
+                if (isDeleted(rs, cols)) {
+                    ctx.tracker().completeEntityItem("links");
+                    emitEntityProgress(ctx, "友情链接", "跳过已删除友链");
+                    continue;
+                }
                 String url = rs.getString("url");
                 if (Link.count("url = ?1", url) > 0) {
                     ctx.tracker().completeEntityItem("links");
@@ -768,7 +973,7 @@ public class ImportService {
                 if (columnExists(cols, "image")) l.image = resolveAndDownload(rs.getString("image"), assetPrefix, operator, ctx);
                 if (columnExists(cols, "icon")) l.icon = resolveAndDownload(rs.getString("icon"), assetPrefix, operator, ctx);
                 if (columnExists(cols, "sort_order")) l.sortOrder = rs.getInt("sort_order");
-                l.status = 1; // Default visible
+                l.status = isEnabled(rs, cols) ? (short) 1 : (short) 2;
                 l.applicationStatus = 1; // Imported links are treated as approved.
                 l.availabilityStatus = "UNKNOWN";
                 l.backlinkStatus = "UNKNOWN";
@@ -794,23 +999,37 @@ public class ImportService {
 
     private void importUsers(Connection conn, ImportContext ctx) throws SQLException {
         // 在 windblog_webman 中，作者表通常是 wa_users
-        String sql = "SELECT id, username, nickname, email FROM wa_users";
+        String sql = "SELECT * FROM wa_users ORDER BY id";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
+            List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 long oldId = rs.getLong("id");
-                String username = rs.getString("username");
-                String nickname = rs.getString("nickname");
-                String email = rs.getString("email");
-
-                // 尝试通过用户名或邮箱查找现有用户
-                User existing = User.find("username = ?1 or email = ?2", username, email).firstResult();
-                if (existing != null) {
-                    ctx.userMap().put(oldId, existing.id);
-                } else {
-                    // 如果不存在，可以考虑自动创建，但目前为了安全，仅做映射
-                    // 也可以映射给当前操作者，或者映射给超级管理员
+                String username = trimToNull(rs.getString("username"));
+                String nickname = trimToNull(columnExists(cols, "nickname") ? rs.getString("nickname") : null);
+                String email = normalizeEmail(columnExists(cols, "email") ? rs.getString("email") : null);
+                ctx.authorNames().put(oldId, nickname != null ? nickname : username);
+                User byUsername = username == null ? null : User.find("username = ?1", username).firstResult();
+                User byEmail = email == null ? null : User.find("lower(email) = ?1", email).firstResult();
+                if (byUsername != null && byEmail != null && !byUsername.id.equals(byEmail.id)) {
+                    emit("warning", "旧用户用户名与邮箱分别匹配到不同账号，保留署名而不绑定账号", Map.of("legacyUserId", oldId));
+                    continue;
                 }
+                User existing = byUsername != null ? byUsername : byEmail;
+                if (existing == null && username != null && email != null && !isDeleted(rs, cols)) {
+                    User imported = new User();
+                    imported.username = username;
+                    imported.email = email;
+                    imported.nickname = nickname;
+                    imported.status = 0;
+                    imported.mustResetPassword = true;
+                    imported.roleName = RoleConstant.USER;
+                    imported.password = passwordHasher.hash(UUID.randomUUID().toString());
+                    imported.createdAt = readTimestamp(rs, cols, "created_at");
+                    QuarkusTransaction.requiringNew().run(imported::persist);
+                    existing = User.find("username = ?1", username).firstResult();
+                }
+                if (existing != null) ctx.userMap().put(oldId, existing.id);
                 emitEntityProgress(ctx, "作者映射", "正在处理作者/用户映射");
             }
         } catch (SQLException e) {
@@ -848,7 +1067,7 @@ public class ImportService {
 
         // 1. 迁移分类关联 (post_category)
         // 注意：新系统 Post 实体目前仅支持一个 category_id
-        String catSql = "SELECT post_id, category_id FROM post_category";
+        String catSql = "SELECT post_id, category_id FROM post_category ORDER BY post_id, category_id";
         try (PreparedStatement ps = conn.prepareStatement(catSql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
@@ -862,8 +1081,14 @@ public class ImportService {
                     QuarkusTransaction.requiringNew().run(() -> {
                         Post p = postsById.get(newPostId);
                         Category c = categoriesById.get(newCatId);
-                        if (p != null && c != null && p.category == null) {
-                            p.category = c;
+                        if (p != null && c != null) {
+                            if (p.category == null) p.category = c;
+                            if (p.categories.stream().noneMatch(existing -> existing.id.equals(c.id))) {
+                                p.categories.add(c);
+                            }
+                            if (p.category != null && p.categories.stream().noneMatch(existing -> existing.id.equals(p.category.id))) {
+                                p.categories.add(0, p.category);
+                            }
                             p.persist();
                         }
                     });
@@ -909,10 +1134,13 @@ public class ImportService {
         }
 
         // 3. 迁移作者关联 (post_author)
-        String authSql = "SELECT post_id, author_id FROM post_author WHERE is_primary = true";
+        String authSql = "SELECT * FROM post_author ORDER BY post_id, author_id";
         try (PreparedStatement ps = conn.prepareStatement(authSql);
              ResultSet rs = ps.executeQuery()) {
+            List<String> authorColumns = getAvailableColumns(rs);
             while (rs.next()) {
+                if (columnExists(authorColumns, "is_primary") && rs.getObject("is_primary") != null
+                        && !isTruthy(rs.getObject("is_primary"))) continue;
                 long oldPostId = rs.getLong("post_id");
                 long oldAuthId = rs.getLong("author_id");
 
@@ -965,6 +1193,16 @@ public class ImportService {
             List<String> cols = getAvailableColumns(rs);
             while (rs.next()) {
                 long oldId = rs.getLong("id");
+                String legacyStatus = columnExists(cols, "status") ? rs.getString("status") : "approved";
+                if (legacyStatus == null) legacyStatus = "approved";
+                if (columnExists(cols, "trash") && isTruthy(rs.getObject("trash"))) legacyStatus = "trash";
+                else if (columnExists(cols, "spam") && isTruthy(rs.getObject("spam"))) legacyStatus = "spam";
+                else if (columnExists(cols, "approved") && isTruthy(rs.getObject("approved"))) legacyStatus = "approved";
+                if (isDeleted(rs, cols)) {
+                    ctx.tracker().completeEntityItem("comments");
+                    emitEntityProgress(ctx, "评论", "跳过已软删除评论");
+                    continue;
+                }
                 long oldPostId = rs.getLong("post_id");
                 Long newPostId = ctx.postMap().get(oldPostId);
 
@@ -976,10 +1214,16 @@ public class ImportService {
 
                 Comment c = new Comment();
                 c.content = processContentLinks(rs.getString("content"), assetPrefix, operator, ctx);
-                c.status = 1; // 默认通过
-                c.auditStatus = COMMENT_AUDIT_STATUS_APPROVED;
+                c.status = mapLegacyCommentStatus(legacyStatus);
+                c.auditStatus = c.status == 1 ? COMMENT_AUDIT_STATUS_APPROVED : (short) 0;
+                c.guestName = trimToNull(firstAvailable(rs, cols, "guest_name", "author_name", "author"));
+                c.guestEmail = normalizeEmail(firstAvailable(rs, cols, "guest_email", "email"));
+                if ("trash".equalsIgnoreCase(legacyStatus)) {
+                    c.deletedAt = readTimestamp(rs, cols, "updated_at");
+                    if (c.deletedAt == null) c.deletedAt = OffsetDateTime.now();
+                }
 
-                Timestamp createdAtTs = rs.getTimestamp("created_at");
+                Timestamp createdAtTs = columnExists(cols, "created_at") ? rs.getTimestamp("created_at") : null;
                 if (createdAtTs != null)
                     c.createdAt = OffsetDateTime.ofInstant(createdAtTs.toInstant(), ZoneId.systemDefault());
 
@@ -1004,6 +1248,12 @@ public class ImportService {
                     }
                 }
                 final Long finalUserId = oldUserId != null ? ctx.userMap().get(oldUserId) : null;
+                if (finalUserId != null) {
+                    c.user = usersById.get(finalUserId);
+                } else if (oldUserId != null) {
+                    String legacyAuthorName = ctx.authorNames().get(oldUserId);
+                    if (legacyAuthorName != null && !legacyAuthorName.isBlank()) c.guestName = legacyAuthorName;
+                }
 
                 QuarkusTransaction.requiringNew().run(() -> {
                     c.post = postsById.get(newPostId);
@@ -1028,10 +1278,73 @@ public class ImportService {
     }
 
     private PostStatus mapStatus(String status) {
-        if ("published".equalsIgnoreCase(status)) return PostStatus.PUBLISHED;
+        if ("published".equalsIgnoreCase(status) || "publish".equalsIgnoreCase(status)) return PostStatus.PUBLISHED;
         if ("draft".equalsIgnoreCase(status)) return PostStatus.DRAFT;
         if ("archived".equalsIgnoreCase(status)) return PostStatus.ARCHIVED;
         return PostStatus.DRAFT;
+    }
+
+    private short mapLegacyCommentStatus(String status) {
+        if ("approved".equalsIgnoreCase(status) || "1".equals(status)) return 1;
+        if ("spam".equalsIgnoreCase(status) || "trash".equalsIgnoreCase(status) || "2".equals(status)) return 2;
+        return 0;
+    }
+
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean bool) return bool;
+        if (value instanceof Number number) return number.intValue() != 0;
+        if (value == null) return false;
+        String normalized = value.toString().trim();
+        return "1".equals(normalized) || "true".equalsIgnoreCase(normalized)
+                || "yes".equalsIgnoreCase(normalized);
+    }
+
+    private String firstAvailable(ResultSet rs, List<String> columns, String... names) throws SQLException {
+        for (String name : names) {
+            if (columnExists(columns, name)) {
+                String value = trimToNull(rs.getString(name));
+                if (value != null) return value;
+            }
+        }
+        return null;
+    }
+
+    private boolean isDeleted(ResultSet rs, List<String> columns) throws SQLException {
+        if (columnExists(columns, "deleted_at") && rs.getTimestamp("deleted_at") != null) return true;
+        if (columnExists(columns, "is_deleted") && isTruthy(rs.getObject("is_deleted"))) return true;
+        if (columnExists(columns, "deleted") && isTruthy(rs.getObject("deleted"))) return true;
+        if (columnExists(columns, "status")) {
+            String status = rs.getString("status");
+            return "trash".equalsIgnoreCase(status) || "deleted".equalsIgnoreCase(status);
+        }
+        return false;
+    }
+
+    private boolean isEnabled(ResultSet rs, List<String> columns) throws SQLException {
+        if (!columnExists(columns, "status")) return true;
+        Object status = rs.getObject("status");
+        if (status == null) return true;
+        if (status instanceof Boolean value) return value;
+        if (status instanceof Number value) return value.intValue() != 0;
+        String value = status.toString().trim();
+        return !("false".equalsIgnoreCase(value) || "0".equals(value)
+                || "disabled".equalsIgnoreCase(value) || "hidden".equalsIgnoreCase(value));
+    }
+
+    private OffsetDateTime readTimestamp(ResultSet rs, List<String> columns, String column) throws SQLException {
+        if (!columnExists(columns, column)) return null;
+        Timestamp timestamp = rs.getTimestamp(column);
+        return timestamp == null ? null : OffsetDateTime.ofInstant(timestamp.toInstant(), ZoneId.systemDefault());
+    }
+
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String normalizeEmail(String value) {
+        String email = trimToNull(value);
+        if (email == null || !email.matches("(?i)^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) return null;
+        return email.toLowerCase(java.util.Locale.ROOT);
     }
 
     private short mapVisibility(String visibility) {
@@ -1438,11 +1751,12 @@ public class ImportService {
             Map<Long, Long> categoryMap,
             Map<Long, Long> tagMap,
             Map<Long, Long> userMap,
+            Map<Long, String> authorNames,
             Map<Long, Long> postMap,
             ImportProgressTracker tracker
     ) {
         public ImportContext() {
-            this(new HashMap<>(), new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new ImportProgressTracker());
+            this(new HashMap<>(), new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new ImportProgressTracker());
         }
     }
 }

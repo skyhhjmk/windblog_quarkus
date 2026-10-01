@@ -10,6 +10,7 @@ public class AdminCommentDtos {
             String postTitle,
             Long userId,
             String userName,
+            String guestEmail,
             String content,
             Long parentId,
             short status,

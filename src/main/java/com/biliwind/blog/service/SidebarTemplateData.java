@@ -121,7 +121,7 @@ public class SidebarTemplateData {
             return cachedCategories;
         }
 
-        List<Category> categories = Category.find("order by path")
+        List<Category> categories = Category.find("enabled = true order by path")
                 .page(0, MAX_PUBLIC_CATEGORIES)
                 .list();
 
@@ -185,7 +185,7 @@ public class SidebarTemplateData {
 
         long postCount = Post.count("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
                 com.biliwind.blog.model.PostStatus.PUBLISHED);
-        long categoryCount = Category.count();
+        long categoryCount = Category.count("enabled", true);
         long tagCount = Tag.count();
         long commentCount = Comment.count();
 

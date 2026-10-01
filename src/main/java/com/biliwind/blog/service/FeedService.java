@@ -73,7 +73,7 @@ public class FeedService {
     }
 
     public List<SitemapUrlView> getCategorySitemapUrls() {
-        List<Category> categories = Category.find("order by path")
+        List<Category> categories = Category.find("enabled = true order by path")
                 .page(io.quarkus.panache.common.Page.ofSize(MAX_PUBLIC_TAXONOMY_ITEMS)).list();
         List<SitemapUrlView> result = new ArrayList<>();
         for (Category category : categories) {

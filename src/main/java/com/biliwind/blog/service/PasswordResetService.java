@@ -42,7 +42,7 @@ public class PasswordResetService {
         }
 
         User user = User.find("email = ?1 and deletedAt is null", normalizedEmail).firstResult();
-        if (user == null || user.status != 1) {
+        if (user == null || (user.status != 1 && !user.mustResetPassword)) {
             return false;
         }
 
@@ -83,11 +83,15 @@ public class PasswordResetService {
         }
 
         User user = User.find("id = ?1 and deletedAt is null", resetToken.userId).firstResult();
-        if (user == null || user.status != 1) {
+        if (user == null || (user.status != 1 && !user.mustResetPassword)) {
             return false;
         }
 
         user.password = passwordHasher.hash(newPassword);
+        if (user.mustResetPassword) {
+            user.mustResetPassword = false;
+            user.status = 1;
+        }
         resetToken.consumedAt = OffsetDateTime.now();
         return true;
     }

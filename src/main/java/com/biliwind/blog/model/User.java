@@ -50,6 +50,9 @@ public class User extends PanacheEntityBase {
     @Column(nullable = false)
     public short status;
 
+    @Column(name = "must_reset_password", nullable = false)
+    public boolean mustResetPassword;
+
     /**
      * 用户角色
      */

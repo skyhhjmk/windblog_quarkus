@@ -17,6 +17,7 @@ import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -62,12 +63,12 @@ public class CategoryController {
 
         PanacheQuery<Category> categoryQuery;
         if (safeKeyword.isBlank()) {
-            categoryQuery = Category.find("order by path");
+            categoryQuery = Category.find("enabled = true order by path");
         } else {
             String pattern = "%" + safeKeyword.toLowerCase(Locale.ROOT) + "%";
             categoryQuery = Category.find(
-                    "lower(cast(name as String)) like ?1 or lower(cast(description as String)) like ?1 "
-                            + "or lower(slug) like ?1 or lower(path) like ?1 order by path",
+                    "enabled = true and (lower(cast(name as String)) like ?1 or lower(cast(description as String)) like ?1 "
+                            + "or lower(slug) like ?1 or lower(path) like ?1) order by path",
                     pattern);
         }
 
@@ -108,6 +109,7 @@ public class CategoryController {
     @GET
     @Path("/{slug}")
     @Produces(MediaType.TEXT_HTML)
+    @Transactional
     public TemplateInstance detail(@PathParam("slug") String slug,
                                    @QueryParam("page") @DefaultValue("1") Integer page,
                                    @Context HttpHeaders httpHeaders) {
@@ -119,12 +121,13 @@ public class CategoryController {
         if (entity == null) {
             throw new NotFoundException("Category not found: " + normalizedSlug);
         }
+        if (!entity.enabled) throw new NotFoundException("Category not found: " + normalizedSlug);
 
-        List<Category> children = Category.list("parent.id = ?1 order by createdAt desc", entity.id);
+        List<Category> children = Category.list("parent.id = ?1 and enabled = true order by createdAt desc", entity.id);
         List<CategoryListItem> childItems = children.stream().map(c -> toCategoryListItem(c, lang)).toList();
 
         String currentRegion = regionContext.getCurrentRegion().getCode();
-        String queryStr = "category = ?1 and status = ?2 and deletedAt is null and visibility = 0 and publishedRevision is not null "
+        String queryStr = "(category = ?1 or ?1 member of categories) and status = ?2 and deletedAt is null and visibility = 0 and publishedRevision is not null "
                 + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3) "
                 + "order by publishedAt desc nulls last, createdAt desc";
         PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%");
@@ -175,12 +178,24 @@ public class CategoryController {
         }
         
         OffsetDateTime date = post.publishedAt != null ? post.publishedAt : post.createdAt;
+        List<CategoryItem> categories = post.categories.stream()
+                .filter(category -> category != null && category.enabled)
+                .map(category -> new CategoryItem(
+                        LanguageHelper.resolveLocalizedValue(category.name, lang), category.slug))
+                .toList();
+        if (categories.isEmpty() && post.category != null && post.category.enabled) {
+            categories = List.of(new CategoryItem(
+                    LanguageHelper.resolveLocalizedValue(post.category.name, lang), post.category.slug));
+        }
         return new CategoryPostItem(post.slug, title, summary, formatDate(date), 
-                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", tags);
+                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", categories, tags);
     }
 
     @RegisterForReflection
     public record TagItem(String name, String slug) {}
+
+    @RegisterForReflection
+    public record CategoryItem(String name, String slug) {}
 
     private java.util.Map<Long, List<TagItem>> loadTagsByPost(List<Post> posts, String lang) {
         if (posts.isEmpty()) {
@@ -221,7 +236,7 @@ public class CategoryController {
         List<Long> categoryIds = categories.stream().map(category -> category.id).toList();
         java.util.Map<Long, Long> childCounts = new java.util.HashMap<>();
         List<Object[]> rows = Category.getEntityManager()
-                .createQuery("select parent.id, count(id) from Category where parent.id in ?1 group by parent.id", Object[].class)
+                .createQuery("select parent.id, count(id) from Category where enabled = true and parent.id in ?1 group by parent.id", Object[].class)
                 .setParameter(1, categoryIds)
                 .getResultList();
         for (Object[] row : rows) {
@@ -233,7 +248,7 @@ public class CategoryController {
     private CategoryDetailItem toCategoryDetailItem(Category category, String lang) {
         String name = resolveCategoryName(category, lang);
         String description = resolveCategoryDescription(category, lang);
-        long childCount = Category.count("parent.id", category.id);
+        long childCount = Category.count("parent.id = ?1 and enabled = true", category.id);
         return new CategoryDetailItem(
                 category.slug,
                 name,
@@ -258,11 +273,9 @@ public class CategoryController {
             if (slug == null || slug.isBlank()) {
                 continue;
             }
-            Category node = Category.find("slug", slug).firstResult();
+            Category node = Category.find("slug = ?1 and enabled = true", slug).firstResult();
             if (node != null) {
                 items.add(new CategoryBreadcrumb(node.slug, resolveCategoryName(node, lang), "/category/" + node.slug));
-            } else {
-                items.add(new CategoryBreadcrumb(slug, slug, "/category/" + slug));
             }
         }
         return items;
@@ -360,6 +373,6 @@ public class CategoryController {
     }
 
     @RegisterForReflection
-    public record CategoryPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<TagItem> tags) {
+    public record CategoryPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags) {
     }
 }

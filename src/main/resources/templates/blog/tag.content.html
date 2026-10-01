@@ -37,7 +37,9 @@
                                 <div class="flex-1">
                                     <!-- Meta Information -->
                                     <div class="flex items-center gap-4 text-[11px] font-mono text-meta mb-3 tracking-widest uppercase">
-                                        <span class="text-accent font-semibold">{post.categoryName}</span>
+                                        {#for category in post.categories}
+                                            <a class="text-accent font-semibold" href="/category/{category.slug}">{category.name}</a>
+                                        {/for}
                                         <time class="timestamp" data-timestamp="{post.publishedAtText}">{post.publishedAtText}</time>
                                     </div>
 

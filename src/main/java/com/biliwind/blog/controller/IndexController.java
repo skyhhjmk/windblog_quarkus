@@ -224,16 +224,28 @@ public class IndexController {
                 categoryName = "未分类";
             }
             String categorySlug = snapshot.categorySlug() == null ? "uncategorized" : snapshot.categorySlug();
+            List<com.biliwind.blog.service.PublicCacheRefreshService.PublicCategorySnapshot> categorySnapshots =
+                    snapshot.categories() == null ? List.of() : snapshot.categories();
+            List<CategoryItem> categories = categorySnapshots.stream()
+                    .map(category -> new CategoryItem(
+                            LanguageHelper.resolveLocalizedValue(category.name(), language), category.slug()))
+                    .toList();
+            if (categories.isEmpty() && snapshot.categorySlug() != null) {
+                categories = List.of(new CategoryItem(categoryName, categorySlug));
+            }
             result.add(new IndexPostItem(
                     snapshot.slug(), title, summary, snapshot.aiSummary(), aiSummaryStatusValue,
                     snapshot.publishedAt(), snapshot.createdAt(), categoryName, categorySlug,
-                    snapshot.authorName(), tags));
+                    categories, snapshot.authorName(), tags));
         }
         return result;
     }
 
     @TemplateData
     public record TagItem(String name, String slug) {}
+
+    @TemplateData
+    public record CategoryItem(String name, String slug) {}
 
     @TemplateData
     public record IndexPostItem(
@@ -246,6 +258,7 @@ public class IndexController {
             OffsetDateTime createdAt,
             String categoryName,
             String categorySlug,
+            List<CategoryItem> categories,
             String authorName,
             List<TagItem> tags
     ) {

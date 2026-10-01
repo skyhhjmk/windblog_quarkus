@@ -224,10 +224,8 @@ public class AdminCommentController {
             }
         }
 
-        String userName = "Guest";
-        if (comment.user != null) {
-            userName = comment.user.username;
-        }
+        String userName = comment.user != null ? comment.user.username
+                : (comment.guestName == null || comment.guestName.isBlank() ? "Guest" : comment.guestName);
 
         Long parentId = null;
         if (comment.parent != null) {
@@ -240,6 +238,7 @@ public class AdminCommentController {
                 displayTitle,
                 comment.user != null ? comment.user.id : null,
                 userName,
+                comment.guestEmail,
                 comment.content,
                 parentId,
                 comment.status,

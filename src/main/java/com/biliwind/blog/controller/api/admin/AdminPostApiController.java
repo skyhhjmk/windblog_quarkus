@@ -225,10 +225,10 @@ public class AdminPostApiController {
         post.contentDeclarations = validateContentDeclarations(request.contentDeclarations());
         post.repostPolicyCode = repostPolicyCatalog.require(request.repostPolicyCode()).code();
 
-        // 设置分类
-        if (request.categoryId() != null) {
-            post.category = Category.findById(request.categoryId());
-        }
+        List<Long> initialCategoryIds = request.categoryIds() != null
+                ? request.categoryIds()
+                : (request.categoryId() == null ? List.of() : List.of(request.categoryId()));
+        applyPostCategories(post, initialCategoryIds);
 
         post.persist();
 
@@ -304,7 +304,7 @@ public class AdminPostApiController {
         boolean changed = false;
 
         changed |= updateBasicFields(post, request);
-        changed |= updateCategory(post, request);
+        changed |= updateCategories(post, request);
 
         // 更新买断价格和免费行数
         com.biliwind.blog.common.helper.PostHelper.updateExtraInfo(post, request.pointsPrice(), request.freeLines());
@@ -547,6 +547,27 @@ public class AdminPostApiController {
         return tagIds;
     }
 
+    private List<Long> getCategoryIds(Post post) {
+        if (post.categories != null && !post.categories.isEmpty()) {
+            return post.categories.stream().map(category -> category.id).toList();
+        }
+        return post.category == null ? List.of() : List.of(post.category.id);
+    }
+
+    private void applyPostCategories(Post post, List<Long> requestedIds) {
+        List<Long> uniqueIds = requestedIds == null ? List.of() : requestedIds.stream()
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        List<Category> categories = new ArrayList<>();
+        for (Long id : uniqueIds) {
+            Category category = Category.findById(id);
+            if (category == null) throw badRequest("分类不存在: " + id);
+            categories.add(category);
+        }
+        post.categories.clear();
+        post.categories.addAll(categories);
+        post.category = categories.isEmpty() ? null : categories.get(0);
+    }
+
     private AdminPostItem toItem(Post post) {
         List<Long> tagIds = getTagIdsByPostId(post.id);
 
@@ -562,6 +583,7 @@ public class AdminPostApiController {
                 post.user == null ? null : post.user.id,
                 PostAuthorHelper.displayName(post),
                 post.category == null ? null : post.category.id,
+                getCategoryIds(post),
                 tagIds,
                 post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
                 post.publishedRevision != null,
@@ -597,6 +619,7 @@ public class AdminPostApiController {
                 post.user == null ? null : post.user.id,
                 PostAuthorHelper.displayName(post),
                 post.category == null ? null : post.category.id,
+                getCategoryIds(post),
                 tagIds,
                 post.visibilityRegions,
                 post.contentDeclarations,
@@ -837,15 +860,15 @@ public class AdminPostApiController {
         return changed;
     }
 
-    private boolean updateCategory(Post post, PostUpdateRequest request) {
-        if (request.categoryId() != null) {
-            Category newCategory = Category.findById(request.categoryId());
-            if (newCategory != null && !newCategory.equals(post.category)) {
-                post.category = newCategory;
-                return true;
-            }
-        }
-        return false;
+    private boolean updateCategories(Post post, PostUpdateRequest request) {
+        List<Long> requestedIds = request.categoryIds();
+        if (requestedIds == null && request.categoryId() != null) requestedIds = List.of(request.categoryId());
+        if (requestedIds == null) return false;
+        List<Long> currentIds = getCategoryIds(post);
+        List<Long> nextIds = requestedIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (currentIds.equals(nextIds)) return false;
+        applyPostCategories(post, nextIds);
+        return true;
     }
 
     private boolean updateContent(Post post, PostUpdateRequest request) {
@@ -947,6 +970,7 @@ public class AdminPostApiController {
                 post.user == null ? null : post.user.id,
                 PostAuthorHelper.displayName(post),
                 post.category == null ? null : post.category.id,
+                getCategoryIds(post),
                 tagIds,
                 post.visibilityRegions,
                 post.contentDeclarations,

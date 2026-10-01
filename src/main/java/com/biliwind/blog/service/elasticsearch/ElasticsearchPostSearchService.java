@@ -286,8 +286,14 @@ public class ElasticsearchPostSearchService {
                         "authorName": { "type": "keyword" },
                         "categoryId": { "type": "long" },
                         "categoryName": { "type": "keyword" },
-                            "categorySlug": { "type": "keyword" },
+                        "categorySlug": { "type": "keyword" },
                         "categoryPath": { "type": "keyword" },
+                        "categories": {
+                          "properties": {
+                            "name": { "type": "keyword" },
+                            "slug": { "type": "keyword" }
+                          }
+                        },
                         "tags": { "type": "keyword" },
                         "viewCount": { "type": "long" },
                         "featured": { "type": "boolean" },
@@ -444,6 +450,7 @@ public class ElasticsearchPostSearchService {
     /**
      * Index article to Elasticsearch
      */
+    @jakarta.transaction.Transactional
     public void indexPost(Post post) throws Exception {
         indexPost(post, null);
     }
@@ -451,6 +458,7 @@ public class ElasticsearchPostSearchService {
     /**
      * Index article to Elasticsearch (with tags)
      */
+    @jakarta.transaction.Transactional
     public void indexPost(Post post, List<String> tags) throws Exception {
         if (!connectionManager.isAvailable()) {
             log.debugf("Elasticsearch unavailable, skipping article index: %d", post.id);
@@ -482,6 +490,18 @@ public class ElasticsearchPostSearchService {
                 LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "");
         document.put("categorySlug", post.category != null ? post.category.slug : "");
         document.put("categoryPath", post.category != null && post.category.path != null ? post.category.path : "");
+        List<Map<String, String>> categoryDocuments = post.categories.stream()
+                .filter(category -> category != null && category.enabled && category.slug != null)
+                .map(category -> {
+                    String name = category.name == null ? "" : LanguageHelper.resolveLocalizedValue(category.name, lang);
+                    return Map.of("name", name == null ? "" : name, "slug", category.slug);
+                })
+                .toList();
+        if (categoryDocuments.isEmpty() && post.category != null && post.category.enabled && post.category.slug != null) {
+            String name = post.category.name == null ? "" : LanguageHelper.resolveLocalizedValue(post.category.name, lang);
+            categoryDocuments = List.of(Map.of("name", name == null ? "" : name, "slug", post.category.slug));
+        }
+        document.put("categories", categoryDocuments);
         document.put("seoTitle", post.seoTitle != null ? post.seoTitle : "");
         document.put("seoKeywords", post.seoKeywords != null ? post.seoKeywords : "");
         document.put("seoDescription", post.seoDescription != null ? post.seoDescription : "");
@@ -761,6 +781,15 @@ public class ElasticsearchPostSearchService {
                 }
             }
 
+            List<SearchCategory> categories = new ArrayList<>();
+            var categoriesNode = source.path("categories");
+            if (categoriesNode.isArray()) {
+                for (var category : categoriesNode) {
+                    categories.add(new SearchCategory(category.path("name").asText(""),
+                            category.path("slug").asText("")));
+                }
+            }
+
             SearchedPost post = new SearchedPost(
                 source.path("id").asLong(),
                     source.path("title").asText(""),
@@ -770,7 +799,8 @@ public class ElasticsearchPostSearchService {
                 source.path("authorName").asText(""),
                 source.path("categoryName").asText(""),
                     source.path("categorySlug").asText(""),
-                source.path("categoryPath").asText(""),
+                    source.path("categoryPath").asText(""),
+                    categories,
                     tagList,
                 source.path("viewCount").asInt(0),
                 source.path("featured").asBoolean(false),
@@ -912,6 +942,8 @@ public class ElasticsearchPostSearchService {
 
     public record SearchResult(long total, List<SearchedPost> posts) {}
 
+    public record SearchCategory(String name, String slug) {}
+
     public record SearchedPost(
         Long id,
         String title,
@@ -922,6 +954,7 @@ public class ElasticsearchPostSearchService {
         String categoryName,
         String categorySlug,
         String categoryPath,
+        List<SearchCategory> categories,
         List<String> tags,
         int viewCount,
         boolean featured,
