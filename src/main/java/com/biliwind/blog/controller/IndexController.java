@@ -3,6 +3,7 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.context.CspNonceContext;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import io.quarkus.qute.TemplateData;
@@ -53,6 +54,9 @@ public class IndexController {
     @Inject
     RegionContext regionContext;
 
+    @Inject
+    CspNonceContext cspNonceContext;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public Response index(@Context HttpHeaders httpHeaders) {
@@ -77,9 +81,10 @@ public class IndexController {
         String renderedPageCacheKey = buildRenderedPageCacheKey(
                 "index:v2:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
 
-        String cachedHtml = getRenderedPageHtml(renderedPageCacheKey);
-        if (cachedHtml != null) {
-            return buildHtmlResponse(cachedHtml);
+        RenderedPageCache cachedPage = getRenderedPage(renderedPageCacheKey);
+        if (cachedPage != null) {
+            String currentNonce = cspNonceContext.getNonce();
+            return buildHtmlResponse(replaceNonce(cachedPage.html, cachedPage.nonce, currentNonce));
         }
 
         com.biliwind.blog.service.PublicCacheRefreshService.PublicIndexPageSnapshot pageCache =
@@ -119,7 +124,7 @@ public class IndexController {
                 .data("posts", postItems)
                 .render();
 
-        setRenderedPageHtml(renderedPageCacheKey, renderedHtml);
+        setRenderedPageHtml(renderedPageCacheKey, renderedHtml, cspNonceContext.getNonce());
         return buildHtmlResponse(renderedHtml);
     }
 
@@ -148,7 +153,7 @@ public class IndexController {
         return cacheType + ":" + cacheKey;
     }
 
-    private String getRenderedPageHtml(String renderedPageCacheKey) {
+    private RenderedPageCache getRenderedPage(String renderedPageCacheKey) {
         RenderedPageCache renderedPageCache = RENDERED_PAGE_CACHE.get(renderedPageCacheKey);
         if (renderedPageCache == null) {
             return null;
@@ -160,13 +165,20 @@ public class IndexController {
             return null;
         }
 
-        return renderedPageCache.html;
+        return renderedPageCache;
     }
 
-    private void setRenderedPageHtml(String renderedPageCacheKey, String renderedHtml) {
+    private void setRenderedPageHtml(String renderedPageCacheKey, String renderedHtml, String nonce) {
         long expiresAtMillis = System.currentTimeMillis() + RENDERED_PAGE_CACHE_TTL_MILLIS;
-        RenderedPageCache renderedPageCache = new RenderedPageCache(renderedHtml, expiresAtMillis);
+        RenderedPageCache renderedPageCache = new RenderedPageCache(renderedHtml, nonce, expiresAtMillis);
         RENDERED_PAGE_CACHE.put(renderedPageCacheKey, renderedPageCache);
+    }
+
+    private String replaceNonce(String html, String previousNonce, String currentNonce) {
+        if (previousNonce == null || previousNonce.isBlank() || currentNonce == null || currentNonce.isBlank()) {
+            return html;
+        }
+        return html.replace("nonce=\"" + previousNonce + "\"", "nonce=\"" + currentNonce + "\"");
     }
 
     private Response buildHtmlResponse(String html) {
@@ -241,6 +253,7 @@ public class IndexController {
 
     private record RenderedPageCache(
             String html,
+            String nonce,
             long expiresAtMillis
     ) {
     }
