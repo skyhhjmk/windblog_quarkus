@@ -131,4 +131,5 @@
     <include file="db/migration/130-seed-admin-inventory-permission.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/131-add-regional-encrypted-storage-policy.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/132-add-post-multi-category-and-category-status.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/133-improve-ai-comment-audit-prompt.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

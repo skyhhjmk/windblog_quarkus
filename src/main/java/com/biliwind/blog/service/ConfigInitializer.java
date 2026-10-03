@@ -255,7 +255,7 @@ public class ConfigInitializer {
         aiAuditFields.addObject().put("key", "allowAutoDecision").put("label", "允许 AI 自主决策").put("widget", "switch");
 
         ObjectNode aiAuditValue = mapper.createObjectNode();
-        aiAuditValue.put("prompt", "你是一个评论审核专家。请审核以下评论内容，判断其是否包含不当内容（色情、暴力、政治敏感、广告垃圾等）。回答 JSON: {\"isSafe\": true/false, \"reason\": \"理由\", \"score\": 评分0-100}。待审核内容: {{content}}");
+        aiAuditValue.put("prompt", com.biliwind.blog.service.ai.CommentModerationPrompt.DEFAULT_PROMPT);
         aiAuditValue.put("allowAutoDecision", false);
 
         list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "功能设置", aiAuditSchema, "AI 评论审核设置"));

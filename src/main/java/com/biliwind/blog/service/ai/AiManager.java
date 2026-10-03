@@ -79,7 +79,7 @@ public class AiManager {
         }
 
         // 获取系统设置中的提示词
-        String prompt = "你是一个评论审核专家。请审核以下评论内容，判断其是否包含不当内容（色情、暴力、政治敏感、广告垃圾等）。回答 JSON: {\"isSafe\": true/false, \"reason\": \"理由\", \"score\": 评分0-100}。待审核内容: {{content}}";
+        String prompt = CommentModerationPrompt.DEFAULT_PROMPT;
         com.biliwind.blog.model.SystemSetting setting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
         if (setting != null && setting.configValue != null && setting.configValue.has("prompt")) {
             prompt = setting.configValue.get("prompt").asText();
