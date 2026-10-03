@@ -1,0 +1,44 @@
+# Maintainer: Bili_Wind
+pkgname=windblog-admin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='Flutter desktop administration client for WindBlog'
+arch=('x86_64')
+url='https://github.com/skyhhjmk/windblog_admin_flutter'
+license=('BSD-3-Clause')
+depends=('gtk3' 'libsecret')
+makedepends=('cmake' 'clang' 'flutter' 'ninja' 'pkgconf')
+source=("git+https://github.com/skyhhjmk/windblog_admin_flutter.git#commit=70bca75dfba89d6b338ec2e6fd3b00d429a754d4"
+        'windblog-admin.desktop'
+        'windblog-admin')
+sha256sums=('SKIP'
+            '25c69ae587685a209b153ec7ec0957fbbc8ce5eaed09015be5cf897d7f6f5729'
+            'a722723d3caaa3a1cfdc7709b4fed1305018844444041262bf7422b282797953')
+
+prepare() {
+  # The upstream override is specific to the maintainer's local checkout.
+  rm -f "$srcdir/windblog_admin_flutter/pubspec_overrides.yaml"
+}
+
+build() {
+  cd "$srcdir/windblog_admin_flutter"
+  flutter config --no-analytics
+  flutter pub get
+  flutter build linux --release
+}
+
+package() {
+  local bundle="$srcdir/windblog_admin_flutter/build/linux/x64/release/bundle"
+
+  install -d "$pkgdir/opt/windblog-admin"
+  cp -a "$bundle/." "$pkgdir/opt/windblog-admin/"
+
+  install -Dm755 "$srcdir/windblog-admin" \
+    "$pkgdir/usr/bin/windblog-admin"
+  install -Dm644 "$srcdir/windblog-admin.desktop" \
+    "$pkgdir/usr/share/applications/windblog-admin.desktop"
+  install -Dm644 "$srcdir/windblog_admin_flutter/LICENSE" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/windblog_admin_flutter/web/icons/Icon-512.png" \
+    "$pkgdir/usr/share/pixmaps/windblog-admin.png"
+}

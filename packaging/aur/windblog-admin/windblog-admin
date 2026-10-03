@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /opt/windblog-admin/windblog_admin_flutter "$@"

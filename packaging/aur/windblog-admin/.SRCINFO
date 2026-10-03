@@ -1,0 +1,22 @@
+pkgbase = windblog-admin
+	pkgdesc = Flutter desktop administration client for WindBlog
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/skyhhjmk/windblog_admin_flutter
+	arch = x86_64
+	license = BSD-3-Clause
+	makedepends = cmake
+	makedepends = clang
+	makedepends = flutter
+	makedepends = ninja
+	makedepends = pkgconf
+	depends = gtk3
+	depends = libsecret
+	source = git+https://github.com/skyhhjmk/windblog_admin_flutter.git#commit=70bca75dfba89d6b338ec2e6fd3b00d429a754d4
+	source = windblog-admin.desktop
+	source = windblog-admin
+	sha256sums = SKIP
+	sha256sums = 25c69ae587685a209b153ec7ec0957fbbc8ce5eaed09015be5cf897d7f6f5729
+	sha256sums = a722723d3caaa3a1cfdc7709b4fed1305018844444041262bf7422b282797953
+
+pkgname = windblog-admin
