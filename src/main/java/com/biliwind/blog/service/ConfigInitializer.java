@@ -243,6 +243,7 @@ public class ConfigInitializer {
         analyticsValue.put("tagManager", false);
         analyticsValue.put("experiments", false);
         analyticsValue.put("privacyPreferences", true);
+        analyticsValue.putObject("regions");
         list.add(new SettingDefinition("analytics_tracking", analyticsValue, "object", "访问分析", analyticsSchema,
                 "由数据库管理的 SeeRay Lens 追踪配置；保存后自动更新页面 CSP。"));
 

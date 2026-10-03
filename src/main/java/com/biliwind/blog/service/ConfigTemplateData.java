@@ -135,58 +135,56 @@ public class ConfigTemplateData {
     }
 
     public static boolean analyticsTrackingEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().enabled();
+        return analyticsTrackingSettings().enabled();
     }
 
     public static String analyticsTrackingScriptUrl() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().scriptUrl();
+        return analyticsTrackingSettings().scriptUrl();
     }
 
     public static String analyticsTrackingSiteId() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().siteId();
+        return analyticsTrackingSettings().siteId();
     }
 
     public static boolean analyticsTrackingRequireConsent() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().requireConsent();
+        return analyticsTrackingSettings().requireConsent();
     }
 
     public static String analyticsTrackingConsentScriptUrl() {
-        AnalyticsTrackingSettings.Settings settings =
-                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        AnalyticsTrackingSettings.Settings settings = analyticsTrackingSettings();
         return settings.origin().isBlank() ? "" : settings.origin() + "/consent.js";
     }
 
     public static boolean analyticsTrackingHeatmapsEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().heatmaps();
+        return analyticsTrackingSettings().heatmaps();
     }
 
     public static boolean analyticsTrackingWebVitalsEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().webVitals();
+        return analyticsTrackingSettings().webVitals();
     }
 
     public static boolean analyticsTrackingFormsEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().forms();
+        return analyticsTrackingSettings().forms();
     }
 
     public static boolean analyticsTrackingMediaEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().media();
+        return analyticsTrackingSettings().media();
     }
 
     public static boolean analyticsTrackingErrorsEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().errors();
+        return analyticsTrackingSettings().errors();
     }
 
     public static boolean analyticsTrackingTagManagerEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().tagManager();
+        return analyticsTrackingSettings().tagManager();
     }
 
     public static boolean analyticsTrackingExperimentsEnabled() {
-        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current().experiments();
+        return analyticsTrackingSettings().experiments();
     }
 
     public static boolean analyticsTrackingPrivacyPreferencesEnabled() {
-        AnalyticsTrackingSettings.Settings settings =
-                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        AnalyticsTrackingSettings.Settings settings = analyticsTrackingSettings();
         return settings.privacyPreferences() && !settings.origin().isBlank() && !settings.siteId().isBlank();
     }
 
@@ -202,18 +200,20 @@ public class ConfigTemplateData {
     }
 
     private static boolean analyticsTrackingPrivacyPreferencesAvailable() {
-        AnalyticsTrackingSettings.Settings settings =
-                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        AnalyticsTrackingSettings.Settings settings = analyticsTrackingSettings();
         return !settings.origin().isBlank() && !settings.siteId().isBlank();
     }
 
     public static String analyticsTrackingPrivacyPreferencesUrl() {
-        AnalyticsTrackingSettings.Settings settings =
-                Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
+        AnalyticsTrackingSettings.Settings settings = analyticsTrackingSettings();
         return settings.origin().isBlank() || settings.siteId().isBlank()
                 ? ""
                 : settings.origin() + "/privacy/preferences?siteId=" + java.net.URLEncoder.encode(
                         settings.siteId(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static AnalyticsTrackingSettings.Settings analyticsTrackingSettings() {
+        return Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
     }
 
     public static String logoUrl() {

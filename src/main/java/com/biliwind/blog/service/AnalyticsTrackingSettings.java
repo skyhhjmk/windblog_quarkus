@@ -1,7 +1,11 @@
 package com.biliwind.blog.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.model.BlogRegion;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.ContextNotActiveException;
+import jakarta.inject.Inject;
 import java.net.URI;
 
 /** Validated, database-backed public analytics embed configuration. */
@@ -11,12 +15,40 @@ public class AnalyticsTrackingSettings {
 
     private final ConfigManager configManager;
 
+    @Inject
+    RegionContext regionContext;
+
     public AnalyticsTrackingSettings(ConfigManager configManager) {
         this.configManager = configManager;
     }
 
     public Settings current() {
+        BlogRegion region = BlogRegion.GLOBAL;
+        try {
+            if (regionContext != null && regionContext.getCurrentRegion() != null) {
+                region = regionContext.getCurrentRegion();
+            }
+        } catch (ContextNotActiveException ignored) {
+            // Non-request callers retain the legacy global configuration.
+        }
+        return current(region);
+    }
+
+    public Settings current(BlogRegion region) {
         JsonNode value = configManager.get(KEY);
+        if (value == null || !value.isObject()) return Settings.disabled();
+        BlogRegion selectedRegion = region == null ? BlogRegion.GLOBAL : region;
+        if (selectedRegion != BlogRegion.GLOBAL) {
+            JsonNode regionalSettings = value.path("regions");
+            String regionCode = selectedRegion.getCode();
+            if (regionalSettings.isObject() && regionalSettings.has(regionCode)) {
+                value = regionalSettings.get(regionCode);
+            }
+        }
+        return parse(value);
+    }
+
+    private Settings parse(JsonNode value) {
         if (value == null || !value.path("enabled").asBoolean(false)) return Settings.disabled();
         String scriptUrl = value.path("scriptUrl").asText("").trim();
         String siteId = value.path("siteId").asText("").trim();
