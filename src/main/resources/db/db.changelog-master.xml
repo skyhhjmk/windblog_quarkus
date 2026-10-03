@@ -133,4 +133,5 @@
     <include file="db/migration/132-add-post-multi-category-and-category-status.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/133-improve-ai-comment-audit-prompt.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/134-update-existing-ai-comment-audit-prompt.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/135-create-honeypot.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

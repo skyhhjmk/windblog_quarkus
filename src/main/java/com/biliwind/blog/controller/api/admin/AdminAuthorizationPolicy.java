@@ -40,6 +40,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static boolean isSuperAdminOnly(String method, String path, RiskLevel riskLevel) {
+        if (path.startsWith("/api/admin/security/honeypot")) {
+            return true;
+        }
         if (path.equals("/api/admin/edge-nodes/connection/bootstrap")) {
             return false;
         }
@@ -160,6 +163,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static String resourceFor(String path) {
+        if (path.startsWith("/api/admin/security/honeypot")) {
+            return "honeypot";
+        }
         if (path.startsWith("/api/admin/users/") && path.contains("/inventory")) {
             return "inventory";
         }
@@ -233,6 +239,9 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static String actionFor(String method, String path, String resource) {
+        if (path.startsWith("/api/admin/security/honeypot")) {
+            return "GET".equals(method) ? "honeypot.read" : "honeypot.rule.update";
+        }
         if (path.startsWith("/api/admin/users/") && path.endsWith("/inventory/grant")) {
             return "inventory.grant";
         }
