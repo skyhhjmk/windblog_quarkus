@@ -13,6 +13,7 @@ import com.biliwind.blog.service.ConfigTemplateData;
 import io.quarkus.panache.common.Page;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
+import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -219,8 +220,10 @@ public class TagController {
                 post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", categories, tags);
     }
 
+    @TemplateData
     public record TagItem(String name, String slug) {}
 
+    @TemplateData
     public record CategoryItem(String name, String slug) {}
 
     private java.util.Map<Long, List<TagItem>> loadTagsByPost(List<Post> posts, String lang) {
@@ -318,12 +321,15 @@ public class TagController {
         return value == null ? "" : value.trim();
     }
 
+    @TemplateData
     public record TagListItem(String slug, String name, String description, long postCount, String createdAtText) {
     }
 
+    @TemplateData
     public record TagDetailItem(String slug, String name, String description, long postCount, String createdAtText) {
     }
 
+    @TemplateData
     public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags) {
     }
 }
