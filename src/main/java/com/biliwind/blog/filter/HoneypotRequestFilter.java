@@ -10,6 +10,8 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +44,39 @@ public class HoneypotRequestFilter {
 
     @Inject
     RoutingContext routingContext;
+
+    @ServerRequestFilter(preMatching = true, priority = Priorities.AUTHENTICATION - 50)
+    public Uni<Response> handleUnmatchedDecoyPath(ContainerRequestContext request) {
+        String path = request.getUriInfo().getPath();
+        if (!isDecoyPath(path)) return Uni.createFrom().nullItem();
+
+        Map<String, List<String>> headers = copyHeaders(request.getHeaders());
+        String uri = request.getUriInfo().getRequestUri().toString();
+        String method = request.getMethod();
+        HoneypotService.Detection detection = honeypotService.detect(method, uri, headers, new byte[0]);
+        if (detection.matchedRules().isEmpty()) {
+            return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build());
+        }
+
+        ClientIpResolver.ClientIpResolution ip;
+        try {
+            ip = clientIpResolver.resolve(routingContext);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("蜜罐诱饵路径客户端地址解析失败: method={}, path={}", method, path, exception);
+            return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build());
+        }
+        String userAgent = firstHeader(headers, "user-agent");
+        return Uni.createFrom().item(() -> {
+            try {
+                honeypotService.record(ip.clientIp(), ip.remoteIp(), method, uri, userAgent,
+                        detection.matchedRules(), detection.blocked() ? "BLOCK" : "OBSERVE",
+                        headers, new byte[0], false);
+            } catch (RuntimeException exception) {
+                LOGGER.warn("蜜罐诱饵路径事件写入失败: method={}, rules={}", method, detection.matchedRules(), exception);
+            }
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+    }
 
     @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 50, readBody = true)
     public Optional<Response> filter(ContainerRequestContext request) {
