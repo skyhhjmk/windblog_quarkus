@@ -3,16 +3,13 @@ package com.biliwind.blog.filter;
 import com.biliwind.blog.service.security.ClientIpResolver;
 import com.biliwind.blog.service.security.HoneypotService;
 import io.vertx.ext.web.RoutingContext;
-import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.ext.Provider;
-import jakarta.ws.rs.container.PreMatching;
+import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,13 +21,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
-/** Inspects requests before REST resource matching, including common decoy paths. */
-@Provider
-@PreMatching
-@Priority(Priorities.AUTHENTICATION - 50)
+/** Inspects matched REST requests after Quarkus has safely read any request body. */
 @ApplicationScoped
-public class HoneypotRequestFilter implements ContainerRequestFilter {
+public class HoneypotRequestFilter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HoneypotRequestFilter.class);
     private static final int MAX_BODY_SAMPLE_BYTES = 8 * 1024 * 1024;
@@ -48,14 +43,14 @@ public class HoneypotRequestFilter implements ContainerRequestFilter {
     @Inject
     RoutingContext routingContext;
 
-    @Override
-    public void filter(ContainerRequestContext request) {
+    @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 50, readBody = true)
+    public Optional<Response> filter(ContainerRequestContext request) {
         Map<String, List<String>> headers = copyHeaders(request.getHeaders());
         BodySample body = readBodySample(request);
         String uri = request.getUriInfo().getRequestUri().toString();
         String method = request.getMethod();
         HoneypotService.Detection detection = honeypotService.detect(method, uri, headers, body.bytes());
-        if (detection.matchedRules().isEmpty()) return;
+        if (detection.matchedRules().isEmpty()) return Optional.empty();
 
         String userAgent = firstHeader(headers, "user-agent");
         String action = detection.blocked() ? "BLOCK" : "OBSERVE";
@@ -70,13 +65,14 @@ public class HoneypotRequestFilter implements ContainerRequestFilter {
 
         String path = request.getUriInfo().getPath();
         if (isDecoyPath(path)) {
-            request.abortWith(Response.status(Response.Status.NOT_FOUND).build());
+            return Optional.of(Response.status(Response.Status.NOT_FOUND).build());
         } else if (detection.blocked()) {
-            request.abortWith(Response.status(Response.Status.FORBIDDEN)
+            return Optional.of(Response.status(Response.Status.FORBIDDEN)
                     .header("Cache-Control", "no-store")
                     .entity("请求已拒绝")
                     .build());
         }
+        return Optional.empty();
     }
 
     private BodySample readBodySample(ContainerRequestContext request) {
