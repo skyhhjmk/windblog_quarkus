@@ -1,5 +1,36 @@
 # WESP 双实例本地测试
 
+## 主节点主动轮询与私网隔离
+
+可在独立的数据目录、容器名、数据库名和端口上运行主动轮询拓扑。此时 `home`
+是主节点，`public` 是公网边缘节点；`home` 只在容器回环地址监听 HTTP/gRPC，
+且不发布主节点端口。`public` 无主节点 peer URL，无法主动建立到主节点的 TCP 连接。
+
+```bash
+WINDBLOG_WESP_TEST_TOPOLOGY=active-poll \
+WINDBLOG_WESP_TEST_PRIVATE_MAIN=true \
+WINDBLOG_WESP_TEST_BUILD_MODE=jvm \
+WINDBLOG_WESP_TEST_DATA_DIR="$PWD/.codex-test-data/wesp-active-poll" \
+WINDBLOG_WESP_PUBLIC_CONTAINER=windblog-wesp-ap-public \
+WINDBLOG_WESP_HOME_CONTAINER=windblog-wesp-ap-home \
+WINDBLOG_WESP_PUBLIC_DB=wesp_ap_public \
+WINDBLOG_WESP_HOME_DB=wesp_ap_home \
+WINDBLOG_WESP_PUBLIC_PORT=58280 \
+WINDBLOG_WESP_HOME_PORT=58281 \
+WINDBLOG_WESP_PUBLIC_GRPC_PORT=59280 \
+WINDBLOG_WESP_HOME_GRPC_PORT=59281 \
+WINDBLOG_WESP_TEST_IMAGE=localhost/windblog:wesp-active-poll \
+scripts/wesp-two-node-test.sh up
+```
+
+检查主节点的入站隔离：`podman port windblog-wesp-ap-home` 应为空；从
+`windblog-wesp-ap-public` 容器访问主节点容器 IP 的 8080 和 9000 端口应连接失败。
+主节点健康检查只能在主节点容器内执行：
+`podman exec windblog-wesp-ap-home curl -fsS http://127.0.0.1:8080/q/health/ready`。
+在边缘节点上提交需要回源的写请求，核对结果只出现在 `wesp_ap_home` 数据库；
+再检查主节点的 WESP 操作是否推送到 `wesp_ap_public`。测试数据保留在独立目录中，
+供失败复盘。
+
 本测试在现有 `scripts/local-test.sh` 依赖栈之上启动两个独立的 WindBlog
 容器：
 

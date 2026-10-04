@@ -68,6 +68,7 @@ public class WespSyncService {
     @Inject EdgeReadOnlyState readOnlyState;
     @Inject StorageService storageService;
     @Inject WespRuntimeConfig runtimeConfig;
+    @Inject WespActivePollChannel activePollChannel;
     @Inject Instance<EdgeDataSyncService> edgeDataSyncService;
 
     @ConfigProperty(name = "windblog.wesp.enabled", defaultValue = "true") boolean enabled;
@@ -135,12 +136,19 @@ public class WespSyncService {
         return normalizePeerUrl() != null;
     }
 
+    public String peerUrlForActivePoll() {
+        return normalizePeerUrl();
+    }
+
     /**
      * Forward a write request over the authenticated outbound WESP connection.
      * The edge node never accepts a socket from the primary; it creates a
      * short request/response exchange on the same HTTPS peer URL.
      */
     public RoutedHttpExchange.Response forwardWriteRequest(RoutedHttpExchange.Request request) {
+        if (activePollChannel.isEnabled()) {
+            return activePollChannel.forward(request);
+        }
         if (request == null || request.method() == null || request.path() == null) {
             return unavailableResponse("WESP 回源请求参数无效");
         }
@@ -242,8 +250,7 @@ public class WespSyncService {
 
     /**
      * Ask one registered WESP peer to converge to the current public snapshot.
-     * The request and snapshot are both outbox operations, so a public node
-     * never opens an inbound connection to the home node.
+     * Active-poll peers receive the snapshot through the primary's outbound sync.
      */
     @Transactional
     public String triggerFullSync(String targetNodeId, boolean force) {
@@ -252,21 +259,21 @@ public class WespSyncService {
             throw new IllegalArgumentException("WESP 节点不存在");
         }
         String peerUrl = target.apiUrl == null ? "" : target.apiUrl.trim().replaceAll("/+$", "");
-        if (!peerUrl.startsWith("http://") && !peerUrl.startsWith("https://")) {
+        if (!activePollChannel.isEnabled() && !peerUrl.startsWith("http://") && !peerUrl.startsWith("https://")) {
             throw new IllegalArgumentException("WESP 节点缺少主节点连接域名");
         }
         ObjectNode request = mapper.createObjectNode();
         request.put("target_node_id", targetNodeId);
         request.put("mode", "FULL");
         request.put("force", force);
-        request.put("peer_id", sha256(peerUrlForTarget(target)));
+        if (!activePollChannel.isEnabled()) request.put("peer_id", sha256(peerUrlForTarget(target)));
         request.put("requested_at", now().toString());
         // Put the request before the snapshot items. If the edge receives the
         // request in the same pull page, it resets its cursor before consuming
         // the snapshot. If it receives the request first, the next pull starts
         // after the request and continues with the remaining snapshot.
-        String requestOperationId = enqueueLocalOperation(
-                "SYNC_REQUEST", "UPSERT", targetNodeId, request.toString());
+        String requestOperationId = activePollChannel.isEnabled() ? "active-poll"
+                : enqueueLocalOperation("SYNC_REQUEST", "UPSERT", targetNodeId, request.toString());
         int snapshotItems = 0;
         for (EdgeDataSyncService.FullSyncItem item
                 : edgeDataSyncService.get().buildPublicFullSyncSnapshot(force)) {
@@ -284,6 +291,13 @@ public class WespSyncService {
      * so it uses the authenticated outbound WESP control channel.
      */
     public void requestFullSyncFromPrimary(boolean force) {
+        if (activePollChannel.isEnabled()) {
+            RoutedHttpExchange.Response response = activePollChannel.forward(new RoutedHttpExchange.Request(
+                    "WESP_FULL_SYNC", "/internal/full-sync", force ? "force=true" : "force=false",
+                    Map.of(), new byte[0]));
+            if (response.status() != 202) throw new IllegalStateException("WESP 主节点未接受全量同步请求");
+            return;
+        }
         if (!isEnabled() || !hasPeer()) {
             throw new IllegalStateException("WESP 主节点连接未配置");
         }
@@ -884,7 +898,7 @@ public class WespSyncService {
         // through WespRuntimeConfig, without peer/token env overrides.
         // Use the effective configuration here, otherwise the runtime file is
         // only read for request handling and the active scheduler never runs.
-        if (!isEnabled() || !hasPeer()) return;
+        if (!isEnabled() || !hasPeer() || activePollChannel.isEnabled() && nodeRoleService.isEdgeNode()) return;
         try {
             negotiateSession();
             pushPending();
@@ -1205,6 +1219,7 @@ public class WespSyncService {
     }
 
     private String normalizePeerUrl() {
+        if (nodeRoleService.isEdgeNode() && activePollChannel.isEnabled()) return null;
         // An authenticated bootstrap is the node's active enrollment. It must
         // take precedence over an image's stale development/default peer.
         String value = runtimeConfig.peerUrl().filter(item -> !item.isBlank())

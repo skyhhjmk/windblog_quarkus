@@ -40,6 +40,11 @@ public class WespNodeConnectionService {
 
     @Inject ObjectMapper mapper;
     @Inject WespSyncService wespSyncService;
+    @Inject WespRuntimeConfig runtimeConfig;
+    @Inject NodeRoleService nodeRoleService;
+
+    @ConfigProperty(name = "windblog.wesp.active-poll.enabled", defaultValue = "false")
+    boolean activePollEnabled;
 
     @ConfigProperty(name = "windblog.site.public-url", defaultValue = "http://localhost:8080")
     String sitePublicUrl;
@@ -78,6 +83,13 @@ public class WespNodeConnectionService {
         String targetStepUp = stepUp(targetUrl, targetJwt, request.password());
         bootstrap(targetUrl, targetJwt, targetStepUp, request, authToken);
 
+        if (activePollEnabled && nodeRoleService.isPrimaryNode()) {
+            runtimeConfig.applyBootstrap(nodeRoleService.getNodeId(), targetUrl, authToken,
+                    wespSyncService.bootstrapTenantId(), wespSyncService.bootstrapDatasetId(),
+                    UUID.randomUUID().toString(), true, request.nodeId().trim());
+            wespSyncService.refreshRuntimeConfig();
+        }
+
         EdgeNode node = persistNode(request, targetUrl);
         Map<String, Object> checks = new LinkedHashMap<>();
         checks.put("reachable", true);
@@ -85,7 +97,8 @@ public class WespNodeConnectionService {
         checks.put("bootstrapped", true);
         checks.put("health_status", 200);
         return new ConnectionResult(node, targetUrl, checks,
-                "目标节点已登录并写入 WESP 运行配置，等待其主动会话");
+                activePollEnabled ? "已建立主节点主动连接配置，等待通道就绪"
+                        : "目标节点已登录并写入 WESP 运行配置，等待其主动会话");
     }
 
     private String resolveReachableUrl(String rawTargetUrl) {
@@ -199,7 +212,8 @@ public class WespNodeConnectionService {
             body.put("nodeName", request.nodeName() == null || request.nodeName().isBlank()
                     ? request.nodeId().trim() : request.nodeName().trim());
             body.put("region", (request.region() == null ? BlogRegion.GLOBAL : request.region()).name().toLowerCase());
-            body.put("peerUrl", peerUrlForTarget());
+            body.put("peerUrl", activePollEnabled ? "" : peerUrlForTarget());
+            body.put("activePoll", activePollEnabled);
             if (request.externalUrl() == null || request.externalUrl().isBlank()) body.putNull("externalUrl");
             else body.put("externalUrl", request.externalUrl().trim());
             body.put("tenantId", wespSyncService.bootstrapTenantId());

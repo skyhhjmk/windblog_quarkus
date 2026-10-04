@@ -125,7 +125,8 @@ public class AdminEdgeNodeApiController {
     @Transactional
     @Operation(summary = "写入 WESP 运行配置", description = "由已登录的目标管理员完成一次性节点引导")
     public Response bootstrap(ConnectionBootstrapRequest request) {
-        if (request == null || blank(request.nodeId()) || blank(request.peerUrl())
+        if (request == null || blank(request.nodeId())
+                || !Boolean.TRUE.equals(request.activePoll()) && blank(request.peerUrl())
                 || blank(request.authToken()) || blank(request.tenantId())
                 || blank(request.datasetId()) || blank(request.incarnation())) {
             throw new BadRequestException("WESP 连接引导参数不完整");
@@ -135,9 +136,10 @@ public class AdminEdgeNodeApiController {
             throw new BadRequestException("WESP 连接引导参数无效");
         }
         try {
-            wespRuntimeConfig.applyBootstrap(request.nodeId().trim(), request.peerUrl().trim(),
+            boolean activePoll = Boolean.TRUE.equals(request.activePoll());
+            wespRuntimeConfig.applyBootstrap(request.nodeId().trim(), activePoll ? "" : request.peerUrl().trim(),
                     request.authToken().trim(), request.tenantId().trim(), request.datasetId().trim(),
-                    request.incarnation().trim());
+                    request.incarnation().trim(), activePoll);
             wespSyncService.refreshRuntimeConfig();
 
             EdgeNode node = EdgeNode.findByNodeId(request.nodeId().trim());
@@ -148,7 +150,7 @@ public class AdminEdgeNodeApiController {
             node.name = blank(request.nodeName()) ? node.nodeId : request.nodeName().trim();
             node.region = request.region() == null ? BlogRegion.GLOBAL : request.region();
             node.connectionType = EdgeConnectionType.WESP;
-            node.apiUrl = request.peerUrl().trim().replaceAll("/+$", "");
+            node.apiUrl = activePoll ? null : request.peerUrl().trim().replaceAll("/+$", "");
             node.externalUrl = blank(request.externalUrl()) ? null : request.externalUrl().trim();
             node.status = "CONFIGURED";
             node.isEnabled = true;
@@ -157,7 +159,8 @@ public class AdminEdgeNodeApiController {
             node.metrics.put("connection", "admin-login-bootstrap");
             node.persist();
             return Response.ok(java.util.Map.of("success", true, "nodeId", node.nodeId,
-                    "status", node.status, "message", "WESP 运行配置已保存，节点将主动连接主节点")).build();
+                    "status", node.status, "message", activePoll
+                            ? "WESP 配置已保存，等待主节点主动连接" : "WESP 运行配置已保存，节点将主动连接主节点")).build();
         } catch (IllegalArgumentException exception) {
             throw new BadRequestException(exception.getMessage());
         }
@@ -298,9 +301,8 @@ public class AdminEdgeNodeApiController {
         if (node != null && node.connectionType == EdgeConnectionType.WESP
                 && wespSyncService.isEnabled()) {
             if (nodeRoleService.isEdgeNode()) {
-                // A home admin must ask the primary to create the snapshot;
-                // appending a SYNC_REQUEST locally would be rejected by the
-                // primary because its target node is the home itself.
+                // The edge asks the primary to create the snapshot through
+                // its configured WESP request transport.
                 try {
                     wespSyncService.requestFullSyncFromPrimary(force);
                 } catch (IllegalStateException exception) {
@@ -308,9 +310,8 @@ public class AdminEdgeNodeApiController {
                             "无法向 WESP 主节点请求全量同步", Response.Status.BAD_GATEWAY);
                 }
             } else {
-                // WESP has no inbound path to a home node. The primary appends
-                // the request and current public snapshot to its operation log;
-                // the home consumes them during its next outbound pull.
+                // The primary appends the snapshot to its operation log. In
+                // active-poll mode it pushes it to the public edge.
                 wespSyncService.triggerFullSync(nodeId, force);
             }
             return Response.accepted().build();
@@ -506,7 +507,8 @@ public class AdminEdgeNodeApiController {
             String tenantId,
             String datasetId,
             String authToken,
-            String incarnation
+            String incarnation,
+            Boolean activePoll
     ) {
     }
 

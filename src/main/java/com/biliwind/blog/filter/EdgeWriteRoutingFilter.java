@@ -120,6 +120,9 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
         if (path.equals("/api/admin/edge-nodes/connection/bootstrap")) {
             return true;
         }
+        if (wespSyncService.isEnabled() && path.matches("/api/admin/edge-nodes/[^/]+/sync")) {
+            return true;
+        }
         if (path.equals("/api/admin/install")) {
             return true;
         }

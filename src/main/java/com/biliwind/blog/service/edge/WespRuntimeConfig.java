@@ -48,6 +48,10 @@ public class WespRuntimeConfig {
         return Optional.ofNullable(values.peerUrl);
     }
 
+    public boolean isActivePoll() {
+        return values.activePoll;
+    }
+
     public Optional<String> authToken() {
         return Optional.ofNullable(values.authToken);
     }
@@ -68,8 +72,12 @@ public class WespRuntimeConfig {
         return Optional.ofNullable(values.nodeId);
     }
 
+    public Optional<String> peerNodeId() {
+        return Optional.ofNullable(values.peerNodeId);
+    }
+
     public boolean isConfigured() {
-        return values.peerUrl != null && values.authToken != null;
+        return (values.peerUrl != null || values.activePoll) && values.authToken != null;
     }
 
     /** Persist only the runtime fields needed by WESP. */
@@ -80,20 +88,24 @@ public class WespRuntimeConfig {
         String tenantId = text(payload, "tenant_id");
         String datasetId = text(payload, "dataset_id");
         String incarnation = text(payload, "incarnation");
-        if (nodeId == null || peerUrl == null || authToken == null || tenantId == null
+        String peerNodeId = text(payload, "peer_node_id");
+        boolean activePoll = payload.path("active_poll").asBoolean(false);
+        if (nodeId == null || peerUrl == null && !activePoll || authToken == null || tenantId == null
                 || datasetId == null || incarnation == null
-                || (!peerUrl.startsWith("http://") && !peerUrl.startsWith("https://"))
+                || (peerUrl != null && !peerUrl.startsWith("http://") && !peerUrl.startsWith("https://"))
                 || authToken.length() < 32) {
             throw new IllegalArgumentException("WESP 运行配置缺少有效字段");
         }
 
         ObjectNode root = mapper.createObjectNode();
         root.put("node_id", nodeId);
-        root.put("peer_url", peerUrl.replaceAll("/+$", ""));
+        root.put("peer_url", peerUrl == null ? "" : peerUrl.replaceAll("/+$", ""));
+        root.put("active_poll", activePoll);
         root.put("auth_token", authToken);
         root.put("tenant_id", tenantId);
         root.put("dataset_id", datasetId);
         root.put("incarnation", incarnation);
+        if (peerNodeId != null) root.put("peer_node_id", peerNodeId);
         root.put("version", 1);
         Path target = configPath();
         try {
@@ -114,8 +126,8 @@ public class WespRuntimeConfig {
             } finally {
                 Files.deleteIfExists(temporary);
             }
-            values = new Values(nodeId, root.path("peer_url").asText(), authToken,
-                    tenantId, datasetId, incarnation);
+            values = new Values(nodeId, text(root, "peer_url"), authToken,
+                    tenantId, datasetId, incarnation, activePoll, peerNodeId);
         } catch (IOException exception) {
             throw new IllegalStateException("无法保存 WESP 本地运行配置", exception);
         }
@@ -124,6 +136,18 @@ public class WespRuntimeConfig {
     /** Apply an authenticated bootstrap without accepting a transport code. */
     public synchronized void applyBootstrap(String nodeId, String peerUrl, String authToken,
                                             String tenantId, String datasetId, String incarnation) {
+        applyBootstrap(nodeId, peerUrl, authToken, tenantId, datasetId, incarnation, false);
+    }
+
+    public synchronized void applyBootstrap(String nodeId, String peerUrl, String authToken,
+                                            String tenantId, String datasetId, String incarnation,
+                                            boolean activePoll) {
+        applyBootstrap(nodeId, peerUrl, authToken, tenantId, datasetId, incarnation, activePoll, null);
+    }
+
+    public synchronized void applyBootstrap(String nodeId, String peerUrl, String authToken,
+                                            String tenantId, String datasetId, String incarnation,
+                                            boolean activePoll, String peerNodeId) {
         ObjectNode payload = mapper.createObjectNode();
         payload.put("node_id", nodeId == null ? "" : nodeId);
         payload.put("peer_url", peerUrl == null ? "" : peerUrl);
@@ -131,6 +155,8 @@ public class WespRuntimeConfig {
         payload.put("tenant_id", tenantId == null ? "" : tenantId);
         payload.put("dataset_id", datasetId == null ? "" : datasetId);
         payload.put("incarnation", incarnation == null ? "" : incarnation);
+        payload.put("active_poll", activePoll);
+        if (peerNodeId != null) payload.put("peer_node_id", peerNodeId);
         apply(payload);
     }
 
@@ -145,9 +171,12 @@ public class WespRuntimeConfig {
             String tenantId = text(root, "tenant_id");
             String datasetId = text(root, "dataset_id");
             String incarnation = text(root, "incarnation");
-            if (nodeId != null && peerUrl != null && authToken != null && authToken.length() >= 32
+            String peerNodeId = text(root, "peer_node_id");
+            boolean activePoll = root.path("active_poll").asBoolean(false);
+            if (nodeId != null && (peerUrl != null || activePoll) && authToken != null && authToken.length() >= 32
                     && tenantId != null && datasetId != null && incarnation != null) {
-                values = new Values(nodeId, peerUrl, authToken, tenantId, datasetId, incarnation);
+                values = new Values(nodeId, peerUrl, authToken, tenantId, datasetId,
+                        incarnation, activePoll, peerNodeId);
             } else {
                 LOG.warn("WESP 本地运行配置字段不完整，忽略 {}", target);
             }
@@ -175,9 +204,10 @@ public class WespRuntimeConfig {
     }
 
     private record Values(String nodeId, String peerUrl, String authToken,
-                          String tenantId, String datasetId, String incarnation) {
+                          String tenantId, String datasetId, String incarnation, boolean activePoll,
+                          String peerNodeId) {
         private static Values empty() {
-            return new Values(null, null, null, null, null, null);
+            return new Values(null, null, null, null, null, null, false, null);
         }
     }
 }

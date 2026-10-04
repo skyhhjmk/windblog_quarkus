@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.internal;
 
 import com.biliwind.blog.service.edge.WespSyncService;
+import com.biliwind.blog.service.edge.WespActivePollChannel;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.PrimaryRoutedHttpExecutor;
 import com.biliwind.blog.service.edge.RoutedHttpExchange;
@@ -23,6 +24,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import io.smallrye.common.annotation.Blocking;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -31,6 +33,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletionStage;
 
 /** Internal WESP v1 receiver. It never opens a connection to a peer. */
 @Path("/sync/v1")
@@ -38,10 +41,45 @@ import java.util.UUID;
 @Tag(name = "WESP internal synchronization")
 public class WespSyncResource {
     @Inject WespSyncService sync;
+    @Inject WespActivePollChannel activePoll;
     @Inject NodeRoleService nodeRoleService;
     @Inject PrimaryRoutedHttpExecutor primaryRoutedHttpExecutor;
     @Inject ObjectMapper mapper;
     @Context HttpHeaders requestHeaders;
+
+    @GET
+    @Path("/active-poll/next")
+    @Blocking
+    @Operation(summary = "Hold a primary-initiated request channel to a public edge")
+    public CompletionStage<Response> nextActivePoll(@HeaderParam("Authorization") String authorization,
+                                                     @HeaderParam("X-WESP-Node-Id") String nodeId,
+                                                     @HeaderParam("X-WESP-Request-Id") String requestId) {
+        Response auth = authorize(authorization, nodeId, requestId, "");
+        if (auth != null) return java.util.concurrent.CompletableFuture.completedFuture(auth);
+        return activePoll.poll(nodeId);
+    }
+
+    @POST
+    @Path("/active-poll/results/{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Return a primary-executed response over the outbound channel")
+    public Response activePollResult(@PathParam("id") String id, String body,
+                                     @HeaderParam("Authorization") String authorization,
+                                     @HeaderParam("X-WESP-Node-Id") String nodeId,
+                                     @HeaderParam("X-WESP-Request-Id") String requestId) {
+        Response auth = authorize(authorization, nodeId, requestId, body);
+        if (auth != null) return auth;
+        if (body == null || body.length() > 15_000_000 || !isUuid(id)) {
+            return error(Response.Status.BAD_REQUEST, requestId, "INVALID_ACTIVE_POLL_RESULT", false);
+        }
+        try {
+            return activePoll.complete(nodeId, id, mapper.readTree(body))
+                    ? Response.noContent().build()
+                    : error(Response.Status.CONFLICT, requestId, "ACTIVE_POLL_RESULT_NOT_PENDING", false);
+        } catch (Exception exception) {
+            return error(Response.Status.BAD_REQUEST, requestId, "INVALID_ACTIVE_POLL_RESULT", false);
+        }
+    }
 
     @POST
     @Path("/sessions")
@@ -100,6 +138,9 @@ public class WespSyncResource {
                                   @HeaderParam("X-WESP-Request-Id") String requestId) {
         Response auth = authorize(authorization, nodeId, requestId, body);
         if (auth != null) return auth;
+        if (activePoll.isEnabled()) {
+            return error(Response.Status.CONFLICT, requestId, "ACTIVE_POLL_REQUIRES_PRIMARY_OUTBOUND", false);
+        }
         if (!nodeRoleService.isPrimaryNode()) {
             return error(Response.Status.CONFLICT, requestId, "REQUEST_TARGET_NOT_PRIMARY", true);
         }

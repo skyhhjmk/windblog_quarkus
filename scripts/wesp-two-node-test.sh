@@ -28,6 +28,8 @@ TEST_ADMIN_EMAIL="${WINDBLOG_WESP_TEST_ADMIN_EMAIL:-wespadmin@example.test}"
 TEST_ADMIN_PASSWORD="${WINDBLOG_WESP_TEST_ADMIN_PASSWORD:-WespLocalAdmin!2026}"
 TEST_MAX_EGRESS_BYTES_PER_MINUTE="${WINDBLOG_WESP_TEST_MAX_EGRESS_BYTES_PER_MINUTE:-0}"
 RESET_RUNTIME_CONFIG="${WINDBLOG_WESP_TEST_RESET_RUNTIME_CONFIG:-false}"
+TOPOLOGY="${WINDBLOG_WESP_TEST_TOPOLOGY:-outbound-sync}"
+PRIVATE_MAIN="${WINDBLOG_WESP_TEST_PRIVATE_MAIN:-false}"
 
 mkdir -p "${DATA_DIR}" "${LOG_DIR}" "${ENV_DIR}"
 chmod 700 "${DATA_DIR}" "${LOG_DIR}" "${ENV_DIR}"
@@ -104,8 +106,13 @@ EOF
 
 ensure_admin() {
   local node="$1" port="$2" installed body
-  installed="$(curl -fsS "http://127.0.0.1:${port}/api/admin/install/status" \
-    | jq -r '.installed // false')"
+  if [[ "${TOPOLOGY}" == "active-poll" && "${PRIVATE_MAIN}" == "true" && "${node}" == "home" ]]; then
+    installed="$(podman exec "${HOME_CONTAINER}" curl -fsS "http://127.0.0.1:8080/api/admin/install/status" \
+      | jq -r '.installed // false')"
+  else
+    installed="$(curl -fsS "http://127.0.0.1:${port}/api/admin/install/status" \
+      | jq -r '.installed // false')"
+  fi
   if [[ "${installed}" == "true" ]]; then
     return 0
   fi
@@ -116,16 +123,33 @@ ensure_admin() {
     --arg siteUrl "http://127.0.0.1:${port}" \
     --arg title "WindBlog WESP ${node}" \
     '{username:$username,email:$email,password:$password,siteTitle:$title,siteSubtitle:"本地 WESP 双节点测试",siteDescription:"仅供本地协议验收",siteKeywords:["wesp","local-test"],siteAuthor:"WindBlog",siteUrl:$siteUrl}')"
-  curl -fsS -X POST "http://127.0.0.1:${port}/api/admin/install" \
-    -H 'Content-Type: application/json' --data "${body}" >/dev/null
+  if [[ "${TOPOLOGY}" == "active-poll" && "${PRIVATE_MAIN}" == "true" && "${node}" == "home" ]]; then
+    podman exec "${HOME_CONTAINER}" curl -fsS -X POST "http://127.0.0.1:8080/api/admin/install" \
+      -H 'Content-Type: application/json' --data "${body}" >/dev/null
+  else
+    curl -fsS -X POST "http://127.0.0.1:${port}/api/admin/install" \
+      -H 'Content-Type: application/json' --data "${body}" >/dev/null
+  fi
 }
 
 write_env() {
   local node="$1" db="$2" host_port="$3" grpc_port="$4" peer="$5"
   local node_dir="${DATA_DIR}/${node}"
   local node_role="edge"
+  local active_poll_enabled="false" active_poll_target=""
+  local http_host="0.0.0.0" grpc_host="0.0.0.0"
   if [[ "${node}" == "public" ]]; then
     node_role="primary"
+  fi
+  if [[ "${TOPOLOGY}" == "active-poll" ]]; then
+    active_poll_enabled="true"
+    node_role="primary"
+    [[ "${node}" == "public" ]] && node_role="edge"
+    [[ "${node}" == "home" ]] && active_poll_target="wesp-public"
+    if [[ "${node}" == "home" && "${PRIVATE_MAIN}" == "true" ]]; then
+      http_host="127.0.0.1"
+      grpc_host="127.0.0.1"
+    fi
   fi
   mkdir -p "${node_dir}/uploads" "${node_dir}/blocks" "${node_dir}/logs" "${node_dir}/rsa-keys"
   chmod 700 "${node_dir}" "${node_dir}/uploads" "${node_dir}/blocks" "${node_dir}/logs" "${node_dir}/rsa-keys"
@@ -133,8 +157,9 @@ write_env() {
   # /data by start_node; the certificate directory is mounted read-only.
   cat >"${ENV_DIR}/${node}.env" <<EOF
 QUARKUS_PROFILE=edge
-QUARKUS_HTTP_HOST=0.0.0.0
+QUARKUS_HTTP_HOST=${http_host}
 QUARKUS_HTTP_PORT=8080
+QUARKUS_GRPC_SERVER_HOST=${grpc_host}
 QUARKUS_GRPC_SERVER_PORT=9000
 GRPC_SERVER_PLAINTEXT=false
 GRPC_SERVER_CLIENT_AUTH=required
@@ -174,8 +199,11 @@ ELASTICSEARCH_SSL_TRUST_ALL=true
 ADMIN_JWT_SECRET=${WESP_TOKEN}-${node}-admin
 USER_JWT_SECRET=${WESP_TOKEN}-${node}-user
 SECURITY_EVENT_HASH_SECRET=${WESP_TOKEN}-${node}-events
+GRAFANA_JWT_SECRET=${WESP_TOKEN}-${node}-grafana
 MEDIA_UPLOAD_DIR=/data/uploads
 WINDBLOG_WESP_ENABLED=true
+WINDBLOG_WESP_ACTIVE_POLL_ENABLED=${active_poll_enabled}
+WINDBLOG_WESP_ACTIVE_POLL_TARGET_NODE_ID=${active_poll_target}
 WINDBLOG_WESP_PEER_URL=${peer}
 WINDBLOG_WESP_AUTH_TOKEN=${WESP_TOKEN}
 WINDBLOG_WESP_LOCAL_TARGET_ALIAS=http://windblog-wesp-home:8080
@@ -253,6 +281,10 @@ build_app() {
 start_node() {
   local node="$1" container="$2" host_port="$3" grpc_port="$4"
   local rsa_mount_dir="/work/rsa_keys"
+  local -a publish_args=(-p "127.0.0.1:${host_port}:8080" -p "127.0.0.1:${grpc_port}:9000")
+  if [[ "${TOPOLOGY}" == "active-poll" && "${PRIVATE_MAIN}" == "true" && "${node}" == "home" ]]; then
+    publish_args=()
+  fi
   if [[ "${BUILD_MODE}" == "jvm" ]]; then
     rsa_mount_dir="/app/rsa_keys"
   fi
@@ -263,8 +295,7 @@ start_node() {
   podman run -d --name "${container}" --network "${INFRA_NETWORK}" \
     --userns=keep-id --user "$(id -u):$(id -g)" \
     --env-file "${ENV_DIR}/${node}.env" \
-    -p "127.0.0.1:${host_port}:8080" \
-    -p "127.0.0.1:${grpc_port}:9000" \
+    "${publish_args[@]}" \
     -v "${DATA_DIR}/${node}:/data:Z" \
     -v "${DATA_DIR}/${node}/rsa-keys:${rsa_mount_dir}:Z" \
     -v "${ROOT_DIR}/certs:/app/certs:ro,Z" \
@@ -274,7 +305,9 @@ start_node() {
 wait_ready() {
   local node="$1" container="$2" port="$3"
   for _ in $(seq 1 90); do
-    if curl -fsS "http://127.0.0.1:${port}/q/health/ready" >/dev/null 2>&1; then
+    if [[ "${TOPOLOGY}" == "active-poll" && "${PRIVATE_MAIN}" == "true" && "${node}" == "home" ]]; then
+      podman exec "${container}" curl -fsS "http://127.0.0.1:8080/q/health/ready" >/dev/null 2>&1 && return 0
+    elif curl -fsS "http://127.0.0.1:${port}/q/health/ready" >/dev/null 2>&1; then
       return 0
     fi
     if ! container_running "${container}"; then
@@ -294,7 +327,11 @@ status() {
     IFS=: read -r node container http_port grpc_port <<<"${spec}"
     if podman container exists "${container}"; then
       state="$(podman inspect "${container}" --format '{{.State.Status}}' 2>/dev/null || true)"
-      echo "${node}: ${state} http=http://127.0.0.1:${http_port} grpc=127.0.0.1:${grpc_port} env=${ENV_DIR}/${node}.env"
+      if [[ "${TOPOLOGY}" == "active-poll" && "${PRIVATE_MAIN}" == "true" && "${node}" == "home" ]]; then
+        echo "${node}: ${state} http=container-loopback-only grpc=container-loopback-only env=${ENV_DIR}/${node}.env"
+      else
+        echo "${node}: ${state} http=http://127.0.0.1:${http_port} grpc=127.0.0.1:${grpc_port} env=${ENV_DIR}/${node}.env"
+      fi
     else
       echo "${node}: stopped"
     fi
