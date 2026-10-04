@@ -28,24 +28,28 @@ public class HoneypotService {
 
     private static final List<RuleDefinition> DEFINITIONS = List.of(
             new RuleDefinition("sql_injection", "SQL 注入", Pattern.compile(
-                    "(?is)(?:['\\\"]?\\s*\\b(?:or|and)\\b\\s+\\d+\\s*=\\s*\\d+|union\\s+(?:all\\s+)?select|(?:sleep|benchmark)\\s*\\()")),
+                    "(?is)(?:\\bunion\\s+(?:all\\s+)?select\\b|\\b(?:sleep|pg_sleep|benchmark)\\s*\\(|\\bwaitfor\\s+delay\\b|\\b(?:extractvalue|updatexml)\\s*\\(|\\binto\\s+(?:out|dump)file\\b|\\bload_file\\s*\\(|(?:['\\\"]?\\s*\\b(?:or|and)\\b\\s*(?:\\d+|['\\\"][^'\\\"]*['\\\"])\\s*=\\s*(?:\\d+|['\\\"][^'\\\"]*['\\\"]))|;\\s*(?:select|insert|update|delete|drop|alter)\\b)")),
             new RuleDefinition("xss", "跨站脚本注入", Pattern.compile(
-                    "(?is)<\\s*script\\b|javascript\\s*:|on(?:error|load|click)\\s*=|<\\s*svg\\b")),
+                    "(?is)<\\s*(?:script|svg|iframe|object|embed)\\b|javascript\\s*:|data\\s*:\\s*text/html|\\bon[a-z]{3,24}\\s*=\\s*(?:['\\\"]|[^\\s>])")),
             new RuleDefinition("path_traversal", "目录穿越", Pattern.compile(
-                    "(?i)(?:\\.\\.[/\\\\]|%2e%2e(?:%2f|%5c|[/\\\\]))")),
+                    "(?i)(?:\\.\\.[/\\\\]|%2e%2e(?:%2f|%5c|[/\\\\])|%c0%ae|%c1%9c)(?:[^\\s\\\"'<>]{0,160})")),
             new RuleDefinition("command_injection", "命令注入", Pattern.compile(
-                    "(?i)(?:;|\\||&&|\\$\\()\\s*(?:whoami|id|cat|curl|wget|nc|bash|sh|cmd|powershell)\\b")),
+                    "(?is)(?:(?:;|\\||&&|\\n|`|\\$\\(|\\$\\{)\\s*(?:whoami|id|uname|cat|curl|wget|nc|ncat|bash|sh|dash|cmd(?:\\.exe)?|powershell|python[23]?|perl|php|busybox)\\b|\\b(?:bash|sh|cmd(?:\\.exe)?|powershell)\\s+-[a-z]{1,8}\\b)")),
             new RuleDefinition("template_injection", "模板注入", Pattern.compile(
-                    "(?is)(?:\\$\\{\\s*\\d+\\s*\\*|#\\{\\s*T\\(|\\{\\{\\s*['\\\"]?\\s*7\\s*\\*|<%\\s*=)")),
+                    "(?is)(?:\\$\\{\\s*(?:\\d+\\s*[+*]|T\\s*\\(|new\\s+java\\.io\\.file)|#\\{\\s*T\\(|\\{\\{\\s*(?:['\\\"]?\\s*\\d+\\s*[+*]|config\\.(?:__|secret|items|from_object)|self\\.__|cycler\\.__)|<%\\s*=|freemarker\\.template\\.utility|\\bnew\\s+java\\.io\\.file\\s*\\()")),
             new RuleDefinition("scanner_probe", "扫描器探测", Pattern.compile("(?!)")),
+            new RuleDefinition("sensitive_file_probe", "敏感文件探测", Pattern.compile("(?!)")),
             new RuleDefinition("honeypot_paths", "诱捕路径访问", Pattern.compile("(?!)"))
     );
     private static final Map<String, RuleDefinition> DEFINITIONS_BY_KEY = definitionsByKey();
     private static final List<String> DECOY_PATHS = List.of(
-            "/.env", "/.git/config", "/wp-login.php", "/wp-admin", "/xmlrpc.php",
+            "/.env", "/.env.local", "/.env.production", "/.git/config", "/.svn/entries",
+            "/wp-login.php", "/wp-admin", "/wp-config.php", "/xmlrpc.php",
             "/phpmyadmin", "/phpmyadmin/", "/actuator/env", "/vendor/phpunit/phpunit/src/util/php/eval-stdin.php");
     private static final Pattern SCANNER_PATH = Pattern.compile(
-            "(?i)(?:/wp-[^/]*|/xmlrpc\\.php|/phpmyadmin(?:/|$)|/\\.env(?:$|/)|/\\.git(?:/|$)|/actuator/env|/vendor/phpunit/)");
+            "(?i)(?:^|/)(?:wp-login\\.php|wp-admin(?:/|$)|wp-content/debug\\.log|xmlrpc\\.php|phpmyadmin(?:/|$)|adminer(?:\\.php)?(?:/|$)|actuator/(?:env|heapdump|configprops|mappings|beans|gateway/routes)(?:/|$)|vendor/phpunit/phpunit/src/util/php/eval-stdin\\.php|phpunit/phpunit/src/util/php/eval-stdin\\.php|cgi-bin/(?:\\.\\./|[^?]*\\.(?:cgi|sh))(?:$|/)|boaform/admin/formlogin|hnap1(?:/|$)|gponform/diag_form|setup\\.cgi(?:/|$)|autodiscover/autodiscover\\.json|solr/admin/info/system|jenkins/script(?:/|$)|manager/html(?:/|$)|console/login/loginform\\.jsp|jmx-console(?:/|$)|_profiler/phpinfo(?:/|$)|debug/default/view(?:/|$)|h2-console(?:/|$)|v2/_catalog(?:/|$)|api/jsonws(?:/|$)|server-status(?:/|$))");
+    private static final Pattern SENSITIVE_FILE_PATH = Pattern.compile(
+            "(?i)(?:^|/)(?:\\.env(?:\\.[a-z0-9_-]+)?|\\.git/(?:config|head|index)|\\.svn/entries|\\.hg/(?:hgrc|store)|\\.aws/credentials|\\.docker/config\\.json|\\.kube/config|\\.npmrc|\\.htaccess|\\.htpasswd|\\.ds_store|wp-config\\.php(?:\\.(?:bak|old|save|orig|swp))?|(?:config|database|settings|credentials|secrets?)(?:\\.[a-z0-9_-]+)?\\.(?:php|json|ya?ml|ini|conf|properties|bak|old|orig|save)|[^/]+\\.(?:sql|dump|sqlite|db|pem|key|p12|pfx)(?:\\.(?:gz|zip|bak))?|[^/]+\\.(?:zip|tar(?:\\.gz)?|tgz|7z|rar|bak|old|orig|save|swp)|(?:id_rsa|authorized_keys|known_hosts))(?=$|/|\\?)");
 
     private volatile Map<String, RuleState> rules = defaultRuleStates();
 
@@ -127,6 +131,7 @@ public class HoneypotService {
             if (!state.enabled()) continue;
             boolean match = switch (definition.key()) {
                 case "scanner_probe" -> SCANNER_PATH.matcher(normalizedPath).find();
+                case "sensitive_file_probe" -> SENSITIVE_FILE_PATH.matcher(normalizedPath).find();
                 case "honeypot_paths" -> DECOY_PATHS.stream().anyMatch(decoy -> normalizedPath.equalsIgnoreCase(decoy));
                 default -> definition.pattern().matcher(normalized).find();
             };
@@ -134,6 +139,13 @@ public class HoneypotService {
         }
         boolean blocked = matched.stream().anyMatch(key -> state(key).action() == RuleAction.BLOCK);
         return new Detection(List.copyOf(matched), blocked);
+    }
+
+    public boolean isDecoyPath(String rawPath) {
+        String normalizedPath = decodeForDetection(pathOnly(rawPath));
+        return DECOY_PATHS.stream().anyMatch(decoy -> normalizedPath.equalsIgnoreCase(decoy))
+                || SCANNER_PATH.matcher(normalizedPath).find()
+                || SENSITIVE_FILE_PATH.matcher(normalizedPath).find();
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
@@ -181,7 +193,7 @@ public class HoneypotService {
 
     private String decodeForDetection(String value) {
         String result = value == null ? "" : value.toLowerCase(java.util.Locale.ROOT);
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 4; i++) {
             try {
                 String decoded = java.net.URLDecoder.decode(result, java.nio.charset.StandardCharsets.UTF_8);
                 if (decoded.equals(result)) break;
@@ -190,7 +202,28 @@ public class HoneypotService {
                 break;
             }
         }
-        return result.replaceAll("(?s)/\\*.*?\\*/", " ");
+        java.util.regex.Matcher unicodeEscape = Pattern.compile("(?i)(?:\\\\u|%u)([0-9a-f]{4})").matcher(result);
+        StringBuffer unicodeDecoded = new StringBuffer();
+        while (unicodeEscape.find()) {
+            int codePoint = Integer.parseInt(unicodeEscape.group(1), 16);
+            unicodeEscape.appendReplacement(unicodeDecoded,
+                    java.util.regex.Matcher.quoteReplacement(String.valueOf((char) codePoint)));
+        }
+        unicodeEscape.appendTail(unicodeDecoded);
+        result = unicodeDecoded.toString();
+        result = decodeBasicHtmlEntities(result);
+        return result.replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("(?s)<!--.*?-->", " ")
+                .replace(Character.toString(0), " ");
+    }
+
+    private String decodeBasicHtmlEntities(String value) {
+        return value.replaceAll("(?i)&#x0*3c;", "<")
+                .replaceAll("(?i)&#0*60;", "<")
+                .replaceAll("(?i)&lt;", "<")
+                .replaceAll("(?i)&#x0*3e;", ">")
+                .replaceAll("(?i)&#0*62;", ">")
+                .replaceAll("(?i)&gt;", ">");
     }
 
     private String pathOnly(String requestUri) {

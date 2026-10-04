@@ -135,4 +135,5 @@
     <include file="db/migration/134-update-existing-ai-comment-audit-prompt.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/135-create-honeypot.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/136-split-comment-auto-audit-setting.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/137-expand-honeypot-probes.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

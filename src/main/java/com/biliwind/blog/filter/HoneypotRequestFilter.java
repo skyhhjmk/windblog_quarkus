@@ -31,11 +31,7 @@ public class HoneypotRequestFilter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HoneypotRequestFilter.class);
     private static final int MAX_BODY_SAMPLE_BYTES = 8 * 1024 * 1024;
-    private static final List<String> DECOY_PATHS = List.of(
-            "/.env", "/.git/config", "/wp-login.php", "/wp-admin", "/xmlrpc.php",
-            "/phpmyadmin", "/phpmyadmin/", "/actuator/env",
-            "/vendor/phpunit/phpunit/src/util/php/eval-stdin.php");
-
+    private static final String PREMATCH_RULES_PROPERTY = HoneypotRequestFilter.class.getName() + ".prematchRules";
     @Inject
     HoneypotService honeypotService;
 
@@ -46,24 +42,27 @@ public class HoneypotRequestFilter {
     RoutingContext routingContext;
 
     @ServerRequestFilter(preMatching = true, priority = Priorities.AUTHENTICATION - 50)
-    public Uni<Response> handleUnmatchedDecoyPath(ContainerRequestContext request) {
+    public Uni<Response> inspectPreMatchedRequest(ContainerRequestContext request) {
         String path = request.getUriInfo().getPath();
-        if (!isDecoyPath(path)) return Uni.createFrom().nullItem();
+        boolean decoyPath = honeypotService.isDecoyPath(path);
 
         Map<String, List<String>> headers = copyHeaders(request.getHeaders());
         String uri = request.getUriInfo().getRequestUri().toString();
         String method = request.getMethod();
         HoneypotService.Detection detection = honeypotService.detect(method, uri, headers, new byte[0]);
-        if (detection.matchedRules().isEmpty()) {
-            return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build());
+        if (detection.matchedRules().isEmpty() && !decoyPath) return Uni.createFrom().nullItem();
+        if (!detection.matchedRules().isEmpty() && !decoyPath) {
+            request.setProperty(PREMATCH_RULES_PROPERTY, detection.matchedRules());
         }
+        Response response = decoyPath ? Response.status(Response.Status.NOT_FOUND).build() : null;
+        if (detection.matchedRules().isEmpty()) return Uni.createFrom().item(response);
 
         ClientIpResolver.ClientIpResolution ip;
         try {
             ip = clientIpResolver.resolve(routingContext);
         } catch (RuntimeException exception) {
-            LOGGER.warn("蜜罐诱饵路径客户端地址解析失败: method={}, path={}", method, path, exception);
-            return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build());
+            LOGGER.warn("蜜罐预匹配客户端地址解析失败: method={}, path={}", method, path, exception);
+            return response == null ? Uni.createFrom().nullItem() : Uni.createFrom().item(response);
         }
         String userAgent = firstHeader(headers, "user-agent");
         return Uni.createFrom().item(() -> {
@@ -72,10 +71,11 @@ public class HoneypotRequestFilter {
                         detection.matchedRules(), detection.blocked() ? "BLOCK" : "OBSERVE",
                         headers, new byte[0], false);
             } catch (RuntimeException exception) {
-                LOGGER.warn("蜜罐诱饵路径事件写入失败: method={}, rules={}", method, detection.matchedRules(), exception);
+                LOGGER.warn("蜜罐预匹配事件写入失败: method={}, rules={}", method, detection.matchedRules(), exception);
             }
-            return Response.status(Response.Status.NOT_FOUND).build();
-        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+            return response;
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool()).onItem().transformToUni(result ->
+                result == null ? Uni.createFrom().nullItem() : Uni.createFrom().item(result));
     }
 
     @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 50, readBody = true)
@@ -85,21 +85,32 @@ public class HoneypotRequestFilter {
         String uri = request.getUriInfo().getRequestUri().toString();
         String method = request.getMethod();
         HoneypotService.Detection detection = honeypotService.detect(method, uri, headers, body.bytes());
+        @SuppressWarnings("unchecked")
+        List<String> prematchRules = request.getProperty(PREMATCH_RULES_PROPERTY) instanceof List<?> rules
+                ? (List<String>) rules : List.of();
+        boolean bodyMatch = body.bytes().length > 0 && !honeypotService
+                .detect(method, "", Map.of(), body.bytes()).matchedRules().isEmpty();
         if (detection.matchedRules().isEmpty()) return Optional.empty();
 
         String userAgent = firstHeader(headers, "user-agent");
         String action = detection.blocked() ? "BLOCK" : "OBSERVE";
+        List<String> newlyMatchedRules = prematchRules.isEmpty() ? detection.matchedRules()
+                : detection.matchedRules().stream().filter(rule -> !prematchRules.contains(rule)).toList();
+        boolean shouldRecord = prematchRules.isEmpty() || !newlyMatchedRules.isEmpty() || bodyMatch;
         try {
             ClientIpResolver.ClientIpResolution ip = clientIpResolver.resolve(routingContext);
-            honeypotService.record(ip.clientIp(), ip.remoteIp(), method, uri, userAgent,
-                    detection.matchedRules(), action, headers, body.bytes(), body.truncated());
+            if (shouldRecord) {
+                honeypotService.record(ip.clientIp(), ip.remoteIp(), method, uri, userAgent,
+                        bodyMatch || prematchRules.isEmpty() ? detection.matchedRules() : newlyMatchedRules,
+                        action, headers, body.bytes(), body.truncated());
+            }
         } catch (RuntimeException exception) {
             // Collection failures must not break normal site requests. A configured block still applies.
             LOGGER.warn("蜜罐事件写入失败: method={}, rules={}", method, detection.matchedRules(), exception);
         }
 
         String path = request.getUriInfo().getPath();
-        if (isDecoyPath(path)) {
+        if (honeypotService.isDecoyPath(path)) {
             return Optional.of(Response.status(Response.Status.NOT_FOUND).build());
         } else if (detection.blocked()) {
             return Optional.of(Response.status(Response.Status.FORBIDDEN)
@@ -143,12 +154,6 @@ public class HoneypotRequestFilter {
                 .filter(entry -> soughtName.equalsIgnoreCase(entry.getKey()))
                 .flatMap(entry -> entry.getValue().stream())
                 .findFirst().orElse(null);
-    }
-
-    private boolean isDecoyPath(String rawPath) {
-        if (rawPath == null) return false;
-        String path = rawPath.startsWith("/") ? rawPath : "/" + rawPath;
-        return DECOY_PATHS.stream().anyMatch(decoy -> path.equalsIgnoreCase(decoy));
     }
 
     private record BodySample(byte[] bytes, boolean truncated) { }
