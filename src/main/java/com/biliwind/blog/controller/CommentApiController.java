@@ -156,7 +156,8 @@ public class CommentApiController {
 
             // 触发 AI 审核状态预设
             com.biliwind.blog.model.SystemSetting auditSetting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
-            if (auditSetting != null && auditSetting.configValue != null && auditSetting.configValue.has("allowAutoDecision") && auditSetting.configValue.get("allowAutoDecision").asBoolean()) {
+            if (auditSetting != null && auditSetting.configValue != null
+                    && auditSetting.configValue.path("autoAudit").asBoolean(false)) {
                 comment.auditStatus = 1; // 审核中
                 comment.isReviewing = true;
             }

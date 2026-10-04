@@ -108,9 +108,7 @@ public class AiPollingService {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
         if (nodes.isEmpty()) {
-            AiResult defaultResult = new AiResult();
-            defaultResult.isSafe = true;
-            return CompletableFuture.completedFuture(defaultResult);
+            return CompletableFuture.failedFuture(new IllegalStateException("轮询组中配置的审核节点列表为空"));
         }
 
         NodeInfo selected = pickNext(nodes, alg, groupConfig.id);
@@ -217,9 +215,7 @@ public class AiPollingService {
 
     private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, int startIdx, int retryCount, String prompt, String content) {
         if (nodes.isEmpty() || retryCount >= nodes.size()) {
-            AiResult defaultResult = new AiResult();
-            defaultResult.isSafe = true;
-            return CompletableFuture.completedFuture(defaultResult); // 默认放行
+            return CompletableFuture.failedFuture(new IllegalStateException("轮询组中所有节点调用审核失败"));
         }
 
         int currentIdx = (startIdx + retryCount) % nodes.size();

@@ -256,11 +256,7 @@ public class OpenAiAiService implements AiService {
                             String resultText = extractTextFromResponse(root);
                             JsonNode resultJson = objectMapper.readTree(resultText);
 
-                            AiResult res = new AiResult();
-                            res.isSafe = resultJson.has("isSafe") ? resultJson.get("isSafe").asBoolean() : true;
-                            res.reason = resultJson.has("reason") ? resultJson.get("reason").asText() : null;
-                            res.score = resultJson.has("score") ? resultJson.get("score").asInt() : null;
-                            res.rawResponse = response.body();
+                            AiResult res = AiModerationResultParser.parse(resultJson, response.body());
 
                             // 提取 Token 消耗
                             if (root.has("usage")) {
@@ -275,10 +271,7 @@ public class OpenAiAiService implements AiService {
                         } catch (Exception e) {
                             LOG.error("解析 OpenAI 审核响应失败: "
                                     + SensitiveMessageSanitizer.sanitize(response.body()), e);
-                            AiResult fallback = new AiResult();
-                            fallback.isSafe = true;
-                            fallback.errorMessage = "解析 AI 响应失败，默认通过";
-                            return fallback;
+                            throw new IllegalStateException("解析 OpenAI 审核响应失败", e);
                         }
                     });
         } catch (Exception e) {

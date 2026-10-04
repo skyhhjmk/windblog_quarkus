@@ -66,16 +66,12 @@ public class AiManager {
         List<AiProviderConfig> configs = new ArrayList<>(allConfigs);
         
         if (configs.isEmpty()) {
-            AiResult defaultRes = new AiResult();
-            defaultRes.isSafe = true;
-            return CompletableFuture.completedFuture(defaultRes);
+            return CompletableFuture.failedFuture(new IllegalStateException("没有可用的 AI 审核配置"));
         }
 
         AiProviderConfig best = selectionService.select("moderate", configs);
         if (best == null) {
-            AiResult defaultRes = new AiResult();
-            defaultRes.isSafe = true;
-            return CompletableFuture.completedFuture(defaultRes);
+            return CompletableFuture.failedFuture(new IllegalStateException("没有允许评论审核操作的 AI 配置"));
         }
 
         // 获取系统设置中的提示词
@@ -87,10 +83,21 @@ public class AiManager {
         final String effectivePrompt = prompt;
 
         log.info("[AI] 开始审核内容，使用配置={}, provider={}", best.name, best.provider);
-        return executeModerate(best, effectivePrompt, content).exceptionallyCompose(error -> {
+        return executeModerate(best, effectivePrompt, content).thenApply(this::validateModerationResult).exceptionallyCompose(error -> {
             AiProviderConfig fallback = selectionService.fallback("moderate", configs, best);
-            return fallback == null ? CompletableFuture.failedFuture(error) : executeModerate(fallback, effectivePrompt, content);
+            return fallback == null ? CompletableFuture.failedFuture(error)
+                    : executeModerate(fallback, effectivePrompt, content).thenApply(this::validateModerationResult);
         });
+    }
+
+    private AiResult validateModerationResult(AiResult result) {
+        if (result == null || result.isSafe == null) {
+            throw new IllegalStateException("AI 审核响应缺少有效的安全判定");
+        }
+        if (result.score != null && (result.score < 0 || result.score > 100)) {
+            throw new IllegalStateException("AI 审核响应评分超出 0 到 100 的范围");
+        }
+        return result;
     }
 
     public CompletionStage<AiResult> translate(String sourceLanguage, String targetLanguage,
@@ -146,9 +153,8 @@ public class AiManager {
             AiService svc = findService(config);
             if (svc == null) {
                 log.warn("[AI] 未找到支持该配置的 AI 服务: name={}, provider={}", config.name, config.provider);
-                AiResult defaultRes = new AiResult();
-                defaultRes.isSafe = true;
-                return CompletableFuture.completedFuture(defaultRes);
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "不支持的 AI 提供商引擎: " + config.provider));
             }
             return svc.moderate(config, prompt, content);
         }

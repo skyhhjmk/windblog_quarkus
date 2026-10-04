@@ -71,14 +71,7 @@ public class CodexCreatorAiService implements AiService {
     }
 
     private AiResult moderationResult(JsonNode output) {
-        AiResult result = contentResult(output);
-        if (output != null && output.isObject()) {
-            if (output.has("isSafe")) result.isSafe = output.get("isSafe").asBoolean();
-            if (output.has("safe")) result.isSafe = output.get("safe").asBoolean();
-            if (output.has("score")) result.score = output.get("score").asInt();
-            if (output.has("reason")) result.reason = output.get("reason").asText();
-        }
-        return result;
+        return AiModerationResultParser.parse(output, output == null ? null : output.toString());
     }
 
     private AiResult contentResultWithProvenance(CodexCreatorInference inference) {

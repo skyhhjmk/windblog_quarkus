@@ -247,11 +247,7 @@ public class ChatGlmAiService implements AiService {
                             String resultText = extractTextFromResponse(root);
                             JsonNode resultJson = objectMapper.readTree(resultText);
 
-                            AiResult res = new AiResult();
-                            res.isSafe = resultJson.has("isSafe") ? resultJson.get("isSafe").asBoolean() : true;
-                            res.reason = resultJson.has("reason") ? resultJson.get("reason").asText() : null;
-                            res.score = resultJson.has("score") ? resultJson.get("score").asInt() : null;
-                            res.rawResponse = response.body();
+                            AiResult res = AiModerationResultParser.parse(resultJson, response.body());
 
                             if (root.has("usage")) {
                                 JsonNode usage = root.get("usage");
@@ -263,9 +259,7 @@ public class ChatGlmAiService implements AiService {
                             return res;
                         } catch (Exception e) {
                             LOG.error("解析 ChatGLM 审核响应失败", e);
-                            AiResult fallback = new AiResult();
-                            fallback.isSafe = true;
-                            return fallback;
+                            throw new IllegalStateException("解析 ChatGLM 审核响应失败", e);
                         }
                     });
         } catch (Exception e) {

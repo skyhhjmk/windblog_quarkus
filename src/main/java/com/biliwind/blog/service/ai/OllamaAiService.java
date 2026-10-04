@@ -264,11 +264,7 @@ public class OllamaAiService implements AiService {
                             String resultText = extractTextFromResponse(root);
                             JsonNode resultJson = objectMapper.readTree(resultText);
 
-                            AiResult res = new AiResult();
-                            res.isSafe = resultJson.has("isSafe") ? resultJson.get("isSafe").asBoolean() : true;
-                            res.reason = resultJson.has("reason") ? resultJson.get("reason").asText() : null;
-                            res.score = resultJson.has("score") ? resultJson.get("score").asInt() : null;
-                            res.rawResponse = response.body();
+                            AiResult res = AiModerationResultParser.parse(resultJson, response.body());
 
                             // Ollama usage info is usually in prompt_eval_count and eval_count
                             int promptTokens = root.has("prompt_eval_count") ? root.get("prompt_eval_count").asInt() : 0;
@@ -278,9 +274,7 @@ public class OllamaAiService implements AiService {
                             return res;
                         } catch (Exception e) {
                             log.error("解析 Ollama 审核响应失败", e);
-                            AiResult fallback = new AiResult();
-                            fallback.isSafe = true;
-                            return fallback;
+                            throw new IllegalStateException("解析 Ollama 审核响应失败", e);
                         }
                     });
         } catch (Exception e) {

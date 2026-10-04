@@ -194,6 +194,9 @@ public class AiTaskConsumer {
 
     private java.util.concurrent.CompletionStage<Void> handleRetryOrDeadLetterAudit(Message<JsonObject> message, AiAuditTask task,
                                                                                     int currentRetryCount, int allowedMaxRetries, Exception ex) {
+        String sanitizedError = SensitiveMessageSanitizer.sanitize(ex.getMessage());
+        final String safeError = sanitizedError == null || sanitizedError.isBlank()
+                ? ex.getClass().getSimpleName() : sanitizedError;
         if (currentRetryCount < allowedMaxRetries) {
             int nextRetryCount = currentRetryCount + 1;
             log.warn("{} 审核重试 {}/{}，commentId={}", MQ_TAG, nextRetryCount, allowedMaxRetries, task.commentId());
@@ -207,8 +210,7 @@ public class AiTaskConsumer {
                     auditLog.entityType = "comment";
                     auditLog.entityId = task.commentId().toString();
                     auditLog.action = "ai_moderation_retry";
-                    auditLog.extInfo = Map.of("retryCount", nextRetryCount, "error",
-                            SensitiveMessageSanitizer.sanitize(ex.getMessage()));
+                    auditLog.extInfo = Map.of("retryCount", nextRetryCount, "error", safeError);
                     auditLog.persist();
                 });
 
@@ -225,6 +227,13 @@ public class AiTaskConsumer {
                 com.biliwind.blog.model.Comment comment = com.biliwind.blog.model.Comment.findById(task.commentId());
                 if (comment != null) {
                     comment.isReviewing = false;
+                    comment.auditStatus = 0;
+                    Map<String, Object> failureData = new HashMap<>();
+                    failureData.put("reviewRequired", true);
+                    failureData.put("reason", "AI 审核失败，已转人工审核");
+                    failureData.put("error", safeError);
+                    failureData.put("auditTime", System.currentTimeMillis());
+                    comment.aiReviewData = failureData;
                     comment.persist();
                 }
 
@@ -232,7 +241,7 @@ public class AiTaskConsumer {
                 auditLog.entityType = "comment";
                 auditLog.entityId = task.commentId().toString();
                 auditLog.action = "ai_moderation_failed";
-                auditLog.extInfo = Map.of("error", SensitiveMessageSanitizer.sanitize(ex.getMessage()));
+                auditLog.extInfo = Map.of("error", safeError);
                 auditLog.persist();
             });
 
@@ -389,7 +398,7 @@ public class AiTaskConsumer {
                 String reason;
                 if (aiResult.reason != null && !aiResult.reason.isBlank()) {
                     reason = aiResult.reason;
-                } else if (aiResult.isSafe) {
+                } else if (Boolean.TRUE.equals(aiResult.isSafe)) {
                     reason = "AI 判定内容安全";
                 } else {
                     reason = "AI 判定内容存在风险";
@@ -399,14 +408,14 @@ public class AiTaskConsumer {
                 // 仅当允许全自动且评分大于等于 80 时，才改变状态
                 boolean statusChanged = false;
                 if (allowAutoDecision && score != null && score >= 80) {
-                    newStatus = aiResult.isSafe ? (short) 1 : (short) 2;
-                    newAuditStatus = aiResult.isSafe ? (short) 2 : (short) 3;
+                    newStatus = Boolean.TRUE.equals(aiResult.isSafe) ? (short) 1 : (short) 2;
+                    newAuditStatus = Boolean.TRUE.equals(aiResult.isSafe) ? (short) 2 : (short) 3;
 
                     comment.status = newStatus;
                     comment.auditStatus = newAuditStatus;
                     statusChanged = true;
-                } else if (allowAutoDecision && (score == null || score < 80)) {
-                    // 转入待人工复审
+                } else {
+                    // 未开启自动决策或评分不足时，审核结论交由人工确认。
                     comment.auditStatus = 0; // pending
                     newAuditStatus = 0;
                 }
@@ -426,6 +435,7 @@ public class AiTaskConsumer {
                     aiData.put("rawResponse", aiResult.rawResponse);
                 }
                 aiData.put("auditTime", System.currentTimeMillis());
+                aiData.put("reviewRequired", !statusChanged);
 
                 comment.aiReviewData = aiData;
                 comment.isReviewing = false;

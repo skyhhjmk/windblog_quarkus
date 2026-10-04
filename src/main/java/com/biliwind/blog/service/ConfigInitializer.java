@@ -252,10 +252,12 @@ public class ConfigInitializer {
         aiAuditSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode aiAuditFields = aiAuditSchema.putArray("fields");
         aiAuditFields.addObject().put("key", "prompt").put("label", "AI 审核提示词").put("widget", "textarea").put("required", true);
-        aiAuditFields.addObject().put("key", "allowAutoDecision").put("label", "允许 AI 自主决策").put("widget", "switch");
+        aiAuditFields.addObject().put("key", "autoAudit").put("label", "自动 AI 审核").put("widget", "switch");
+        aiAuditFields.addObject().put("key", "allowAutoDecision").put("label", "允许 AI 自动通过或拒绝").put("widget", "switch");
 
         ObjectNode aiAuditValue = mapper.createObjectNode();
         aiAuditValue.put("prompt", com.biliwind.blog.service.ai.CommentModerationPrompt.DEFAULT_PROMPT);
+        aiAuditValue.put("autoAudit", true);
         aiAuditValue.put("allowAutoDecision", false);
 
         list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "功能设置", aiAuditSchema, "AI 评论审核设置"));

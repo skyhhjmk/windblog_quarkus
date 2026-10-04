@@ -193,6 +193,7 @@ public class AdminCommentController {
             }
             if (!c.isReviewing) {
                 c.isReviewing = true;
+                c.auditStatus = 1;
                 c.persist();
             }
             AuditData ad = new AuditData();
