@@ -30,7 +30,7 @@ public class HoneypotEvent extends PanacheEntityBase {
     @Column(nullable = false, length = 16)
     public String method;
 
-    @Column(nullable = false, columnDefinition = "text")
+    @Column(name = "request_uri", nullable = false, columnDefinition = "text")
     public String requestUri;
 
     @Column(name = "user_agent", columnDefinition = "text")
