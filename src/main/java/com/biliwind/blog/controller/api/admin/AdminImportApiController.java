@@ -98,8 +98,31 @@ public class AdminImportApiController {
     @Path("/execute")
     @Blocking
     @Operation(summary = "执行已分析的导入任务")
-    public java.util.Map<String, Object> execute(ExecuteRequest req) {
+    public ImportResult execute(ExecuteRequest req) {
         requireSuperAdmin();
+        ImportAnalysisService.Session session = requireReadySession(req);
+        ImportRequest importRequest = toImportRequest(req);
+        if ("SQL_FILE".equalsIgnoreCase(session.sourceType())) {
+            return importService.doImportSql(session.artifact(), importRequest, adminRequestContext.getUserId());
+        }
+        return importService.doImport(importRequest, adminRequestContext.getUserId());
+    }
+
+    @POST
+    @Path("/execute-async")
+    @Blocking
+    @Operation(summary = "创建可恢复的异步导入任务")
+    public java.util.Map<String, Object> executeAsync(ExecuteRequest req) {
+        requireSuperAdmin();
+        ImportAnalysisService.Session session = requireReadySession(req);
+        ImportRequest importRequest = toImportRequest(req);
+        if ("SQL_FILE".equalsIgnoreCase(session.sourceType())) {
+            return importJobService.enqueue(importRequest, session.artifact(), adminRequestContext.getUserId());
+        }
+        return importJobService.enqueue(importRequest, null, adminRequestContext.getUserId());
+    }
+
+    private ImportAnalysisService.Session requireReadySession(ExecuteRequest req) {
         if (req == null || req.analysisId() == null || req.analysisId().isBlank()) {
             throw new BadRequestException("缺少分析报告 ID");
         }
@@ -112,12 +135,12 @@ public class AdminImportApiController {
         if (blockers instanceof java.util.Collection<?> collection && !collection.isEmpty()) {
             throw new BadRequestException("预分析报告存在阻断项，请修复后重新分析");
         }
-        ImportRequest importRequest = new ImportRequest(
-                req.driver(), req.url(), req.username(), req.password(), req.types(), req.assetPrefix(), false);
-        if ("SQL_FILE".equalsIgnoreCase(session.sourceType())) {
-            return importJobService.enqueue(importRequest, session.artifact(), adminRequestContext.getUserId());
-        }
-        return importJobService.enqueue(importRequest, null, adminRequestContext.getUserId());
+        return session;
+    }
+
+    private ImportRequest toImportRequest(ExecuteRequest req) {
+        return new ImportRequest(req.driver(), req.url(), req.username(), req.password(), req.types(),
+                req.assetPrefix(), false);
     }
 
     @GET
