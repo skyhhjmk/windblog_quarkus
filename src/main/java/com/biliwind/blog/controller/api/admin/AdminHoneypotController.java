@@ -3,7 +3,6 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.model.HoneypotEvent;
 import com.biliwind.blog.model.HoneypotEventSample;
 import com.biliwind.blog.service.security.HoneypotService;
-import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -26,10 +25,10 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
+/** Authentication and SUPER_ADMIN authorization are enforced by the admin request filters. */
 @ApplicationScoped
 @Path("/api/admin/security/honeypot")
 @Produces(MediaType.APPLICATION_JSON)
-@RolesAllowed("SUPER_ADMIN")
 public class AdminHoneypotController {
 
     @Inject

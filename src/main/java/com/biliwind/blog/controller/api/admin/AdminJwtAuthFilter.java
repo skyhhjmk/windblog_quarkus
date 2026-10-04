@@ -108,7 +108,7 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
         requestContext.setProperty(REQUEST_ROLE_NAME_KEY, currentRoleName);
         requestContext.setProperty(REQUEST_IS_SUPER_ADMIN_KEY, currentIsSuperAdmin);
 
-        // Set SecurityContext to support @RolesAllowed
+        // Expose the verified principal and role through the Jakarta REST security context.
         requestContext.setSecurityContext(new SecurityContext() {
             @Override
             public Principal getUserPrincipal() {
