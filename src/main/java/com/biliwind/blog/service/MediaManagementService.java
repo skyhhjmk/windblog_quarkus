@@ -10,6 +10,7 @@ import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
 import io.quarkus.logging.Log;
 import io.quarkus.panache.common.Page;
+import io.quarkus.scheduler.Scheduled;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -410,6 +411,31 @@ public class MediaManagementService {
         }
     }
 
+    @Transactional
+    public void syncImportPlaceholderReferences(Post post, Map<String, String> contentMap) {
+        if (post == null || post.id == null) return;
+        PostMedia.delete("post.id = ?1", post.id);
+        if (contentMap == null || contentMap.isEmpty()) return;
+
+        Set<Long> mediaIds = new java.util.LinkedHashSet<>();
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "(?i)/uploads/import-placeholder/(\\d+)");
+        for (String content : contentMap.values()) {
+            if (content == null || content.isBlank()) continue;
+            java.util.regex.Matcher matcher = pattern.matcher(content);
+            while (matcher.find()) {
+                try {
+                    mediaIds.add(Long.parseLong(matcher.group(1)));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        for (Long mediaId : mediaIds) {
+            Media media = Media.findById(mediaId);
+            if (isImportPlaceholder(media)) persistReference(post, media);
+        }
+    }
+
     /**
      * 存储上传的媒体文件
      * @param operator 操作用户
@@ -451,7 +477,7 @@ public class MediaManagementService {
         long currentUsage = sumUsage(operator.id);
 
         return storeUploadedMediaInternal(source, sanitizedFileName, normalizedMime, operator.id,
-                role.maxSingleUploadBytes, currentUsage, role.maxTotalUploadBytes, new HashMap<>());
+                role.maxSingleUploadBytes, currentUsage, role.maxTotalUploadBytes, new HashMap<>(), null);
     }
 
     /**
@@ -491,14 +517,15 @@ public class MediaManagementService {
         metadata.put("uploadSource", "CODEX_CREATOR");
         metadata.put("generationMethod", "CODEX_APP_SERVER");
         return storeUploadedMediaInternal(source, sanitizedFileName, normalizedMime, null,
-                maxBytes, 0L, null, metadata);
+                maxBytes, 0L, null, metadata, null);
     }
 
     private Media storeUploadedMediaInternal(InputStream source, String sanitizedFileName,
                                              String normalizedMime, Long operatorId,
                                              Long maxSingleUploadBytes, long currentUsage,
                                              Long maxTotalUploadBytes,
-                                             Map<String, Object> metadata) {
+                                             Map<String, Object> metadata,
+                                             Long importPlaceholderId) {
 
         String extension = extractExtension(sanitizedFileName);
         // 使用 UUID 生成唯一的存储键，防止文件名冲突
@@ -560,10 +587,15 @@ public class MediaManagementService {
         }
 
         MediaManagementService transactionalSelf = selfProxy.get();
-        Media media = transactionalSelf.createPendingUploadedMedia(
-                storageKey, normalizedMime, sanitizedFileName, size, operatorId, metadata,
-                toVirusScanStatus(virusScanResult.status()), OffsetDateTime.now(),
-                sanitizeVirusScanMessage(virusScanResult));
+        Media media = importPlaceholderId == null
+                ? transactionalSelf.createPendingUploadedMedia(
+                        storageKey, normalizedMime, sanitizedFileName, size, operatorId, metadata,
+                        toVirusScanStatus(virusScanResult.status()), OffsetDateTime.now(),
+                        sanitizeVirusScanMessage(virusScanResult))
+                : transactionalSelf.prepareImportPlaceholderForProcessing(
+                        importPlaceholderId, storageKey, normalizedMime, sanitizedFileName, size,
+                        toVirusScanStatus(virusScanResult.status()), OffsetDateTime.now(),
+                        sanitizeVirusScanMessage(virusScanResult));
 
         if (asyncMediaProcessing) {
             try {
@@ -790,6 +822,176 @@ public class MediaManagementService {
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media prepareImportPlaceholderForProcessing(Long mediaId, String storageKey,
+                                                        String normalizedMime, String sanitizedFileName,
+                                                        long size, String virusScanStatus,
+                                                        OffsetDateTime virusScannedAt,
+                                                        String virusScanMessage) {
+        Media media = Media.findById(mediaId);
+        if (media == null || media.deletedAt != null || !isImportPlaceholder(media)) {
+            throw new BadRequestException("导入附件占位不存在或状态无效");
+        }
+        media.storageKey = storageKey;
+        media.mimeType = normalizedMime;
+        media.fileName = sanitizedFileName;
+        media.mediaType = parseMediaType(normalizedMime);
+        media.size = size;
+        media.width = null;
+        media.height = null;
+        media.storageClasses = new LinkedHashMap<>();
+        media.processingStatus = "PENDING";
+        media.processingProgress = 0;
+        media.processingError = null;
+        media.virusScanStatus = virusScanStatus == null || virusScanStatus.isBlank()
+                ? "NOT_SCANNED" : virusScanStatus;
+        media.virusScannedAt = virusScannedAt;
+        media.virusScanMessage = virusScanMessage;
+        Map<String, Object> mergedMetadata = media.metadata == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(media.metadata);
+        if (normalizedMime != null && !normalizedMime.isBlank()) {
+            mergedMetadata.put("detectedMimeType", normalizedMime);
+        }
+        mergedMetadata.put("importStatus", "processing_media");
+        mergedMetadata.remove("importError");
+        media.metadata = mergedMetadata;
+        media.persist();
+        Media.getEntityManager().flush();
+        return media;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media createImportPlaceholder(User operator, String sourceUrl, List<String> sourceMappings) {
+        if (operator == null || operator.id == null) {
+            throw new BadRequestException("导入附件占位缺少操作用户");
+        }
+        Media media = new Media();
+        media.storageKey = "IMPORT_PENDING_" + UUID.randomUUID();
+        media.url = "";
+        media.mediaType = 0;
+        media.fileName = sanitizeFileName(extractFileNameFromUrl(sourceUrl));
+        media.size = 0L;
+        media.uploadedBy = operator.id;
+        media.mimeType = null;
+        media.alt = Collections.emptyMap();
+        media.storageClasses = new LinkedHashMap<>();
+        media.version = 0;
+        media.processingStatus = "PENDING";
+        media.processingProgress = 0;
+        media.virusScanStatus = "NOT_SCANNED";
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("importSource", "LEGACY_IMPORT");
+        metadata.put("importStatus", "pending");
+        metadata.put("sourceUrl", sourceUrl);
+        metadata.put("sourceMappings", sourceMappings == null ? List.of() : sourceMappings);
+        media.metadata = metadata;
+        media.persist();
+        Media.getEntityManager().flush();
+        metadata.put("importPlaceholderUrl", "/uploads/import-placeholder/" + media.id);
+        media.metadata = metadata;
+        media.persist();
+        return media;
+    }
+
+    public String importPlaceholderUrl(Media media) {
+        if (media == null || media.metadata == null) return null;
+        Object value = media.metadata.get("importPlaceholderUrl");
+        return value == null ? null : value.toString();
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void addImportPlaceholderMappings(Long mediaId, List<String> sourceMappings) {
+        Media media = Media.findById(mediaId);
+        if (media == null || !isImportPlaceholder(media) || sourceMappings == null || sourceMappings.isEmpty()) {
+            return;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>(media.metadata);
+        Set<String> mappings = new java.util.LinkedHashSet<>();
+        Object existing = metadata.get("sourceMappings");
+        if (existing instanceof List<?> list) {
+            for (Object value : list) {
+                if (value != null && !value.toString().isBlank()) mappings.add(value.toString());
+            }
+        }
+        sourceMappings.stream().filter(value -> value != null && !value.isBlank()).forEach(mappings::add);
+        metadata.put("sourceMappings", new ArrayList<>(mappings));
+        media.metadata = metadata;
+        media.persist();
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media markImportPlaceholderFailed(Long mediaId, String error) {
+        Media media = Media.findById(mediaId);
+        if (media == null || !isImportPlaceholder(media)) return media;
+        String safeError = SensitiveMessageSanitizer.sanitize(error);
+        Map<String, Object> metadata = media.metadata == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(media.metadata);
+        metadata.put("importStatus", "failed");
+        metadata.put("importError", safeError);
+        int retryCount = 0;
+        try { retryCount = Integer.parseInt(String.valueOf(metadata.getOrDefault("importRetryCount", 0))); }
+        catch (NumberFormatException ignored) { }
+        metadata.put("nextRetryAt", OffsetDateTime.now().plusMinutes(Math.min(60, 2L << Math.min(retryCount, 5))).toString());
+        media.metadata = metadata;
+        media.processingStatus = "FAILED";
+        media.processingProgress = 0;
+        media.processingError = safeError;
+        media.persist();
+        return media;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void markImportPlaceholderProcessing(Long mediaId) {
+        Media media = Media.findById(mediaId);
+        if (media == null || !isImportPlaceholder(media)) return;
+        Map<String, Object> metadata = new LinkedHashMap<>(media.metadata);
+        metadata.put("importStatus", "processing");
+        metadata.put("lastRetryAt", OffsetDateTime.now().toString());
+        metadata.remove("nextRetryAt");
+        media.metadata = metadata;
+        media.processingStatus = "PROCESSING";
+        media.processingProgress = 0;
+        media.persist();
+    }
+
+    @Scheduled(every = "1m", identity = "windblog-import-media-retry-watchdog")
+    void retryStagedImportMedia() {
+        List<Long> mediaIds;
+        try { mediaIds = selfProxy.get().claimRetryableImportMedia(); }
+        catch (Exception exception) { Log.warn("导入媒体重试看门狗领取任务失败", exception); return; }
+        for (Long mediaId : mediaIds) {
+            try { retryImport(mediaId); }
+            catch (Exception exception) { Log.debug("导入媒体暂存重试失败，等待退避后重试: " + mediaId); }
+        }
+    }
+
+    @Transactional
+    List<Long> claimRetryableImportMedia() {
+        @SuppressWarnings("unchecked")
+        List<Number> rows = Media.getEntityManager().createNativeQuery("update media set metadata="
+                        + "jsonb_set(jsonb_set(coalesce(metadata, '{}'::jsonb), '{importRetryCount}', "
+                        + "to_jsonb(coalesce((metadata->>'importRetryCount')::int, 0) + 1), true), "
+                        + "'{importRetryLockedAt}', to_jsonb(now()::text), true) "
+                        + "where id in (select id from media where metadata->>'importSource'='LEGACY_IMPORT' "
+                        + "and coalesce((metadata->>'importRetryCount')::int, 0) < 5 "
+                        + "and ((metadata->>'importStatus'='failed' and "
+                        + "coalesce((metadata->>'nextRetryAt')::timestamptz, now()) <= now()) "
+                        + "or (metadata->>'importStatus'='processing' and "
+                        + "coalesce((metadata->>'lastRetryAt')::timestamptz, now()) < now()-interval '5 minutes')) "
+                        + "and coalesce((metadata->>'importRetryLockedAt')::timestamptz, now()-interval '1 hour') "
+                        + "< now()-interval '10 minutes' order by id limit 20 for update skip locked) returning id")
+                .getResultList();
+        List<Long> ids = new ArrayList<>();
+        for (Number row : rows) ids.add(row.longValue());
+        return ids;
+    }
+
+    private boolean isImportPlaceholder(Media media) {
+        return media != null && media.metadata != null
+                && "LEGACY_IMPORT".equals(String.valueOf(media.metadata.get("importSource")))
+                && media.metadata.get("sourceUrl") != null;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
     public Media completeUploadedMedia(Long mediaId, Integer width, Integer height, Map<String, Object> metadata,
                                        Map<VariantType, String> generatedVariants) {
         Media media = Media.findById(mediaId);
@@ -799,6 +1001,15 @@ public class MediaManagementService {
         media.width = width;
         media.height = height;
         media.metadata = metadata;
+        if (isImportPlaceholder(media)) {
+            Map<String, Object> completedMetadata = new LinkedHashMap<>(media.metadata);
+            completedMetadata.put("importStatus", "completed");
+            completedMetadata.remove("importError");
+            completedMetadata.remove("nextRetryAt");
+            completedMetadata.remove("lastRetryAt");
+            completedMetadata.remove("importRetryLockedAt");
+            media.metadata = completedMetadata;
+        }
         StorageService.InitialStorage initial = storageService.installProcessedMedia(media, generatedVariants, uploadRoot);
         media.storageClasses = new LinkedHashMap<>();
         media.storageClasses.put(initial.storageClassName(), initial.variants());
@@ -843,6 +1054,12 @@ public class MediaManagementService {
             media.processingStatus = status;
             media.processingProgress = progress;
             media.processingError = error;
+            if ("FAILED".equals(status) && isImportPlaceholder(media)) {
+                Map<String, Object> metadata = new LinkedHashMap<>(media.metadata);
+                metadata.put("importStatus", "failed");
+                metadata.put("importError", SensitiveMessageSanitizer.sanitize(error));
+                media.metadata = metadata;
+            }
             media.persist();
         }
     }
@@ -974,6 +1191,53 @@ public class MediaManagementService {
         }
     }
 
+    public Media importFromUrlIntoPlaceholder(User operator, Long placeholderId, String fileUrl,
+                                               com.biliwind.blog.service.security.SafeExternalHttpService.DownloadProgressListener progressListener)
+            throws IOException {
+        edgeWriteGuard.rejectWriteOnEdge("导入外部媒体");
+        if (operator == null || operator.id == null) {
+            throw new BadRequestException("导入媒体需要有效的操作用户");
+        }
+        try {
+            com.biliwind.blog.service.security.SafeExternalHttpService.ExternalHttpResponse response =
+                    safeExternalHttpService.get(fileUrl, "WindBlog-Safe-Media-Importer/1.0",
+                            256 * 1024 * 1024, progressListener);
+            if (response.statusCode() != 200) {
+                throw new IOException("下载文件失败，HTTP 状态码: " + response.statusCode());
+            }
+            String contentType = response.headerValue("Content-Type");
+            if (contentType != null && contentType.toLowerCase(Locale.ROOT).contains("text/html")) {
+                throw new IOException("下载内容疑似为 HTML 页面而非媒体文件，已拦截");
+            }
+
+            String sanitizedFileName = sanitizeFileName(extractFileNameFromUrl(fileUrl));
+            validateExtension(sanitizedFileName);
+            String normalizedMime = contentType == null || contentType.isBlank()
+                    ? "" : contentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+            UploadRole role = resolveUploadRole(operator);
+            if (!role.allowedMimeTypes.isEmpty() && !role.allowedMimeTypes.contains(normalizedMime)) {
+                throw new BadRequestException("当前角色不允许导入该媒体类型");
+            }
+            long currentUsage = sumUsage(operator.id);
+            return storeUploadedMediaInternal(new ByteArrayInputStream(response.body()), sanitizedFileName,
+                    normalizedMime, operator.id, role.maxSingleUploadBytes, currentUsage,
+                    role.maxTotalUploadBytes, new HashMap<>(), placeholderId);
+        } catch (IllegalArgumentException exception) {
+            throw new IOException("外部媒体地址被安全策略拒绝", exception);
+        }
+    }
+
+    private UploadRole resolveUploadRole(User operator) {
+        String roleName = operator.roleName;
+        if (roleName == null || roleName.isBlank()) roleName = RoleConstant.USER;
+        UploadRole role = uploadRoleService.findByName(roleName);
+        if (role == null) role = uploadRoleService.findByName(RoleConstant.USER);
+        if (role == null || !role.canUpload) {
+            throw new ForbiddenException("当前角色不允许上传媒体");
+        }
+        return role;
+    }
+
     /**
      * 创建一个标记为“导入失败”的占位媒体记录
      *
@@ -1026,11 +1290,11 @@ public class MediaManagementService {
         operator.roleName = context.operatorRoleName();
 
         try {
-            Media newMedia = importFromUrl(operator, context.sourceUrl());
-            return selfProxy.get().applyRetryImportResult(context.mediaId(), context.oldUrl(), newMedia);
+            selfProxy.get().markImportPlaceholderProcessing(context.mediaId());
+            return importFromUrlIntoPlaceholder(operator, context.mediaId(), context.sourceUrl(), null);
         } catch (Exception e) {
             String safeMessage = SensitiveMessageSanitizer.sanitize(e.getMessage());
-            selfProxy.get().recordRetryImportFailure(context.mediaId(), safeMessage);
+            selfProxy.get().markImportPlaceholderFailed(context.mediaId(), safeMessage);
             throw new IOException("重试导入仍然失败: " + safeMessage);
         }
     }
@@ -1042,7 +1306,7 @@ public class MediaManagementService {
             throw new BadRequestException("媒体不存在");
         }
         Map<String, Object> metadata = media.metadata != null ? new HashMap<>(media.metadata) : new HashMap<>();
-        if (!"failed".equals(String.valueOf(metadata.get("importStatus")))) {
+        if (!Set.of("failed", "processing").contains(String.valueOf(metadata.get("importStatus")))) {
             throw new BadRequestException("该媒体并未处于导入失败状态");
         }
         String sourceUrl = String.valueOf(metadata.get("sourceUrl"));
@@ -1056,30 +1320,7 @@ public class MediaManagementService {
         if (operator == null || operator.id == null) {
             throw new BadRequestException("找不到媒体导入操作用户");
         }
-        return new RetryImportContext(media.id, media.url, sourceUrl, operator.id, operator.roleName);
-    }
-
-    @Transactional
-    public Media applyRetryImportResult(Long mediaId, String oldUrl, Media newMedia) {
-        Media media = Media.findById(mediaId);
-        if (media == null) {
-            throw new BadRequestException("媒体不存在");
-        }
-        String newUrl = newMedia.url;
-        media.storageKey = newMedia.storageKey;
-        media.url = newUrl;
-        media.mediaType = newMedia.mediaType;
-        media.mimeType = newMedia.mimeType;
-        media.fileName = newMedia.fileName;
-        media.size = newMedia.size;
-        media.width = newMedia.width;
-        media.height = newMedia.height;
-        media.metadata = newMedia.metadata;
-        media.persist();
-        if (oldUrl != null && !oldUrl.isBlank() && !oldUrl.equals(newUrl)) {
-            updatePostReferences(oldUrl, newUrl);
-        }
-        return media;
+        return new RetryImportContext(media.id, sourceUrl, operator.id, operator.roleName);
     }
 
     @Transactional
@@ -1095,7 +1336,7 @@ public class MediaManagementService {
         media.persist();
     }
 
-    public record RetryImportContext(Long mediaId, String oldUrl, String sourceUrl,
+    public record RetryImportContext(Long mediaId, String sourceUrl,
                                      Long operatorId, String operatorRoleName) {
     }
 
@@ -1631,6 +1872,10 @@ public class MediaManagementService {
         }
         if (media.fileName != null) {
             keys.add(media.fileName.toLowerCase());
+        }
+        if (media.metadata != null) {
+            Object placeholderUrl = media.metadata.get("importPlaceholderUrl");
+            if (placeholderUrl != null) keys.add(normalizeUrlToPath(placeholderUrl.toString()));
         }
         keys.remove("");
         return keys;

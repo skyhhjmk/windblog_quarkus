@@ -704,7 +704,7 @@ public class PostAccessService {
         addMediaSource(sources, media.storageKey);
         if (media.metadata != null) {
             for (String key : java.util.List.of("thumbnailUrl", "previewUrl", "webpUrl",
-                    "placeholderUrl", "coverUrl")) {
+                    "placeholderUrl", "coverUrl", "importPlaceholderUrl")) {
                 Object value = media.metadata.get(key);
                 if (value != null) {
                     addMediaSource(sources, value.toString());

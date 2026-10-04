@@ -35,6 +35,39 @@ public class UploadFileController {
     com.biliwind.blog.context.RegionContext regionContext;
 
     @GET
+    @Path("/import-placeholder/{mediaId}")
+    @Produces(MediaType.WILDCARD)
+    public Response resolveImportPlaceholder(@PathParam("mediaId") Long mediaId) {
+        Media media = Media.find("id = ?1 and deletedAt is null", mediaId).firstResult();
+        if (media == null || media.metadata == null
+                || !"LEGACY_IMPORT".equals(String.valueOf(media.metadata.get("importSource")))
+                || !("/uploads/import-placeholder/" + mediaId)
+                        .equals(String.valueOf(media.metadata.get("importPlaceholderUrl")))) {
+            throw new NotFoundException();
+        }
+        try {
+            if (postAccessService.hasProtectedMediaReference(media.id)
+                    || !mediaAccessService.canAccess(media, regionContext.getCurrentRegion())) {
+                throw new NotFoundException();
+            }
+        } catch (NotFoundException notFoundException) {
+            throw notFoundException;
+        } catch (Exception exception) {
+            throw new ServiceUnavailableException("媒体访问校验暂不可用");
+        }
+        if (!"COMPLETED".equals(media.processingStatus) || media.url == null || media.url.isBlank()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .header("Retry-After", 5)
+                    .header("Cache-Control", "no-store")
+                    .build();
+        }
+        return Response.status(Response.Status.FOUND)
+                .header("Location", media.url)
+                .header("Cache-Control", "no-store")
+                .build();
+    }
+
+    @GET
     @Path("/{fileName}")
     @Produces(MediaType.WILDCARD)
     public Response getFile(@PathParam("fileName") String fileName, @Context UriInfo uriInfo) {

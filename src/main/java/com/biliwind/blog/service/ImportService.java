@@ -13,6 +13,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import java.net.URLDecoder;
@@ -25,6 +26,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,12 +56,16 @@ public class ImportService {
      * leave the admin page showing an old percentage with no context.
      */
     private volatile ImportProgressEvent latestProgressEvent;
+    private final ThreadLocal<String> activeJobId = new ThreadLocal<>();
 
     @Inject
     MediaManagementService mediaService;
 
     @Inject
     ImportAnalysisService importAnalysisService;
+
+    @Inject
+    Instance<ImportJobService> importJobService;
 
     @Inject
     EmbeddedDataImageService embeddedDataImageService;
@@ -114,6 +120,18 @@ public class ImportService {
         }
     }
 
+    public ImportResult runJob(ImportRequest req, Long operatorId, String jobId) {
+        activeJobId.set(jobId);
+        try { return doImport(req, operatorId); }
+        finally { activeJobId.remove(); }
+    }
+
+    public ImportResult runSqlJob(java.nio.file.Path sqlFile, ImportRequest req, Long operatorId, String jobId) {
+        activeJobId.set(jobId);
+        try { return doImportSql(sqlFile, req, operatorId); }
+        finally { activeJobId.remove(); }
+    }
+
     public ImportResult doImportSql(java.nio.file.Path sqlFile, ImportRequest req, Long operatorId) {
         resetProgressStream();
         emit("info", "准备从 SQL 文件导入数据...", null);
@@ -160,12 +178,15 @@ public class ImportService {
             emitOverall(ctx, "标签", "标签处理完成");
             emit("progress", "标签导入完成", Map.of("count", tags));
         }
+        if (types.contains("media") || types.contains("posts")) {
+            emit("info", "正在登记外部媒体映射...", null);
+            prepareMediaPlaceholders(conn, req.assetPrefix(), operator, ctx,
+                    types.contains("media"), types.contains("posts"));
+        }
         if (types.contains("media")) {
-            emit("info", "正在导入媒体库...", null);
-            importMedia(conn, req.assetPrefix(), operator, ctx);
             ctx.tracker().completeEntityType("media");
-            emitOverall(ctx, "媒体", "媒体资源处理完成");
-            emit("progress", "媒体库导入主体完成", null);
+            emitOverall(ctx, "媒体", "媒体占位和来源映射已登记");
+            emit("progress", "媒体库占位登记完成", null);
         }
         if (types.contains("posts") || types.contains("comments")) {
             emit("info", "正在处理作者/用户映射...", null);
@@ -181,10 +202,6 @@ public class ImportService {
             importPostRelations(conn, ctx);
             emit("progress", "关联关系重建完成", null);
         }
-        if (!ctx.retryQueue().isEmpty()) {
-            emit("info", "正在执行附件重试任务 (" + ctx.retryQueue().size() + " 个)...", null);
-            processRetryQueue(operator, ctx);
-        }
         if (types.contains("links")) {
             emit("info", "正在导入友情链接...", null);
             links = importLinks(conn, operator, req.assetPrefix(), ctx);
@@ -198,6 +215,11 @@ public class ImportService {
             ctx.tracker().completeEntityType("comments");
             emitOverall(ctx, "评论", "评论处理完成");
             emit("progress", "评论导入完成", Map.of("count", comments));
+        }
+        if (!ctx.deferredMedia().isEmpty()) {
+            emit("info", "文章和关联数据已导入，开始同步外部媒体 ("
+                    + ctx.deferredMedia().size() + " 个)...", null);
+            processDeferredMedia(operator, ctx);
         }
         emitOverall(ctx, "完成", "全部导入任务完成");
         emit("end", "全部导入任务完成", ctx.tracker().snapshot(), "success");
@@ -515,6 +537,8 @@ public class ImportService {
             latestProgressEvent = event;
         }
         eventProcessor.onNext(event);
+        String jobId = activeJobId.get();
+        if (jobId != null) importJobService.get().recordProgress(jobId, event);
     }
 
     private void emitOverall(ImportContext ctx, String phase, String message) {
@@ -535,7 +559,8 @@ public class ImportService {
         emitOverall(ctx, phase, message);
     }
 
-    private Media downloadImportedMedia(User operator, String fullUrl, ImportContext ctx) throws Exception {
+    private Media downloadImportedMedia(User operator, long placeholderId,
+                                        String fullUrl, ImportContext ctx) throws Exception {
         ImportProgressTracker tracker = ctx.tracker();
         tracker.registerResource(fullUrl);
         int resourceIndex = tracker.resourceIndex(fullUrl);
@@ -543,7 +568,7 @@ public class ImportService {
         emit("download", "开始下载资源 " + sanitizeErrorMessage(fullUrl),
                 downloadData(tracker, fullUrl, resourceIndex, state, "started"), "processing");
         try {
-            Media media = mediaService.importFromUrl(operator, fullUrl,
+            Media media = mediaService.importFromUrlIntoPlaceholder(operator, placeholderId, fullUrl,
                     (downloaded, total, statusCode, redirectCount) -> {
                         state.statusCode = statusCode;
                         state.redirectCount = redirectCount;
@@ -567,6 +592,22 @@ public class ImportService {
                     downloadData(tracker, fullUrl, resourceIndex, state, "failed"), "failed");
             emitOverall(ctx, "媒体", "资源下载失败");
             throw exception;
+        }
+    }
+
+    private void processDeferredMedia(User operator, ImportContext ctx) {
+        for (DeferredMediaImport deferred : ctx.deferredMedia().values()) {
+            String safeUrl = sanitizeErrorMessage(deferred.sourceUrl());
+            emit("info", "开始同步外部媒体: " + safeUrl, Map.of("mediaId", deferred.mediaId()));
+            try {
+                mediaService.markImportPlaceholderProcessing(deferred.mediaId());
+                downloadImportedMedia(operator, deferred.mediaId(), deferred.sourceUrl(), ctx);
+            } catch (Exception exception) {
+                String safeMessage = sanitizeErrorMessage(exception.getMessage());
+                mediaService.markImportPlaceholderFailed(deferred.mediaId(), safeMessage);
+                emit("error", "外部媒体同步失败，来源映射已保留，可在媒体库重试: " + safeUrl,
+                        Map.of("mediaId", deferred.mediaId(), "error", safeMessage));
+            }
         }
     }
 
@@ -649,56 +690,53 @@ public class ImportService {
         return count;
     }
 
-    private void importMedia(Connection conn, String assetPrefix, User operator, ImportContext ctx) throws SQLException {
+    private void prepareMediaPlaceholders(Connection conn, String assetPrefix, User operator,
+                                         ImportContext ctx, boolean includeMediaTable,
+                                         boolean includePosts) throws SQLException {
         // 发现池，Key 是探测到的各种路径形式，Value 是对应的下载 URL
         Map<String, String> discoveryMap = new HashMap<>();
 
-        // 1. 从 media 表中发现
-        String mediaSql = "SELECT * FROM media";
-        try (PreparedStatement ps = conn.prepareStatement(mediaSql);
-             ResultSet rs = ps.executeQuery()) {
-            List<String> mediaColumns = getAvailableColumns(rs);
-            while (rs.next()) {
-                if (isDeleted(rs, mediaColumns)) {
-                    ctx.tracker().completeEntityItem("media");
-                    emitEntityProgress(ctx, "媒体", "跳过已删除媒体");
-                    continue;
-                }
-                String filePath = rs.getString("file_path");
-                if (filePath == null) {
-                    ctx.tracker().completeEntityItem("media");
-                    emitEntityProgress(ctx, "媒体", "媒体资源发现中");
-                    continue;
-                }
+        // 先登记 legacy media 表中的来源 URL，不在文章和关系导入前发起网络请求。
+        if (includeMediaTable) {
+            String mediaSql = "SELECT * FROM media";
+            try (PreparedStatement ps = conn.prepareStatement(mediaSql);
+                 ResultSet rs = ps.executeQuery()) {
+                List<String> mediaColumns = getAvailableColumns(rs);
+                while (rs.next()) {
+                    if (isDeleted(rs, mediaColumns)) {
+                        ctx.tracker().completeEntityItem("media");
+                        emitEntityProgress(ctx, "媒体", "跳过已删除媒体");
+                        continue;
+                    }
+                    String filePath = rs.getString("file_path");
+                    if (filePath == null) {
+                        ctx.tracker().completeEntityItem("media");
+                        emitEntityProgress(ctx, "媒体", "媒体资源发现中");
+                        continue;
+                    }
 
-                if (isEmbeddedImageDataUrl(filePath)) {
-                    String imported = importEmbeddedImage(filePath, operator, ctx);
-                    ctx.urlMap().put(filePath, imported);
+                    if (isEmbeddedImageDataUrl(filePath)) {
+                        String imported = importEmbeddedImage(filePath, operator, ctx);
+                        ctx.urlMap().put(filePath, imported);
+                        ctx.tracker().completeEntityItem("media");
+                        emitEntityProgress(ctx, "媒体", "内嵌媒体资源处理中");
+                        continue;
+                    }
+
+                    addDiscoveredMediaUrl(filePath, assetPrefix, discoveryMap);
                     ctx.tracker().completeEntityItem("media");
-                    emitEntityProgress(ctx, "媒体", "媒体资源处理中");
-                    continue;
+                    emitEntityProgress(ctx, "媒体", "媒体来源登记中");
                 }
-
-                boolean absoluteSource = isAbsoluteHttpUrl(filePath);
-                String oldRelUrl = absoluteSource ? filePath : normalizeOldRelUrl(filePath);
-                String fullUrl = absoluteSource ? filePath : formatUrl(assetPrefix, oldRelUrl);
-
-                discoveryMap.put(oldRelUrl, fullUrl);
-                discoveryMap.put(filePath, fullUrl);
-                if (!filePath.startsWith("/")) discoveryMap.put("/" + filePath, fullUrl);
-                ctx.tracker().completeEntityItem("media");
-                emitEntityProgress(ctx, "媒体", "媒体资源发现中");
+            } catch (SQLException e) {
+                String safeMessage = sanitizeErrorMessage(e.getMessage());
+                emit("info", "读取 media 表失败，将仅依赖文章内容分析: " + safeMessage, null);
             }
-        } catch (SQLException e) {
-            String safeMessage = sanitizeErrorMessage(e.getMessage());
-            emit("info", "读取 media 表失败，将仅依赖文章内容分析: " + safeMessage, null);
         }
 
-        // 2. 从 posts 表中通过内容分析发现
-        extractUrlsFromPosts(conn, assetPrefix, discoveryMap, ctx);
+        // 文章要先拿到稳定占位地址，媒体下载延后到文章、评论和友链全部写入之后。
+        if (includePosts) extractUrlsFromPosts(conn, assetPrefix, discoveryMap, ctx);
 
-        // 3. 执行去重后的下载任务
-        // 我们需要按 fullUrl 进行分组，避免同一个文件因为不同的引用路径被下载多次
+        // 同一来源 URL 只创建一个附件；所有 legacy 路径别名都记录在该附件的 metadata 中。
         Map<String, List<String>> reverseMap = new HashMap<>();
         for (Map.Entry<String, String> entry : discoveryMap.entrySet()) {
             if (!isAbsoluteHttpUrl(entry.getValue())) {
@@ -712,27 +750,48 @@ public class ImportService {
         for (Map.Entry<String, List<String>> entry : reverseMap.entrySet()) {
             String fullUrl = entry.getKey();
             List<String> refPaths = entry.getValue();
-            ctx.tracker().registerResource(fullUrl);
-
-            String safeUrl = sanitizeErrorMessage(fullUrl);
-            emit("info", "同步媒体资源: " + safeUrl, null);
-            try {
-                Media m = downloadImportedMedia(operator, fullUrl, ctx);
-                // 将所有关联的引用路径都指向新 URL
-                for (String path : refPaths) {
-                    ctx.urlMap().put(path, m.url);
-                }
-                ctx.urlMap().put(fullUrl, m.url);
-            } catch (Exception e) {
-                String safeMessage = sanitizeErrorMessage(e.getMessage());
-                emit("error", "同步失败，创建占位记录: " + safeUrl, safeMessage);
-                Media failedMedia = mediaService.markAsImportFailed(operator, fullUrl, safeMessage);
-                for (String path : refPaths) {
-                    ctx.urlMap().put(path, failedMedia.url);
-                }
-                ctx.urlMap().put(fullUrl, failedMedia.url);
-            }
+            registerDeferredMedia(fullUrl, refPaths, operator, ctx);
         }
+    }
+
+    private void addDiscoveredMediaUrl(String url, String assetPrefix, Map<String, String> discoveryMap) {
+        if (url == null || url.isBlank() || isNonMediaScheme(url) || isEmbeddedImageDataUrl(url)) return;
+        boolean absoluteSource = isAbsoluteHttpUrl(url);
+        String oldRelUrl = absoluteSource ? url : normalizeOldRelUrl(url);
+        String fullUrl = absoluteSource ? url : url.startsWith("//")
+                ? resolveRelativeUrl(assetPrefix, url)
+                : formatUrl(assetPrefix, oldRelUrl);
+        discoveryMap.put(url, fullUrl);
+        discoveryMap.put(oldRelUrl, fullUrl);
+        if (!url.startsWith("/")) discoveryMap.put("/" + url, fullUrl);
+    }
+
+    private void registerDeferredMedia(String fullUrl, List<String> aliases,
+                                       User operator, ImportContext ctx) {
+        if (fullUrl == null || !isAbsoluteHttpUrl(fullUrl)) return;
+        DeferredMediaImport existing = ctx.deferredMedia().get(fullUrl);
+        if (existing != null) {
+            List<String> sourceMappings = aliases == null ? List.of() : aliases.stream()
+                    .filter(alias -> alias != null && !alias.isBlank())
+                    .distinct().toList();
+            mediaService.addImportPlaceholderMappings(existing.mediaId(), sourceMappings);
+            for (String alias : sourceMappings) ctx.urlMap().put(alias, existing.placeholderUrl());
+            ctx.urlMap().put(fullUrl, existing.placeholderUrl());
+            return;
+        }
+
+        List<String> sourceMappings = aliases == null ? List.of() : aliases.stream()
+                .filter(alias -> alias != null && !alias.isBlank())
+                .distinct().toList();
+        Media placeholder = mediaService.createImportPlaceholder(operator, fullUrl, sourceMappings);
+        String placeholderUrl = mediaService.importPlaceholderUrl(placeholder);
+        DeferredMediaImport deferred = new DeferredMediaImport(fullUrl, placeholder.id, placeholderUrl);
+        ctx.deferredMedia().put(fullUrl, deferred);
+        ctx.tracker().registerResource(fullUrl);
+        for (String alias : sourceMappings) ctx.urlMap().put(alias, placeholderUrl);
+        ctx.urlMap().put(fullUrl, placeholderUrl);
+        emit("info", "已登记外部媒体映射并创建附件占位: " + sanitizeErrorMessage(fullUrl),
+                Map.of("mediaId", placeholder.id, "sourceMappings", sourceMappings.size()));
     }
 
     private void extractUrlsFromPosts(Connection conn, String assetPrefix,
@@ -910,6 +969,8 @@ public class ImportService {
                     }
                 });
 
+                mediaService.syncImportPlaceholderReferences(p, Map.of("zh-cn", contentMarkdown));
+
                 ctx.postMap().put(oldPostId, p.id);
                 ctx.tracker().completeEntityItem("posts");
                 emitEntityProgress(ctx, "文章", "文章处理中");
@@ -926,25 +987,6 @@ public class ImportService {
         if (path == null || path.isBlank()) return path;
         if (isAbsoluteHttpUrl(path)) return path;
         return resolveRelativeUrl(prefix, path);
-    }
-
-    private void processRetryQueue(User operator, ImportContext ctx) {
-        List<DownloadTask> currentQueue = new ArrayList<>(ctx.retryQueue());
-        ctx.retryQueue().clear();
-
-        for (DownloadTask task : currentQueue) {
-            String safeUrl = sanitizeErrorMessage(task.sourceUrl);
-            emit("info", "重试下载: " + safeUrl, null);
-            try {
-                Media m = downloadImportedMedia(operator, task.sourceUrl, ctx);
-                ctx.urlMap().put(task.sourceUrl, m.url);
-            } catch (Exception e) {
-                String safeMessage = sanitizeErrorMessage(e.getMessage());
-                emit("error", "重试仍然失败: " + safeUrl, safeMessage);
-                // 最终失败时，resolveAndDownload 已创建失败记录，直接使用已有记录的 URL
-                ctx.urlMap().put(task.sourceUrl, task.sourceUrl);
-            }
-        }
     }
 
     private int importLinks(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
@@ -1504,39 +1546,11 @@ public class ImportService {
         if (isEmbeddedImageDataUrl(url)) return importEmbeddedImage(url, operator, ctx);
         if (isNonMediaScheme(url)) return url;
 
-        // 相对路径、协议相对 URL，以及来源站点同源资源才进入媒体下载流程。
-        boolean isRelativeOrOldSystem = !isAbsoluteHttpUrl(url) || isSameOrigin(url, assetPrefix);
-
-        if (isRelativeOrOldSystem) {
-            String fullUrl = url;
-            if (!isAbsoluteHttpUrl(url)) {
-                fullUrl = resolveRelativeUrl(assetPrefix, url);
-            }
-
-            if (!isAbsoluteHttpUrl(fullUrl)) return url;
-
-            // 再次检查拼接后的完整 URL 是否在映射中
-            String cachedFullUrl = ctx.urlMap().get(fullUrl);
-            if (cachedFullUrl != null) {
-                return cachedFullUrl;
-            }
-
-            try {
-                Media m = downloadImportedMedia(operator, fullUrl, ctx);
-                ctx.urlMap().put(url, m.url);
-                ctx.urlMap().put(fullUrl, m.url);
-                return m.url;
-            } catch (Exception e) {
-                // 下载失败时立即创建失败占位记录，避免后续重复尝试
-                Media failedMedia = mediaService.markAsImportFailed(
-                        operator, fullUrl, sanitizeErrorMessage(e.getMessage()));
-                ctx.urlMap().put(url, failedMedia.url);
-                ctx.urlMap().put(fullUrl, failedMedia.url);
-                return failedMedia.url;
-            }
-        }
-
-        return url;
+        // 图片和媒体先改写到可持久化的站内占位地址，外部网络请求延后处理。
+        String fullUrl = isAbsoluteHttpUrl(url) ? url : resolveRelativeUrl(assetPrefix, url);
+        if (!isAbsoluteHttpUrl(fullUrl)) return url;
+        registerDeferredMedia(fullUrl, List.of(url, fullUrl), operator, ctx);
+        return ctx.urlMap().getOrDefault(url, ctx.urlMap().getOrDefault(fullUrl, url));
     }
 
     private boolean isNonMediaScheme(String url) {
@@ -1589,18 +1603,6 @@ public class ImportService {
         }
     }
 
-    private boolean isSameOrigin(String url, String assetPrefix) {
-        try {
-            URI source = URI.create(url);
-            URI base = URI.create(normalizeAssetPrefix(assetPrefix));
-            return source.getHost() != null && source.getHost().equalsIgnoreCase(base.getHost())
-                    && source.getPort() == base.getPort()
-                    && source.getScheme().equalsIgnoreCase(base.getScheme());
-        } catch (IllegalArgumentException ignored) {
-            return false;
-        }
-    }
-
     private String resolveRelativeUrl(String assetPrefix, String path) {
         String normalizedPrefix = normalizeAssetPrefix(assetPrefix);
         if (normalizedPrefix.isBlank()) return path;
@@ -1630,7 +1632,7 @@ public class ImportService {
         }
     }
 
-    private record DownloadTask(String sourceUrl, String targetName, Post relatedPost) {
+    private record DeferredMediaImport(String sourceUrl, Long mediaId, String placeholderUrl) {
     }
 
     private static final class DownloadState {
@@ -1747,7 +1749,7 @@ public class ImportService {
     private record ImportContext(
             Map<String, String> urlMap,
             Map<String, String> embeddedMap,
-            List<DownloadTask> retryQueue,
+            Map<String, DeferredMediaImport> deferredMedia,
             Map<Long, Long> categoryMap,
             Map<Long, Long> tagMap,
             Map<Long, Long> userMap,
@@ -1756,7 +1758,8 @@ public class ImportService {
             ImportProgressTracker tracker
     ) {
         public ImportContext() {
-            this(new HashMap<>(), new HashMap<>(), new ArrayList<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new ImportProgressTracker());
+            this(new HashMap<>(), new HashMap<>(), new LinkedHashMap<>(), new HashMap<>(), new HashMap<>(),
+                    new HashMap<>(), new HashMap<>(), new HashMap<>(), new ImportProgressTracker());
         }
     }
 }

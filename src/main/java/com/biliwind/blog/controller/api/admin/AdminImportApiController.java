@@ -9,6 +9,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.AnalyzeRequest
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.AnalysisResponse;
 import com.biliwind.blog.controller.api.admin.dto.AdminImportDtos.ExecuteRequest;
 import com.biliwind.blog.service.ImportAnalysisService;
+import com.biliwind.blog.service.ImportJobService;
 import com.biliwind.blog.service.ImportService;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Multi;
@@ -36,6 +37,9 @@ public class AdminImportApiController {
 
     @Inject
     ImportAnalysisService importAnalysisService;
+
+    @Inject
+    ImportJobService importJobService;
 
     @Inject
     AdminRequestContext adminRequestContext;
@@ -94,7 +98,7 @@ public class AdminImportApiController {
     @Path("/execute")
     @Blocking
     @Operation(summary = "执行已分析的导入任务")
-    public ImportResult execute(ExecuteRequest req) {
+    public java.util.Map<String, Object> execute(ExecuteRequest req) {
         requireSuperAdmin();
         if (req == null || req.analysisId() == null || req.analysisId().isBlank()) {
             throw new BadRequestException("缺少分析报告 ID");
@@ -111,9 +115,17 @@ public class AdminImportApiController {
         ImportRequest importRequest = new ImportRequest(
                 req.driver(), req.url(), req.username(), req.password(), req.types(), req.assetPrefix(), false);
         if ("SQL_FILE".equalsIgnoreCase(session.sourceType())) {
-            return importService.doImportSql(session.artifact(), importRequest, adminRequestContext.getUserId());
+            return importJobService.enqueue(importRequest, session.artifact(), adminRequestContext.getUserId());
         }
-        return importService.doImport(importRequest, adminRequestContext.getUserId());
+        return importJobService.enqueue(importRequest, null, adminRequestContext.getUserId());
+    }
+
+    @GET
+    @Path("/jobs/{id}")
+    @Operation(summary = "获取导入任务状态和最近进度")
+    public java.util.Map<String, Object> getJob(@PathParam("id") String id) {
+        requireSuperAdmin();
+        return importJobService.status(id);
     }
 
     @GET
