@@ -4,6 +4,7 @@ import com.biliwind.blog.common.exception.BadRequestException;
 import com.biliwind.blog.model.RegionRule;
 import jakarta.transaction.Transactional;
 import jakarta.inject.Inject;
+import jakarta.enterprise.event.Event;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -21,6 +22,12 @@ public class AdminRegionController extends AdminBaseApiController {
     @Inject
     com.biliwind.blog.service.RegionRuleService regionRuleService;
 
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
+
+    @Inject
+    Event<com.biliwind.blog.service.edge.DataSyncEvent> dataSyncEvent;
+
     @GET
     public List<RegionRule> listRules() {
         return RegionRule.list("order by priority desc");
@@ -35,6 +42,10 @@ public class AdminRegionController extends AdminBaseApiController {
         rule.id = null; // 确保是新增
         rule.persist();
         regionRuleService.invalidate();
+        if (!nodeRoleService.isEdgeNode()) {
+            dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent(
+                    "REGION_RULE", rule.id, "UPSERT"));
+        }
         return Response.status(Response.Status.CREATED).entity(rule).build();
     }
 
@@ -54,6 +65,10 @@ public class AdminRegionController extends AdminBaseApiController {
         entity.priority = update.priority;
         entity.isEnabled = update.isEnabled;
         regionRuleService.invalidate();
+        if (!nodeRoleService.isEdgeNode()) {
+            dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent(
+                    "REGION_RULE", entity.id, "UPSERT"));
+        }
 
         return entity;
     }
@@ -68,6 +83,10 @@ public class AdminRegionController extends AdminBaseApiController {
         }
         entity.delete();
         regionRuleService.invalidate();
+        if (!nodeRoleService.isEdgeNode()) {
+            dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent(
+                    "REGION_RULE", id, "DELETE"));
+        }
         return Response.noContent().build();
     }
 }

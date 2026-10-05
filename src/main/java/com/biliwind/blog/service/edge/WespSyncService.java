@@ -280,7 +280,17 @@ public class WespSyncService {
             enqueueLocalOperation(item.entityType(), item.action(), item.entityId(), item.payload());
             snapshotItems++;
         }
-        LOG.info("WESP 已将公开快照加入操作日志，targetNodeId={} items={} force={}",
+        for (EdgeDataSyncService.FullSyncItem item
+                : edgeDataSyncService.get().buildSystemSettingsSnapshot()) {
+            enqueueLocalOperation(item.entityType(), item.action(), item.entityId(), item.payload());
+            snapshotItems++;
+        }
+        for (EdgeDataSyncService.FullSyncItem item
+                : edgeDataSyncService.get().buildRegionRulesSnapshot()) {
+            enqueueLocalOperation(item.entityType(), item.action(), item.entityId(), item.payload());
+            snapshotItems++;
+        }
+        LOG.info("WESP 已将公开内容、系统设置和区域规则快照加入操作日志，targetNodeId={} items={} force={}",
                 targetNodeId, snapshotItems, force);
         return requestOperationId;
     }

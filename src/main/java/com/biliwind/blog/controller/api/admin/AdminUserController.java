@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.constant.RoleConstant;
+import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.AdminUserItem;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
@@ -31,6 +32,9 @@ public class AdminUserController {
 
     @Inject
     AdminRequestContext adminRequestContext;
+
+    @Inject
+    PasswordHasher passwordHasher;
 
     @Inject
     com.biliwind.blog.service.AuditService auditService;
@@ -70,6 +74,25 @@ public class AdminUserController {
         User user = User.findById(id);
         if (user == null || user.deletedAt != null) {
             throw new NotFoundException();
+        }
+
+        if (req.username() != null) {
+            String username = req.username().trim();
+            if (username.length() < 3 || username.length() > 100) {
+                throw new BadRequestException("用户名长度必须为 3-100 个字符");
+            }
+            if (User.count("username = ?1 and id <> ?2", username, user.id) > 0) {
+                throw new jakarta.ws.rs.ClientErrorException("用户名已被使用",
+                        jakarta.ws.rs.core.Response.Status.CONFLICT);
+            }
+            user.username = username;
+        }
+
+        if (req.password() != null && !req.password().isBlank()) {
+            if (req.password().length() < 6 || req.password().length() > 32) {
+                throw new BadRequestException("密码长度必须为 6-32 位");
+            }
+            user.password = passwordHasher.hash(req.password());
         }
 
         if (req.email() != null && !req.email().isBlank()) {

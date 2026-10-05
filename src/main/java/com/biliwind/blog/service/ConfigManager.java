@@ -1,8 +1,10 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -11,6 +13,7 @@ import org.jboss.logging.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -57,6 +60,42 @@ public class ConfigManager {
             localCache.put(key, val);
         }
         return val;
+    }
+
+    /**
+     * Returns the complete regional override for a setting, falling back to
+     * its complete global value when the requested region has no override.
+     */
+    public JsonNode getForRegion(String key, BlogRegion region) {
+        JsonNode value = get(key);
+        if (value == null || !value.isObject()) {
+            return value;
+        }
+        JsonNode regions = value.get("regions");
+        String regionCode = region == null ? BlogRegion.GLOBAL.getCode()
+                : region.getCode().toLowerCase(Locale.ROOT);
+        if (!BlogRegion.GLOBAL.getCode().equals(regionCode)
+                && regions != null && regions.isObject()) {
+            JsonNode regionalValue = regions.get(regionCode);
+            if (regionalValue != null && regionalValue.isObject()) {
+                return regionalValue;
+            }
+        }
+        ObjectNode globalValue = ((ObjectNode) value).deepCopy();
+        globalValue.remove("regions");
+        return globalValue;
+    }
+
+    public String getStringForRegion(String key, String field, String defaultValue, BlogRegion region) {
+        JsonNode node = getForRegion(key, region);
+        if (node != null && node.has(field)) {
+            JsonNode fieldNode = node.get(field);
+            if (fieldNode.isTextual()) {
+                return fieldNode.asText();
+            }
+            return fieldNode.toString();
+        }
+        return defaultValue;
     }
 
     public String getString(String key, String defaultValue) {

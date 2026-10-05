@@ -2,11 +2,15 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.RegionRule;
+import com.biliwind.blog.model.EdgeNode;
+import com.biliwind.blog.service.edge.NodeRoleService;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import jakarta.inject.Inject;
 
 /**
  * 区域规则匹配服务
@@ -14,10 +18,15 @@ import java.util.List;
 @ApplicationScoped
 public class RegionRuleService {
 
+    @Inject
+    NodeRoleService nodeRoleService;
+
     @ConfigProperty(name = "windblog.region-rule.cache-seconds", defaultValue = "30")
     long cacheSeconds;
 
     private volatile RuleSnapshot snapshot;
+    private volatile BlogRegion assignedNodeRegion;
+    private volatile boolean assignedNodeRegionLoaded;
 
     /**
      * 根据域名和语言解析区域
@@ -30,9 +39,11 @@ public class RegionRuleService {
     public BlogRegion resolveRegion(String host, List<String> languages) {
         List<RuleView> rules = getRules();
 
-        if (host != null && !host.isBlank()) {
+        String normalizedHost = normalizeHost(host);
+        if (!normalizedHost.isBlank()) {
             for (RuleView rule : rules) {
-                if ("domain".equals(rule.ruleType()) && host.equalsIgnoreCase(rule.pattern())) {
+                if (isRuleType(rule, "domain")
+                        && normalizedHost.equals(normalizeHost(rule.pattern()))) {
                     return rule.region();
                 }
             }
@@ -40,9 +51,13 @@ public class RegionRuleService {
 
         if (languages != null && !languages.isEmpty()) {
             for (RuleView rule : rules) {
-                if ("language".equals(rule.ruleType())) {
+                if (isRuleType(rule, "language")) {
+                    String normalizedPattern = normalizeLanguage(rule.pattern());
+                    if (normalizedPattern.isEmpty()) {
+                        continue;
+                    }
                     for (String lang : languages) {
-                        if (lang.toLowerCase().contains(rule.pattern().toLowerCase())) {
+                        if (normalizeLanguage(lang).contains(normalizedPattern)) {
                             return rule.region();
                         }
                     }
@@ -50,11 +65,61 @@ public class RegionRuleService {
             }
         }
 
+        BlogRegion nodeRegion = assignedNodeRegion();
+        if (nodeRegion != null) {
+            return nodeRegion;
+        }
         return BlogRegion.GLOBAL;
+    }
+
+    private boolean isRuleType(RuleView rule, String expectedType) {
+        return rule.ruleType() != null
+                && expectedType.equalsIgnoreCase(rule.ruleType().trim());
+    }
+
+    private String normalizeLanguage(String language) {
+        return language == null ? "" : language.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private BlogRegion assignedNodeRegion() {
+        if (nodeRoleService == null || !nodeRoleService.isEdgeNode()) return null;
+        if (assignedNodeRegionLoaded) return assignedNodeRegion;
+        synchronized (this) {
+            if (!assignedNodeRegionLoaded) {
+                EdgeNode localNode = EdgeNode.findByNodeId(nodeRoleService.getNodeId());
+                assignedNodeRegion = localNode == null ? null : localNode.region;
+                assignedNodeRegionLoaded = true;
+            }
+            return assignedNodeRegion;
+        }
+    }
+
+    private String normalizeHost(String host) {
+        if (host == null || host.isBlank()) {
+            return "";
+        }
+        String normalized = host.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("[")) {
+            int closingBracket = normalized.indexOf(']');
+            if (closingBracket >= 0) {
+                normalized = normalized.substring(0, closingBracket + 1);
+            }
+        } else {
+            int colon = normalized.lastIndexOf(':');
+            if (colon >= 0 && normalized.indexOf(':') == colon) {
+                normalized = normalized.substring(0, colon);
+            }
+        }
+        while (normalized.endsWith(".")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     public void invalidate() {
         snapshot = null;
+        assignedNodeRegion = null;
+        assignedNodeRegionLoaded = false;
     }
 
     private List<RuleView> getRules() {

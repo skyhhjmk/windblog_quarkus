@@ -19,6 +19,24 @@ public class ConfigTemplateData {
         return Arc.container().instance(ConfigManager.class).get();
     }
 
+    private static BlogRegion currentRegion() {
+        try {
+            RegionContext context = jakarta.enterprise.inject.spi.CDI.current()
+                    .select(RegionContext.class).get();
+            return context.getCurrentRegion();
+        } catch (RuntimeException ignored) {
+            return BlogRegion.GLOBAL;
+        }
+    }
+
+    private static JsonNode regionalSetting(String key) {
+        return configManager().getForRegion(key, currentRegion());
+    }
+
+    private static String regionalString(String key, String field, String defaultValue) {
+        return configManager().getStringForRegion(key, field, defaultValue, currentRegion());
+    }
+
     public static String baseUrl() {
         return PublicUrlService.normalize(
                 org.eclipse.microprofile.config.ConfigProvider.getConfig()
@@ -27,7 +45,7 @@ public class ConfigTemplateData {
     }
 
     public static String siteTitle() {
-        return configManager().getString("site_info", "title", "WindBlog");
+        return regionalString("site_info", "title", "WindBlog");
     }
 
     public static String siteNavRoot() {
@@ -49,15 +67,15 @@ public class ConfigTemplateData {
     }
 
     public static String siteSubtitle() {
-        return configManager().getString("site_info", "subtitle", "");
+        return regionalString("site_info", "subtitle", "");
     }
 
     public static String siteDescription() {
-        return configManager().getString("site_info", "description", "");
+        return regionalString("site_info", "description", "");
     }
 
     public static String siteKeywords() {
-        JsonNode siteInfoNode = configManager().get("site_info");
+        JsonNode siteInfoNode = regionalSetting("site_info");
         if (siteInfoNode != null && siteInfoNode.has("keywords") && siteInfoNode.get("keywords").isArray()) {
             StringBuilder keywordsText = new StringBuilder();
             for (JsonNode keywordNode : siteInfoNode.get("keywords")) {
@@ -72,28 +90,27 @@ public class ConfigTemplateData {
     }
 
     public static String copyright() {
-        return configManager().getString("site_footer", "copyright", "© 2026 WindBlog. Built with Quarkus.");
+        return regionalString("site_footer", "copyright", "© 2026 WindBlog. Built with Quarkus.");
     }
 
     public static String icp() {
-        return configManager().getString("site_footer", "icp", "");
+        return regionalString("site_footer", "icp", "");
     }
 
     public static String icpUrl() {
-        return safeExternalHttpUrl(configManager().getString("site_footer", "icp_url", ""));
+        return safeExternalHttpUrl(regionalString("site_footer", "icp_url", ""));
     }
 
     public static String publicSecurityRecord() {
-        return configManager().getString("site_footer", "public_security_record", "");
+        return regionalString("site_footer", "public_security_record", "");
     }
 
     public static String publicSecurityRecordUrl() {
-        return safeExternalHttpUrl(configManager().getString("site_footer", "public_security_record_url", ""));
+        return safeExternalHttpUrl(regionalString("site_footer", "public_security_record_url", ""));
     }
 
     public static boolean footerRecordsVisible() {
-        String configuredRegion = configManager()
-                .getString("site_footer", "record_display_region", "all");
+        String configuredRegion = regionalString("site_footer", "record_display_region", "all");
         RegionContext regionContext = jakarta.enterprise.inject.spi.CDI.current()
                 .select(RegionContext.class).get();
         return isFooterRecordsVisible(configuredRegion, regionContext.getCurrentRegion());
@@ -131,7 +148,7 @@ public class ConfigTemplateData {
     }
 
     public static String footerHtml() {
-        return configManager().getString("site_footer", "custom_html", "");
+        return regionalString("site_footer", "custom_html", "");
     }
 
     public static boolean analyticsTrackingEnabled() {

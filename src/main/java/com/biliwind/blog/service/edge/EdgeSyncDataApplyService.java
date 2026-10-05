@@ -3,13 +3,19 @@ package com.biliwind.blog.service.edge;
 import com.biliwind.blog.edge.EdgeServiceProto.SyncDataRequest;
 import com.biliwind.blog.common.helper.RsaHelper;
 import com.biliwind.blog.model.Category;
+import com.biliwind.blog.model.BlogRegion;
+import com.biliwind.blog.model.EdgeConnectionType;
+import com.biliwind.blog.model.EdgeNode;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
+import com.biliwind.blog.model.RegionRule;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import jakarta.enterprise.event.Event;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -51,6 +57,12 @@ public class EdgeSyncDataApplyService {
     @Inject
     Event<DataSyncEvent> dataSyncEvent;
 
+    @Inject
+    Event<ConfigChangedEvent> configChangedEvent;
+
+    @Inject
+    com.biliwind.blog.service.RegionRuleService regionRuleService;
+
     @Transactional
     public void apply(SyncDataRequest request) {
         if (request == null) {
@@ -62,7 +74,7 @@ public class EdgeSyncDataApplyService {
             String entityType = request.getEntityType();
 
             if (!isPublicSyncEntity(entityType)) {
-                LOGGER.warn("拒绝非公开同步实体: {}", entityType);
+                LOGGER.warn("拒绝不在同步白名单中的实体: {}", entityType);
                 return;
             }
 
@@ -79,13 +91,21 @@ public class EdgeSyncDataApplyService {
 
             upsertEntity(entityType, request.getEntityId(), request.getPayload());
             publishCacheInvalidation(entityType, request.getEntityId(), action);
+            if ("SYSTEM_SETTING".equals(entityType)) {
+                JsonNode payload = objectMapper.readTree(request.getPayload());
+                configChangedEvent.fire(new ConfigChangedEvent(
+                        payload.path("configKey").asText(), payload.get("configValue")));
+            }
         } catch (Exception exception) {
             LOGGER.error("应用从主节点收到的同步数据失败: {} {}", request.getEntityType(), request.getEntityId(), exception);
-            throw new IllegalStateException("公开同步数据应用失败", exception);
+            throw new IllegalStateException("同步数据应用失败", exception);
         }
     }
 
     private void publishCacheInvalidation(String entityType, long entityId, String action) {
+        if ("REGION_RULE".equals(entityType)) {
+            regionRuleService.invalidate();
+        }
         if ("POST".equals(entityType)) {
             postSyncedEvent.fire(new PostSyncedEvent(entityId));
         } else if ("CATEGORY".equals(entityType)
@@ -99,7 +119,10 @@ public class EdgeSyncDataApplyService {
                 || "CATEGORY".equals(entityType)
                 || "MEDIA".equals(entityType)
                 || "POST".equals(entityType)
-                || "CLUSTER_PUBLIC_KEY".equals(entityType);
+                || "CLUSTER_PUBLIC_KEY".equals(entityType)
+                || "SYSTEM_SETTING".equals(entityType)
+                || "REGION_RULE".equals(entityType)
+                || "NODE_REGION".equals(entityType);
     }
 
     private void upsertEntity(String entityType, long entityId, String payload) throws Exception {
@@ -123,7 +146,86 @@ public class EdgeSyncDataApplyService {
             rsaHelper.setClusterPublicKey(payload);
             return;
         }
+        if ("SYSTEM_SETTING".equals(entityType)) {
+            upsertSystemSetting(payload);
+            return;
+        }
+        if ("NODE_REGION".equals(entityType)) {
+            upsertNodeRegion(payload);
+            return;
+        }
+        if ("REGION_RULE".equals(entityType)) {
+            upsertRegionRule(entityId, payload);
+            return;
+        }
         LOGGER.warn("忽略暂不支持的同步实体类型: {}", entityType);
+    }
+
+    private void upsertSystemSetting(String payload) throws Exception {
+        JsonNode node = objectMapper.readTree(payload);
+        String configKey = readRequiredText(node, "configKey");
+        JsonNode configValue = node.get("configValue");
+        if (configValue == null || configValue.isNull()) {
+            throw new IllegalArgumentException("系统设置缺少 configValue");
+        }
+        SystemSetting setting = SystemSetting.findByKey(configKey);
+        if (setting == null) {
+            setting = new SystemSetting();
+            setting.configKey = configKey;
+        }
+        setting.configValue = configValue.deepCopy();
+        setting.configType = readOptionalText(node, "configType", "string");
+        setting.groupName = readOptionalText(node, "groupName", "general");
+        JsonNode uiSchema = node.get("uiSchema");
+        setting.uiSchema = uiSchema == null || uiSchema.isNull()
+                ? objectMapper.createObjectNode() : uiSchema.deepCopy();
+        setting.description = readOptionalText(node, "description", "");
+        setting.version = node.path("version").canConvertToInt() ? node.path("version").asInt() : 1;
+        setting.isFrozen = node.path("isFrozen").asBoolean(false);
+        setting.persist();
+        entityManager.flush();
+    }
+
+    private String readOptionalText(JsonNode node, String field, String fallback) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? fallback : value.asText(fallback);
+    }
+
+    private void upsertNodeRegion(String payload) throws Exception {
+        JsonNode node = objectMapper.readTree(payload);
+        String nodeId = readRequiredText(node, "nodeId");
+        BlogRegion region = BlogRegion.fromCode(readOptionalText(node, "region", "global"));
+        EdgeNode edgeNode = EdgeNode.findByNodeId(nodeId);
+        if (edgeNode == null) {
+            edgeNode = new EdgeNode();
+            edgeNode.nodeId = nodeId;
+            edgeNode.name = nodeId;
+            edgeNode.connectionType = EdgeConnectionType.WESP;
+            edgeNode.isEnabled = true;
+            edgeNode.status = "CONFIGURED";
+            edgeNode.isTrusted = true;
+        }
+        edgeNode.region = region;
+        edgeNode.persist();
+        entityManager.flush();
+        regionRuleService.invalidate();
+    }
+
+    private void upsertRegionRule(long ruleId, String payload) throws Exception {
+        JsonNode node = objectMapper.readTree(payload);
+        RegionRule rule = RegionRule.findById(ruleId);
+        if (rule == null) {
+            rule = new RegionRule();
+            rule.id = ruleId;
+        }
+        rule.name = readRequiredText(node, "name");
+        rule.ruleType = readRequiredText(node, "ruleType");
+        rule.pattern = readRequiredText(node, "pattern");
+        rule.region = BlogRegion.fromCode(readOptionalText(node, "region", "global"));
+        rule.priority = node.path("priority").asInt(0);
+        rule.isEnabled = node.path("isEnabled").asBoolean(true);
+        rule.persist();
+        entityManager.flush();
     }
 
     private void upsertPublicTag(long entityId, String payload) throws Exception {
@@ -790,6 +892,10 @@ public class EdgeSyncDataApplyService {
         }
         if ("POST".equals(entityType)) {
             Post.deleteById(entityId);
+            return;
+        }
+        if ("REGION_RULE".equals(entityType)) {
+            RegionRule.deleteById(entityId);
         }
     }
 }

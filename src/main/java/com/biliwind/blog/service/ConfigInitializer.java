@@ -87,7 +87,17 @@ public class ConfigInitializer {
                 .put("label", "本站链接")
                 .put("widget", "input")
                 .put("required", true)
-                .put("hint", "用于友链反向链接检测，例如：https://example.com");
+                .put("hint", "默认链接；用于友链反向链接检测，例如：https://example.com。区域未单独设置时使用此链接。");
+        for (BlogRegion region : BlogRegion.values()) {
+            if (region == BlogRegion.GLOBAL) {
+                continue;
+            }
+            siteInfoFields.addObject()
+                    .put("key", "site_url_regions." + region.getCode())
+                    .put("label", region.getDisplayName() + "本站链接")
+                    .put("widget", "input")
+                    .put("hint", "可选；留空时使用默认链接");
+        }
 
         ObjectNode siteInfoValue = mapper.createObjectNode();
         siteInfoValue.put("title", "WindBlog");
@@ -96,6 +106,7 @@ public class ConfigInitializer {
         siteInfoValue.put("description", "基于 Quarkus 和 Flutter 构建的极简博客系统，支持 AI 摘要与多端同步。");
         siteInfoValue.put("author", "BiliWind");
         siteInfoValue.put("site_url", "http://localhost:8080");
+        siteInfoValue.putObject("site_url_regions");
 
         list.add(new SettingDefinition("site_info", siteInfoValue, "object", "基础设置", siteInfoSchema, "网站基础信息设置"));
 

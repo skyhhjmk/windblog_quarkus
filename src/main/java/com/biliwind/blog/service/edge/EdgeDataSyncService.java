@@ -113,9 +113,19 @@ public class EdgeDataSyncService {
         }
     }
 
+    public void onNodeRegionChanged(
+            @Observes(during = TransactionPhase.AFTER_SUCCESS) NodeRegionChangedEvent event) {
+        if (nodeRoleService.isEdgeNode() || event.nodeId() == null || event.nodeId().isBlank()) return;
+        ObjectNode payload = objectMapper.createObjectNode();
+        putText(payload, "nodeId", event.nodeId());
+        putText(payload, "region", event.region());
+        broadcastSync("NODE_REGION", "UPSERT", event.nodeId(), writePayload(payload));
+    }
+
     private boolean isOutboxSyncType(String entityType) {
         return "POST".equals(entityType) || "TAG".equals(entityType)
-                || "CATEGORY".equals(entityType) || "MEDIA".equals(entityType);
+                || "CATEGORY".equals(entityType) || "MEDIA".equals(entityType)
+                || "SYSTEM_SETTING".equals(entityType) || "REGION_RULE".equals(entityType);
     }
 
     private void enqueueEdgeSync(String entityType, Long entityId, String action) {
@@ -152,9 +162,80 @@ public class EdgeDataSyncService {
             syncCategory(entityId, action);
         } else if ("MEDIA".equals(entityType)) {
             syncMedia(entityId, action);
+        } else if ("SYSTEM_SETTING".equals(entityType)) {
+            syncSystemSetting(entityId, action);
+        } else if ("REGION_RULE".equals(entityType)) {
+            syncRegionRule(entityId, action);
         } else {
             throw new IllegalArgumentException("不支持的 EDGE_SYNC 类型: " + entityType);
         }
+    }
+
+    private void syncSystemSetting(Long settingId, String action) {
+        if (!"UPSERT".equals(action)) return;
+        SystemSetting setting = SystemSetting.findById(settingId);
+        if (setting == null) return;
+        broadcastSync("SYSTEM_SETTING", "UPSERT", setting.id.toString(), systemSettingPayload(setting));
+    }
+
+    private String systemSettingPayload(SystemSetting setting) {
+        ObjectNode payload = objectMapper.createObjectNode();
+        putText(payload, "configKey", setting.configKey);
+        payload.set("configValue", setting.configValue == null
+                ? objectMapper.getNodeFactory().nullNode() : setting.configValue.deepCopy());
+        putText(payload, "configType", setting.configType);
+        putText(payload, "groupName", setting.groupName);
+        payload.set("uiSchema", setting.uiSchema == null
+                ? objectMapper.getNodeFactory().nullNode() : setting.uiSchema.deepCopy());
+        putText(payload, "description", setting.description);
+        putInteger(payload, "version", setting.version);
+        putBoolean(payload, "isFrozen", setting.isFrozen);
+        return writePayload(payload);
+    }
+
+    @Transactional
+    public List<FullSyncItem> buildSystemSettingsSnapshot() {
+        List<SystemSetting> settings = SystemSetting.<SystemSetting>findAll().list();
+        List<FullSyncItem> items = new java.util.ArrayList<>(settings.size());
+        for (SystemSetting setting : settings) {
+            items.add(new FullSyncItem("SYSTEM_SETTING", "UPSERT", setting.id.toString(),
+                    systemSettingPayload(setting), 15));
+        }
+        return items;
+    }
+
+    private void syncRegionRule(Long ruleId, String action) {
+        if ("DELETE".equals(action)) {
+            broadcastSync("REGION_RULE", action, ruleId.toString(), "{}");
+            return;
+        }
+        if (!"UPSERT".equals(action)) return;
+        RegionRule rule = RegionRule.findById(ruleId);
+        if (rule == null) return;
+        broadcastSync("REGION_RULE", "UPSERT", rule.id.toString(), regionRulePayload(rule));
+    }
+
+    private String regionRulePayload(RegionRule rule) {
+        ObjectNode payload = objectMapper.createObjectNode();
+        putLong(payload, "id", rule.id);
+        putText(payload, "name", rule.name);
+        putText(payload, "ruleType", rule.ruleType);
+        putText(payload, "pattern", rule.pattern);
+        putText(payload, "region", rule.region == null ? BlogRegion.GLOBAL.getCode() : rule.region.getCode());
+        putInteger(payload, "priority", rule.priority);
+        putBoolean(payload, "isEnabled", rule.isEnabled);
+        return writePayload(payload);
+    }
+
+    @Transactional
+    public List<FullSyncItem> buildRegionRulesSnapshot() {
+        List<RegionRule> rules = RegionRule.<RegionRule>findAll().list();
+        List<FullSyncItem> items = new java.util.ArrayList<>(rules.size());
+        for (RegionRule rule : rules) {
+            items.add(new FullSyncItem("REGION_RULE", "UPSERT", rule.id.toString(),
+                    regionRulePayload(rule), 15));
+        }
+        return items;
     }
 
     private void syncCategory(Long categoryId, String action) {
@@ -704,6 +785,22 @@ public class EdgeDataSyncService {
                     }
                 }
             }
+            for (FullSyncItem item : self.get().buildSystemSettingsSnapshot()) {
+                boolean success = pushToNodeWithRetry(node, item.entityType(), item.action(),
+                        item.entityId(), item.payload(), item.timeoutSeconds());
+                if (!success) failed++;
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING",
+                        "Synchronizing settings (" + processed + "/" + total + ")"));
+            }
+            for (FullSyncItem item : self.get().buildRegionRulesSnapshot()) {
+                boolean success = pushToNodeWithRetry(node, item.entityType(), item.action(),
+                        item.entityId(), item.payload(), item.timeoutSeconds());
+                if (!success) failed++;
+                processed++;
+                syncProgressMap.put(nodeId, new SyncProgress(total, processed, "SYNCING",
+                        "Synchronizing region rules (" + processed + "/" + total + ")"));
+            }
             if (failed == 0) {
                 syncProgressMap.put(nodeId, new SyncProgress(total, processed, "COMPLETED", null));
             } else {
@@ -743,7 +840,9 @@ public class EdgeDataSyncService {
                 revokedMediaCount,
                 Post.count("status = ?1 and deletedAt is null and visibility = 0 "
                         + "and publishedRevision is not null", PostStatus.PUBLISHED),
-                revokedPostCount);
+                revokedPostCount,
+                SystemSetting.count(),
+                RegionRule.count());
     }
 
     @jakarta.transaction.Transactional(jakarta.transaction.Transactional.TxType.REQUIRES_NEW)
@@ -916,9 +1015,11 @@ public class EdgeDataSyncService {
     }
 
     public record PublicFullSyncCounts(long tags, long categories, long publicMedia,
-                                      long revokedMedia, long publicPosts, long revokedPosts) {
+                                      long revokedMedia, long publicPosts, long revokedPosts,
+                                      long systemSettings, long regionRules) {
         public int total() {
-            long total = tags + categories + publicMedia + revokedMedia + publicPosts + revokedPosts;
+            long total = tags + categories + publicMedia + revokedMedia + publicPosts + revokedPosts
+                    + systemSettings + regionRules;
             return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
         }
     }

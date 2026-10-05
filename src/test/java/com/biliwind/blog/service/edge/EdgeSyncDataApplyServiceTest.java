@@ -45,7 +45,7 @@ class EdgeSyncDataApplyServiceTest {
 
     @Test
     @TestTransaction
-    void shouldRejectPrivateEntitiesBeforeDeserializingPayload() {
+    void shouldApplyPrimarySystemSettingsToTheEdgeSettingsTable() {
         String settingKey = "edge-sync-private-test-" + UUID.randomUUID();
         SyncDataRequest request = SyncDataRequest.newBuilder()
                 .setAction("UPSERT")
@@ -57,7 +57,9 @@ class EdgeSyncDataApplyServiceTest {
 
         syncDataApplyService.apply(request);
 
-        assertNull(SystemSetting.findByKey(settingKey));
+        SystemSetting syncedSetting = SystemSetting.findByKey(settingKey);
+        assertNotNull(syncedSetting);
+        assertEquals("must-not-sync", syncedSetting.configValue.path("apiSecret").asText());
     }
 
     @Test

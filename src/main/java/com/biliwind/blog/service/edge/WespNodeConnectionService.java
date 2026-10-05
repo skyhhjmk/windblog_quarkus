@@ -152,7 +152,10 @@ public class WespNodeConnectionService {
             HttpResponse<String> response = httpClient.send(request,
                     HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-                throw new WebApplicationException("目标节点账号或密码错误", Response.Status.UNAUTHORIZED);
+                // The credentials are for the remote target, not this API caller.
+                // Returning 401 makes AdminApiClient treat this as an expired local
+                // session and replay the same idempotency key, masking the real error.
+                throw new WebApplicationException("目标节点账号或密码错误", Response.Status.BAD_GATEWAY);
             }
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new WebApplicationException("目标节点登录失败（HTTP " + response.statusCode() + "）",

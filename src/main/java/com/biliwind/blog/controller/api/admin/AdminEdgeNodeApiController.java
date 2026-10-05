@@ -15,6 +15,7 @@ import com.biliwind.blog.service.security.DeploymentPackageService;
 import com.biliwind.blog.service.security.EdgeImageVariant;
 import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
+import jakarta.enterprise.event.Event;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -58,6 +59,9 @@ public class AdminEdgeNodeApiController {
 
     @Inject
     WespNodeConnectionService wespNodeConnectionService;
+
+    @Inject
+    Event<com.biliwind.blog.service.edge.NodeRegionChangedEvent> nodeRegionChangedEvent;
 
     @Inject
     WespRuntimeConfig wespRuntimeConfig;
@@ -246,6 +250,8 @@ public class AdminEdgeNodeApiController {
         }
 
         node.persist();
+        nodeRegionChangedEvent.fire(new com.biliwind.blog.service.edge.NodeRegionChangedEvent(
+                node.nodeId, node.region.getCode()));
 
         return node;
     }
@@ -270,6 +276,10 @@ public class AdminEdgeNodeApiController {
         if (request.edgeGrpcPort() != null) node.edgeGrpcPort = request.edgeGrpcPort();
 
         node.persist();
+        if (request.region() != null) {
+            nodeRegionChangedEvent.fire(new com.biliwind.blog.service.edge.NodeRegionChangedEvent(
+                    node.nodeId, node.region == null ? BlogRegion.GLOBAL.getCode() : node.region.getCode()));
+        }
         return node;
     }
 

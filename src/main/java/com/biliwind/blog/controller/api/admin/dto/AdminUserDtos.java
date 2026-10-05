@@ -17,6 +17,7 @@ public class AdminUserDtos {
     }
 
     public record UserUpdateRequest(
+            String username,
             String nickname,
             String avatar,
             String email,
