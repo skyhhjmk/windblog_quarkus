@@ -2,6 +2,7 @@ package com.biliwind.blog.filter;
 
 import com.biliwind.blog.service.security.ClientIpResolver;
 import com.biliwind.blog.service.security.HoneypotService;
+import com.biliwind.blog.service.edge.WespSyncService;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -36,6 +37,9 @@ public class HoneypotRequestFilter {
     HoneypotService honeypotService;
 
     @Inject
+    WespSyncService wespSyncService;
+
+    @Inject
     ClientIpResolver clientIpResolver;
 
     @Inject
@@ -43,6 +47,7 @@ public class HoneypotRequestFilter {
 
     @ServerRequestFilter(preMatching = true, priority = Priorities.AUTHENTICATION - 50)
     public Uni<Response> inspectPreMatchedRequest(ContainerRequestContext request) {
+        if (isAuthenticatedWespSyncRequest(request)) return Uni.createFrom().nullItem();
         String path = request.getUriInfo().getPath();
         boolean decoyPath = honeypotService.isDecoyPath(path);
 
@@ -80,6 +85,7 @@ public class HoneypotRequestFilter {
 
     @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 50, readBody = true)
     public Optional<Response> filter(ContainerRequestContext request) {
+        if (isAuthenticatedWespSyncRequest(request)) return Optional.empty();
         Map<String, List<String>> headers = copyHeaders(request.getHeaders());
         BodySample body = readBodySample(request);
         String uri = request.getUriInfo().getRequestUri().toString();
@@ -119,6 +125,26 @@ public class HoneypotRequestFilter {
                     .build());
         }
         return Optional.empty();
+    }
+
+    private boolean isAuthenticatedWespSyncRequest(ContainerRequestContext request) {
+        String path = request.getUriInfo().getPath();
+        if (!"sync/v1".equals(path) && !path.startsWith("sync/v1/")) return false;
+        String nodeId = request.getHeaderString("X-WESP-Node-Id");
+        String requestId = request.getHeaderString("X-WESP-Request-Id");
+        if (nodeId == null || nodeId.isBlank() || nodeId.length() > 100 || !isUuid(requestId)) return false;
+        return wespSyncService.isEnabled()
+                && wespSyncService.isAuthorized(request.getHeaderString("Authorization"), nodeId, null);
+    }
+
+    private boolean isUuid(String value) {
+        if (value == null) return false;
+        try {
+            java.util.UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     private BodySample readBodySample(ContainerRequestContext request) {
