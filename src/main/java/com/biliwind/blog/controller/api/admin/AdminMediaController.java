@@ -235,7 +235,6 @@ public class AdminMediaController {
 
     @POST
     @Path("/batch-retry")
-    @Transactional
     @Operation(summary = "批量重试导入失败的媒体")
     public AdminMediaDtos.BatchRetryResult batchRetry() {
         mustFindOperator();
