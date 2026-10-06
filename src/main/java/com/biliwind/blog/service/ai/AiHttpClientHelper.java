@@ -160,8 +160,7 @@ public class AiHttpClientHelper {
         if (cached != null) {
             return cached;
         }
-        AiPinnedHttpClient created = AiPinnedHttpClient.direct(host,
-                AiHttpClientHelper::isExplicitlyAllowed);
+        AiPinnedHttpClient created = AiPinnedHttpClient.direct();
         AiPinnedHttpClient existing = clientCache.putIfAbsent(cacheKey, created);
         return existing == null ? created : existing;
     }
@@ -174,8 +173,7 @@ public class AiHttpClientHelper {
         synchronized (AiHttpClientHelper.class) {
             cached = defaultClient;
             if (cached == null) {
-                cached = AiPinnedHttpClient.direct(null,
-                        AiHttpClientHelper::isExplicitlyAllowed);
+                cached = AiPinnedHttpClient.direct();
                 defaultClient = cached;
             }
             return cached;
@@ -215,15 +213,7 @@ public class AiHttpClientHelper {
         if (request == null || request.uri() == null) {
             throw new IllegalArgumentException("AI 请求地址不能为空");
         }
-        validateEndpoint(request.uri());
-    }
-
-    private static void validateEndpoint(URI uri) {
-        URI validatedUri = ExternalHttpEndpointPolicy.validateHttpUri(uri, "AI endpoint");
-        String host = validatedUri.getHost();
-        if (isPrivateHost(host) && !isExplicitlyAllowed(host)) {
-            throw new IllegalArgumentException("AI endpoint 不允许访问私有网络，请配置显式 allowlist");
-        }
+        ExternalHttpEndpointPolicy.validateHttpUri(request.uri(), "AI endpoint");
     }
 
     private static void validateConfiguredEndpoint(AiProviderConfig config) {
@@ -236,34 +226,7 @@ public class AiHttpClientHelper {
         } catch (Exception exception) {
             throw new IllegalArgumentException("AI endpoint 格式无效");
         }
-        validateEndpoint(uri);
-    }
-
-    private static boolean isPrivateHost(String host) {
-        for (java.net.InetAddress address : ExternalHttpEndpointPolicy.resolveAddresses(host)) {
-            if (!ExternalHttpEndpointPolicy.isPublicAddress(address)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isExplicitlyAllowed(String host) {
-        String allowlist = System.getenv("AI_PRIVATE_ENDPOINT_ALLOWLIST");
-        if (allowlist == null || allowlist.isBlank()) {
-            try {
-                allowlist = org.eclipse.microprofile.config.ConfigProvider.getConfig()
-                        .getOptionalValue("ai.private-endpoint-allowlist", String.class).orElse("");
-            } catch (Exception ignored) {
-                allowlist = "";
-            }
-        }
-        for (String entry : allowlist.split(",")) {
-            if (host.equalsIgnoreCase(entry.trim())) {
-                return true;
-            }
-        }
-        return false;
+        ExternalHttpEndpointPolicy.validateHttpUri(uri, "AI endpoint");
     }
 
     private static final class BoundedByteArraySubscriber

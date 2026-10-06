@@ -3,6 +3,7 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.model.SystemSetting;
 import com.biliwind.blog.model.SystemSettingHistory;
+import com.biliwind.blog.model.AiProviderConfig;
 import com.biliwind.blog.controller.api.admin.dto.SystemSettingView;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.biliwind.blog.service.SafeModeWatchdog;
@@ -54,6 +55,9 @@ public class AdminSystemSettingsController {
 
     @Inject
     com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
+
+    @Inject
+    com.biliwind.blog.service.ai.AiProviderConfigService aiProviderConfigService;
 
     @Inject
     RoutingContext routingContext;
@@ -334,10 +338,54 @@ public class AdminSystemSettingsController {
 
     private SystemSettingView toView(SystemSetting setting) {
         boolean secret = containsSecret(setting.configKey, setting.configValue);
+        JsonNode uiSchema = setting.uiSchema;
+        if ("ai_operation_configs".equals(setting.configKey) && uiSchema != null && uiSchema.isObject()) {
+            ObjectNode dynamicSchema = ((ObjectNode) uiSchema).deepCopy();
+            JsonNode fields = dynamicSchema.path("fields");
+            if (fields.isArray()) {
+                for (JsonNode fieldNode : fields) {
+                    if (!(fieldNode instanceof ObjectNode field)) continue;
+                    String operation = field.path("key").asText();
+                    com.fasterxml.jackson.databind.node.ArrayNode options = mapper.createArrayNode();
+                    ObjectNode automatic = options.addObject();
+                    automatic.put("value", "");
+                    automatic.put("label", "自动选择");
+                    for (AiProviderConfig config : aiProviderConfigService.listAll()) {
+                        if (!config.enabled || !aiConfigAllows(config, operation)) continue;
+                        ObjectNode option = options.addObject();
+                        option.put("value", config.id.toString());
+                        option.put("label", config.name + "（"
+                                + (config.type == null ? "PROVIDER" : config.type.name())
+                                + " / " + config.provider + "）");
+                    }
+                    field.set("options", options);
+                }
+            }
+            uiSchema = dynamicSchema;
+        }
         return new SystemSettingView(setting.id, setting.configKey,
                 maskSecrets(setting.configKey, setting.configValue), setting.configType,
-                setting.groupName, setting.uiSchema, setting.description, setting.version,
+                setting.groupName, uiSchema, setting.description, setting.version,
                 setting.isFrozen, secret, setting.createdAt, setting.updatedAt);
+    }
+
+    private boolean aiConfigAllows(AiProviderConfig config, String operation) {
+        if (config.config == null || config.config.isBlank()) return true;
+        try {
+            JsonNode value = mapper.readTree(config.config);
+            JsonNode operations = value.get("operations");
+            if (operations == null) return true;
+            if (operations.isArray()) {
+                for (JsonNode item : operations) {
+                    if (operation.equalsIgnoreCase(item.asText())) return true;
+                }
+                return false;
+            }
+            if (operations.isTextual()) return operation.equalsIgnoreCase(operations.asText());
+            return true;
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 
     private boolean containsSecret(String key, JsonNode value) {

@@ -41,6 +41,10 @@ public class Media extends PanacheEntityBase {
     @Column(name = "file_name", length = 255)
     public String fileName;
 
+    /** SHA-256 digest of the original file content, used to detect identical media. */
+    @Column(name = "content_sha256", length = 64)
+    public String contentSha256;
+
     /**
      * 文件大小（字节）
      */

@@ -47,11 +47,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Flow;
 import java.util.concurrent.Future;
 import java.util.concurrent.Executor;
-import java.util.function.Predicate;
 
 /**
  * Keeps the JDK HttpClient contract used by AI providers while pinning direct
- * connections to the addresses validated immediately before the request.
+ * connections to the addresses resolved immediately before the request.
  */
 final class AiPinnedHttpClient {
 
@@ -60,18 +59,18 @@ final class AiPinnedHttpClient {
 
     private final HttpClient jdkClient;
     private final CloseableHttpAsyncClient apacheClient;
-    private final ValidatedDnsResolver dnsResolver;
+    private final PinnedDnsResolver dnsResolver;
 
     private AiPinnedHttpClient(HttpClient jdkClient,
                                CloseableHttpAsyncClient apacheClient,
-                               ValidatedDnsResolver dnsResolver) {
+                               PinnedDnsResolver dnsResolver) {
         this.jdkClient = jdkClient;
         this.apacheClient = apacheClient;
         this.dnsResolver = dnsResolver;
     }
 
-    static AiPinnedHttpClient direct(String pinnedHost, Predicate<String> privateHostAllowed) {
-        ValidatedDnsResolver resolver = new ValidatedDnsResolver(pinnedHost, privateHostAllowed);
+    static AiPinnedHttpClient direct() {
+        PinnedDnsResolver resolver = new PinnedDnsResolver();
         CloseableHttpAsyncClient client = HttpAsyncClients.custom()
                 .setConnectionManager(PoolingAsyncClientConnectionManagerBuilder.create()
                         .setDnsResolver(resolver)
@@ -103,7 +102,7 @@ final class AiPinnedHttpClient {
 
         try {
             URI uri = ExternalHttpEndpointPolicy.validateHttpUri(request.uri(), "AI endpoint");
-            InetAddress[] addresses = resolveAndValidate(uri.getHost());
+            InetAddress[] addresses = ExternalHttpEndpointPolicy.resolveAddresses(uri.getHost());
             dnsResolver.pin(uri.getHost(), addresses);
             SimpleHttpRequest apacheRequest = toApacheRequest(request);
             CompletableFuture<java.net.http.HttpResponse<T>> result = new CompletableFuture<>();
@@ -139,17 +138,6 @@ final class AiPinnedHttpClient {
         } catch (Exception exception) {
             return CompletableFuture.failedFuture(exception);
         }
-    }
-
-    private InetAddress[] resolveAndValidate(String host) {
-        InetAddress[] addresses = ExternalHttpEndpointPolicy.resolveAddresses(host);
-        for (InetAddress address : addresses) {
-            if (!ExternalHttpEndpointPolicy.isPublicAddress(address)
-                    && !dnsResolver.privateHostAllowed(host)) {
-                throw new IllegalArgumentException("AI endpoint 不允许访问私有网络，请配置显式 allowlist");
-            }
-        }
-        return addresses;
     }
 
     private static SimpleHttpRequest toApacheRequest(HttpRequest request) {
@@ -387,47 +375,18 @@ final class AiPinnedHttpClient {
         }
     }
 
-    static final class ValidatedDnsResolver implements DnsResolver {
-        private final String pinnedHost;
-        private final Predicate<String> privateHostAllowed;
+    static final class PinnedDnsResolver implements DnsResolver {
         private final ConcurrentHashMap<String, InetAddress[]> pinnedAddresses = new ConcurrentHashMap<>();
 
-        ValidatedDnsResolver(String pinnedHost, Predicate<String> privateHostAllowed) {
-            this.pinnedHost = pinnedHost == null ? "" : pinnedHost.trim();
-            this.privateHostAllowed = privateHostAllowed;
-        }
-
         void pin(String host, InetAddress[] addresses) {
-            if (!pinnedHost.isBlank() && !pinnedHost.equalsIgnoreCase(host)) {
-                throw new IllegalArgumentException("AI 请求主机与已验证 endpoint 不一致");
-            }
-            for (InetAddress address : addresses) {
-                if (!ExternalHttpEndpointPolicy.isPublicAddress(address)
-                        && !privateHostAllowed(host)) {
-                    throw new IllegalArgumentException("AI endpoint 不允许访问私有网络，请配置显式 allowlist");
-                }
-            }
             pinnedAddresses.put(host.toLowerCase(), addresses.clone());
-        }
-
-        boolean privateHostAllowed(String host) {
-            return privateHostAllowed != null && privateHostAllowed.test(host);
         }
 
         @Override
         public InetAddress[] resolve(String host) {
-            if (!pinnedHost.isBlank() && !pinnedHost.equalsIgnoreCase(host)) {
-                throw new IllegalArgumentException("AI 请求主机与已验证 endpoint 不一致");
-            }
             InetAddress[] addresses = pinnedAddresses.get(host.toLowerCase());
             if (addresses == null) {
                 addresses = ExternalHttpEndpointPolicy.resolveAddresses(host);
-                for (InetAddress address : addresses) {
-                    if (!ExternalHttpEndpointPolicy.isPublicAddress(address)
-                            && !privateHostAllowed(host)) {
-                        throw new IllegalArgumentException("AI endpoint 不允许访问私有网络，请配置显式 allowlist");
-                    }
-                }
                 pinnedAddresses.put(host.toLowerCase(), addresses.clone());
             }
             return addresses.clone();

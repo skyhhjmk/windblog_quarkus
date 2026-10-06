@@ -137,4 +137,5 @@
     <include file="db/migration/136-split-comment-auto-audit-setting.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/137-expand-honeypot-probes.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/138-create-import-jobs.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/139-add-media-content-sha256.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

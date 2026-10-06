@@ -450,8 +450,12 @@ public class ImportService {
                 Category existing = Category.find("slug = ?1", slug).firstResult();
                 if (existing != null) {
                     if (columnExists(cols, "status") && rs.getObject("status") != null) {
-                        existing.enabled = isEnabled(rs, cols);
-                        QuarkusTransaction.requiringNew().run(existing::persist);
+                        Long existingId = existing.id;
+                        boolean enabled = isEnabled(rs, cols);
+                        QuarkusTransaction.requiringNew().run(() -> {
+                            Category managed = Category.findById(existingId);
+                            if (managed != null) managed.enabled = enabled;
+                        });
                     }
                     emit("info", "跳过已存在的分类: " + categoryName, slug);
                     ctx.categoryMap().put(oldId, existing.id);
@@ -1081,34 +1085,9 @@ public class ImportService {
     }
 
     private void importPostRelations(Connection conn, ImportContext ctx) throws SQLException {
-        // 预加载文章和分类，避免 N+1 查询
-        Map<Long, Post> postsById = new HashMap<>();
-        if (!ctx.postMap().isEmpty()) {
-            java.util.Set<Long> postIds = new java.util.HashSet<>(ctx.postMap().values());
-            List<Post> postList = Post.list("id in ?1", postIds);
-            for (Post p : postList) {
-                postsById.put(p.id, p);
-            }
-        }
-        Map<Long, Category> categoriesById = new HashMap<>();
-        if (!ctx.categoryMap().isEmpty()) {
-            java.util.Set<Long> catIds = new java.util.HashSet<>(ctx.categoryMap().values());
-            List<Category> catList = Category.list("id in ?1", catIds);
-            for (Category c : catList) {
-                categoriesById.put(c.id, c);
-            }
-        }
-        Map<Long, User> usersById = new HashMap<>();
-        if (!ctx.userMap().isEmpty()) {
-            java.util.Set<Long> userIds = new java.util.HashSet<>(ctx.userMap().values());
-            List<User> userList = User.list("id in ?1", userIds);
-            for (User u : userList) {
-                usersById.put(u.id, u);
-            }
-        }
-
         // 1. 迁移分类关联 (post_category)
-        // 注意：新系统 Post 实体目前仅支持一个 category_id
+        // Each association is committed in its own transaction, so resolve entities
+        // inside that transaction and let Hibernate dirty checking persist updates.
         String catSql = "SELECT post_id, category_id FROM post_category ORDER BY post_id, category_id";
         try (PreparedStatement ps = conn.prepareStatement(catSql);
              ResultSet rs = ps.executeQuery()) {
@@ -1121,8 +1100,8 @@ public class ImportService {
 
                 if (newPostId != null && newCatId != null) {
                     QuarkusTransaction.requiringNew().run(() -> {
-                        Post p = postsById.get(newPostId);
-                        Category c = categoriesById.get(newCatId);
+                        Post p = Post.findById(newPostId);
+                        Category c = Category.findById(newCatId);
                         if (p != null && c != null) {
                             if (p.category == null) p.category = c;
                             if (p.categories.stream().noneMatch(existing -> existing.id.equals(c.id))) {
@@ -1131,7 +1110,6 @@ public class ImportService {
                             if (p.category != null && p.categories.stream().noneMatch(existing -> existing.id.equals(p.category.id))) {
                                 p.categories.add(0, p.category);
                             }
-                            p.persist();
                         }
                     });
                 }
@@ -1155,7 +1133,7 @@ public class ImportService {
 
                 if (newPostId != null && newTagId != null) {
                     QuarkusTransaction.requiringNew().run(() -> {
-                        Post p = postsById.get(newPostId);
+                        Post p = Post.findById(newPostId);
                         Tag t = Tag.findById(newTagId);
                         if (p != null && t != null) {
                             if (PostTag.count("id.postId = ?1 and id.tagId = ?2", p.id, t.id) == 0) {
@@ -1191,11 +1169,10 @@ public class ImportService {
 
                 if (newPostId != null && newAuthId != null) {
                     QuarkusTransaction.requiringNew().run(() -> {
-                        Post p = postsById.get(newPostId);
-                        User u = usersById.get(newAuthId);
+                        Post p = Post.findById(newPostId);
+                        User u = User.findById(newAuthId);
                         if (p != null && u != null) {
                             p.user = u;
-                            p.persist();
                         }
                     });
                 }
@@ -1209,24 +1186,6 @@ public class ImportService {
     private int importComments(Connection conn, User operator, String assetPrefix, ImportContext ctx) throws SQLException {
         int count = 0;
         Map<Long, Long> commentIdMap = new HashMap<>();
-
-        // 预加载文章和用户，避免 N+1 查询
-        Map<Long, Post> postsById = new HashMap<>();
-        if (!ctx.postMap().isEmpty()) {
-            java.util.Set<Long> postIds = new java.util.HashSet<>(ctx.postMap().values());
-            List<Post> postList = Post.list("id in ?1", postIds);
-            for (Post p : postList) {
-                postsById.put(p.id, p);
-            }
-        }
-        Map<Long, User> usersById = new HashMap<>();
-        if (!ctx.userMap().isEmpty()) {
-            java.util.Set<Long> userIds = new java.util.HashSet<>(ctx.userMap().values());
-            List<User> userList = User.list("id in ?1", userIds);
-            for (User u : userList) {
-                usersById.put(u.id, u);
-            }
-        }
 
         // 按 ID 排序以确保父评论先被处理（或者后续处理层级）
         String sql = "SELECT * FROM comments ORDER BY id ASC";
@@ -1290,20 +1249,18 @@ public class ImportService {
                     }
                 }
                 final Long finalUserId = oldUserId != null ? ctx.userMap().get(oldUserId) : null;
-                if (finalUserId != null) {
-                    c.user = usersById.get(finalUserId);
-                } else if (oldUserId != null) {
+                if (finalUserId == null && oldUserId != null) {
                     String legacyAuthorName = ctx.authorNames().get(oldUserId);
                     if (legacyAuthorName != null && !legacyAuthorName.isBlank()) c.guestName = legacyAuthorName;
                 }
 
                 QuarkusTransaction.requiringNew().run(() -> {
-                    c.post = postsById.get(newPostId);
+                    c.post = Post.findById(newPostId);
                     if (finalParentId != null) {
                         c.parent = Comment.findById(finalParentId);
                     }
                     if (finalUserId != null) {
-                        c.user = usersById.get(finalUserId);
+                        c.user = User.findById(finalUserId);
                     }
                     c.persist();
                 });
@@ -1314,7 +1271,10 @@ public class ImportService {
                 count++;
             }
         } catch (SQLException e) {
-            emit("error", "导入评论失败: " + sanitizeErrorMessage(e.getMessage()), null);
+            String safeMessage = sanitizeErrorMessage(e.getMessage());
+            log.error("导入评论失败: " + safeMessage, e);
+            emit("error", "导入评论失败: " + safeMessage, null);
+            throw new SQLException("导入评论失败: " + safeMessage, e);
         }
         return count;
     }

@@ -22,37 +22,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AiHttpClientHelperTest {
 
     @Test
-    void shouldKeepValidatedAiAddressesPinnedPerHost() throws Exception {
-        AiPinnedHttpClient.ValidatedDnsResolver resolver =
-                new AiPinnedHttpClient.ValidatedDnsResolver("example.com", host -> false);
+    void shouldKeepResolvedAiAddressesPinnedPerHost() throws Exception {
+        AiPinnedHttpClient.PinnedDnsResolver resolver = new AiPinnedHttpClient.PinnedDnsResolver();
         InetAddress address = InetAddress.getByAddress(
                 "example.com", new byte[]{93, (byte) 184, (byte) 216, 34});
+        InetAddress otherAddress = InetAddress.getByName("127.0.0.1");
 
         resolver.pin("example.com", new InetAddress[]{address});
+        resolver.pin("other.example", new InetAddress[]{otherAddress});
 
         assertArrayEquals(new InetAddress[]{address}, resolver.resolve("example.com"));
-        assertThrows(IllegalArgumentException.class, () -> resolver.resolve("other.example"));
+        assertArrayEquals(new InetAddress[]{otherAddress}, resolver.resolve("other.example"));
     }
 
     @Test
-    void shouldRejectUnvalidatedPrivateAiAddressWhenPinning() throws Exception {
-        AiPinnedHttpClient.ValidatedDnsResolver resolver =
-                new AiPinnedHttpClient.ValidatedDnsResolver("example.com", host -> false);
+    void shouldAllowPrivateAiAddressWhenPinning() throws Exception {
+        AiPinnedHttpClient.PinnedDnsResolver resolver = new AiPinnedHttpClient.PinnedDnsResolver();
         InetAddress privateAddress = InetAddress.getByName("127.0.0.1");
 
-        assertThrows(IllegalArgumentException.class,
-                () -> resolver.pin("example.com", new InetAddress[]{privateAddress}));
-    }
+        resolver.pin("example.com", new InetAddress[]{privateAddress});
 
-    @Test
-    void shouldRejectPrivateAiRequestBeforeOpeningConnection() {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:11434/api/generate"))
-                .GET()
-                .build();
-
-        assertThrows(IllegalArgumentException.class, () -> AiHttpClientHelper.sendAsync(
-                HttpClient.newHttpClient(), request, HttpResponse.BodyHandlers.ofString()));
+        assertArrayEquals(new InetAddress[]{privateAddress}, resolver.resolve("example.com"));
     }
 
     @Test
@@ -64,31 +54,13 @@ class AiHttpClientHelperTest {
     }
 
     @Test
-    void shouldRejectSpecialIpv4AndCredentialBearingAiRequests() {
-        HttpRequest carrierGradeNatRequest = HttpRequest.newBuilder()
-                .uri(URI.create("http://100.64.0.1:11434/api/generate"))
-                .GET()
-                .build();
-        assertThrows(IllegalArgumentException.class, () -> AiHttpClientHelper.sendAsync(
-                HttpClient.newHttpClient(), carrierGradeNatRequest, HttpResponse.BodyHandlers.ofString()));
-
+    void shouldRejectCredentialBearingAiRequests() {
         HttpRequest credentialBearingRequest = HttpRequest.newBuilder()
                 .uri(URI.create("https://user:password@example.com/api"))
                 .GET()
                 .build();
         assertThrows(IllegalArgumentException.class, () -> AiHttpClientHelper.sendAsync(
                 HttpClient.newHttpClient(), credentialBearingRequest, HttpResponse.BodyHandlers.ofString()));
-    }
-
-    @Test
-    void shouldRejectMappedIpv6PrivateAiRequest() {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://[::ffff:127.0.0.1]:11434/api/generate"))
-                .GET()
-                .build();
-
-        assertThrows(IllegalArgumentException.class, () -> AiHttpClientHelper.sendAsync(
-                HttpClient.newHttpClient(), request, HttpResponse.BodyHandlers.ofString()));
     }
 
     @Test

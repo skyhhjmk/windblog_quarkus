@@ -32,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -99,6 +100,7 @@ public class MediaManagementService {
 
     private Path uploadRoot;
     private String normalizedPublicPath;
+    private volatile boolean legacyImportHashesBackfilled;
 
     /**
      * 批量重试导入失败的媒体
@@ -573,6 +575,16 @@ public class MediaManagementService {
             deleteTarget(target);
             throw new IllegalStateException("无法获取文件大小", e);
         }
+        String contentSha256;
+        try {
+            contentSha256 = sha256(target);
+        } catch (Exception e) {
+            deleteTarget(target);
+            throw new IllegalStateException("无法计算媒体 SHA-256", e);
+        }
+        if (importPlaceholderId != null) {
+            backfillLegacyImportHashes();
+        }
 
         // 验证单文件大小限制
         if (maxSingleUploadBytes != null && maxSingleUploadBytes > 0 && size > maxSingleUploadBytes) {
@@ -591,11 +603,17 @@ public class MediaManagementService {
                 ? transactionalSelf.createPendingUploadedMedia(
                         storageKey, normalizedMime, sanitizedFileName, size, operatorId, metadata,
                         toVirusScanStatus(virusScanResult.status()), OffsetDateTime.now(),
-                        sanitizeVirusScanMessage(virusScanResult))
+                        sanitizeVirusScanMessage(virusScanResult), contentSha256)
                 : transactionalSelf.prepareImportPlaceholderForProcessing(
                         importPlaceholderId, storageKey, normalizedMime, sanitizedFileName, size,
                         toVirusScanStatus(virusScanResult.status()), OffsetDateTime.now(),
-                        sanitizeVirusScanMessage(virusScanResult));
+                        sanitizeVirusScanMessage(virusScanResult), contentSha256);
+
+        if (importPlaceholderId != null && !Objects.equals(media.id, importPlaceholderId)) {
+            // The placeholder now aliases an existing media record with identical bytes.
+            deleteTarget(target);
+            return media;
+        }
 
         if (asyncMediaProcessing) {
             try {
@@ -690,6 +708,56 @@ public class MediaManagementService {
         } catch (Exception exception) {
             throw new IOException("媒体原始文件不存在或无法从存储读取", exception);
         }
+    }
+
+    private void backfillLegacyImportHashes() {
+        if (legacyImportHashesBackfilled) return;
+        synchronized (this) {
+            if (legacyImportHashesBackfilled) return;
+            @SuppressWarnings("unchecked")
+            List<Number> mediaIds = Media.getEntityManager().createNativeQuery(
+                            "select id from media where deleted_at is null and processing_status = 'COMPLETED' "
+                                    + "and content_sha256 is null and metadata->>'importSource' = 'LEGACY_IMPORT' "
+                                    + "order by id")
+                    .getResultList();
+            for (Number mediaId : mediaIds) {
+                Media media = Media.findById(mediaId.longValue());
+                if (media == null) continue;
+                try (InputStream original = openOriginalForVirusScan(media)) {
+                    selfProxy.get().setContentSha256IfMissing(media.id, sha256(original));
+                } catch (Exception exception) {
+                    Log.warnf("Unable to index SHA-256 for legacy import media id=%d", mediaId.longValue());
+                }
+            }
+            legacyImportHashesBackfilled = true;
+        }
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void setContentSha256IfMissing(Long mediaId, String contentSha256) {
+        Media media = Media.findById(mediaId);
+        if (media != null && media.deletedAt == null && media.contentSha256 == null) {
+            media.contentSha256 = contentSha256;
+            media.persist();
+        }
+    }
+
+    private String sha256(Path path) throws Exception {
+        try (InputStream input = Files.newInputStream(path)) {
+            return sha256(input);
+        }
+    }
+
+    private String sha256(InputStream input) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[64 * 1024];
+        int read;
+        while ((read = input.read(buffer)) >= 0) {
+            if (read > 0) digest.update(buffer, 0, read);
+        }
+        StringBuilder hex = new StringBuilder(64);
+        for (byte value : digest.digest()) hex.append(String.format(Locale.ROOT, "%02x", value));
+        return hex.toString();
     }
 
     private String toVirusScanStatus(MediaVirusScanService.Status status) {
@@ -794,6 +862,15 @@ public class MediaManagementService {
                                             long size, Long operatorId, Map<String, Object> metadata,
                                             String virusScanStatus, OffsetDateTime virusScannedAt,
                                             String virusScanMessage) {
+        return createPendingUploadedMedia(storageKey, normalizedMime, sanitizedFileName, size, operatorId,
+                metadata, virusScanStatus, virusScannedAt, virusScanMessage, null);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media createPendingUploadedMedia(String storageKey, String normalizedMime, String sanitizedFileName,
+                                            long size, Long operatorId, Map<String, Object> metadata,
+                                            String virusScanStatus, OffsetDateTime virusScannedAt,
+                                            String virusScanMessage, String contentSha256) {
         Media media = new Media();
         media.storageKey = storageKey;
         media.url = "";
@@ -812,6 +889,7 @@ public class MediaManagementService {
         media.storageClasses = new LinkedHashMap<>();
         media.processingStatus = "PENDING";
         media.processingProgress = 0;
+        media.contentSha256 = contentSha256;
         media.virusScanStatus = virusScanStatus == null || virusScanStatus.isBlank()
                 ? "NOT_SCANNED" : virusScanStatus;
         media.virusScannedAt = virusScannedAt;
@@ -826,16 +904,26 @@ public class MediaManagementService {
                                                         String normalizedMime, String sanitizedFileName,
                                                         long size, String virusScanStatus,
                                                         OffsetDateTime virusScannedAt,
-                                                        String virusScanMessage) {
+                                                        String virusScanMessage,
+                                                        String contentSha256) {
         Media media = Media.findById(mediaId);
         if (media == null || media.deletedAt != null || !isImportPlaceholder(media)) {
             throw new BadRequestException("导入附件占位不存在或状态无效");
+        }
+        Media.getEntityManager().createNativeQuery("select pg_advisory_xact_lock(hashtextextended(?1, 0))")
+                .setParameter(1, contentSha256).getSingleResult();
+        Media duplicate = Media.find("contentSha256 = ?1 and deletedAt is null and id <> ?2 order by id",
+                        contentSha256, mediaId)
+                .firstResult();
+        if (duplicate != null) {
+            return markImportPlaceholderDuplicate(media, duplicate, contentSha256);
         }
         media.storageKey = storageKey;
         media.mimeType = normalizedMime;
         media.fileName = sanitizedFileName;
         media.mediaType = parseMediaType(normalizedMime);
         media.size = size;
+        media.contentSha256 = contentSha256;
         media.width = null;
         media.height = null;
         media.storageClasses = new LinkedHashMap<>();
@@ -857,6 +945,50 @@ public class MediaManagementService {
         media.persist();
         Media.getEntityManager().flush();
         return media;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Media markImportPlaceholderDuplicate(Long placeholderId, Long canonicalMediaId,
+                                                String contentSha256) {
+        Media.getEntityManager().createNativeQuery("select pg_advisory_xact_lock(hashtextextended(?1, 0))")
+                .setParameter(1, contentSha256).getSingleResult();
+        Media placeholder = Media.findById(placeholderId);
+        Media canonical = Media.find("id = ?1 and deletedAt is null and contentSha256 = ?2",
+                canonicalMediaId, contentSha256).firstResult();
+        if (placeholder == null || placeholder.deletedAt != null || !isImportPlaceholder(placeholder)) {
+            throw new BadRequestException("导入附件占位不存在或状态无效");
+        }
+        if (canonical == null || Objects.equals(canonical.id, placeholder.id)) {
+            throw new BadRequestException("重复附件的原始媒体记录不可用");
+        }
+        return markImportPlaceholderDuplicate(placeholder, canonical, contentSha256);
+    }
+
+    private Media markImportPlaceholderDuplicate(Media placeholder, Media canonical, String contentSha256) {
+        Media.getEntityManager().createNativeQuery(
+                        "delete from post_media duplicate_ref using post_media canonical_ref "
+                                + "where duplicate_ref.media_id = ?1 and canonical_ref.media_id = ?2 "
+                                + "and duplicate_ref.post_id = canonical_ref.post_id")
+                .setParameter(1, placeholder.id).setParameter(2, canonical.id).executeUpdate();
+        Media.getEntityManager().createNativeQuery("update post_media set media_id = ?2 where media_id = ?1")
+                .setParameter(1, placeholder.id).setParameter(2, canonical.id).executeUpdate();
+
+        Map<String, Object> metadata = placeholder.metadata == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(placeholder.metadata);
+        metadata.put("importStatus", "duplicate");
+        metadata.put("duplicateOfMediaId", canonical.id);
+        metadata.put("contentSha256", contentSha256);
+        metadata.remove("importError");
+        placeholder.metadata = metadata;
+        placeholder.contentSha256 = contentSha256;
+        placeholder.processingStatus = "COMPLETED";
+        placeholder.processingProgress = 100;
+        placeholder.processingError = null;
+        placeholder.url = "";
+        placeholder.deletedAt = OffsetDateTime.now();
+        placeholder.persist();
+        Media.getEntityManager().flush();
+        return canonical;
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)

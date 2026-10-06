@@ -273,6 +273,28 @@ public class ConfigInitializer {
 
         list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "功能设置", aiAuditSchema, "AI 评论审核设置"));
 
+        ObjectNode aiOperationConfigSchema = mapper.createObjectNode();
+        aiOperationConfigSchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode aiOperationConfigFields = aiOperationConfigSchema.putArray("fields");
+        for (String[] operation : new String[][] {
+                {"moderate", "评论审核 AI 配置"},
+                {"summarize", "AI 摘要配置"},
+                {"translate", "AI 翻译配置"}
+        }) {
+            ObjectNode field = aiOperationConfigFields.addObject();
+            field.put("key", operation[0]);
+            field.put("label", operation[1]);
+            field.put("widget", "select");
+            field.put("hint", "选择单个提供商或轮询组；留空时自动选择");
+            field.putArray("options");
+        }
+        ObjectNode aiOperationConfigValue = mapper.createObjectNode();
+        aiOperationConfigValue.put("moderate", "");
+        aiOperationConfigValue.put("summarize", "");
+        aiOperationConfigValue.put("translate", "");
+        list.add(new SettingDefinition("ai_operation_configs", aiOperationConfigValue, "object", "功能设置",
+                aiOperationConfigSchema, "分别指定 AI 评论审核、摘要和翻译使用的提供商或轮询组。"));
+
         ObjectNode elasticsearchSchema = mapper.createObjectNode();
         elasticsearchSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode elasticsearchFields = elasticsearchSchema.putArray("fields");

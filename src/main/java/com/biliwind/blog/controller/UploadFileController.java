@@ -38,16 +38,29 @@ public class UploadFileController {
     @Path("/import-placeholder/{mediaId}")
     @Produces(MediaType.WILDCARD)
     public Response resolveImportPlaceholder(@PathParam("mediaId") Long mediaId) {
-        Media media = Media.find("id = ?1 and deletedAt is null", mediaId).firstResult();
+        Media media = Media.findById(mediaId);
         if (media == null || media.metadata == null
                 || !"LEGACY_IMPORT".equals(String.valueOf(media.metadata.get("importSource")))
                 || !("/uploads/import-placeholder/" + mediaId)
                         .equals(String.valueOf(media.metadata.get("importPlaceholderUrl")))) {
             throw new NotFoundException();
         }
+        Media resolvedMedia = media;
+        Object duplicateTarget = media.metadata.get("duplicateOfMediaId");
+        if (duplicateTarget != null) {
+            try {
+                resolvedMedia = Media.find("id = ?1 and deletedAt is null", Long.valueOf(duplicateTarget.toString()))
+                        .firstResult();
+            } catch (NumberFormatException ignored) {
+                throw new NotFoundException();
+            }
+            if (resolvedMedia == null) throw new NotFoundException();
+        } else if (media.deletedAt != null) {
+            throw new NotFoundException();
+        }
         try {
-            if (postAccessService.hasProtectedMediaReference(media.id)
-                    || !mediaAccessService.canAccess(media, regionContext.getCurrentRegion())) {
+            if (postAccessService.hasProtectedMediaReference(resolvedMedia.id)
+                    || !mediaAccessService.canAccess(resolvedMedia, regionContext.getCurrentRegion())) {
                 throw new NotFoundException();
             }
         } catch (NotFoundException notFoundException) {
@@ -55,14 +68,15 @@ public class UploadFileController {
         } catch (Exception exception) {
             throw new ServiceUnavailableException("媒体访问校验暂不可用");
         }
-        if (!"COMPLETED".equals(media.processingStatus) || media.url == null || media.url.isBlank()) {
+        if (!"COMPLETED".equals(resolvedMedia.processingStatus)
+                || resolvedMedia.url == null || resolvedMedia.url.isBlank()) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .header("Retry-After", 5)
                     .header("Cache-Control", "no-store")
                     .build();
         }
         return Response.status(Response.Status.FOUND)
-                .header("Location", media.url)
+                .header("Location", resolvedMedia.url)
                 .header("Cache-Control", "no-store")
                 .build();
     }
