@@ -450,6 +450,7 @@ public class PostController {
         }
     }
 
+    @RegisterForReflection
     public record TagItem(String name, String slug) {}
 
     private String escapeJavaScript(String input) {

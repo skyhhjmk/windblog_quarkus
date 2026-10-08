@@ -1,6 +1,7 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.constant.RoleConstant;
+import com.biliwind.blog.common.helper.ImageDimensionReader;
 import com.biliwind.blog.common.helper.MediaPathHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.controller.api.admin.dto.AdminMediaDtos;
@@ -1268,11 +1269,13 @@ public class MediaManagementService {
         try {
             image = ImageIO.read(target.toFile());
         } catch (IOException exception) {
+            applyHeaderDimensions(media, target, metadata);
             recordProcessingWarning(metadata, "图片", exception);
             Log.warn("图片变体生成失败，保留原图: " + exception.getMessage());
             return;
         }
         if (image == null) {
+            applyHeaderDimensions(media, target, metadata);
             IOException exception = new IOException("无法读取原图片: " + target);
             recordProcessingWarning(metadata, "图片", exception);
             Log.warn("图片变体生成失败，保留原图: " + exception.getMessage());
@@ -1309,6 +1312,17 @@ public class MediaManagementService {
             recordProcessingWarning(metadata, "WebP", exception);
             Log.warn("WebP 变体生成失败，保留原图: " + exception.getMessage());
         }
+    }
+
+    private void applyHeaderDimensions(Media media, Path target, Map<String, Object> metadata) {
+        int[] dimensions = ImageDimensionReader.read(target);
+        if (dimensions == null) {
+            return;
+        }
+        media.width = dimensions[0];
+        media.height = dimensions[1];
+        metadata.put("width", dimensions[0]);
+        metadata.put("height", dimensions[1]);
     }
 
     private void recordProcessingWarning(Map<String, Object> metadata, String variantName,

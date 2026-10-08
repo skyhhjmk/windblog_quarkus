@@ -52,6 +52,10 @@
     --tag-bg-hover: rgba(124, 58, 237, 0.2);
     --tag-text: #c4b5fd;
     --tag-border: rgba(167, 139, 250, 0.3);
+    --image-placeholder-base: #152331;
+    --image-placeholder-sheen: rgba(34, 211, 238, 0.48);
+    --image-placeholder-border: rgba(34, 211, 238, 0.9);
+    --image-placeholder-stripe: rgba(34, 211, 238, 0.16);
 
     /* Spacing System */
     --space-sm: 1rem;
@@ -224,6 +228,10 @@
     --tag-bg-hover: #ede9fe;
     --tag-text: #6d28d9;
     --tag-border: #ddd6fe;
+    --image-placeholder-base: #e8f6fa;
+    --image-placeholder-sheen: rgba(8, 145, 178, 0.42);
+    --image-placeholder-border: rgba(8, 145, 178, 0.88);
+    --image-placeholder-stripe: rgba(8, 145, 178, 0.16);
 }
 
 /* Base Styles */
@@ -532,9 +540,55 @@ input::placeholder {
 
 .prose img {
     display: block;
+    max-width: 100%;
+    height: auto;
     margin: 2rem auto;
     border-radius: var(--radius-md);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.prose img.article-image-loading {
+    box-sizing: border-box;
+    border: 1px solid var(--image-placeholder-border);
+    background-color: var(--image-placeholder-base);
+    background-image: linear-gradient(
+        108deg,
+        transparent 22%,
+        var(--image-placeholder-sheen) 48%,
+        transparent 74%
+    );
+    background-size: 220% 100%;
+    animation: windblog-image-shimmer 1.15s ease-in-out infinite;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--image-placeholder-border) 42%, transparent),
+        0 0 24px color-mix(in srgb, var(--image-placeholder-border) 30%, transparent);
+}
+
+.prose img.article-image-loaded {
+    border: 1px solid transparent;
+    background: transparent;
+    animation: none;
+}
+
+.prose img.article-image-error {
+    border: 1px solid var(--image-placeholder-border);
+    background-color: var(--image-placeholder-base);
+    background-image: repeating-linear-gradient(
+        135deg,
+        transparent 0 12px,
+        var(--image-placeholder-stripe) 12px 24px
+    );
+    animation: none;
+}
+
+@keyframes windblog-image-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .prose img.article-image-loading {
+        animation: none;
+    }
 }
 
 .prose blockquote {
