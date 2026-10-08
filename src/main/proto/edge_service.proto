@@ -146,6 +146,9 @@ message EdgeChannelMessage {
 message LinkProbeRequest {
   string url = 1;
   string site_url = 2;
+  string target_name = 3;
+  string site_name = 4;
+  repeated string monitoring_keywords = 5;
 }
 
 message LinkProbeResponse {
@@ -154,6 +157,18 @@ message LinkProbeResponse {
   int32 load_time_ms = 3;
   bool backlink_found = 4;
   string error_message = 5;
+  string checked_url = 6;
+  string target_name = 7;
+  string site_url = 8;
+  string site_name = 9;
+  repeated string expected_keywords = 10;
+  repeated string matched_keywords = 11;
+  repeated string matched_backlink_urls = 12;
+  repeated string matched_anchor_texts = 13;
+  bool keyword_fraud_detected = 14;
+  repeated string fraud_reasons = 15;
+  int32 dom_parse_error_count = 16;
+  bool evidence_supported = 17;
 }
 
 message CertificateRenewalMessage {

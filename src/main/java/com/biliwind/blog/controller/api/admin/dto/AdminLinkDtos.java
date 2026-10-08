@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller.api.admin.dto;
 
 import java.time.OffsetDateTime;
+import java.util.Map;
 
 public class AdminLinkDtos {
 
@@ -32,6 +33,13 @@ public class AdminLinkDtos {
                         String placementDescription,
                         long referencedPostCount,
                         long referenceCount,
+                        boolean monitoringEnabled,
+                        int monitoringIntervalMinutes,
+                        boolean hideWhenBacklinkMissing,
+                        boolean hideWhenOffline,
+                        String monitoringKeywords,
+                        boolean hideWhenKeywordFraudDetected,
+                        String keywordFraudStatus,
                         OffsetDateTime createdAt) {
         }
 
@@ -62,7 +70,13 @@ public class AdminLinkDtos {
                         Short type,
                         String seoTitle,
                         String seoKeywords,
-                        String seoDescription) {
+                        String seoDescription,
+                        Boolean monitoringEnabled,
+                        Integer monitoringIntervalMinutes,
+                        Boolean hideWhenBacklinkMissing,
+                        Boolean hideWhenOffline,
+                        String monitoringKeywords,
+                        Boolean hideWhenKeywordFraudDetected) {
         }
 
         public record LinkUpdateRequest(
@@ -81,7 +95,13 @@ public class AdminLinkDtos {
                         Short type,
                         String seoTitle,
                         String seoKeywords,
-                        String seoDescription) {
+                        String seoDescription,
+                        Boolean monitoringEnabled,
+                        Integer monitoringIntervalMinutes,
+                        Boolean hideWhenBacklinkMissing,
+                        Boolean hideWhenOffline,
+                        String monitoringKeywords,
+                        Boolean hideWhenKeywordFraudDetected) {
         }
 
         public record AdminLinkMonitorLogItem(
@@ -89,6 +109,7 @@ public class AdminLinkDtos {
                         Long linkId,
                         String linkName,
                         OffsetDateTime checkTime,
+                        String checkSource,
                         Boolean ok,
                         Integer loadTimeMs,
                         Boolean backlinkFound,
@@ -96,6 +117,17 @@ public class AdminLinkDtos {
                         String checkBatchId,
                         String nodeId,
                         String nodeName,
+                        String errorMessage,
+                        Boolean keywordFraudDetected,
+                        Map<String, Object> detectionDetails) {
+        }
+
+        public record AdminLinkCheckJobItem(
+                        String jobId,
+                        Long linkId,
+                        String status,
+                        OffsetDateTime startedAt,
+                        OffsetDateTime completedAt,
                         String errorMessage) {
         }
 

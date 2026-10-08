@@ -5,14 +5,15 @@ import com.biliwind.blog.controller.api.admin.dto.AdminLinkDtos.*;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.link.LinkMonitorService;
+import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import com.biliwind.blog.service.security.SafeExternalHttpService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
-import io.quarkus.panache.common.Sort;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jsoup.Jsoup;
@@ -20,7 +21,10 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
@@ -56,11 +60,23 @@ public class AdminLinkController {
 
     @GET
     @Operation(summary = "所有友链")
-    public List<AdminLinkItem> list() {
-        return Link.listAll(Sort.by("sortOrder")).stream()
-                .map(l -> (Link) l)
-                .map(this::toItem)
-                .collect(Collectors.toList());
+    public PageResult<AdminLinkItem> list(
+            @QueryParam("page") @DefaultValue("1") int page,
+            @QueryParam("pageSize") @DefaultValue("20") int pageSize,
+            @QueryParam("type") Short type,
+            @QueryParam("excludeType") Short excludeType) {
+        int safePage = Math.max(page, 1);
+        int safePageSize = Math.max(1, Math.min(pageSize, 100));
+        PanacheQuery<Link> query;
+        if (type != null) {
+            query = Link.find("type = ?1 order by id asc", LinkType.fromCode(type));
+        } else if (excludeType != null) {
+            query = Link.find("type <> ?1 order by id asc", LinkType.fromCode(excludeType));
+        } else {
+            query = Link.find("order by id asc");
+        }
+        List<Link> list = query.page(Page.of(safePage - 1, safePageSize)).list();
+        return new PageResult<>(list.stream().map(this::toItem).toList(), query.count(), safePage, safePageSize);
     }
 
     @GET
@@ -97,12 +113,28 @@ public class AdminLinkController {
 
     @POST
     @Path("/{id}/check")
-    @Operation(summary = "手动触发链接检查并更新链接状态")
-    public void check(@PathParam("id") Long id) {
+    @Operation(summary = "异步触发链接检查并更新链接状态")
+    public Response check(@PathParam("id") Long id) {
         Link link = Link.findById(id);
-        if (link == null)
-            throw new NotFoundException();
-        linkMonitorService.checkLink(link, false);
+        if (link == null) {
+            throw new NotFoundException("链接不存在");
+        }
+        AdminLinkCheckJobItem job = linkMonitorService.enqueueCheck(id, LinkMonitorSource.MANUAL);
+        return Response.accepted(job).build();
+    }
+
+    @GET
+    @Path("/{id}/check-jobs/{jobId}")
+    @Operation(summary = "查询异步链接检查状态")
+    public AdminLinkCheckJobItem checkJob(@PathParam("id") Long id, @PathParam("jobId") String jobId) {
+        if (Link.findById(id) == null) {
+            throw new NotFoundException("链接不存在");
+        }
+        AdminLinkCheckJobItem job = linkMonitorService.getCheckJob(id, jobId);
+        if (job == null) {
+            throw new NotFoundException("检测任务不存在");
+        }
+        return job;
     }
 
     @POST
@@ -143,8 +175,8 @@ public class AdminLinkController {
                 null,
                 java.util.Map.of("applicationStatus", link.applicationStatus)
         );
-        if (request.approved()) {
-            linkMonitorService.checkLink(link, false);
+        if (request.approved() && LinkMonitorPolicy.isMonitoringEnabled(link)) {
+            linkMonitorService.enqueueCheck(link.id, LinkMonitorSource.AUTOMATIC);
         }
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", link.id, "UPSERT"));
         return toItem(link);
@@ -221,18 +253,27 @@ public class AdminLinkController {
             @QueryParam("pageSize") @DefaultValue("20") int pageSize,
             @QueryParam("linkId") Long linkId) {
 
-        String queryStr = (linkId != null) ? "link.id = ?1" : "";
-        Object[] params = (linkId != null) ? new Object[] { linkId } : new Object[] {};
-
-        String where = queryStr.isEmpty() ? "" : "where " + queryStr;
-        PanacheQuery<LinkMonitorLog> query = LinkMonitorLog.find(where + " order by checkTime desc", params);
-        List<LinkMonitorLog> list = query.page(Page.of(page - 1, pageSize)).list();
+        int safePage = Math.max(page, 1);
+        int safePageSize = Math.max(1, Math.min(pageSize, 100));
+        OffsetDateTime retentionCutoff = OffsetDateTime.now(ZoneOffset.UTC).minusDays(90);
+        PanacheQuery<LinkMonitorLog> query;
+        if (linkId != null) {
+            query = LinkMonitorLog.find(
+                    "link.id = ?1 and checkTime >= ?2 order by checkTime desc, id desc",
+                    linkId,
+                    retentionCutoff);
+        } else {
+            query = LinkMonitorLog.find(
+                    "checkTime >= ?1 order by checkTime desc, id desc",
+                    retentionCutoff);
+        }
+        List<LinkMonitorLog> list = query.page(Page.of(safePage - 1, safePageSize)).list();
 
         return new PageResult<>(
                 list.stream().map(this::toLogItem).toList(),
                 query.count(),
-                page,
-                pageSize);
+                safePage,
+                safePageSize);
     }
 
     @GET
@@ -347,6 +388,16 @@ public class AdminLinkController {
         l.seoTitle = req.seoTitle();
         l.seoKeywords = req.seoKeywords();
         l.seoDescription = req.seoDescription();
+        applyMonitoringSettings(
+                l,
+                req.monitoringEnabled() == null ? true : req.monitoringEnabled(),
+                req.monitoringIntervalMinutes() == null
+                        ? LinkMonitorPolicy.DEFAULT_INTERVAL_MINUTES
+                        : req.monitoringIntervalMinutes(),
+                req.hideWhenBacklinkMissing() == null ? false : req.hideWhenBacklinkMissing(),
+                req.hideWhenOffline() == null ? false : req.hideWhenOffline(),
+                req.monitoringKeywords(),
+                req.hideWhenKeywordFraudDetected() == null ? false : req.hideWhenKeywordFraudDetected());
         l.publicToken = linkPublicTokenService.ensurePublicToken(l);
 
         l.createdAt = OffsetDateTime.now();
@@ -399,6 +450,22 @@ public class AdminLinkController {
         if (req.seoDescription() != null)
             l.seoDescription = req.seoDescription();
 
+        if (req.monitoringEnabled() != null
+                || req.monitoringIntervalMinutes() != null
+                || req.hideWhenBacklinkMissing() != null
+                || req.hideWhenOffline() != null
+                || req.monitoringKeywords() != null
+                || req.hideWhenKeywordFraudDetected() != null) {
+            applyMonitoringSettings(
+                    l,
+                    req.monitoringEnabled(),
+                    req.monitoringIntervalMinutes(),
+                    req.hideWhenBacklinkMissing(),
+                    req.hideWhenOffline(),
+                    req.monitoringKeywords(),
+                    req.hideWhenKeywordFraudDetected());
+        }
+
         linkPublicTokenService.ensurePublicToken(l);
         l.updatedAt = OffsetDateTime.now();
         auditService.log("link", String.valueOf(l.id), "update", null, java.util.Map.of("name", l.name, "url", l.url)); // For simplicity, just log key info
@@ -447,7 +514,63 @@ public class AdminLinkController {
                 readSetting(l, "placementDescription"),
                 articleExternalLinkService.countReferencedPosts(l.id),
                 articleExternalLinkService.countReferences(l.id),
+                LinkMonitorPolicy.isMonitoringEnabled(l),
+                LinkMonitorPolicy.intervalMinutes(l),
+                LinkMonitorPolicy.shouldHideWhenBacklinkMissing(l),
+                LinkMonitorPolicy.shouldHideWhenOffline(l),
+                LinkMonitorPolicy.monitoringKeywords(l),
+                LinkMonitorPolicy.shouldHideWhenKeywordFraudDetected(l),
+                l.keywordFraudStatus == null ? "UNKNOWN" : l.keywordFraudStatus,
                 l.createdAt);
+    }
+
+    private void applyMonitoringSettings(
+            Link link,
+            Boolean monitoringEnabled,
+            Integer monitoringIntervalMinutes,
+            Boolean hideWhenBacklinkMissing,
+            Boolean hideWhenOffline,
+            String monitoringKeywords,
+            Boolean hideWhenKeywordFraudDetected) {
+        if (monitoringIntervalMinutes != null
+                && (monitoringIntervalMinutes < 1
+                || monitoringIntervalMinutes > LinkMonitorPolicy.MAX_INTERVAL_MINUTES)) {
+            throw new BadRequestException("检测间隔必须在 1 到 10080 分钟之间");
+        }
+
+        Map<String, Object> settings = link.settings == null
+                ? new HashMap<>()
+                : new HashMap<>(link.settings);
+        if (monitoringEnabled != null) {
+            settings.put("monitoringEnabled", monitoringEnabled);
+        }
+        if (monitoringIntervalMinutes != null) {
+            settings.put("monitoringIntervalMinutes", monitoringIntervalMinutes);
+        }
+        if (hideWhenBacklinkMissing != null) {
+            settings.put("hideWhenBacklinkMissing", hideWhenBacklinkMissing);
+        }
+        if (hideWhenOffline != null) {
+            settings.put("hideWhenOffline", hideWhenOffline);
+        }
+        if (monitoringKeywords != null) {
+            List<String> keywords = java.util.Arrays.stream(monitoringKeywords.split("[,，;；\\r\\n]+"))
+                    .map(String::trim)
+                    .filter(value -> !value.isBlank())
+                    .toList();
+            if (keywords.size() > 20 || keywords.stream().anyMatch(value -> value.length() > 100)) {
+                throw new BadRequestException("检测关键词最多 20 个，每个关键词不超过 100 个字符");
+            }
+            if (keywords.isEmpty()) {
+                settings.remove("monitoringKeywords");
+            } else {
+                settings.put("monitoringKeywords", String.join(", ", keywords));
+            }
+        }
+        if (hideWhenKeywordFraudDetected != null) {
+            settings.put("hideWhenKeywordFraudDetected", hideWhenKeywordFraudDetected);
+        }
+        link.settings = settings;
     }
 
     private String readSetting(Link link, String key) {
@@ -494,11 +617,21 @@ public class AdminLinkController {
     }
 
     private AdminLinkMonitorLogItem toLogItem(LinkMonitorLog log) {
+        Map<String, Object> detectionDetails = new HashMap<>();
+        if (log.rawData != null && log.rawData.get("detectionDetails") instanceof Map<?, ?> values) {
+            values.forEach((key, value) -> {
+                if (key instanceof String stringKey) {
+                    detectionDetails.put(stringKey, value);
+                }
+            });
+        }
+        boolean fraudDetected = Boolean.TRUE.equals(detectionDetails.get("keywordFraudDetected"));
         return new AdminLinkMonitorLogItem(
                 log.id,
                 log.link.id,
                 log.link.name,
                 log.checkTime,
+                log.checkSource == null ? LinkMonitorSource.UNKNOWN.name() : log.checkSource.name(),
                 log.ok,
                 log.loadTimeMs,
                 log.backlinkFound,
@@ -506,7 +639,9 @@ public class AdminLinkController {
                 log.checkBatchId,
                 log.nodeId,
                 log.nodeName,
-                log.errorMessage);
+                log.errorMessage,
+                fraudDetected,
+                detectionDetails);
     }
 
     private AdminLinkAuditItem toAuditItem(LinkAudit audit) {

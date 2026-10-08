@@ -131,11 +131,13 @@ public class AdminPostApiController {
             @QueryParam("pageSize") @DefaultValue("10") int pageSize,
             @QueryParam("status") Short status,
             @QueryParam("categoryId") Long categoryId,
-            @QueryParam("keyword") String keyword) {
+            @QueryParam("keyword") String keyword,
+            @QueryParam("sortBy") @DefaultValue("id") String sortBy) {
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(1, Math.min(pageSize, 100));
 
-        io.quarkus.hibernate.orm.panache.PanacheQuery<Post> query = postRepository.findAdminPosts(status, categoryId, keyword);
+        io.quarkus.hibernate.orm.panache.PanacheQuery<Post> query = postRepository.findAdminPosts(
+                status, categoryId, keyword, sortBy);
         long total = query.count();
         List<Post> entities = query.page(Page.of(safePage - 1, safePageSize)).list();
 

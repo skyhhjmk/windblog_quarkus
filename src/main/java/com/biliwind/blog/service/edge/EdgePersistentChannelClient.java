@@ -281,15 +281,32 @@ public class EdgePersistentChannelClient {
     private void handleLinkProbeRequest(EdgeChannelMessage message) {
         LinkProbeRequest request = message.getLinkProbeRequest();
         com.biliwind.blog.service.link.LinkProbeResult probeResult =
-                linkProbeService.probe(request.getUrl(), request.getSiteUrl());
+                linkProbeService.probe(request.getUrl(), request.getSiteUrl(), request.getSiteName(),
+                        String.join(",", request.getMonitoringKeywordsList()), request.getTargetName());
 
-        LinkProbeResponse response = LinkProbeResponse.newBuilder()
+        com.biliwind.blog.service.link.LinkProbeEvidence evidence = probeResult.evidence();
+        LinkProbeResponse.Builder responseBuilder = LinkProbeResponse.newBuilder()
                 .setReachable(probeResult.reachable())
                 .setStatusCode(probeResult.statusCode())
                 .setLoadTimeMs(probeResult.loadTimeMs())
                 .setBacklinkFound(probeResult.backlinkFound())
-                .setErrorMessage(nullToEmpty(probeResult.errorMessage()))
-                .build();
+                .setErrorMessage(nullToEmpty(probeResult.errorMessage()));
+        if (evidence != null) {
+            responseBuilder
+                    .setCheckedUrl(nullToEmpty(evidence.checkedUrl()))
+                    .setTargetName(nullToEmpty(evidence.targetName()))
+                    .setSiteUrl(nullToEmpty(evidence.siteUrl()))
+                    .setSiteName(nullToEmpty(evidence.siteName()))
+                    .addAllExpectedKeywords(evidence.expectedKeywords())
+                    .addAllMatchedKeywords(evidence.matchedKeywords())
+                    .addAllMatchedBacklinkUrls(evidence.matchedBacklinkUrls())
+                    .addAllMatchedAnchorTexts(evidence.matchedAnchorTexts())
+                    .setKeywordFraudDetected(evidence.keywordFraudDetected())
+                    .addAllFraudReasons(evidence.fraudReasons())
+                    .setDomParseErrorCount(evidence.domParseErrorCount())
+                    .setEvidenceSupported(evidence.detectorSupported());
+        }
+        LinkProbeResponse response = responseBuilder.build();
         EdgeChannelMessage responseMessage = EdgeChannelMessage.newBuilder()
                 .setRequestId(message.getRequestId())
                 .setNodeId(nodeRoleService.getNodeId())

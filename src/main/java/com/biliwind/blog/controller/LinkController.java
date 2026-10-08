@@ -4,6 +4,7 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkType;
+import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -50,9 +51,6 @@ public class LinkController {
         LanguageContext languageContext;
 
     @Inject
-    jakarta.persistence.EntityManager entityManager;
-
-    @Inject
     @Location("system/go.html")
     Template goTemplate;
 
@@ -86,26 +84,32 @@ public class LinkController {
                 template = linkContent;
             }
                 
+                List<Link> eligibleLinks = Link.<Link>list(
+                                "status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
+                                (short) 1,
+                                LinkType.EXTERNAL_ARTICLE)
+                        .stream()
+                        .filter(LinkMonitorPolicy::isVisibleOnPublicPage)
+                        .toList();
                 List<Link> links;
             if (type == null || type.isBlank() || type.equalsIgnoreCase("All")) {
-                links = Link.list("status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
-                        (short) 1, LinkType.EXTERNAL_ARTICLE);
+                links = eligibleLinks;
                 } else {
                         LinkType linkType = parseLinkType(type);
                 if (linkType != null && linkType != LinkType.EXTERNAL_ARTICLE) {
-                                links = Link.list("status = ?1 and type = ?2 order by sortOrder asc, createdAt desc",
-                                                (short) 1, linkType);
+                                links = eligibleLinks.stream()
+                                        .filter(item -> item.type == linkType)
+                                        .toList();
                         } else {
-                    links = Link.list("status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
-                            (short) 1, LinkType.EXTERNAL_ARTICLE);
+                    links = eligibleLinks;
                         }
                 }
 
             // 只获取当前数据库中已存在的链接分类，且排除文章外部链接
-            List<LinkType> activeTypes = entityManager.createQuery(
-                            "SELECT DISTINCT l.type FROM Link l WHERE l.status = 1 AND l.type != :extType", LinkType.class)
-                    .setParameter("extType", LinkType.EXTERNAL_ARTICLE)
-                    .getResultList();
+            List<LinkType> activeTypes = eligibleLinks.stream()
+                    .map(item -> item.type)
+                    .distinct()
+                    .toList();
                 
                 return template
                         .data("pageTitle", "友情链接")
@@ -147,7 +151,8 @@ public class LinkController {
             @Context HttpHeaders httpHeaders,
             @PathParam("id") Long id) {
         Link linkEntity = Link.findById(id);
-        if (linkEntity == null) {
+        if (linkEntity == null || linkEntity.status != 1
+                || !LinkMonitorPolicy.isVisibleOnPublicPage(linkEntity)) {
             throw new WebApplicationException(404);
         }
 
@@ -180,7 +185,7 @@ public class LinkController {
             throw new WebApplicationException(404);
         }
 
-        if (linkEntity.status != 1) {
+        if (linkEntity.status != 1 || !LinkMonitorPolicy.isVisibleOnPublicPage(linkEntity)) {
             throw new WebApplicationException(404);
         }
 

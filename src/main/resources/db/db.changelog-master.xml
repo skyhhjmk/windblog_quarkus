@@ -138,4 +138,7 @@
     <include file="db/migration/137-expand-honeypot-probes.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/138-create-import-jobs.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/139-add-media-content-sha256.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/140-link-monitor-source-and-retention.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/141-mark-legacy-link-monitor-source.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/142-add-link-keyword-fraud-status.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

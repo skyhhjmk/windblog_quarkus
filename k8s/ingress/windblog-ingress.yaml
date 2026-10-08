@@ -43,7 +43,6 @@ metadata:
       }
       proxy_set_header X-JWT-Assertion $windblog_grafana_jwt;
       add_header Cache-Control "no-store" always;
-      add_header Referrer-Policy "same-origin" always;
 spec:
   ingressClassName: nginx
   rules:

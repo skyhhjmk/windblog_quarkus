@@ -12,7 +12,9 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Path("/api/admin/categories")
 @Produces(MediaType.APPLICATION_JSON)
@@ -37,12 +39,14 @@ public class AdminCategoryController {
     }
 
     @GET
+    @Transactional
     @Operation(summary = "所有分类")
     public List<AdminCategoryItem> list() {
         List<Category> categories = Category.listAll(Sort.by("path"));
+        Map<Long, Long> postCounts = loadPostCounts(categories);
         List<AdminCategoryItem> items = new java.util.ArrayList<>();
         for (Category c : categories) {
-            items.add(toItem(c));
+            items.add(toItem(c, postCounts.getOrDefault(c.id, 0L)));
         }
         return items;
     }
@@ -123,20 +127,54 @@ public class AdminCategoryController {
     @Operation(summary = "重新扫描全表计算分类文章数量")
     public Response reScan() {
         List<Category> allCategories = Category.listAll();
+        Map<Long, Long> postCounts = loadPostCounts(allCategories);
         for (Category c : allCategories) {
-            // 这里可以根据需求决定是否递归计算子分类的文章数量
-            // 目前只计算直接关联该分类的文章数量
-            c.postCount = com.biliwind.blog.model.Post.count(
-                    "category.id = ?1 and status = ?2 and deletedAt is null and visibility = 0 and publishedRevision is not null",
-                    c.id,
-                    com.biliwind.blog.model.PostStatus.PUBLISHED);
+            c.postCount = postCounts.getOrDefault(c.id, 0L);
             c.persist();
         }
         invalidateCategoryCaches();
         return Response.ok(java.util.Map.of("success", true, "message", "扫描完成")).build();
     }
 
+    private Map<Long, Long> loadPostCounts(List<Category> categories) {
+        if (categories.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> categoryIds = categories.stream().map(category -> category.id).toList();
+        Map<Long, Long> postCounts = new HashMap<>();
+        List<Object[]> rows = Category.getEntityManager().createNativeQuery("""
+                        select related_posts.category_id, count(distinct related_posts.post_id)
+                        from (
+                            select p.category_id, p.id as post_id
+                            from posts p
+                            where p.status = 1 and p.deleted_at is null and p.visibility = 0
+                              and p.published_revision_id is not null
+                              and p.category_id in (:legacyCategoryIds)
+                            union all
+                            select pc.category_id, p.id as post_id
+                            from post_categories pc
+                            join posts p on p.id = pc.post_id
+                            where p.status = 1 and p.deleted_at is null and p.visibility = 0
+                              and p.published_revision_id is not null
+                              and pc.category_id in (:relationCategoryIds)
+                        ) related_posts
+                        group by related_posts.category_id
+                        """)
+                .setParameter("legacyCategoryIds", categoryIds)
+                .setParameter("relationCategoryIds", categoryIds)
+                .getResultList();
+        for (Object[] row : rows) {
+            postCounts.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        return postCounts;
+    }
+
     private AdminCategoryItem toItem(Category c) {
+        return toItem(c, loadPostCounts(List.of(c)).getOrDefault(c.id, 0L));
+    }
+
+    private AdminCategoryItem toItem(Category c, Long postCount) {
         return new AdminCategoryItem(
                 c.id,
                 c.parent != null ? c.parent.id : null,
@@ -145,6 +183,6 @@ public class AdminCategoryController {
                 c.description,
                 c.path,
                 c.createdAt,
-                c.postCount);
+                postCount);
     }
 }

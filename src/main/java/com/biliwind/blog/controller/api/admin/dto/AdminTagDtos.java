@@ -10,7 +10,8 @@ public class AdminTagDtos {
             String slug,
             Map<String, String> name,
             Map<String, String> description,
-            OffsetDateTime createdAt) {
+            OffsetDateTime createdAt,
+            Long postCount) {
     }
 
     public record TagCreateRequest(

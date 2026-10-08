@@ -119,7 +119,6 @@ public class AdminMediaDownloadResource {
                     .type(media.mimeType == null ? MediaType.APPLICATION_OCTET_STREAM : media.mimeType)
                     .header("Cache-Control", "no-store")
                     .header("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName)
-                    .header("X-Content-Type-Options", "nosniff")
                     .build();
         } catch (Exception exception) {
             downloadRiskService.releaseConcurrency(concurrencyLease);

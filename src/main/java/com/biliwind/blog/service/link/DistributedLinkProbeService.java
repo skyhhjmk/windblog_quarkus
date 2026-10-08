@@ -20,22 +20,30 @@ import java.util.concurrent.TimeUnit;
 public class DistributedLinkProbeService {
 
     private final Map<String, CompletableFuture<LinkProbeResult>> pendingRequests = new ConcurrentHashMap<>();
+    private final Map<String, ProbeContext> pendingContexts = new ConcurrentHashMap<>();
 
     @Inject
     PrimaryEdgeChannelRegistry channelRegistry;
 
-    public List<NodeLinkProbeResult> probeOnlineEdgeNodes(String url, String siteUrl) {
+    public List<NodeLinkProbeResult> probeOnlineEdgeNodes(String url, String siteUrl, String siteName,
+                                                          String configuredKeywords, String targetName) {
         List<String> nodeIds = channelRegistry.listOnlineNodeIds();
         List<PendingNodeProbe> pendingNodeProbes = new ArrayList<>();
+        List<String> expectedKeywords = expectedKeywords(siteName, configuredKeywords);
 
         for (String nodeId : nodeIds) {
             String requestId = UUID.randomUUID().toString();
             CompletableFuture<LinkProbeResult> future = new CompletableFuture<>();
             pendingRequests.put(requestId, future);
+            pendingContexts.put(requestId,
+                    new ProbeContext(url, targetName, siteUrl, siteName, expectedKeywords));
 
             LinkProbeRequest probeRequest = LinkProbeRequest.newBuilder()
                     .setUrl(url)
                     .setSiteUrl(siteUrl)
+                    .setTargetName(targetName == null ? "" : targetName)
+                    .setSiteName(siteName == null ? "" : siteName)
+                    .addAllMonitoringKeywords(configuredKeywords(configuredKeywords))
                     .build();
             EdgeChannelMessage channelMessage = EdgeChannelMessage.newBuilder()
                     .setRequestId(requestId)
@@ -46,9 +54,11 @@ public class DistributedLinkProbeService {
 
             boolean sent = channelRegistry.sendToNode(nodeId, channelMessage);
             if (sent) {
-                pendingNodeProbes.add(new PendingNodeProbe(nodeId, requestId, future));
+                pendingNodeProbes.add(new PendingNodeProbe(nodeId, requestId, future,
+                        pendingContexts.get(requestId)));
             } else {
                 pendingRequests.remove(requestId);
+                pendingContexts.remove(requestId);
             }
         }
 
@@ -69,12 +79,42 @@ public class DistributedLinkProbeService {
         if (future == null) {
             return;
         }
+        ProbeContext context = pendingContexts.remove(requestId);
+        String checkedUrl = response.getCheckedUrl().isBlank()
+                ? context == null ? "" : context.checkedUrl()
+                : response.getCheckedUrl();
+        String targetName = response.getTargetName().isBlank()
+                ? context == null ? "" : context.targetName()
+                : response.getTargetName();
+        String siteUrl = response.getSiteUrl().isBlank()
+                ? context == null ? "" : context.siteUrl()
+                : response.getSiteUrl();
+        String siteName = response.getSiteName().isBlank()
+                ? context == null ? "" : context.siteName()
+                : response.getSiteName();
+        List<String> expectedKeywords = response.getExpectedKeywordsCount() == 0
+                ? context == null ? List.of() : context.expectedKeywords()
+                : response.getExpectedKeywordsList();
+        LinkProbeEvidence evidence = new LinkProbeEvidence(
+                checkedUrl,
+                targetName,
+                siteUrl,
+                siteName,
+                expectedKeywords,
+                response.getMatchedKeywordsList(),
+                response.getMatchedBacklinkUrlsList(),
+                response.getMatchedAnchorTextsList(),
+                response.getKeywordFraudDetected(),
+                response.getFraudReasonsList(),
+                response.getDomParseErrorCount(),
+                response.getEvidenceSupported());
         LinkProbeResult result = new LinkProbeResult(
                 response.getReachable(),
                 response.getStatusCode(),
                 response.getLoadTimeMs(),
                 response.getBacklinkFound(),
-                response.getErrorMessage()
+                response.getErrorMessage(),
+                evidence
         );
         future.complete(result);
     }
@@ -84,8 +124,43 @@ public class DistributedLinkProbeService {
             return pendingNodeProbe.future.get(15, TimeUnit.SECONDS);
         } catch (Exception exception) {
             pendingRequests.remove(pendingNodeProbe.requestId);
-            return new LinkProbeResult(false, 0, 15000, false, "节点探测超时或通道断开");
+            pendingContexts.remove(pendingNodeProbe.requestId);
+            ProbeContext context = pendingNodeProbe.context;
+            LinkProbeEvidence evidence = context == null ? LinkProbeEvidence.unavailable("")
+                    : new LinkProbeEvidence(context.checkedUrl(), context.targetName(), context.siteUrl(),
+                            context.siteName(), context.expectedKeywords(), List.of(), List.of(), List.of(),
+                            false, List.of(), 0, false);
+            return new LinkProbeResult(false, 0, 15000, false, "节点探测超时或通道断开", evidence);
         }
+    }
+
+    private List<String> expectedKeywords(String siteName, String configuredKeywords) {
+        List<String> result = new ArrayList<>();
+        if (siteName != null && !siteName.isBlank()) {
+            result.add(siteName.trim());
+        }
+        for (String keyword : configuredKeywords(configuredKeywords)) {
+            if (result.size() >= 20) {
+                break;
+            }
+            if (!result.contains(keyword)) {
+                result.add(keyword);
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private List<String> configuredKeywords(String configuredKeywords) {
+        if (configuredKeywords == null || configuredKeywords.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(configuredKeywords.split("[,，;；\\r\\n]+"))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> value.length() > 100 ? value.substring(0, 100) : value)
+                .distinct()
+                .limit(20)
+                .toList();
     }
 
     private String resolveNodeName(String nodeId) {
@@ -100,15 +175,22 @@ public class DistributedLinkProbeService {
         private final String nodeId;
         private final String requestId;
         private final CompletableFuture<LinkProbeResult> future;
+        private final ProbeContext context;
 
         private PendingNodeProbe(
                 String nodeId,
                 String requestId,
-                CompletableFuture<LinkProbeResult> future
+                CompletableFuture<LinkProbeResult> future,
+                ProbeContext context
         ) {
             this.nodeId = nodeId;
             this.requestId = requestId;
             this.future = future;
+            this.context = context;
         }
+    }
+
+    private record ProbeContext(String checkedUrl, String targetName, String siteUrl, String siteName,
+                                List<String> expectedKeywords) {
     }
 }

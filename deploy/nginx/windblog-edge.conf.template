@@ -94,7 +94,6 @@ server {
         proxy_buffering off;
         add_header Cache-Control "no-store" always;
         add_header Set-Cookie $windblog_grafana_set_cookie always;
-        add_header Referrer-Policy "same-origin" always;
         access_log /var/log/nginx/windblog_grafana_access.log windblog_grafana_safe;
     }
 

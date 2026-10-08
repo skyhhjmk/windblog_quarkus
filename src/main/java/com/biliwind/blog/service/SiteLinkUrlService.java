@@ -38,6 +38,11 @@ public class SiteLinkUrlService {
         return urlFor(region);
     }
 
+    public String currentSiteName() {
+        String title = configManager.getString("site_info", "title", "WindBlog");
+        return title == null || title.isBlank() ? "WindBlog" : title.trim();
+    }
+
     public String urlFor(BlogRegion region) {
         JsonNode siteInfo = configManager.get("site_info");
         BlogRegion selectedRegion = region == null ? BlogRegion.GLOBAL : region;

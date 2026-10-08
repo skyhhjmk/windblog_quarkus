@@ -10,7 +10,9 @@ import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Path("/api/admin/tags")
 @Produces(MediaType.APPLICATION_JSON)
@@ -35,12 +37,14 @@ public class AdminTagController {
     }
 
     @GET
+    @Transactional
     @Operation(summary = "所有标签")
     public List<AdminTagItem> list() {
         List<com.biliwind.blog.model.Tag> tags = com.biliwind.blog.model.Tag.listAll(Sort.by("createdAt").descending());
+        Map<Long, Long> postCounts = loadPostCounts(tags);
         List<AdminTagItem> items = new java.util.ArrayList<>();
         for (com.biliwind.blog.model.Tag t : tags) {
-            items.add(toItem(t));
+            items.add(toItem(t, postCounts.getOrDefault(t.id, 0L)));
         }
         return items;
     }
@@ -107,11 +111,37 @@ public class AdminTagController {
     }
 
     private AdminTagItem toItem(com.biliwind.blog.model.Tag t) {
+        return toItem(t, loadPostCounts(List.of(t)).getOrDefault(t.id, 0L));
+    }
+
+    private AdminTagItem toItem(com.biliwind.blog.model.Tag t, Long postCount) {
         return new AdminTagItem(
                 t.id,
                 t.slug,
                 t.name,
                 t.description,
-                t.createdAt);
+                t.createdAt,
+                postCount);
+    }
+
+    private Map<Long, Long> loadPostCounts(List<com.biliwind.blog.model.Tag> tags) {
+        if (tags.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> tagIds = tags.stream().map(tag -> tag.id).toList();
+        Map<Long, Long> postCounts = new HashMap<>();
+        List<Object[]> rows = com.biliwind.blog.model.PostTag.getEntityManager().createQuery(
+                        "select tag.id, count(post.id) from PostTag "
+                                + "where tag.id in ?1 and post.status = ?2 and post.deletedAt is null "
+                                + "and post.visibility = 0 and post.publishedRevision is not null group by tag.id",
+                        Object[].class)
+                .setParameter(1, tagIds)
+                .setParameter(2, com.biliwind.blog.model.PostStatus.PUBLISHED)
+                .getResultList();
+        for (Object[] row : rows) {
+            postCounts.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        return postCounts;
     }
 }

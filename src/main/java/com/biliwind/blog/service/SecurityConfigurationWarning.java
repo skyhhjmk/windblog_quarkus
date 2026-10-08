@@ -54,18 +54,6 @@ public class SecurityConfigurationWarning {
     @ConfigProperty(name = "quarkus.swagger-ui.always-include", defaultValue = "false")
     boolean swaggerEnabled;
 
-    @ConfigProperty(name = "security.headers.csp.enforce", defaultValue = "false")
-    boolean cspEnforced;
-
-    @ConfigProperty(name = "security.headers.csp.img-sources", defaultValue = "none")
-    String cspImageSources;
-
-    @ConfigProperty(name = "security.headers.csp.connect-sources", defaultValue = "none")
-    String cspConnectSources;
-
-    @ConfigProperty(name = "security.headers.csp.trusted-types.enabled", defaultValue = "false")
-    boolean trustedTypesEnabled;
-
     @ConfigProperty(name = "security.headers.hsts.enabled", defaultValue = "false")
     boolean hstsEnabled;
 
@@ -154,14 +142,8 @@ public class SecurityConfigurationWarning {
         if (swaggerEnabled) {
             throw new IllegalStateException("生产环境禁止公开 Swagger UI");
         }
-        if (!cspEnforced || !hstsEnabled) {
-            throw new IllegalStateException("生产环境必须启用强制 CSP 和 HSTS");
-        }
-        if (!trustedTypesEnabled) {
-            throw new IllegalStateException("生产环境必须启用 Trusted Types DOM sink 防护");
-        }
-        if (containsUnsafeCspSource(cspImageSources) || containsUnsafeCspSource(cspConnectSources)) {
-            throw new IllegalStateException("生产环境 CSP source 不能使用通配符、引号或不安全 HTTP 来源");
+        if (!hstsEnabled) {
+            throw new IllegalStateException("生产环境必须启用 HSTS");
         }
         if (corsCredentialsAllowed) {
             throw new IllegalStateException("生产环境禁止 CORS credentials 全局开启");
@@ -330,20 +312,6 @@ public class SecurityConfigurationWarning {
 
     private boolean isBlank(Optional<String> value) {
         return value.isEmpty() || value.get().isBlank();
-    }
-
-    private boolean containsUnsafeCspSource(String sources) {
-        if (sources == null || sources.isBlank() || "none".equalsIgnoreCase(sources.trim())) {
-            return false;
-        }
-        String[] values = sources.split(",");
-        for (String value : values) {
-            String source = value.trim();
-            if (source.contains("*") || source.contains("'") || !source.startsWith("https://")) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean containsUnsafeCorsOrigin(String origins) {

@@ -46,7 +46,11 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
      * @param keyword    关键词（匹配 slug）
      * @return 文章查询对象
      */
-    public io.quarkus.hibernate.orm.panache.PanacheQuery<Post> findAdminPosts(Short status, Long categoryId, String keyword) {
+    public io.quarkus.hibernate.orm.panache.PanacheQuery<Post> findAdminPosts(
+            Short status,
+            Long categoryId,
+            String keyword,
+            String sortBy) {
         StringBuilder where = new StringBuilder("deletedAt is null");
         java.util.Map<String, Object> parameters = new java.util.HashMap<>();
 
@@ -73,6 +77,13 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
             parameters.put("keyword", "%" + keyword.trim().toLowerCase() + "%");
         }
 
-        return find(where.toString(), io.quarkus.panache.common.Sort.by("updatedAt").descending(), parameters);
+        String orderBy = switch (sortBy == null ? "id" : sortBy) {
+            case "createdAt" -> "createdAt desc, id desc";
+            case "updatedAt" -> "updatedAt desc, id desc";
+            case "publishedAt" -> "publishedAt desc nulls last, id desc";
+            default -> "id desc";
+        };
+
+        return find(where + " order by " + orderBy, parameters);
     }
 }

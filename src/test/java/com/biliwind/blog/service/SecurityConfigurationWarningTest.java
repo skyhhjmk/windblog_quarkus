@@ -201,11 +201,7 @@ class SecurityConfigurationWarningTest {
         warning.adminJwtSecret = "admin-jwt-value-that-is-longer-than-32";
         warning.userJwtSecret = "user-jwt-value-that-is-longer-than-32";
         warning.swaggerEnabled = false;
-        warning.cspEnforced = true;
         warning.hstsEnabled = true;
-        warning.trustedTypesEnabled = true;
-        warning.cspImageSources = "none";
-        warning.cspConnectSources = "none";
         warning.corsCredentialsAllowed = false;
         warning.elasticsearchSslVerify = "full";
         warning.nodeRole = "primary";

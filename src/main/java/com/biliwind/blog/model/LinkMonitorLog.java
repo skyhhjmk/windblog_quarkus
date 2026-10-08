@@ -30,6 +30,11 @@ public class LinkMonitorLog extends PanacheEntityBase {
     @Column(name = "check_time", nullable = false)
     public OffsetDateTime checkTime;
 
+    /** 检测来源：自动定时检测或管理员手动检测 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "check_source", nullable = false, length = 16)
+    public LinkMonitorSource checkSource;
+
     /**
      * 同一轮多节点检测批次ID
      */

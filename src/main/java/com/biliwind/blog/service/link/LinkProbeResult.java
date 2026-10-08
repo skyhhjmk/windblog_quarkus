@@ -5,6 +5,10 @@ public record LinkProbeResult(
         int statusCode,
         int loadTimeMs,
         boolean backlinkFound,
-        String errorMessage
+        String errorMessage,
+        LinkProbeEvidence evidence
 ) {
+    public LinkProbeResult(boolean reachable, int statusCode, int loadTimeMs, boolean backlinkFound, String errorMessage) {
+        this(reachable, statusCode, loadTimeMs, backlinkFound, errorMessage, LinkProbeEvidence.unavailable(""));
+    }
 }

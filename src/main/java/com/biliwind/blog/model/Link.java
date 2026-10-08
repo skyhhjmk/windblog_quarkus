@@ -82,6 +82,10 @@ public class Link extends PanacheEntityBase {
     @Column(name = "backlink_status", nullable = false, length = 16)
     public String backlinkStatus;
 
+    /** 最近一次检测到的关键词欺诈状态：UNKNOWN、CLEAN、DETECTED */
+    @Column(name = "keyword_fraud_status", nullable = false, length = 16)
+    public String keywordFraudStatus = "UNKNOWN";
+
     /**
      * 最近一次多节点监控完成时间
      */
