@@ -24,8 +24,6 @@ import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -1265,27 +1263,8 @@ public class MediaManagementService {
     }
 
     private void processImage(Media media, Path target, Map<String, Object> metadata) {
-        BufferedImage image;
-        try {
-            image = ImageIO.read(target.toFile());
-        } catch (IOException exception) {
-            applyHeaderDimensions(media, target, metadata);
-            recordProcessingWarning(metadata, "图片", exception);
-            Log.warn("图片变体生成失败，保留原图: " + exception.getMessage());
-            return;
-        }
-        if (image == null) {
-            applyHeaderDimensions(media, target, metadata);
-            IOException exception = new IOException("无法读取原图片: " + target);
-            recordProcessingWarning(metadata, "图片", exception);
-            Log.warn("图片变体生成失败，保留原图: " + exception.getMessage());
-            return;
-        }
-
-        media.width = image.getWidth();
-        media.height = image.getHeight();
-        metadata.put("width", image.getWidth());
-        metadata.put("height", image.getHeight());
+        // 从文件头读取尺寸，避免依赖 native 镜像的 ImageIO SPI；JDK 默认也没有 WebP 解码器。
+        applyHeaderDimensions(media, target, metadata);
 
         String baseName = media.storageKey;
         int idx = media.storageKey.lastIndexOf('.');
