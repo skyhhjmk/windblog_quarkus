@@ -7,6 +7,7 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ConfigManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -326,6 +327,7 @@ public class CommentApiController {
             String anchorDataJson) {
     }
 
+    @RegisterForReflection
     public record CommentNode(
             Long id,
             Long parentId,
