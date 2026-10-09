@@ -9,6 +9,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 @TemplateData(namespace = "config")
@@ -149,6 +150,10 @@ public class ConfigTemplateData {
 
     public static String footerHtml() {
         return regionalString("site_footer", "custom_html", "");
+    }
+
+    public static List<RegionRuleService.SiteDomainLink> siteDomains() {
+        return Arc.container().instance(RegionRuleService.class).get().siteDomains();
     }
 
     public static boolean analyticsTrackingEnabled() {

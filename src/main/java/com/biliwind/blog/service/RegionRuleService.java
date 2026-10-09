@@ -7,9 +7,12 @@ import com.biliwind.blog.service.edge.NodeRoleService;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import jakarta.inject.Inject;
 
 /**
@@ -70,6 +73,62 @@ public class RegionRuleService {
             return nodeRegion;
         }
         return BlogRegion.GLOBAL;
+    }
+
+    /**
+     * Returns the enabled domain rules as canonical site links for the public footer.
+     * A root domain and its www rule represent one site, and links always use www.
+     */
+    public List<SiteDomainLink> siteDomains() {
+        Map<String, SiteDomainLink> sitesByDomain = new LinkedHashMap<>();
+        for (RuleView rule : getRules()) {
+            if (!isRuleType(rule, "domain") || rule.region() == null) {
+                continue;
+            }
+            String domain = canonicalSiteDomain(rule.pattern());
+            if (domain.isBlank()) {
+                continue;
+            }
+            String wwwDomain = "www." + domain;
+            sitesByDomain.putIfAbsent(domain, new SiteDomainLink(
+                    rule.region().name() + " Area | " + wwwDomain,
+                    "https://" + wwwDomain));
+        }
+        return List.copyOf(sitesByDomain.values());
+    }
+
+    private String canonicalSiteDomain(String pattern) {
+        if (pattern == null || pattern.isBlank()) {
+            return "";
+        }
+        String candidate = pattern.trim();
+        if (candidate.startsWith("*.")) {
+            candidate = candidate.substring(2);
+        }
+        if (candidate.startsWith("@.")) {
+            candidate = candidate.substring(2);
+        } else if (candidate.startsWith("@")) {
+            candidate = candidate.substring(1);
+        }
+        if (!candidate.contains("://")) {
+            candidate = "https://" + candidate;
+        }
+        try {
+            URI uri = URI.create(candidate);
+            if (uri.getHost() == null || uri.getUserInfo() != null) {
+                return "";
+            }
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            while (host.endsWith(".")) {
+                host = host.substring(0, host.length() - 1);
+            }
+            return host.startsWith("www.") ? host.substring(4) : host;
+        } catch (IllegalArgumentException ignored) {
+            return "";
+        }
+    }
+
+    public record SiteDomainLink(String label, String url) {
     }
 
     private boolean isRuleType(RuleView rule, String expectedType) {

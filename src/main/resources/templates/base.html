@@ -287,12 +287,10 @@
             {/if}
         </div>
         <div class="flex gap-6 items-center">
-            {#if config:social('github')}
-                <a href="{config:social('github')}" target="_blank"
-                   class="meta-mono hover:text-accent transition-colors">GitHub</a>
-            {/if}
-            <a href="/feed" class="meta-mono hover:text-accent transition-colors">RSS 订阅</a>
-            <a href="/sitemap.xml" class="meta-mono hover:text-accent transition-colors">站点地图</a>
+            <a href="https://github.com/skyhhjmk/windblog_quarkus" target="_blank" rel="noopener noreferrer"
+               class="meta-mono hover:text-accent transition-colors">GitHub</a>
+            <a href="/feed" target="_blank" rel="noopener noreferrer" class="meta-mono hover:text-accent transition-colors">RSS 订阅</a>
+            <a href="/sitemap.xml" target="_blank" rel="noopener noreferrer" class="meta-mono hover:text-accent transition-colors">站点地图</a>
             {#if config:analyticsTrackingPrivacyPreferencesEnabled}
                 <details class="relative">
                     <summary class="meta-mono cursor-pointer hover:text-accent transition-colors">隐私偏好</summary>
@@ -303,6 +301,15 @@
             {/if}
         </div>
     </div>
+    {#if config:siteDomains}
+        <div class="max-w-1400 mx-auto px-6 mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+            <span class="meta-mono text-meta">站点列表</span>
+            {#for site in config:siteDomains}
+                <a href="{site.url}" target="_blank" rel="noopener noreferrer"
+                   class="meta-mono hover:text-accent transition-colors">{site.label}</a>
+            {/for}
+        </div>
+    {/if}
     {#if config:footerHtml}
         <div class="max-w-1400 mx-auto px-6 mt-8">
             {config:footerHtml.raw}
