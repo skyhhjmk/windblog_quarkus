@@ -5,6 +5,7 @@ import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Tag;
+import io.quarkus.qute.TemplateData;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -116,6 +117,7 @@ public class FeedService {
         return "";
     }
 
+    @TemplateData
     public record FeedPostView(
             String slug,
             String title,
@@ -125,6 +127,7 @@ public class FeedService {
             String author
     ) {}
 
+    @TemplateData
     public record SitemapUrlView(
             String loc,
             String lastmod
