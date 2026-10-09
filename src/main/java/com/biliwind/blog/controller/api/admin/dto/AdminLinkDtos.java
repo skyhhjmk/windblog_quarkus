@@ -40,6 +40,15 @@ public class AdminLinkDtos {
                         String monitoringKeywords,
                         boolean hideWhenKeywordFraudDetected,
                         String keywordFraudStatus,
+                        String displayRegion,
+                        java.util.List<String> backlinkCheckUrls,
+                        boolean notifyOnBacklinkMissing,
+                        int backlinkMissingGraceDays,
+                        boolean notifyOnOffline,
+                        int offlineGraceDays,
+                        boolean notifyOnKeywordFraud,
+                        int keywordFraudGraceDays,
+                        String autoHideMessage,
                         OffsetDateTime createdAt) {
         }
 
@@ -76,7 +85,15 @@ public class AdminLinkDtos {
                         Boolean hideWhenBacklinkMissing,
                         Boolean hideWhenOffline,
                         String monitoringKeywords,
-                        Boolean hideWhenKeywordFraudDetected) {
+                        Boolean hideWhenKeywordFraudDetected,
+                        String displayRegion,
+                        java.util.List<String> backlinkCheckUrls,
+                        Boolean notifyOnBacklinkMissing,
+                        Integer backlinkMissingGraceDays,
+                        Boolean notifyOnOffline,
+                        Integer offlineGraceDays,
+                        Boolean notifyOnKeywordFraud,
+                        Integer keywordFraudGraceDays) {
         }
 
         public record LinkUpdateRequest(
@@ -101,7 +118,15 @@ public class AdminLinkDtos {
                         Boolean hideWhenBacklinkMissing,
                         Boolean hideWhenOffline,
                         String monitoringKeywords,
-                        Boolean hideWhenKeywordFraudDetected) {
+                        Boolean hideWhenKeywordFraudDetected,
+                        String displayRegion,
+                        java.util.List<String> backlinkCheckUrls,
+                        Boolean notifyOnBacklinkMissing,
+                        Integer backlinkMissingGraceDays,
+                        Boolean notifyOnOffline,
+                        Integer offlineGraceDays,
+                        Boolean notifyOnKeywordFraud,
+                        Integer keywordFraudGraceDays) {
         }
 
         public record AdminLinkMonitorLogItem(

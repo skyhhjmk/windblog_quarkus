@@ -17,7 +17,8 @@ public record LinkProbeEvidence(
         boolean keywordFraudDetected,
         List<String> fraudReasons,
         int domParseErrorCount,
-        boolean detectorSupported
+        boolean detectorSupported,
+        List<String> expectedSiteUrls
 ) {
     public LinkProbeEvidence {
         expectedKeywords = safeList(expectedKeywords);
@@ -25,6 +26,17 @@ public record LinkProbeEvidence(
         matchedBacklinkUrls = safeList(matchedBacklinkUrls);
         matchedAnchorTexts = safeList(matchedAnchorTexts);
         fraudReasons = safeList(fraudReasons);
+        expectedSiteUrls = safeList(expectedSiteUrls);
+    }
+
+    public LinkProbeEvidence(String checkedUrl, String targetName, String siteUrl, String siteName,
+                             List<String> expectedKeywords, List<String> matchedKeywords,
+                             List<String> matchedBacklinkUrls, List<String> matchedAnchorTexts,
+                             boolean keywordFraudDetected, List<String> fraudReasons,
+                             int domParseErrorCount, boolean detectorSupported) {
+        this(checkedUrl, targetName, siteUrl, siteName, expectedKeywords, matchedKeywords, matchedBacklinkUrls,
+                matchedAnchorTexts, keywordFraudDetected, fraudReasons, domParseErrorCount, detectorSupported,
+                siteUrl == null || siteUrl.isBlank() ? List.of() : List.of(siteUrl));
     }
 
     public static LinkProbeEvidence unavailable(String checkedUrl) {
@@ -37,6 +49,7 @@ public record LinkProbeEvidence(
         details.put("checkedUrl", checkedUrl);
         details.put("targetName", targetName);
         details.put("siteUrl", siteUrl);
+        details.put("expectedSiteUrls", expectedSiteUrls);
         details.put("siteName", siteName);
         details.put("expectedKeywords", expectedKeywords);
         details.put("matchedKeywords", matchedKeywords);

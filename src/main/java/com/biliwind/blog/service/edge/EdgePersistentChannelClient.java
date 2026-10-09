@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -280,8 +281,11 @@ public class EdgePersistentChannelClient {
 
     private void handleLinkProbeRequest(EdgeChannelMessage message) {
         LinkProbeRequest request = message.getLinkProbeRequest();
+        List<String> siteUrls = request.getSiteUrlsCount() == 0
+                ? (request.getSiteUrl().isBlank() ? List.of() : List.of(request.getSiteUrl()))
+                : request.getSiteUrlsList();
         com.biliwind.blog.service.link.LinkProbeResult probeResult =
-                linkProbeService.probe(request.getUrl(), request.getSiteUrl(), request.getSiteName(),
+                linkProbeService.probe(request.getUrl(), siteUrls, request.getSiteName(),
                         String.join(",", request.getMonitoringKeywordsList()), request.getTargetName());
 
         com.biliwind.blog.service.link.LinkProbeEvidence evidence = probeResult.evidence();
@@ -304,7 +308,8 @@ public class EdgePersistentChannelClient {
                     .setKeywordFraudDetected(evidence.keywordFraudDetected())
                     .addAllFraudReasons(evidence.fraudReasons())
                     .setDomParseErrorCount(evidence.domParseErrorCount())
-                    .setEvidenceSupported(evidence.detectorSupported());
+                    .setEvidenceSupported(evidence.detectorSupported())
+                    .addAllExpectedSiteUrls(evidence.expectedSiteUrls());
         }
         LinkProbeResponse response = responseBuilder.build();
         EdgeChannelMessage responseMessage = EdgeChannelMessage.newBuilder()

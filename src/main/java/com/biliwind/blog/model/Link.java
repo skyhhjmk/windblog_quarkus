@@ -137,6 +137,10 @@ public class Link extends PanacheEntityBase {
     @Column(columnDefinition = "jsonb")
     public Map<String, Object> settings;
 
+    /** Public status badge derived from the current auto-hide grace period. */
+    @Transient
+    public String publicMonitorLabel;
+
     /** 创建时间 */
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp

@@ -25,25 +25,28 @@ public class DistributedLinkProbeService {
     @Inject
     PrimaryEdgeChannelRegistry channelRegistry;
 
-    public List<NodeLinkProbeResult> probeOnlineEdgeNodes(String url, String siteUrl, String siteName,
+    public List<NodeLinkProbeResult> probeOnlineEdgeNodes(String url, List<String> siteUrls, String siteName,
                                                           String configuredKeywords, String targetName) {
         List<String> nodeIds = channelRegistry.listOnlineNodeIds();
         List<PendingNodeProbe> pendingNodeProbes = new ArrayList<>();
         List<String> expectedKeywords = expectedKeywords(siteName, configuredKeywords);
+        List<String> safeSiteUrls = siteUrls == null ? List.of() : List.copyOf(siteUrls);
+        String primarySiteUrl = safeSiteUrls.isEmpty() ? "" : safeSiteUrls.get(0);
 
         for (String nodeId : nodeIds) {
             String requestId = UUID.randomUUID().toString();
             CompletableFuture<LinkProbeResult> future = new CompletableFuture<>();
             pendingRequests.put(requestId, future);
             pendingContexts.put(requestId,
-                    new ProbeContext(url, targetName, siteUrl, siteName, expectedKeywords));
+                    new ProbeContext(url, targetName, primarySiteUrl, safeSiteUrls, siteName, expectedKeywords));
 
             LinkProbeRequest probeRequest = LinkProbeRequest.newBuilder()
                     .setUrl(url)
-                    .setSiteUrl(siteUrl)
+                    .setSiteUrl(primarySiteUrl)
                     .setTargetName(targetName == null ? "" : targetName)
                     .setSiteName(siteName == null ? "" : siteName)
                     .addAllMonitoringKeywords(configuredKeywords(configuredKeywords))
+                    .addAllSiteUrls(safeSiteUrls)
                     .build();
             EdgeChannelMessage channelMessage = EdgeChannelMessage.newBuilder()
                     .setRequestId(requestId)
@@ -95,6 +98,9 @@ public class DistributedLinkProbeService {
         List<String> expectedKeywords = response.getExpectedKeywordsCount() == 0
                 ? context == null ? List.of() : context.expectedKeywords()
                 : response.getExpectedKeywordsList();
+        List<String> expectedSiteUrls = response.getExpectedSiteUrlsCount() == 0
+                ? context == null ? List.of() : context.expectedSiteUrls()
+                : response.getExpectedSiteUrlsList();
         LinkProbeEvidence evidence = new LinkProbeEvidence(
                 checkedUrl,
                 targetName,
@@ -107,7 +113,8 @@ public class DistributedLinkProbeService {
                 response.getKeywordFraudDetected(),
                 response.getFraudReasonsList(),
                 response.getDomParseErrorCount(),
-                response.getEvidenceSupported());
+                response.getEvidenceSupported(),
+                expectedSiteUrls);
         LinkProbeResult result = new LinkProbeResult(
                 response.getReachable(),
                 response.getStatusCode(),
@@ -129,7 +136,7 @@ public class DistributedLinkProbeService {
             LinkProbeEvidence evidence = context == null ? LinkProbeEvidence.unavailable("")
                     : new LinkProbeEvidence(context.checkedUrl(), context.targetName(), context.siteUrl(),
                             context.siteName(), context.expectedKeywords(), List.of(), List.of(), List.of(),
-                            false, List.of(), 0, false);
+                            false, List.of(), 0, false, context.expectedSiteUrls());
             return new LinkProbeResult(false, 0, 15000, false, "节点探测超时或通道断开", evidence);
         }
     }
@@ -190,7 +197,8 @@ public class DistributedLinkProbeService {
         }
     }
 
-    private record ProbeContext(String checkedUrl, String targetName, String siteUrl, String siteName,
+    private record ProbeContext(String checkedUrl, String targetName, String siteUrl, List<String> expectedSiteUrls,
+                                String siteName,
                                 List<String> expectedKeywords) {
     }
 }

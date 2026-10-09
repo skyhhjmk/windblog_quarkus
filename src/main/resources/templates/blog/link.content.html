@@ -68,6 +68,9 @@
                                     <a href="{link.url}" target="{link.target ?: '_self'}"
                                        class="link-anchor">{link.name}</a>
                                 </h2>
+                                {#if link.publicMonitorLabel}
+                                    <span class="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium {#if link.publicMonitorLabel == '无法访问'}bg-amber-100 text-amber-800{#else}bg-red-100 text-red-700{/if}">{link.publicMonitorLabel}</span>
+                                {/if}
                                 <p class="text-xs meta-mono text-gray-600 truncate">{link.url}</p>
                             </div>
                         </div>

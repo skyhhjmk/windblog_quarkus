@@ -72,7 +72,18 @@ public class EmailDeliveryService {
     @Transactional
     public void queueWithRoute(String scenario, String recipientAddress, String subject, String htmlContent,
                                Long channelGroupId, Long channelId) {
-        String resolvedHtml = resolveTemplateHtml(scenario, htmlContent);
+        queueInternal(scenario, recipientAddress, subject, htmlContent, channelGroupId, channelId, true);
+    }
+
+    /** Queues already-rendered HTML without replacing its content with a scenario template. */
+    @Transactional
+    public void queueRenderedHtml(String scenario, String recipientAddress, String subject, String htmlContent) {
+        queueInternal(scenario, recipientAddress, subject, htmlContent, null, null, false);
+    }
+
+    private void queueInternal(String scenario, String recipientAddress, String subject, String htmlContent,
+                               Long channelGroupId, Long channelId, boolean resolveTemplate) {
+        String resolvedHtml = resolveTemplate ? resolveTemplateHtml(scenario, htmlContent) : htmlContent;
         Long resolvedChannelGroupId = channelGroupId;
         Long resolvedChannelId = channelId;
         if (resolvedChannelGroupId == null && resolvedChannelId == null) {

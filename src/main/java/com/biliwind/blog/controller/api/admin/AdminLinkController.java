@@ -22,6 +22,8 @@ import org.jsoup.nodes.Element;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -398,6 +400,10 @@ public class AdminLinkController {
                 req.hideWhenOffline() == null ? false : req.hideWhenOffline(),
                 req.monitoringKeywords(),
                 req.hideWhenKeywordFraudDetected() == null ? false : req.hideWhenKeywordFraudDetected());
+        applyRegionalLinkSettings(l, req.displayRegion() == null ? "global" : req.displayRegion(),
+                req.backlinkCheckUrls(), req.notifyOnBacklinkMissing(), req.backlinkMissingGraceDays(),
+                req.notifyOnOffline(), req.offlineGraceDays(), req.notifyOnKeywordFraud(),
+                req.keywordFraudGraceDays());
         l.publicToken = linkPublicTokenService.ensurePublicToken(l);
 
         l.createdAt = OffsetDateTime.now();
@@ -466,6 +472,19 @@ public class AdminLinkController {
                     req.hideWhenKeywordFraudDetected());
         }
 
+        if (req.displayRegion() != null
+                || req.backlinkCheckUrls() != null
+                || req.notifyOnBacklinkMissing() != null
+                || req.backlinkMissingGraceDays() != null
+                || req.notifyOnOffline() != null
+                || req.offlineGraceDays() != null
+                || req.notifyOnKeywordFraud() != null
+                || req.keywordFraudGraceDays() != null) {
+            applyRegionalLinkSettings(l, req.displayRegion(), req.backlinkCheckUrls(),
+                    req.notifyOnBacklinkMissing(), req.backlinkMissingGraceDays(), req.notifyOnOffline(),
+                    req.offlineGraceDays(), req.notifyOnKeywordFraud(), req.keywordFraudGraceDays());
+        }
+
         linkPublicTokenService.ensurePublicToken(l);
         l.updatedAt = OffsetDateTime.now();
         auditService.log("link", String.valueOf(l.id), "update", null, java.util.Map.of("name", l.name, "url", l.url)); // For simplicity, just log key info
@@ -521,7 +540,105 @@ public class AdminLinkController {
                 LinkMonitorPolicy.monitoringKeywords(l),
                 LinkMonitorPolicy.shouldHideWhenKeywordFraudDetected(l),
                 l.keywordFraudStatus == null ? "UNKNOWN" : l.keywordFraudStatus,
+                LinkMonitorPolicy.displayRegion(l).getCode(),
+                LinkMonitorPolicy.backlinkCheckUrls(l),
+                LinkMonitorPolicy.shouldNotify(l, LinkMonitorPolicy.BACKLINK_MISSING),
+                LinkMonitorPolicy.graceDays(l, LinkMonitorPolicy.BACKLINK_MISSING),
+                LinkMonitorPolicy.shouldNotify(l, LinkMonitorPolicy.OFFLINE),
+                LinkMonitorPolicy.graceDays(l, LinkMonitorPolicy.OFFLINE),
+                LinkMonitorPolicy.shouldNotify(l, LinkMonitorPolicy.KEYWORD_FRAUD),
+                LinkMonitorPolicy.graceDays(l, LinkMonitorPolicy.KEYWORD_FRAUD),
+                LinkMonitorPolicy.autoHideMessage(l),
                 l.createdAt);
+    }
+
+    private void applyRegionalLinkSettings(
+            Link link,
+            String displayRegion,
+            List<String> backlinkCheckUrls,
+            Boolean notifyOnBacklinkMissing,
+            Integer backlinkMissingGraceDays,
+            Boolean notifyOnOffline,
+            Integer offlineGraceDays,
+            Boolean notifyOnKeywordFraud,
+            Integer keywordFraudGraceDays) {
+        Map<String, Object> settings = link.settings == null
+                ? new HashMap<>()
+                : new HashMap<>(link.settings);
+        if (displayRegion != null) {
+            String normalizedRegion = displayRegion.trim().toLowerCase(java.util.Locale.ROOT);
+            boolean knownRegion = java.util.Arrays.stream(BlogRegion.values())
+                    .anyMatch(region -> region.getCode().equals(normalizedRegion)
+                            || ("china".equals(normalizedRegion) && region == BlogRegion.CN));
+            if (!knownRegion) {
+                throw new BadRequestException("友链展示区域无效");
+            }
+            settings.put("displayRegion", BlogRegion.fromCode(normalizedRegion).getCode());
+        }
+        if (backlinkCheckUrls != null) {
+            if (backlinkCheckUrls.size() > 20) {
+                throw new BadRequestException("检测链接最多设置 20 个");
+            }
+            List<String> normalizedUrls = new ArrayList<>();
+            for (String value : backlinkCheckUrls) {
+                if (value == null || value.isBlank()) {
+                    continue;
+                }
+                String normalized = value.trim();
+                if (normalized.length() > 2000) {
+                    throw new BadRequestException("单个检测链接不能超过 2000 个字符");
+                }
+                try {
+                    URI uri = URI.create(normalized);
+                    String scheme = uri.getScheme();
+                    if (uri.getHost() == null || uri.getUserInfo() != null
+                            || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                        throw new IllegalArgumentException("invalid URL");
+                    }
+                } catch (IllegalArgumentException exception) {
+                    throw new BadRequestException("检测链接必须是有效的 HTTP 或 HTTPS 地址");
+                }
+                if (!normalizedUrls.contains(normalized)) {
+                    normalizedUrls.add(normalized);
+                }
+            }
+            if (normalizedUrls.isEmpty()) {
+                settings.remove("backlinkCheckUrls");
+            } else {
+                settings.put("backlinkCheckUrls", List.copyOf(normalizedUrls));
+            }
+        }
+
+        putBooleanSetting(settings, "notifyOnBacklinkMissing", notifyOnBacklinkMissing);
+        putBooleanSetting(settings, "notifyOnOffline", notifyOnOffline);
+        putBooleanSetting(settings, "notifyOnKeywordFraud", notifyOnKeywordFraud);
+        putGraceSetting(settings, "backlinkMissingGraceDays", backlinkMissingGraceDays);
+        putGraceSetting(settings, "offlineGraceDays", offlineGraceDays);
+        putGraceSetting(settings, "keywordFraudGraceDays", keywordFraudGraceDays);
+
+        boolean requestsNotification = Boolean.TRUE.equals(settings.get("notifyOnBacklinkMissing"))
+                || Boolean.TRUE.equals(settings.get("notifyOnOffline"))
+                || Boolean.TRUE.equals(settings.get("notifyOnKeywordFraud"));
+        if (requestsNotification && (link.email == null || link.email.isBlank())) {
+            throw new BadRequestException("启用站长通知前，请先填写友链邮箱");
+        }
+        link.settings = settings;
+    }
+
+    private void putBooleanSetting(Map<String, Object> settings, String key, Boolean value) {
+        if (value != null) {
+            settings.put(key, value);
+        }
+    }
+
+    private void putGraceSetting(Map<String, Object> settings, String key, Integer value) {
+        if (value == null) {
+            return;
+        }
+        if (value < 0 || value > LinkMonitorPolicy.MAX_GRACE_DAYS) {
+            throw new BadRequestException("缓冲期必须在 0 到 365 天之间");
+        }
+        settings.put(key, value);
     }
 
     private void applyMonitoringSettings(
@@ -570,7 +687,37 @@ public class AdminLinkController {
         if (hideWhenKeywordFraudDetected != null) {
             settings.put("hideWhenKeywordFraudDetected", hideWhenKeywordFraudDetected);
         }
+        if (hideWhenBacklinkMissing != null
+                && LinkMonitorPolicy.shouldHideWhenBacklinkMissing(link) != hideWhenBacklinkMissing) {
+            resetLifecycleState(settings, LinkMonitorPolicy.BACKLINK_MISSING);
+        }
+        if (hideWhenOffline != null
+                && LinkMonitorPolicy.shouldHideWhenOffline(link) != hideWhenOffline) {
+            resetLifecycleState(settings, LinkMonitorPolicy.OFFLINE);
+        }
+        if (hideWhenKeywordFraudDetected != null
+                && LinkMonitorPolicy.shouldHideWhenKeywordFraudDetected(link) != hideWhenKeywordFraudDetected) {
+            resetLifecycleState(settings, LinkMonitorPolicy.KEYWORD_FRAUD);
+        }
         link.settings = settings;
+    }
+
+    private void resetLifecycleState(Map<String, Object> settings, String condition) {
+        Object rawLifecycle = settings.get("autoHideLifecycle");
+        if (!(rawLifecycle instanceof Map<?, ?> values)) {
+            return;
+        }
+        Map<String, Object> lifecycle = new HashMap<>();
+        values.forEach((key, value) -> {
+            if (key instanceof String stringKey && !condition.equals(stringKey)) {
+                lifecycle.put(stringKey, value);
+            }
+        });
+        if (lifecycle.isEmpty()) {
+            settings.remove("autoHideLifecycle");
+        } else {
+            settings.put("autoHideLifecycle", lifecycle);
+        }
     }
 
     private String readSetting(Link link, String key) {

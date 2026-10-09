@@ -2,6 +2,8 @@ package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkType;
 import com.biliwind.blog.service.link.LinkMonitorPolicy;
@@ -51,6 +53,9 @@ public class LinkController {
         LanguageContext languageContext;
 
     @Inject
+    RegionContext regionContext;
+
+    @Inject
     @Location("system/go.html")
     Template goTemplate;
 
@@ -90,6 +95,10 @@ public class LinkController {
                                 LinkType.EXTERNAL_ARTICLE)
                         .stream()
                         .filter(LinkMonitorPolicy::isVisibleOnPublicPage)
+                        .filter(item -> LinkMonitorPolicy.isVisibleInRegion(item,
+                                regionContext.getCurrentRegion() == null ? BlogRegion.GLOBAL
+                                        : regionContext.getCurrentRegion()))
+                        .peek(item -> item.publicMonitorLabel = LinkMonitorPolicy.publicMonitorLabel(item))
                         .toList();
                 List<Link> links;
             if (type == null || type.isBlank() || type.equalsIgnoreCase("All")) {
@@ -152,7 +161,9 @@ public class LinkController {
             @PathParam("id") Long id) {
         Link linkEntity = Link.findById(id);
         if (linkEntity == null || linkEntity.status != 1
-                || !LinkMonitorPolicy.isVisibleOnPublicPage(linkEntity)) {
+                || !LinkMonitorPolicy.isVisibleOnPublicPage(linkEntity)
+                || !LinkMonitorPolicy.isVisibleInRegion(linkEntity,
+                regionContext.getCurrentRegion() == null ? BlogRegion.GLOBAL : regionContext.getCurrentRegion())) {
             throw new WebApplicationException(404);
         }
 
@@ -185,7 +196,9 @@ public class LinkController {
             throw new WebApplicationException(404);
         }
 
-        if (linkEntity.status != 1 || !LinkMonitorPolicy.isVisibleOnPublicPage(linkEntity)) {
+        if (linkEntity.status != 1 || !LinkMonitorPolicy.isVisibleOnPublicPage(linkEntity)
+                || !LinkMonitorPolicy.isVisibleInRegion(linkEntity,
+                regionContext.getCurrentRegion() == null ? BlogRegion.GLOBAL : regionContext.getCurrentRegion())) {
             throw new WebApplicationException(404);
         }
 

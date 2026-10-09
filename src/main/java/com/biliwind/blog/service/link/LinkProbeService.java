@@ -36,8 +36,18 @@ public class LinkProbeService {
 
     public LinkProbeResult probe(String url, String siteUrl, String siteName, String configuredKeywords,
                                  String targetName) {
+        return probe(url, siteUrl == null || siteUrl.isBlank() ? List.of() : List.of(siteUrl), siteName,
+                configuredKeywords, targetName);
+    }
+
+    public LinkProbeResult probe(String url, List<String> expectedSiteUrls, String siteName,
+                                 String configuredKeywords, String targetName) {
         long startedAt = System.currentTimeMillis();
         List<String> expectedKeywords = parseKeywords(siteName, configuredKeywords);
+        List<String> normalizedSiteUrls = expectedSiteUrls == null ? List.of()
+                : expectedSiteUrls.stream().filter(value -> value != null && !value.isBlank())
+                .map(String::trim).distinct().toList();
+        String primarySiteUrl = normalizedSiteUrls.isEmpty() ? "" : normalizedSiteUrls.get(0);
         try {
             SafeExternalHttpService.ExternalHttpResponse response = safeExternalHttpService.get(
                     url,
@@ -47,19 +57,22 @@ public class LinkProbeService {
             int loadTimeMs = calculateLoadTime(startedAt);
             boolean reachable = statusCode >= 200 && statusCode < 400;
             if (!reachable) {
-                return result(false, statusCode, loadTimeMs, false, "", url, targetName, siteUrl, siteName,
-                        expectedKeywords, List.of(), List.of(), List.of(), false, List.of(), 0, false);
+                return result(false, statusCode, loadTimeMs, false, "", url, targetName, primarySiteUrl,
+                        normalizedSiteUrls, siteName, expectedKeywords, List.of(), List.of(), List.of(), false,
+                        List.of(), 0, false);
             }
 
             DetectionResult detection = inspectBacklinks(
-                    response.bodyAsText(), url, siteUrl, expectedKeywords);
-            return result(true, statusCode, loadTimeMs, detection.backlinkFound(), "", url, targetName, siteUrl,
-                    siteName, expectedKeywords, detection.matchedKeywords(), detection.matchedUrls(),
+                    response.bodyAsText(), url, normalizedSiteUrls, expectedKeywords);
+            return result(true, statusCode, loadTimeMs, detection.backlinkFound(), "", url, targetName,
+                    primarySiteUrl, normalizedSiteUrls, siteName, expectedKeywords, detection.matchedKeywords(),
+                    detection.matchedUrls(),
                     detection.matchedAnchorTexts(), detection.fraudDetected(), detection.fraudReasons(),
                     detection.domParseErrorCount(), true);
         } catch (Exception exception) {
             return result(false, 0, calculateLoadTime(startedAt), false, "外部地址请求失败", url, targetName,
-                    siteUrl, siteName, expectedKeywords, List.of(), List.of(), List.of(), false, List.of(), 0, false);
+                    primarySiteUrl, normalizedSiteUrls, siteName, expectedKeywords, List.of(), List.of(), List.of(),
+                    false, List.of(), 0, false);
         }
     }
 
@@ -74,13 +87,15 @@ public class LinkProbeService {
 
     private LinkProbeResult result(boolean reachable, int statusCode, int loadTimeMs, boolean backlinkFound,
                                    String errorMessage, String checkedUrl, String targetName, String siteUrl,
-                                   String siteName, List<String> expectedKeywords, List<String> matchedKeywords,
+                                   List<String> expectedSiteUrls, String siteName, List<String> expectedKeywords,
+                                   List<String> matchedKeywords,
                                    List<String> matchedUrls, List<String> matchedAnchorTexts,
                                    boolean fraudDetected, List<String> fraudReasons, int domParseErrorCount,
                                    boolean detectorSupported) {
         LinkProbeEvidence evidence = new LinkProbeEvidence(
                 checkedUrl, targetName, siteUrl, siteName, expectedKeywords, matchedKeywords, matchedUrls,
-                matchedAnchorTexts, fraudDetected, fraudReasons, domParseErrorCount, detectorSupported);
+                matchedAnchorTexts, fraudDetected, fraudReasons, domParseErrorCount, detectorSupported,
+                expectedSiteUrls);
         return new LinkProbeResult(reachable, statusCode, loadTimeMs, backlinkFound, errorMessage, evidence);
     }
 
@@ -89,10 +104,11 @@ public class LinkProbeService {
         return elapsed > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) elapsed;
     }
 
-    private DetectionResult inspectBacklinks(String html, String checkedUrl, String siteUrl,
+    private DetectionResult inspectBacklinks(String html, String checkedUrl, List<String> expectedSiteUrls,
                                               List<String> expectedKeywords) {
-        String expectedHost = readHost(siteUrl);
-        if (expectedHost.isBlank()) {
+        List<String> expectedHosts = expectedSiteUrls.stream().map(this::readHost)
+                .filter(host -> !host.isBlank()).distinct().toList();
+        if (expectedHosts.isEmpty()) {
             return new DetectionResult(false, List.of(), List.of(), List.of(), false,
                     List.of("本站检测地址无效"), 0);
         }
@@ -108,7 +124,7 @@ public class LinkProbeService {
             String absoluteUrl = anchor.attr("abs:href").trim();
             String anchorHost = readHost(absoluteUrl);
             String anchorText = readAnchorText(anchor);
-            if (anchorHost.equalsIgnoreCase(expectedHost) && isVisible(anchor)) {
+            if (expectedHosts.contains(anchorHost) && isVisible(anchor)) {
                 List<String> anchorMatches = matchingKeywords(anchorText, expectedKeywords);
                 if (!anchorMatches.isEmpty()) {
                     addBounded(matchedUrls, absoluteUrl);
@@ -127,7 +143,7 @@ public class LinkProbeService {
                 if (node instanceof Comment comment) {
                     String commentText = comment.getData();
                     if (!matchingKeywords(commentText, expectedKeywords).isEmpty()
-                            && containsHost(commentText, expectedHost)
+                            && containsAnyHost(commentText, expectedHosts)
                             && commentText.toLowerCase(Locale.ROOT).contains("href")) {
                         addBounded(fraudReasons, "HTML 注释中包含指向本站的检测关键词");
                     }
@@ -150,10 +166,10 @@ public class LinkProbeService {
             }
             boolean hiddenSiteAnchor = "a".equals(element.normalName())
                     && element.hasAttr("href")
-                    && readHost(element.attr("abs:href")).equalsIgnoreCase(expectedHost)
+                    && expectedHosts.contains(readHost(element.attr("abs:href")))
                     && !matchingKeywords(readAnchorText(element), expectedKeywords).isEmpty();
             for (Element anchor : element.select("a[href]")) {
-                if (readHost(anchor.attr("abs:href")).equalsIgnoreCase(expectedHost)
+                if (expectedHosts.contains(readHost(anchor.attr("abs:href")))
                         && !matchingKeywords(readAnchorText(anchor), expectedKeywords).isEmpty()) {
                     hiddenSiteAnchor = true;
                     break;
@@ -168,7 +184,7 @@ public class LinkProbeService {
 
         int parseErrorCount = parser.getErrors().size();
         String source = html == null ? "" : html;
-        if (parseErrorCount > 0 && !backlinkFound && hasMalformedCandidateAnchor(source, expectedHost,
+        if (parseErrorCount > 0 && !backlinkFound && hasMalformedCandidateAnchor(source, expectedHosts,
                 expectedKeywords)) {
             addBounded(fraudReasons, "DOM 结构解析异常，源码同时含本站地址和检测关键词");
         }
@@ -272,21 +288,26 @@ public class LinkProbeService {
         return false;
     }
 
-    private boolean containsHost(String text, String host) {
-        if (text == null || host == null || host.isBlank()) {
+    private boolean containsAnyHost(String text, List<String> hosts) {
+        if (text == null || hosts == null || hosts.isEmpty()) {
             return false;
         }
-        Pattern hostPattern = Pattern.compile("(?i)(?<![A-Za-z0-9.-])(?:www\\.)?"
-                + Pattern.quote(host) + "(?![A-Za-z0-9.-])");
-        return hostPattern.matcher(text).find();
+        for (String host : hosts) {
+            Pattern hostPattern = Pattern.compile("(?i)(?<![A-Za-z0-9.-])(?:www\\.)?"
+                    + Pattern.quote(host) + "(?![A-Za-z0-9.-])");
+            if (hostPattern.matcher(text).find()) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private boolean hasMalformedCandidateAnchor(String source, String expectedHost,
+    private boolean hasMalformedCandidateAnchor(String source, List<String> expectedHosts,
                                                 List<String> expectedKeywords) {
         Matcher anchors = Pattern.compile("(?is)<a\\b.{0,2000}?(?:</a>|$)").matcher(source);
         while (anchors.find()) {
             String anchorSource = anchors.group();
-            if (containsHost(anchorSource, expectedHost)
+            if (containsAnyHost(anchorSource, expectedHosts)
                     && !matchingKeywords(anchorSource, expectedKeywords).isEmpty()) {
                 return true;
             }

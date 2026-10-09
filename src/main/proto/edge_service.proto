@@ -149,6 +149,7 @@ message LinkProbeRequest {
   string target_name = 3;
   string site_name = 4;
   repeated string monitoring_keywords = 5;
+  repeated string site_urls = 6;
 }
 
 message LinkProbeResponse {
@@ -169,6 +170,7 @@ message LinkProbeResponse {
   repeated string fraud_reasons = 15;
   int32 dom_parse_error_count = 16;
   bool evidence_supported = 17;
+  repeated string expected_site_urls = 18;
 }
 
 message CertificateRenewalMessage {
