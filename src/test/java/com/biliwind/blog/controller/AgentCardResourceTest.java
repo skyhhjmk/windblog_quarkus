@@ -62,6 +62,13 @@ class AgentCardResourceTest {
     }
 
     @Test
+    void acceptsTheDocumentedMaximumTextLength() throws Exception {
+        JsonNode request = mapper.readTree("{\"message\":{\"messageId\":\"test\",\"role\":\"ROLE_USER\",\"parts\":[{\"text\":\""
+                + "x".repeat(4096) + "\"}]}}");
+        assertEquals(200, agent().send(request, "1.0").getStatus());
+    }
+
+    @Test
     void rejectsUnsupportedVersionsAndInvalidMessages() throws Exception {
         assertEquals(400, agent().send(null, "1.0").getStatus());
         assertEquals(400, agent().send(null, "0.3").getStatus());

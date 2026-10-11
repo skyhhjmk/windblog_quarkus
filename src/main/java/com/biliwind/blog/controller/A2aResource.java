@@ -41,7 +41,10 @@ public class A2aResource {
             if (!part.path("text").isTextual() || part.has("data") || part.has("url") || part.has("raw")) {
                 return error(400, "CONTENT_TYPE_NOT_SUPPORTED", "Only text parts are supported.");
             }
-            text.append(part.path("text").asText()).append(' ');
+            if (!text.isEmpty()) {
+                text.append(' ');
+            }
+            text.append(part.path("text").asText());
             if (text.length() > 4096) {
                 return error(400, "INVALID_ARGUMENT", "Search text must be at most 4096 characters.");
             }
