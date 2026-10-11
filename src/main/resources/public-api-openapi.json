@@ -1,0 +1,129 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "WindBlog Public API",
+    "version": "1.0.0",
+    "description": "Unauthenticated APIs intended for public use. Account-specific and administrative endpoints are not included."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/api/comments/post/{slug}": {
+      "get": {
+        "tags": ["Comments"],
+        "summary": "List approved comments for a published post",
+        "operationId": "listCommentsByPost",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 0}
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {"type": "integer", "default": 10}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paged approved comment tree",
+            "content": {"application/json": {"schema": {"type": "object"}}}
+          },
+          "404": {"description": "Published post not found"}
+        }
+      }
+    },
+    "/api/comments/quotes/post/{slug}": {
+      "get": {
+        "tags": ["Comments"],
+        "summary": "List public comment quotations for a published post",
+        "operationId": "listCommentQuotesByPost",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public comment quotations",
+            "content": {"application/json": {"schema": {"type": "object"}}}
+          },
+          "404": {"description": "Published post not found"}
+        }
+      }
+    },
+    "/search/suggest": {
+      "get": {
+        "tags": ["Search"],
+        "summary": "Suggest public post titles",
+        "operationId": "suggestPosts",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching title suggestions",
+            "content": {"application/json": {"schema": {"type": "array", "items": {"type": "string"}}}}
+          }
+        }
+      }
+    },
+    "/api/link-applications": {
+      "post": {
+        "tags": ["Link Applications"],
+        "summary": "Submit a public friendly-link application",
+        "operationId": "submitLinkApplication",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "url", "email", "placementType", "placementUrl"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "url": {"type": "string", "format": "uri"},
+                  "description": {"type": "string"},
+                  "icon": {"type": "string", "format": "uri"},
+                  "email": {"type": "string", "format": "email"},
+                  "contact": {"type": "string"},
+                  "placementType": {"type": "string", "enum": ["HOME_PAGE", "LINK_PAGE", "OTHER_PAGE"]},
+                  "placementUrl": {"type": "string", "format": "uri"},
+                  "placementPageName": {"type": "string"},
+                  "placementDescription": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Application submitted for review",
+            "content": {"application/json": {"schema": {"type": "object"}}}
+          },
+          "400": {"description": "Invalid application data"},
+          "409": {"description": "Site has already applied or exists"},
+          "422": {"description": "Submitted site is not publicly reachable"}
+        }
+      }
+    }
+  }
+}

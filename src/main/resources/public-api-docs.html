@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WindBlog 公共 API 文档</title>
+</head>
+<body>
+  <main>
+    <h1>WindBlog 公共 API</h1>
+    <p>这些接口面向访客或外部调用方。需要用户登录的账户接口、后台接口和内部接口不包含在本目录中。</p>
+    <p><a href="/api/public/openapi">查看 OpenAPI 3.1 JSON 规范</a></p>
+
+    <h2>评论</h2>
+    <ul>
+      <li><code>GET /api/comments/post/{slug}</code>：分页读取已发布文章下通过审核的评论。可选参数：<code>page</code>（默认 0）、<code>size</code>（默认 10）。</li>
+      <li><code>GET /api/comments/quotes/post/{slug}</code>：读取已发布文章下公开的评论引用。</li>
+    </ul>
+
+    <h2>搜索</h2>
+    <ul>
+      <li><code>GET /search/suggest?q={query}</code>：根据关键词返回公开文章标题建议；关键词为空时返回空数组。</li>
+    </ul>
+
+    <h2>友链申请</h2>
+    <ul>
+      <li><code>POST /api/link-applications</code>：以 JSON 提交友链申请。必填字段为 <code>name</code>、<code>url</code>、<code>email</code>、<code>placementType</code> 和 <code>placementUrl</code>；申请会经过频率限制和站点可达性检查。</li>
+    </ul>
+
+    <p>API 健康状态：<a href="/q/health/ready">/q/health/ready</a></p>
+  </main>
+</body>
+</html>
