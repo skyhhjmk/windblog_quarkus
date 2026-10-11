@@ -20,7 +20,19 @@ env:
 
 jobs:
   build-native-image:
-    name: Build native images
+    name: Build ${{ matrix.variant }} native image
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: WindBlog
+            profile: prod
+            dockerfile: src/main/docker/Dockerfile.native
+            suffix: "-native"
+          - variant: edge
+            profile: edge
+            dockerfile: src/main/docker/Dockerfile.native-micro
+            suffix: ""
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -117,13 +129,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build WindBlog native application
+      - name: Build ${{ matrix.variant }} native application
         shell: bash
         run: |
           ./mvnw -B -ntp clean package \
             -DskipTests \
             -Dnative \
-            -Dquarkus.profile=prod \
+            -Dquarkus.profile=${{ matrix.profile }} \
             -Dquarkus.application.version="${{ steps.release.outputs.version }}" \
             -Dquarkus.native.container-build=true \
             -Dquarkus.native.native-image-xmx=6g \
@@ -133,98 +145,62 @@ jobs:
             -Dquarkus.container-image.group=skyhhjmk \
             -Dquarkus.container-image.name=windblog_quarkus
 
-      - name: Build and tag WindBlog native image
+      - name: Build and tag ${{ matrix.variant }} native image
         shell: bash
+        env:
+          IMAGE_SUFFIX: ${{ matrix.suffix }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
         run: |
           IMAGE="${{ steps.release.outputs.image }}"
           VERSION="${{ steps.release.outputs.version }}"
           SHORT_SHA="${{ steps.release.outputs.short_sha }}"
 
           docker build \
-            -f src/main/docker/Dockerfile.native \
-            -t "${IMAGE}:${VERSION}-native" \
-            -t "${IMAGE}:sha-${SHORT_SHA}-native" \
+            -f "${DOCKERFILE}" \
+            -t "${IMAGE}:${VERSION}${IMAGE_SUFFIX}" \
+            -t "${IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}" \
             .
 
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
-            docker tag "${IMAGE}:${VERSION}-native" "${IMAGE}:latest-native"
+            docker tag "${IMAGE}:${VERSION}${IMAGE_SUFFIX}" "${IMAGE}:latest${IMAGE_SUFFIX}"
           fi
 
-      - name: Build edge native application
-        shell: bash
-        run: |
-          ./mvnw -B -ntp clean package \
-            -DskipTests \
-            -Dnative \
-            -Dquarkus.profile=edge \
-            -Dquarkus.application.version="${{ steps.release.outputs.version }}" \
-            -Dquarkus.native.container-build=true \
-            -Dquarkus.native.native-image-xmx=6g \
-            -Dquarkus.container-image.build=false \
-            -Dquarkus.container-image.push=false \
-            -Dquarkus.container-image.registry=ghcr.io \
-            -Dquarkus.container-image.group=skyhhjmk \
-            -Dquarkus.container-image.name=windblog_quarkus
-
-      - name: Build and tag edge native image
-        shell: bash
-        run: |
-          IMAGE="${{ steps.release.outputs.image }}"
-          VERSION="${{ steps.release.outputs.version }}"
-          SHORT_SHA="${{ steps.release.outputs.short_sha }}"
-
-          docker build \
-            -f src/main/docker/Dockerfile.native-micro \
-            -t "${IMAGE}:${VERSION}" \
-            -t "${IMAGE}:sha-${SHORT_SHA}" \
-            .
-
-          if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
-            docker tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
-          fi
-
-      - name: Push native images to GHCR
+      - name: Push ${{ matrix.variant }} native image to GHCR
         if: steps.release.outputs.push_image == 'true'
         shell: bash
+        env:
+          IMAGE_SUFFIX: ${{ matrix.suffix }}
         run: |
           IMAGE="${{ steps.release.outputs.image }}"
           VERSION="${{ steps.release.outputs.version }}"
           SHORT_SHA="${{ steps.release.outputs.short_sha }}"
 
-          docker push "${IMAGE}:${VERSION}-native"
-          docker push "${IMAGE}:sha-${SHORT_SHA}-native"
-          docker push "${IMAGE}:${VERSION}"
-          docker push "${IMAGE}:sha-${SHORT_SHA}"
+          docker push "${IMAGE}:${VERSION}${IMAGE_SUFFIX}"
+          docker push "${IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
 
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
-            docker push "${IMAGE}:latest-native"
-            docker push "${IMAGE}:latest"
+            docker push "${IMAGE}:latest${IMAGE_SUFFIX}"
           fi
 
-      - name: Push native images to Docker Hub
+      - name: Push ${{ matrix.variant }} native image to Docker Hub
         if: steps.release.outputs.push_image == 'true'
         shell: bash
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_SUFFIX: ${{ matrix.suffix }}
         run: |
           SOURCE_IMAGE="${{ steps.release.outputs.image }}"
           DOCKERHUB_IMAGE="docker.io/${DOCKERHUB_USERNAME}/windblog_quarkus"
           VERSION="${{ steps.release.outputs.version }}"
           SHORT_SHA="${{ steps.release.outputs.short_sha }}"
 
-          docker tag "${SOURCE_IMAGE}:${VERSION}-native" "${DOCKERHUB_IMAGE}:${VERSION}-native"
-          docker tag "${SOURCE_IMAGE}:sha-${SHORT_SHA}-native" "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}-native"
-          docker tag "${SOURCE_IMAGE}:${VERSION}" "${DOCKERHUB_IMAGE}:${VERSION}"
-          docker tag "${SOURCE_IMAGE}:sha-${SHORT_SHA}" "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}"
+          docker tag "${SOURCE_IMAGE}:${VERSION}${IMAGE_SUFFIX}" "${DOCKERHUB_IMAGE}:${VERSION}${IMAGE_SUFFIX}"
+          docker tag "${SOURCE_IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}" "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
 
-          docker push "${DOCKERHUB_IMAGE}:${VERSION}-native"
-          docker push "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}-native"
-          docker push "${DOCKERHUB_IMAGE}:${VERSION}"
-          docker push "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}"
+          docker push "${DOCKERHUB_IMAGE}:${VERSION}${IMAGE_SUFFIX}"
+          docker push "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
 
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
-            docker tag "${SOURCE_IMAGE}:latest-native" "${DOCKERHUB_IMAGE}:latest-native"
-            docker tag "${SOURCE_IMAGE}:latest" "${DOCKERHUB_IMAGE}:latest"
-            docker push "${DOCKERHUB_IMAGE}:latest-native"
-            docker push "${DOCKERHUB_IMAGE}:latest"
+            docker tag "${SOURCE_IMAGE}:latest${IMAGE_SUFFIX}" "${DOCKERHUB_IMAGE}:latest${IMAGE_SUFFIX}"
+            docker push "${DOCKERHUB_IMAGE}:latest${IMAGE_SUFFIX}"
           fi
