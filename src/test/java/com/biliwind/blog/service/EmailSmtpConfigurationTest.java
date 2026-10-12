@@ -3,7 +3,9 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.model.EmailChannel;
 import com.biliwind.blog.model.EmailDelivery;
 import jakarta.mail.Session;
+import jakarta.mail.Transport;
 import jakarta.mail.internet.InternetAddress;
+import org.eclipse.angus.mail.smtp.SMTPTransport;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,6 +44,13 @@ class EmailSmtpConfigurationTest {
         assertEquals(delivery.subject, message.getSubject());
         assertEquals(delivery.htmlContent, message.getContent());
         assertTrue(message.getContentType().toLowerCase().contains("utf-8"));
+    }
+
+    @Test
+    void resolvesAngusSmtpTransportProvider() throws Exception {
+        Transport transport = Session.getInstance(new java.util.Properties()).getTransport("smtp");
+        assertInstanceOf(SMTPTransport.class, transport);
+        transport.close();
     }
 
     private EmailChannel channel() {
