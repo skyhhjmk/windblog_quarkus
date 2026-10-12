@@ -61,7 +61,8 @@ public class AdminCommentController {
     public PageResult<AdminCommentItem> list(
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("pageSize") @DefaultValue("20") int pageSize,
-            @QueryParam("status") Short status) {
+            @QueryParam("status") Short status,
+            @QueryParam("postId") Long postId) {
 
         int safePage = 1;
         if (page > 1) {
@@ -87,6 +88,11 @@ public class AdminCommentController {
         if (status != null) {
             where.append(" and status = :status");
             params.put("status", status);
+        }
+
+        if (postId != null) {
+            where.append(" and c.post.id = :postId");
+            params.put("postId", postId);
         }
 
         String queryStr = "from Comment c left join fetch c.post left join fetch c.user where " + where.toString().replace("deletedAt", "c.deletedAt").replace("status", "c.status") + " order by c.createdAt desc";
