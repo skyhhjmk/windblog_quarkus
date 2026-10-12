@@ -17,10 +17,6 @@
         return document.getElementById('comment-section');
     }
 
-    function isLoggedIn(root) {
-        return root && root.dataset.commentLoggedIn === 'true';
-    }
-
     function getProfile() {
         return fetch('/user/api/profile')
             .then(r => r.ok ? r.json() : null)
@@ -224,8 +220,6 @@
 
     async function syncLoginState(root) {
         const hint = root.querySelector('#comment-login-hint');
-        const submit = root.querySelector('#comment-submit');
-        const overlay = root.querySelector('#comment-auth-overlay');
         const profile = await getProfile();
         const loggedIn = !!(profile && profile.success && profile.data);
         root.dataset.commentLoggedIn = loggedIn ? 'true' : 'false';
@@ -236,23 +230,29 @@
                 : `<span class="text-xs font-bold text-gray-400">访客模式</span>`;
         }
 
-        if (overlay) {
-            if (loggedIn) {
-                overlay.classList.add('hidden');
-            } else {
-                overlay.classList.remove('hidden');
-            }
-        }
+        const guestFields = root.querySelector('#comment-guest-fields');
+        if (guestFields) guestFields.classList.toggle('hidden', loggedIn);
+    }
 
-        if (submit) {
-            submit.disabled = !loggedIn;
-            const text = loggedIn ? (window.i18n.submit_comment || '发表评论') : (window.i18n.login_required_btn || '请先登录');
-            const textSpan = submit.querySelector('.btn-text');
-            if (textSpan) {
-                textSpan.textContent = text;
-            } else {
-                submit.textContent = text;
-            }
+    async function loadCaptcha(root) {
+        const question = root.querySelector('#comment-captcha-question');
+        const answer = root.querySelector('#comment-captcha-answer');
+        const submit = root.querySelector('#comment-submit');
+        const version = (Number(root.dataset.captchaVersion) || 0) + 1;
+        root.dataset.captchaVersion = String(version);
+        root.dataset.captchaId = '';
+        if (submit) submit.disabled = true;
+        if (answer) answer.value = '';
+        try {
+            const response = await fetch('/api/comments/captcha', {cache: 'no-store'});
+            const result = await response.json();
+            if (root.dataset.captchaVersion !== String(version)) return;
+            if (!response.ok || !result.success) throw new Error('验证码加载失败，请重试');
+            root.dataset.captchaId = result.data.id;
+            question.textContent = result.data.question;
+            if (submit) submit.disabled = false;
+        } catch (error) {
+            if (root.dataset.captchaVersion === String(version)) question.textContent = '加载失败，请点击换一道题';
         }
     }
 
@@ -283,17 +283,13 @@
                 return;
             }
 
-            if (!isLoggedIn(root)) {
-                window.showToast(window.i18n.login_before_submit || 'Please log in before submitting a comment.', 'error');
-                setFeedback(root, window.i18n.login_before_submit || 'Please log in before submitting a comment.', 'error');
-                if (textarea) textarea.focus();
-                return;
-            }
-
             const payload = {
                 postSlug: root.dataset.postSlug,
                 parentId: currentReply ? currentReply.id : null,
-                content: content
+                content: content,
+                guestName: root.querySelector('#comment-guest-name')?.value.trim() || '',
+                captchaId: root.dataset.captchaId,
+                captchaAnswer: root.querySelector('#comment-captcha-answer')?.value.trim() || ''
             };
 
             window.setLoading(submit, true);
@@ -325,14 +321,14 @@
                 // Keep disabled for a short duration to show success
                 setTimeout(() => {
                     window.setLoading(submit, false);
-                    syncLoginState(root);
+                    loadCaptcha(root);
                 }, 2000);
             } catch (error) {
                 window.WindBlogAnalytics?.trackFormResult('comment', false);
                 window.showToast(error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
                 setFeedback(root, error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
                 window.setLoading(submit, false);
-                syncLoginState(root);
+                loadCaptcha(root);
             }
         };
     }
@@ -353,7 +349,8 @@
             };
         }
 
-        await syncLoginState(root);
+        root.querySelector('#comment-captcha-refresh').onclick = () => loadCaptcha(root);
+        await Promise.all([syncLoginState(root), loadCaptcha(root)]);
         await loadComments(root);
     }
 

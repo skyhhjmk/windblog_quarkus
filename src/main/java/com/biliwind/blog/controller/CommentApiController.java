@@ -47,6 +47,30 @@ public class CommentApiController {
     @Inject
     com.biliwind.blog.common.CacheService cacheService;
 
+    @Inject
+    com.biliwind.blog.service.CommentCaptchaService captchaService;
+
+    @Inject
+    com.biliwind.blog.service.security.SecurityRateLimitService rateLimitService;
+
+    @Inject
+    com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
+
+    private void checkRate(io.vertx.ext.web.RoutingContext context, String action, int limit) {
+        String ip = clientIpResolver.resolve(context).clientIp();
+        if (!rateLimitService.tryAcquire("comment-" + action + ":" + ip, limit, java.time.Duration.ofMinutes(1))) {
+            throw new WebApplicationException("操作过于频繁，请稍后重试", 429);
+        }
+    }
+
+    @GET
+    @Path("/captcha")
+    public Response captcha(@Context io.vertx.ext.web.RoutingContext context) {
+        checkRate(context, "captcha", 30);
+        return Response.ok(Map.of("success", true, "data", captchaService.issue()))
+                .header("Cache-Control", "no-store").build();
+    }
+
     @GET
     @Path("/post/{slug}")
     @Transactional
@@ -118,7 +142,9 @@ public class CommentApiController {
     }
 
     @POST
-    public Response create(CommentCreateRequest request, @Context HttpHeaders headers) {
+    public Response create(CommentCreateRequest request, @Context HttpHeaders headers,
+                           @Context io.vertx.ext.web.RoutingContext context) {
+        checkRate(context, "submit", 10);
         if (!configManager.getBoolean("feature_toggles", "enable_comment", true)) {
             return Response.status(Response.Status.FORBIDDEN)
                     .entity(Map.of("success", false, "message", "评论功能已关闭")).build();
@@ -128,12 +154,13 @@ public class CommentApiController {
         }
 
         User user = resolveUserFromCookie(headers);
-        if (user == null) {
-            throw new ForbiddenException("Login required");
+        String guestName = request.guestName() == null ? "访客" : request.guestName().trim();
+        if (guestName.isBlank()) guestName = "访客";
+        if (guestName.length() > 80) {
+            throw new BadRequestException("昵称不能超过 80 个字符");
         }
-        if (user.emailVerifiedAt == null) {
-            throw new ForbiddenException("请先完成邮箱验证后再发表评论");
-        }
+        final String displayName = guestName;
+        captchaService.verify(request.captchaId(), request.captchaAnswer());
 
         final Post post = findPublicPost(request.postSlug());
         final Comment parent = resolveParent(post, request.parentId());
@@ -152,6 +179,7 @@ public class CommentApiController {
             comment.post = post;
             comment.parent = parent;
             comment.user = user;
+            comment.guestName = user == null ? displayName : null;
             comment.content = content;
             comment.status = STATUS_PENDING;
 
@@ -302,7 +330,8 @@ public class CommentApiController {
             Map<String, Object> map = new HashMap<>();
             map.put("id", q.id);
             map.put("commentId", q.comment.id);
-            map.put("userName", q.comment.user != null ? q.comment.user.username : "Guest");
+            map.put("userName", q.comment.user != null ? q.comment.user.username
+                    : (q.comment.guestName == null ? "访客" : q.comment.guestName));
             map.put("content", q.comment.content);
             map.put("quoteType", q.quoteType);
             map.put("quoteText", q.quoteText);
@@ -318,13 +347,17 @@ public class CommentApiController {
         )).build();
     }
 
+    @RegisterForReflection
     public record CommentCreateRequest(
             @NotBlank String postSlug,
             Long parentId,
             @NotBlank @Size(max = MAX_COMMENT_LENGTH) String content,
             String quoteType,
             String quoteText,
-            String anchorDataJson) {
+            String anchorDataJson,
+            @Size(max = 80) String guestName,
+            String captchaId,
+            String captchaAnswer) {
     }
 
     @RegisterForReflection
