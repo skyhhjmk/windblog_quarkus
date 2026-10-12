@@ -132,13 +132,20 @@ jobs:
       - name: Build ${{ matrix.variant }} native application
         shell: bash
         run: |
+          # Public runners have 16 GB; keep the 6 GB cap for smaller runners.
+          # The full application can otherwise spend most of universe building in GC.
+          NATIVE_HEAP_GB=6
+          if awk '/MemTotal/ { exit !($2 >= 14 * 1024 * 1024) }' /proc/meminfo; then
+            NATIVE_HEAP_GB=10
+          fi
+          echo "Native image maximum heap: ${NATIVE_HEAP_GB} GB"
           ./mvnw -B -ntp clean package \
             -DskipTests \
             -Dnative \
             -Dquarkus.profile=${{ matrix.profile }} \
             -Dquarkus.application.version="${{ steps.release.outputs.version }}" \
             -Dquarkus.native.container-build=true \
-            -Dquarkus.native.native-image-xmx=6g \
+            -Dquarkus.native.native-image-xmx="${NATIVE_HEAP_GB}g" \
             -Dquarkus.container-image.build=false \
             -Dquarkus.container-image.push=false \
             -Dquarkus.container-image.registry=ghcr.io \
