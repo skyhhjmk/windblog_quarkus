@@ -18,7 +18,7 @@
     }
 
     function getProfile() {
-        return fetch('/user/api/profile')
+        return fetch('/user/api/profile', {signal: AbortSignal.timeout(10000)})
             .then(r => r.ok ? r.json() : null)
             .catch(() => null);
     }
@@ -77,6 +77,26 @@
         return (nodes || []).reduce((total, node) => total + 1 + countComments(node.replies || []), 0);
     }
 
+    function renderClient(node) {
+        const osIcons = {Windows: 'windows', macOS: 'apple', iOS: 'apple', Android: 'android', Linux: 'linux', ChromeOS: 'chrome'};
+        const browserIcons = {Edge: 'edge', Chrome: 'chrome', Firefox: 'firefox-browser', Safari: 'safari', Opera: 'opera', 'Internet Explorer': 'internet-explorer'};
+        const os = Object.hasOwn(osIcons, node.clientOs) ? node.clientOs : null;
+        const browser = Object.hasOwn(browserIcons, node.clientBrowser) ? node.clientBrowser : null;
+        if (!os && !browser) return '';
+        const mark = (label, icon) => `<i class="fa-brands fa-${icon}" aria-hidden="true"></i><span>${escapeHtml(label)}</span>`;
+        return `<span class="comment-client">${os ? mark(os, osIcons[os]) : ''}${os && browser ? '<span class="comment-client-divider" aria-hidden="true">|</span>' : ''}${browser ? mark(browser, browserIcons[browser]) : ''}</span>`;
+    }
+
+    function authorHtml(node, name) {
+        try {
+            const url = new URL(node.guestWebsite);
+            if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) {
+                return `<a class="comment-author-link" href="${escapeHtml(url.href)}" target="_blank" rel="nofollow ugc noopener noreferrer">${name}</a>`;
+            }
+        } catch (_) { /* Older comments have no website. */ }
+        return name;
+    }
+
     function renderComment(node, depth = 0) {
         const userName = escapeHtml(node.userName || 'Guest');
         const body = node.contentHtml || '';
@@ -117,7 +137,8 @@
             <article class="comment-item card card-static ${isMini ? 'comment-mini' : ''}" id="comment-${node.id}">
                 <div class="comment-meta">
                     <div class="flex items-center gap-3">
-                        <strong class="text-[var(--accent)]">${userName}</strong>
+                        <strong class="text-[var(--accent)]">${authorHtml(node, userName)}</strong>
+                        ${renderClient(node)}
                         <time class="timestamp text-xs opacity-70" data-timestamp="${escapeHtml(node.createdAt)}">${escapeHtml(node.createdAt)}</time>
                     </div>
                 </div>
@@ -231,7 +252,10 @@
         }
 
         const guestFields = root.querySelector('#comment-guest-fields');
-        if (guestFields) guestFields.classList.toggle('hidden', loggedIn);
+        if (guestFields) {
+            guestFields.classList.toggle('hidden', loggedIn);
+            guestFields.querySelectorAll('input').forEach(input => { input.disabled = loggedIn; });
+        }
     }
 
     async function loadCaptcha(root) {
@@ -241,18 +265,20 @@
         const version = (Number(root.dataset.captchaVersion) || 0) + 1;
         root.dataset.captchaVersion = String(version);
         root.dataset.captchaId = '';
+        if (!question || !answer) return;
+        question.textContent = '正在加载...';
         if (submit) submit.disabled = true;
-        if (answer) answer.value = '';
+        answer.value = '';
         try {
-            const response = await fetch('/api/comments/captcha', {cache: 'no-store'});
+            const response = await fetch('/api/comments/captcha', {cache: 'no-store', credentials: 'same-origin', headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(10000)});
             const result = await response.json();
             if (root.dataset.captchaVersion !== String(version)) return;
-            if (!response.ok || !result.success) throw new Error('验证码加载失败，请重试');
+            if (!response.ok || !result.success || !result.data?.id || !result.data?.question) throw new Error('验证码加载失败，请重试');
             root.dataset.captchaId = result.data.id;
             question.textContent = result.data.question;
             if (submit) submit.disabled = false;
         } catch (error) {
-            if (root.dataset.captchaVersion === String(version)) question.textContent = '加载失败，请点击换一道题';
+            if (root.dataset.captchaVersion === String(version)) question.textContent = error.name === 'TimeoutError' ? '加载超时，请重试' : '加载失败，请重试';
         }
     }
 
@@ -283,11 +309,19 @@
                 return;
             }
 
+            if (!form.reportValidity()) return;
+            if (!root.dataset.captchaId) {
+                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error');
+                return;
+            }
+
             const payload = {
                 postSlug: root.dataset.postSlug,
                 parentId: currentReply ? currentReply.id : null,
                 content: content,
                 guestName: root.querySelector('#comment-guest-name')?.value.trim() || '',
+                guestEmail: root.querySelector('#comment-guest-email')?.value.trim() || '',
+                guestWebsite: root.querySelector('#comment-guest-website')?.value.trim() || '',
                 captchaId: root.dataset.captchaId,
                 captchaAnswer: root.querySelector('#comment-captcha-answer')?.value.trim() || ''
             };
@@ -349,9 +383,10 @@
             };
         }
 
-        root.querySelector('#comment-captcha-refresh').onclick = () => loadCaptcha(root);
-        await Promise.all([syncLoginState(root), loadCaptcha(root)]);
-        await loadComments(root);
+        const refresh = root.querySelector('#comment-captcha-refresh');
+        if (refresh) refresh.onclick = () => loadCaptcha(root);
+        // Each request can finish independently; a stalled profile must not block the challenge or list.
+        await Promise.allSettled([syncLoginState(root), loadCaptcha(root), loadComments(root)]);
     }
 
     window.toggleReplies = function (commentId, btn) {

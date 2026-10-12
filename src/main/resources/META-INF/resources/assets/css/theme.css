@@ -1279,3 +1279,25 @@ kbd {
     color: var(--tag-text);
     border-color: var(--tag-border);
 }
+
+/* Visitor identity and arithmetic challenge share the comment editor's visual language. */
+.comment-identity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.comment-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.comment-field label { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.comment-required { color: var(--accent); }
+.comment-optional { color: var(--text-meta); font-size: 11px; font-weight: 400; margin-left: 4px; }
+.comment-field input { width: 100%; min-width: 0; height: 44px; padding: 10px 14px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text-main); font-size: 14px; outline: none; transition: border-color .2s, box-shadow .2s; }
+.comment-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.comment-field input::placeholder { color: var(--text-meta); opacity: .75; }
+.comment-field-note { grid-column: 1 / -1; color: var(--text-meta); font-size: 12px; margin: -4px 0 0; }
+.comment-captcha-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.comment-captcha-question { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 126px; padding: 10px 16px; border: 1px dashed var(--border); border-radius: 8px; background: var(--card-bg); color: var(--accent); font: 600 14px ui-monospace, monospace; }
+.comment-captcha-row input { width: 140px; }
+.comment-captcha-refresh { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-meta); font-size: 12px; transition: color .2s, border-color .2s; }
+.comment-captcha-refresh:hover { border-color: var(--accent); color: var(--accent); }
+.comment-meta > div { flex-wrap: wrap; }
+.comment-client { display: inline-flex; align-items: center; gap: 7px; color: var(--text-meta); font-size: 11px; }
+.comment-client i { font-size: 13px; }
+.comment-client-divider { opacity: .45; }
+.comment-author-link:hover { text-decoration: underline; }
+@media (max-width: 640px) { .comment-identity-grid { grid-template-columns: 1fr; gap: 14px; } .comment-captcha-row { gap: 8px; } .comment-captcha-row input { flex: 1; min-width: 100px; } }

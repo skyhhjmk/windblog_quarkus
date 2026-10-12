@@ -372,15 +372,27 @@
                                 </button>
                             </div>
 
-                            <div id="comment-guest-fields" class="space-y-2">
-                                <label for="comment-guest-name">昵称（选填）</label>
-                                <input id="comment-guest-name" name="guestName" maxlength="80" placeholder="访客" class="w-full">
+                            <div id="comment-guest-fields" class="comment-identity-grid">
+                                <div class="comment-field">
+                                    <label for="comment-guest-name">昵称 <span class="comment-required">*</span></label>
+                                    <input type="text" id="comment-guest-name" name="guestName" maxlength="80" autocomplete="nickname" required placeholder="怎么称呼你？">
+                                </div>
+                                <div class="comment-field">
+                                    <label for="comment-guest-email">邮箱 <span class="comment-required">*</span></label>
+                                    <input type="email" id="comment-guest-email" name="guestEmail" maxlength="255" autocomplete="email" required placeholder="you@example.com" aria-describedby="comment-email-note">
+                                </div>
+                                <div class="comment-field">
+                                    <label for="comment-guest-website">站点 <span class="comment-optional">选填</span></label>
+                                    <input type="url" id="comment-guest-website" name="guestWebsite" maxlength="2048" autocomplete="url" placeholder="https://你的站点">
+                                </div>
+                                <p id="comment-email-note" class="comment-field-note">邮箱不会公开展示。</p>
                             </div>
-                            <div class="space-y-2">
-                                <label for="comment-captcha-answer">验证码：<span id="comment-captcha-question">正在加载...</span></label>
-                                <div class="flex items-center gap-3">
-                                    <input id="comment-captcha-answer" name="captchaAnswer" inputmode="numeric" autocomplete="off" maxlength="3" required placeholder="请输入计算结果">
-                                    <button type="button" id="comment-captcha-refresh">换一道题</button>
+                            <div class="comment-field comment-captcha-field">
+                                <label for="comment-captcha-answer">验证码 <span class="comment-required">*</span></label>
+                                <div class="comment-captcha-row">
+                                    <span id="comment-captcha-question" class="comment-captcha-question" role="status" aria-live="polite">正在加载...</span>
+                                    <input type="text" id="comment-captcha-answer" name="captchaAnswer" inputmode="numeric" pattern="[0-9]+" autocomplete="off" maxlength="3" required placeholder="计算结果">
+                                    <button type="button" id="comment-captcha-refresh" class="comment-captcha-refresh" aria-label="更换验证码"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>换一道题</span></button>
                                 </div>
                             </div>
                             <input type="hidden" id="comment-parent-id" name="parentId" value="">
@@ -389,6 +401,7 @@
                                 <textarea
                                         id="comment-content"
                                         name="content"
+                                        required
                                         rows="5"
                                         maxlength="4000"
                                         placeholder="分享你的想法..."
@@ -399,7 +412,7 @@
                                 <p class="text-xs text-gray-500 max-w-md">
                                     支持 Markdown 语法。
                                 </p>
-                                <button type="submit" id="comment-submit" data-seeray-goal="comment_submit" class="btn-minimal min-w-[140px]">
+                                <button type="submit" id="comment-submit" disabled data-seeray-goal="comment_submit" class="btn-minimal min-w-[140px]">
                                     <span class="btn-text">发表评论</span>
                                     <span class="spinner hidden"></span>
                                 </button>

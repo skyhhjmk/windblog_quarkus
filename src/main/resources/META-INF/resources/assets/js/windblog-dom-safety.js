@@ -39,7 +39,7 @@
         'method', 'min', 'name', 'placeholder', 'points', 'rel', 'required', 'role', 'selected', 'action',
         'size', 'spellcheck', 'step', 'stroke', 'stroke-linecap', 'stroke-linejoin', 'stroke-width',
         'target', 'title', 'type', 'value', 'viewbox', 'width', 'x', 'x1', 'x2', 'y', 'y1', 'y2',
-        'src', 'datetime', 'open', 'controls', 'preload'
+        'src', 'datetime', 'open', 'controls', 'preload', 'autocomplete', 'inputmode', 'pattern', 'aria-live'
     ]);
 
     function isSafeUrl(value) {

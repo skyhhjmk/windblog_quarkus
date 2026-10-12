@@ -36,6 +36,18 @@ Recent history uses `fix:`, `feat:`, and `dev:` prefixes alongside concise Chine
 
 PRs should explain the problem, resulting behavior, validation performed, and configuration or migration impact. Link relevant issues and include screenshots for UI changes. Run `git diff --check` before submission.
 
+## GitHub Actions & bt-main Releases
+
+For a user-requested release to `bt-main`, follow this order:
+
+1. Inspect the worktree and stage only the intended files. Preserve unrelated changes and never stage `.env`, credentials, private keys, uploads, logs, or database volumes.
+2. Commit the scoped change, push the intended branch to GitHub, and record the commit SHA.
+3. Find the GitHub Actions run for that SHA and wait until it is `completed` with a `success` conclusion. Confirm the workflow published the immutable image tag. If the run fails, fix the cause, make and push a new scoped commit, and wait for that run; do not update `bt-main` while a build or registry push is pending or failed.
+4. Before changing the remote service, back up `/root/windblog_quarkus/.env`, `docker-compose.yml`, and the current WindBlog container/image state in a protected, timestamped release directory. Do not print secret values. Keep the healthy old container and a rollback image available until the new image passes checks.
+5. On `bt-main`, pull the CI-published immutable native image, currently available through `docker.1ms.run/hhjmk/windblog_quarkus:sha-<commit>-native`. Confirm `WINDBLOG_PULL_POLICY=always`, update only `WINDBLOG_IMAGE`, validate the Compose configuration, then run `docker compose --env-file .env pull windblog` followed by `docker compose --env-file .env up -d --no-deps --pull always windblog`. Do not rebuild or upload a local image for this registry-pull flow, and do not recreate dependencies or volumes.
+6. Verify that the running container uses the requested tag/digest, is healthy with zero restarts, and that `curl -fsS http://127.0.0.1:58080/q/health/ready` reports readiness. Check startup logs and the requested behavior through the exact public hostname; health or a generic HTTP 200 alone does not prove the changed feature works.
+7. Report the commit SHA, Actions run result, pulled image tag/digest, remote health/readiness, and public behavior separately. Leave unrelated worktree changes untouched.
+
 ## Security & Configuration
 
 Use `.env.example` as a configuration reference. Never commit credentials, `.env`, private keys, uploads, logs, or database volumes. Keep Codex Creator's database separate from WindBlog's.

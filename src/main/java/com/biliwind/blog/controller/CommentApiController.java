@@ -154,12 +154,12 @@ public class CommentApiController {
         }
 
         User user = resolveUserFromCookie(headers);
-        String guestName = request.guestName() == null ? "访客" : request.guestName().trim();
-        if (guestName.isBlank()) guestName = "访客";
-        if (guestName.length() > 80) {
-            throw new BadRequestException("昵称不能超过 80 个字符");
-        }
-        final String displayName = guestName;
+        final String displayName = user == null ? normalizeGuestName(request.guestName()) : null;
+        final String guestEmail = user == null ? normalizeGuestEmail(request.guestEmail()) : null;
+        final String guestWebsite = user == null ? normalizeGuestWebsite(request.guestWebsite()) : null;
+        final String userAgent = headers.getHeaderString("User-Agent");
+        final String clientOs = com.biliwind.blog.common.helper.CommentClientHelper.operatingSystem(userAgent);
+        final String clientBrowser = com.biliwind.blog.common.helper.CommentClientHelper.browser(userAgent);
         captchaService.verify(request.captchaId(), request.captchaAnswer());
 
         final Post post = findPublicPost(request.postSlug());
@@ -180,6 +180,10 @@ public class CommentApiController {
             comment.parent = parent;
             comment.user = user;
             comment.guestName = user == null ? displayName : null;
+            comment.guestEmail = guestEmail;
+            comment.guestWebsite = guestWebsite;
+            comment.clientOs = clientOs;
+            comment.clientBrowser = clientBrowser;
             comment.content = content;
             comment.status = STATUS_PENDING;
 
@@ -269,6 +273,38 @@ public class CommentApiController {
         return parent;
     }
 
+    private String normalizeGuestName(String value) {
+        String name = value == null ? "" : value.trim();
+        if (name.isBlank() || name.length() > 80) {
+            throw new BadRequestException("请填写昵称（最多 80 个字符）");
+        }
+        return name;
+    }
+
+    private String normalizeGuestEmail(String value) {
+        String email = value == null ? "" : value.trim();
+        if (email.isBlank() || email.length() > 255
+                || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new BadRequestException("请填写有效的邮箱地址");
+        }
+        return email;
+    }
+
+    private String normalizeGuestWebsite(String value) {
+        if (value == null || value.isBlank()) return null;
+        String website = value.trim();
+        try {
+            java.net.URI uri = java.net.URI.create(website);
+            if (website.length() > 2048 || uri.getHost() == null || uri.getUserInfo() != null
+                    || !("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))) {
+                throw new IllegalArgumentException();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("站点地址必须是有效的 http:// 或 https:// 链接");
+        }
+        return website;
+    }
+
     private String normalizeContent(String content) {
         if (content == null) {
             throw new BadRequestException("Comment content is required");
@@ -291,6 +327,9 @@ public class CommentApiController {
                 comment.user != null ? comment.user.id : null,
                 comment.user != null ? comment.user.username
                         : (comment.guestName == null || comment.guestName.isBlank() ? "Guest" : comment.guestName),
+                comment.guestWebsite,
+                comment.clientOs,
+                comment.clientBrowser,
                 comment.content,
                 CommentMarkdownHelper.toSafeHtml(comment.content),
                 comment.createdAt,
@@ -356,6 +395,8 @@ public class CommentApiController {
             String quoteText,
             String anchorDataJson,
             @Size(max = 80) String guestName,
+            @Size(max = 255) String guestEmail,
+            @Size(max = 2048) String guestWebsite,
             String captchaId,
             String captchaAnswer) {
     }
@@ -366,6 +407,9 @@ public class CommentApiController {
             Long parentId,
             Long userId,
             String userName,
+            String guestWebsite,
+            String clientOs,
+            String clientBrowser,
             String content,
             String contentHtml,
             OffsetDateTime createdAt,

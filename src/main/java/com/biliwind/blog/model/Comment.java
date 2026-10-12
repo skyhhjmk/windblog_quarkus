@@ -41,6 +41,15 @@ public class Comment extends PanacheEntityBase {
     @Column(name = "guest_email", length = 255)
     public String guestEmail;
 
+    @Column(name = "guest_website", length = 2048)
+    public String guestWebsite;
+
+    @Column(name = "client_os", length = 32)
+    public String clientOs;
+
+    @Column(name = "client_browser", length = 32)
+    public String clientBrowser;
+
     /** 评论内容 */
     @Column(nullable = false, columnDefinition = "text")
     public String content;
