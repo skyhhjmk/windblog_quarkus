@@ -64,6 +64,10 @@ public class EmailDeliveryService {
     @ConfigProperty(name = "windblog.mail.smtp.write-timeout", defaultValue = "30S")
     java.time.Duration smtpWriteTimeout;
 
+    public boolean isEnabled() {
+        return enabled;
+    }
+
     @Transactional
     public void queue(String scenario, String recipientAddress, String subject, String htmlContent) {
         queueWithRoute(scenario, recipientAddress, subject, htmlContent, null, null);
@@ -208,28 +212,15 @@ public class EmailDeliveryService {
                 return new DeliveryOutcome(null, "没有可用的邮件通道");
             }
             channelId = channel.id;
-            Properties properties = new Properties();
-            properties.put("mail.smtp.host", channel.host);
-            properties.put("mail.smtp.port", String.valueOf(channel.port));
-            properties.put("mail.smtp.auth", channel.username != null && !channel.username.isBlank());
-            properties.put("mail.smtp.starttls.enable", "STARTTLS".equals(channel.securityMode));
-            properties.put("mail.smtp.ssl.enable", "SSL_TLS".equals(channel.securityMode));
-            properties.put("mail.smtp.connectiontimeout", String.valueOf(durationMillis(smtpConnectTimeout, 10000L)));
-            properties.put("mail.smtp.timeout", String.valueOf(durationMillis(smtpReadTimeout, 30000L)));
-            properties.put("mail.smtp.writetimeout", String.valueOf(durationMillis(smtpWriteTimeout, 30000L)));
-            Session session = Session.getInstance(properties);
-            MimeMessage message = new MimeMessage(session);
-            message.setFrom(new InternetAddress(channel.fromAddress, channel.fromName));
-            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(delivery.recipientAddress, false));
-            message.setSubject(delivery.subject, "UTF-8");
-            message.setContent(delivery.htmlContent, "text/html; charset=UTF-8");
+            Session session = Session.getInstance(smtpProperties(channel));
+            MimeMessage message = createMessage(session, channel, delivery);
             transport = session.getTransport("smtp");
             transport.connect(channel.host, channel.port, channel.username, getPassword(channel));
             transport.sendMessage(message, message.getAllRecipients());
             delivery.channelId = channelId;
             return new DeliveryOutcome(channelId, null);
         } catch (Exception exception) {
-            return new DeliveryOutcome(channelId, SensitiveMessageSanitizer.sanitize(exception.getMessage()));
+            return new DeliveryOutcome(channelId, SensitiveMessageSanitizer.sanitize(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()));
         } finally {
             if (transport != null) {
                 try {
@@ -239,6 +230,33 @@ public class EmailDeliveryService {
                 }
             }
         }
+    }
+
+    Properties smtpProperties(EmailChannel channel) {
+        Properties properties = new Properties();
+        properties.put("mail.smtp.host", channel.host);
+        properties.put("mail.smtp.port", String.valueOf(channel.port));
+        properties.put("mail.smtp.auth", channel.username != null && !channel.username.isBlank());
+        properties.put("mail.smtp.starttls.enable", "STARTTLS".equals(channel.securityMode));
+        properties.put("mail.smtp.starttls.required", "STARTTLS".equals(channel.securityMode));
+        properties.put("mail.smtp.ssl.checkserveridentity", "true");
+        properties.put("mail.smtp.ssl.enable", "SSL_TLS".equals(channel.securityMode));
+        properties.put("mail.smtp.connectiontimeout", String.valueOf(durationMillis(smtpConnectTimeout, 10000L)));
+        properties.put("mail.smtp.timeout", String.valueOf(durationMillis(smtpReadTimeout, 30000L)));
+        properties.put("mail.smtp.writetimeout", String.valueOf(durationMillis(smtpWriteTimeout, 30000L)));
+        return properties;
+    }
+
+    MimeMessage createMessage(Session session, EmailChannel channel, EmailDelivery delivery) throws Exception {
+        MimeMessage message = new MimeMessage(session);
+        message.setFrom(new InternetAddress(channel.fromAddress, channel.fromName));
+        if (channel.replyToAddress != null && !channel.replyToAddress.isBlank()) {
+            message.setReplyTo(InternetAddress.parse(channel.replyToAddress, true));
+        }
+        message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(delivery.recipientAddress, false));
+        message.setSubject(delivery.subject, "UTF-8");
+        message.setContent(delivery.htmlContent, "text/html; charset=UTF-8");
+        return message;
     }
 
     private long durationMillis(java.time.Duration duration, long fallbackMillis) {
