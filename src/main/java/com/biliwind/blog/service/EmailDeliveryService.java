@@ -4,6 +4,7 @@ import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.storage.StorageConfigProtector;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -24,6 +25,7 @@ import java.util.Properties;
 import java.util.UUID;
 
 @ApplicationScoped
+@RegisterForReflection(targets = org.eclipse.angus.mail.util.MailStreamProvider.class)
 public class EmailDeliveryService {
     @ConfigProperty(name = "windblog.mail.enabled", defaultValue = "false")
     boolean enabled;

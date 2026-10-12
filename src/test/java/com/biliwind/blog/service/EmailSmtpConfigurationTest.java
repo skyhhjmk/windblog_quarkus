@@ -5,6 +5,8 @@ import com.biliwind.blog.model.EmailDelivery;
 import jakarta.mail.Session;
 import jakarta.mail.Transport;
 import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.util.StreamProvider;
+import org.eclipse.angus.mail.util.MailStreamProvider;
 import org.eclipse.angus.mail.smtp.SMTPTransport;
 import org.junit.jupiter.api.Test;
 
@@ -51,6 +53,11 @@ class EmailSmtpConfigurationTest {
         Transport transport = Session.getInstance(new java.util.Properties()).getTransport("smtp");
         assertInstanceOf(SMTPTransport.class, transport);
         transport.close();
+    }
+
+    @Test
+    void resolvesAngusStreamProvider() {
+        assertInstanceOf(MailStreamProvider.class, StreamProvider.provider());
     }
 
     private EmailChannel channel() {
