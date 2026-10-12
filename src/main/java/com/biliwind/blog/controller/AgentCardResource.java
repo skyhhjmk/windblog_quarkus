@@ -22,8 +22,8 @@ public class AgentCardResource {
     public Response getAgentCard() {
         String baseUrl = normalizedPublicUrl();
         Map<String, Object> card = Map.of(
-                "name", "WindBlog Public Content Agent",
-                "description", "Helps agent clients discover WindBlog's public articles and unauthenticated HTTP APIs.",
+                "name", "GeekCoreLab Public Content Agent",
+                "description", "Helps agent clients discover GeekCoreLab's public articles and unauthenticated HTTP APIs.",
                 "version", AGENT_VERSION,
                 "supportedInterfaces", List.of(Map.of(
                         "url", baseUrl + "/a2a",
@@ -31,7 +31,7 @@ public class AgentCardResource {
                         "protocolVersion", "1.0"
                 )),
                 "provider", Map.of(
-                        "organization", "WindBlog",
+                        "organization", "GeekCoreLab",
                         "url", baseUrl
                 ),
                 "documentationUrl", baseUrl + "/a2a/docs",
@@ -53,9 +53,9 @@ public class AgentCardResource {
                         Map.of(
                                 "id", "public-api-reference",
                                 "name", "Public API reference",
-                                "description", "Provides links to the OpenAPI reference and documentation for WindBlog's unauthenticated public APIs.",
+                                "description", "Provides links to the OpenAPI reference and documentation for GeekCoreLab's unauthenticated public APIs.",
                                 "tags", List.of("api", "openapi", "documentation"),
-                                "examples", List.of("List the public WindBlog API operations.")
+                                "examples", List.of("List the public GeekCoreLab API operations.")
                         )
                 )
         );
