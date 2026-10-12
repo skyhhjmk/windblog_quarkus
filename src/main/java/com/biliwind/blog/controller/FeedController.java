@@ -114,6 +114,7 @@ public class FeedController {
     @Produces(MediaType.TEXT_PLAIN)
     public String robots() {
         return "User-agent: *\n"
+                + "Content-Signal: ai-train=yes, search=yes, ai-input=yes\n"
                 + "Allow: /\n"
                 + "Disallow: /admin\n"
                 + "Disallow: /api/\n"
