@@ -33,6 +33,9 @@ public class AmpPageService {
     PublicUrlService publicUrlService;
 
     @Inject
+    CanonicalUrlService canonicalUrlService;
+
+    @Inject
     RepostPolicyCatalog repostPolicyCatalog;
 
     public Optional<AmpPost> find(String slug, String languageCode) {
@@ -135,9 +138,9 @@ public class AmpPageService {
 
     private String buildCanonicalUrl(String slug, String language) {
         if (LanguageConstant.DEFAULT_LANG.equalsIgnoreCase(language)) {
-            return publicUrlService.buildPath("/post/" + slug);
+            return canonicalUrlService.buildPath("/post/" + slug);
         }
-        return publicUrlService.buildPath("/" + language + "/post/" + slug);
+        return canonicalUrlService.buildPath("/" + language + "/post/" + slug);
     }
 
     private String buildAmpUrl(String slug, String language) {

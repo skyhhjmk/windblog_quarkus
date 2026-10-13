@@ -131,6 +131,28 @@ public class RegionRuleService {
     public record SiteDomainLink(String label, String url) {
     }
 
+    public boolean isMultiRegionEnabled() {
+        return getRules().stream().anyMatch(rule -> rule.region() != null
+                && rule.region() != BlogRegion.GLOBAL);
+    }
+
+    public String globalSiteUrl() {
+        for (RuleView rule : getRules()) {
+            if (isRuleType(rule, "domain") && rule.region() == BlogRegion.GLOBAL) {
+                String domain = canonicalSiteDomain(rule.pattern());
+                if (!domain.isBlank()) {
+                    String pattern = rule.pattern().trim();
+                    String candidate = pattern.contains("://") ? pattern : "https://" + pattern;
+                    String configuredHost = URI.create(candidate).getHost();
+                    String host = configuredHost != null && configuredHost.toLowerCase(Locale.ROOT).startsWith("www.")
+                            ? "www." + domain : domain;
+                    return "https://" + host;
+                }
+            }
+        }
+        return "";
+    }
+
     private boolean isRuleType(RuleView rule, String expectedType) {
         return rule.ruleType() != null
                 && expectedType.equalsIgnoreCase(rule.ruleType().trim());

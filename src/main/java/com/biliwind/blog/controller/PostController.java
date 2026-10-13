@@ -62,6 +62,9 @@ public class PostController {
     com.biliwind.blog.service.PublicUrlService publicUrlService;
 
     @Inject
+    com.biliwind.blog.service.CanonicalUrlService canonicalUrlService;
+
+    @Inject
     com.biliwind.blog.service.AmpPageService ampPageService;
 
     @Inject
@@ -345,7 +348,7 @@ public class PostController {
     }
 
     private String buildCanonicalUrl(String slug) {
-        return publicUrlService.buildPath("/post/" + slug);
+        return canonicalUrlService.buildPath("/post/" + slug);
     }
 
     private String buildAmpUrl(String slug, String language) {

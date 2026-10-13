@@ -39,9 +39,9 @@
     <link rel="icon" href="{config:faviconUrl}"/>
 
     {#if canonicalUrl.or(null)}
-        <link rel="canonical" href="{canonicalUrl}" data-site-base="{config:baseUrl}"/>
+        <link rel="canonical" href="{canonicalUrl}" data-site-base="{canonicalBaseUrl}"/>
     {#else}
-        <link rel="canonical" href="{defaultCanonicalUrl}" data-site-base="{config:baseUrl}"/>
+        <link rel="canonical" href="{defaultCanonicalUrl}" data-site-base="{canonicalBaseUrl}"/>
     {/if}
 
     {#if ogData.or(null)}

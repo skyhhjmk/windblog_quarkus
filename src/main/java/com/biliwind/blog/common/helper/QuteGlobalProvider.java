@@ -4,7 +4,7 @@ import io.quarkus.arc.Arc;
 import io.quarkus.qute.TemplateGlobal;
 import io.vertx.core.http.HttpServerRequest;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.ConfigProvider;
+import com.biliwind.blog.service.CanonicalUrlService;
 
 /**
  * Qute 模板全局变量提供者
@@ -55,14 +55,13 @@ public class QuteGlobalProvider {
     }
 
     @TemplateGlobal
-    public static String defaultCanonicalUrl() {
-        String baseUrl = ConfigProvider.getConfig()
-                .getOptionalValue("windblog.site.public-url", String.class)
-                .orElse("http://localhost:8080");
-        while (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
-        }
+    public static String canonicalBaseUrl() {
+        return Arc.container().instance(CanonicalUrlService.class).get().getBaseUrl();
+    }
 
+    @TemplateGlobal
+    public static String defaultCanonicalUrl() {
+        String baseUrl = canonicalBaseUrl();
         String requestPath = "/";
         try {
             HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
