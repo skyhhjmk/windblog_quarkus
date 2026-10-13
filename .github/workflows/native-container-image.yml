@@ -182,11 +182,11 @@ jobs:
           VERSION="${{ steps.release.outputs.version }}"
           SHORT_SHA="${{ steps.release.outputs.short_sha }}"
 
-          docker push "${IMAGE}:${VERSION}${IMAGE_SUFFIX}"
-          docker push "${IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
+          bash scripts/push-image-with-retry.sh "${IMAGE}:${VERSION}${IMAGE_SUFFIX}"
+          bash scripts/push-image-with-retry.sh "${IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
 
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
-            docker push "${IMAGE}:latest${IMAGE_SUFFIX}"
+            bash scripts/push-image-with-retry.sh "${IMAGE}:latest${IMAGE_SUFFIX}"
           fi
 
       - name: Push ${{ matrix.variant }} native image to Docker Hub
@@ -204,10 +204,10 @@ jobs:
           docker tag "${SOURCE_IMAGE}:${VERSION}${IMAGE_SUFFIX}" "${DOCKERHUB_IMAGE}:${VERSION}${IMAGE_SUFFIX}"
           docker tag "${SOURCE_IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}" "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
 
-          docker push "${DOCKERHUB_IMAGE}:${VERSION}${IMAGE_SUFFIX}"
-          docker push "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
+          bash scripts/push-image-with-retry.sh "${DOCKERHUB_IMAGE}:${VERSION}${IMAGE_SUFFIX}"
+          bash scripts/push-image-with-retry.sh "${DOCKERHUB_IMAGE}:sha-${SHORT_SHA}${IMAGE_SUFFIX}"
 
           if [[ "${{ steps.release.outputs.add_latest }}" == "true" ]]; then
             docker tag "${SOURCE_IMAGE}:latest${IMAGE_SUFFIX}" "${DOCKERHUB_IMAGE}:latest${IMAGE_SUFFIX}"
-            docker push "${DOCKERHUB_IMAGE}:latest${IMAGE_SUFFIX}"
+            bash scripts/push-image-with-retry.sh "${DOCKERHUB_IMAGE}:latest${IMAGE_SUFFIX}"
           fi
