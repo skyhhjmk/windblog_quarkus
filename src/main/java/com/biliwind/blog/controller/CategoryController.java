@@ -35,6 +35,9 @@ import java.util.stream.IntStream;
 @Path("/category")
 public class CategoryController {
 
+    @Inject
+    com.biliwind.blog.service.StructuredDataService structuredDataService;
+
     private static final int PAGE_SIZE = 12;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -87,6 +90,8 @@ public class CategoryController {
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
         return template
                 .data("language", lang)
+                .data("jsonLd", structuredDataService.collection("分类", "/category", lang,
+                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb("分类", "/category"))))
                 .data("detailMode", false)
                 .data("pageTitle", safeKeyword.isBlank() ? "Categories" : "Categories - " + safeKeyword)
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / categories")
@@ -145,6 +150,9 @@ public class CategoryController {
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
         return template
                 .data("language", lang)
+                .data("jsonLd", structuredDataService.collection(resolveCategoryName(entity, lang), "/category/" + entity.slug, lang,
+                        buildBreadcrumbs(entity, lang).stream().map(item ->
+                                new com.biliwind.blog.service.StructuredDataService.Breadcrumb(item.name(), item.url())).toList()))
                 .data("detailMode", true)
                 .data("pageTitle", "Category - " + resolveCategoryName(entity, lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / category / " + entity.slug)

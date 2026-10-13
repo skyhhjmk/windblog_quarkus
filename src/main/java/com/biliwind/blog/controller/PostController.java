@@ -56,6 +56,9 @@ public class PostController {
     RegionContext regionContext;
 
     @Inject
+    com.biliwind.blog.service.StructuredDataService structuredDataService;
+
+    @Inject
     com.biliwind.blog.service.ConfigManager configManager;
 
     @Inject
@@ -162,6 +165,7 @@ public class PostController {
         }
 
         String localizedTitle = LanguageHelper.resolveLocalizedValue(snapshot.title(), resolvedLang);
+        String publicPreview = resolveSnapshotContent(snapshot, resolvedLang);
         Long requestUserId = resolveUserId(httpHeaders);
         String deviceId = httpHeaders.getHeaderString("X-Device-Id");
         String localizedContent = resolveSnapshotContent(snapshot, resolvedLang);
@@ -235,6 +239,8 @@ public class PostController {
         if (displayTitle == null) {
             displayTitle = slug;
         }
+        String publicHtml = snapshot.postPrice() > 0 || protectedPage
+                ? resolvePostBody(snapshot.renderType(), publicPreview).body() : postBody.body();
         String seoTitle = resolveSeoTitle(snapshot, displayTitle);
         String pageDescription = resolvePageDescription(snapshot, localizedAiSummary, localizedContent, resolvedLang);
 
@@ -313,8 +319,10 @@ public class PostController {
                 .data("repostOriginalUrl", repostOriginalUrl)
                 .data("canonicalUrl", buildCanonicalUrl(slug))
                 .data("ampUrl", ampUrl)
-                .data("ogData", buildOgData(slug, seoTitle, pageDescription))
-                .data("jsonLd", buildJsonLd(snapshot, seoTitle, pageDescription, slug));
+                .data("ogData", buildOgData(slug, seoTitle, pageDescription, publicHtml))
+                .data("jsonLd", structuredDataService.article(snapshot, seoTitle, pageDescription,
+                        buildCanonicalUrl(slug), resolvedLang,
+                        publicHtml));
 
         Response.ResponseBuilder responseBuilder = Response.ok(templateInstance)
                 .header("Vary", "Accept-Language, Cookie");
@@ -348,7 +356,9 @@ public class PostController {
     }
 
     private String buildCanonicalUrl(String slug) {
-        return canonicalUrlService.buildPath("/post/" + slug);
+        String language = languageContext.getLang();
+        String prefix = LanguageConstant.DEFAULT_LANG.equalsIgnoreCase(language) ? "" : "/" + language;
+        return canonicalUrlService.buildPath(prefix + "/post/" + slug);
     }
 
     private String buildAmpUrl(String slug, String language) {
@@ -400,57 +410,26 @@ public class PostController {
         return normalizedDescription.substring(0, 160);
     }
 
-    private java.util.Map<String, String> buildOgData(String slug, String title, String summary) {
+    private java.util.Map<String, String> buildOgData(String slug, String title, String summary, String publicHtml) {
         java.util.Map<String, String> og = new java.util.HashMap<>();
         og.put("og:title", title);
         og.put("og:description", summary != null ? summary : "");
         og.put("og:type", "article");
         og.put("og:url", buildCanonicalUrl(slug));
 
-        // Try to find a featured image
-        String imageUrl = configManager.getString("appearance", "logo_url", "/logo.png");
-        // In a real scenario, you'd check post.featuredImage or first image in content
-        og.put("og:image", imageUrl);
+        List<String> images = com.biliwind.blog.service.StructuredDataService.imageUrls(publicHtml, buildCanonicalUrl(slug));
+        String imageUrl = images.isEmpty()
+                ? com.biliwind.blog.service.StructuredDataService.absoluteUrl(
+                        configManager.getString("appearance", "logo_url", "/logo.png"), buildCanonicalUrl(slug))
+                : images.getFirst();
+        if (imageUrl != null) og.put("og:image", imageUrl);
 
         og.put("twitter:card", "summary_large_image");
         og.put("twitter:title", title);
         og.put("twitter:description", summary != null ? summary : "");
-        og.put("twitter:image", imageUrl);
+        if (imageUrl != null) og.put("twitter:image", imageUrl);
 
         return og;
-    }
-
-    private String buildJsonLd(
-            com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
-            String title,
-            String summary,
-            String slug) {
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.node.ObjectNode root = mapper.createObjectNode();
-            root.put("@context", "https://schema.org");
-            root.put("@type", "BlogPosting");
-            root.put("headline", title);
-            root.put("description", summary != null ? summary : "");
-            root.put("url", buildCanonicalUrl(slug));
-            root.put("datePublished", snapshot.publishedAt() != null ? snapshot.publishedAt().toString() : "");
-            root.put("dateModified", snapshot.updatedAt() != null ? snapshot.updatedAt().toString() : "");
-
-            com.fasterxml.jackson.databind.node.ObjectNode author = root.putObject("author");
-            author.put("@type", "Person");
-            author.put("name", snapshot.authorName() == null ? "Unknown" : snapshot.authorName());
-
-            com.fasterxml.jackson.databind.node.ObjectNode publisher = root.putObject("publisher");
-            publisher.put("@type", "Organization");
-            publisher.put("name", configManager.getString("site_info", "title", "WindBlog"));
-            com.fasterxml.jackson.databind.node.ObjectNode logo = publisher.putObject("logo");
-            logo.put("@type", "ImageObject");
-            logo.put("url", configManager.getString("appearance", "logo_url", "/logo.png"));
-
-            return mapper.writeValueAsString(root);
-        } catch (Exception e) {
-            return "{}";
-        }
     }
 
     @RegisterForReflection

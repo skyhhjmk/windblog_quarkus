@@ -1,4 +1,9 @@
 <div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
+    <template id="pjax-head-metadata">
+        {#if jsonLd.or(null)}
+            <script type="application/ld+json" nonce="{cspNonce}" data-pjax-managed="true">{jsonLd.raw}</script>
+        {/if}
+    </template>
     <div id="pjax-nav-path" class="hidden">
         {config:siteNavRoot} / 首页{#if subPage && subPage > 1} / page-{subPage}{/if}
     </div>

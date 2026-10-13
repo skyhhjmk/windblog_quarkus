@@ -301,7 +301,7 @@
 
 
             <!-- 付费内容安全加载：初始只显示预览内容 -->
-            <section class="prose dark:prose-invert max-w-none" id="post-content-section"
+            <section class="prose dark:prose-invert max-w-none{#if postPrice > 0} post-paywall{/if}" id="post-content-section"
                      data-post-ref="{postSlug}"
                      data-post-price="{postPrice}"
                      data-has-purchased="{hasPurchased}">

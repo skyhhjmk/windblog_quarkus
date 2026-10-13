@@ -10,6 +10,16 @@ class PublicContentSanitizerTest {
     private final PublicContentSanitizer sanitizer = new PublicContentSanitizer();
 
     @Test
+    void shouldKeepFirstPartyImageAndLinkPathsRelative() {
+        String html = sanitizer.sanitize("<img src=\"/uploads/cover.jpg\" width=\"1200\" height=\"630\">"
+                + "<a href=\"/post/hello\">article</a>");
+        assertTrue(html.contains("src=\"/uploads/cover.jpg\""));
+        assertTrue(html.contains("href=\"/post/hello\""));
+        assertTrue(html.contains("width=\"1200\""));
+        assertFalse(html.contains("http://localhost"));
+    }
+
+    @Test
     void shouldRemoveActiveHtmlAndNormalizeLinks() {
         String html = sanitizer.sanitize("<script>alert(1)</script><a href=\"https://example.com\">link</a>"
                 + "<img src=\"javascript:alert(1)\"><div style=\"background:url(https://evil.test)\">text</div>");

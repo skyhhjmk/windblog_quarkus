@@ -33,6 +33,9 @@ import java.util.stream.IntStream;
 @Path("/tag")
 public class TagController {
 
+    @Inject
+    com.biliwind.blog.service.StructuredDataService structuredDataService;
+
     private static final int PAGE_SIZE = 12;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -86,6 +89,8 @@ public class TagController {
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
         return template
                 .data("language", lang)
+                .data("jsonLd", structuredDataService.collection("标签", "/tag", lang,
+                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb("标签", "/tag"))))
                 .data("detailMode", false)
                 .data("pageTitle", safeKeyword.isBlank() ? "Tags" : "Tags - " + safeKeyword)
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tags")
@@ -144,6 +149,9 @@ public class TagController {
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
         return template
                 .data("language", lang)
+                .data("jsonLd", structuredDataService.collection(tagName, "/tag/" + entity.slug, lang,
+                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb("标签", "/tag"),
+                                new com.biliwind.blog.service.StructuredDataService.Breadcrumb(tagName, "/tag/" + entity.slug))))
                 .data("detailMode", true)
                 .data("pageTitle", "Tag - " + tagName)
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tag / " + entity.slug)

@@ -82,6 +82,10 @@ public class ConfigInitializer {
         siteInfoFields.addObject().put("key", "keywords").put("label", "SEO关键词").put("widget", "tag_input");
         siteInfoFields.addObject().put("key", "description").put("label", "SEO描述").put("widget", "textarea");
         siteInfoFields.addObject().put("key", "author").put("label", "站点作者").put("widget", "input");
+        siteInfoFields.addObject().put("key", "author_url").put("label", "作者公开介绍页").put("widget", "input")
+                .put("hint", "填写真实可公开访问的作者主页；仅用于作者姓名与站点作者一致的文章。");
+        siteInfoFields.addObject().put("key", "author_same_as").put("label", "作者身份链接").put("widget", "tag_input")
+                .put("hint", "同一作者的公开社交账号或个人主页 URL，每个链接添加为一个标签。");
         siteInfoFields.addObject()
                 .put("key", "site_url")
                 .put("label", "本站链接")
@@ -105,6 +109,8 @@ public class ConfigInitializer {
         siteInfoValue.putArray("keywords").add("blog").add("tech").add("quarkus");
         siteInfoValue.put("description", "基于 Quarkus 和 Flutter 构建的极简博客系统，支持 AI 摘要与多端同步。");
         siteInfoValue.put("author", "BiliWind");
+        siteInfoValue.put("author_url", "");
+        siteInfoValue.putArray("author_same_as");
         siteInfoValue.put("site_url", "http://localhost:8080");
         siteInfoValue.putObject("site_url_regions");
 

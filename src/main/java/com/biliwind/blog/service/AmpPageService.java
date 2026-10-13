@@ -18,6 +18,9 @@ import java.util.Optional;
 public class AmpPageService {
 
     @Inject
+    StructuredDataService structuredDataService;
+
+    @Inject
     ConfigManager configManager;
 
     @Inject
@@ -90,7 +93,8 @@ public class AmpPageService {
                 repostPolicy.requiresApplication(),
                 repostPolicy.conditions(),
                 repostPolicy.licenseUrl(),
-                canonicalUrl));
+                canonicalUrl,
+                structuredDataService.article(snapshot, title, summary, canonicalUrl, language, rendered.html())));
     }
 
     public boolean isEnabled() {
@@ -179,7 +183,8 @@ public class AmpPageService {
             boolean repostPolicyRequiresApplication,
             List<String> repostPolicyConditions,
             String repostPolicyLicenseUrl,
-            String repostOriginalUrl) {
+            String repostOriginalUrl,
+            String jsonLd) {
 
         public static AmpPost unavailable(
                 String slug,
@@ -191,7 +196,7 @@ public class AmpPageService {
                 OffsetDateTime lastUpdated) {
             return new AmpPost(false, "受保护或付费文章不生成可缓存 AMP 页面", slug, language, title,
                     summary, "", canonicalUrl, ampUrl, lastUpdated, 0, 0, null,
-                    null, false, List.of(), null, null);
+                    null, false, List.of(), null, null, null);
         }
     }
 }

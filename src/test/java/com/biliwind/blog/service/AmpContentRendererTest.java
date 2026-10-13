@@ -2,6 +2,10 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.PostRenderType;
 import org.junit.jupiter.api.Test;
+import org.jsoup.Jsoup;
+import java.net.URI;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,7 +24,8 @@ class AmpContentRendererTest {
                         + "<script>alert(1)</script><button>buy</button><iframe src=\"https://evil.example\"></iframe>");
 
         assertTrue(result.html().contains("<amp-img"));
-        assertTrue(result.html().contains("src=\"http://localhost:8080/uploads/cover.jpg\""));
+        String imageSource = Jsoup.parseBodyFragment(result.html()).selectFirst("amp-img").attr("src");
+        assertEquals("/uploads/cover.jpg", URI.create(imageSource).getPath());
         assertTrue(result.html().contains("width=\"800\""));
         assertTrue(result.html().contains("height=\"450\""));
         assertFalse(result.html().contains("<img"));

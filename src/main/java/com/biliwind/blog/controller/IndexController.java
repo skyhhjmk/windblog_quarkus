@@ -55,6 +55,9 @@ public class IndexController {
     RegionContext regionContext;
 
     @Inject
+    com.biliwind.blog.service.StructuredDataService structuredDataService;
+
+    @Inject
     CspNonceContext cspNonceContext;
 
     @GET
@@ -102,6 +105,7 @@ public class IndexController {
         }
 
         String renderedHtml = template
+                .data("jsonLd", structuredDataService.home(subPage, language))
                 .data("language", language)
                 .data("subPage", subPage)
                 .data("currentPage", subPage)

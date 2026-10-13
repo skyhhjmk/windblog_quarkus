@@ -21,7 +21,8 @@ public class PublicContentSanitizer {
             .addAttributes("th", "align")
             .addAttributes("td", "align")
             .addProtocols("a", "href", "http", "https", "mailto")
-            .addProtocols("img", "src", "http", "https");
+            .addProtocols("img", "src", "http", "https")
+            .preserveRelativeLinks(true);
 
     public String sanitize(String html) {
         if (html == null || html.isBlank()) {

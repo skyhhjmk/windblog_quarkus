@@ -62,6 +62,7 @@ public class AmpController {
         }
 
         TemplateInstance instance = ampTemplate
+                .data("jsonLd", post.jsonLd())
                 .data("language", post.language())
                 .data("title", post.title())
                 .data("description", post.summary())
