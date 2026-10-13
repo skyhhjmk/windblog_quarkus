@@ -31,7 +31,7 @@ class StructuredDataServiceTest {
                     case "title" -> "Test Blog";
                     case "author" -> "Alice";
                     case "author_url" -> "/about";
-                    case "logo_url" -> "/logo.png";
+                    case "logo_url" -> "/brand-logo.svg";
                     default -> fallback;
                 };
             }
@@ -70,7 +70,7 @@ class StructuredDataServiceTest {
         assertFalse(article.has("dateModified"));
         assertEquals(ORIGIN + "/about", article.path("author").path("url").asText());
         assertEquals(1, article.path("author").path("sameAs").size());
-        assertEquals(ORIGIN + "/logo.png", graph.get(1).path("logo").path("url").asText());
+        assertEquals(ORIGIN + "/brand-logo.svg", graph.get(1).path("logo").path("url").asText());
         assertTrue(article.path("isAccessibleForFree").asBoolean());
         assertFalse(article.has("hasPart"));
         JsonNode crumbs = graph.get(2).path("itemListElement");
@@ -108,6 +108,34 @@ class StructuredDataServiceTest {
         assertEquals(3, items.size());
         assertEquals(1, items.get(0).path("position").asInt());
         assertEquals(3, items.get(2).path("position").asInt());
+    }
+
+    @Test
+    void collectionAlwaysIncludesCurrentPageWhenLegacyTrailIsEmptyOrIncomplete() throws Exception {
+        for (List<StructuredDataService.Breadcrumb> trail : List.of(
+                List.<StructuredDataService.Breadcrumb>of(),
+                List.of(new StructuredDataService.Breadcrumb("Tech", "/category/tech")))) {
+            JsonNode graph = mapper.readTree(service.collection("Cloud Native", "/category/cloud-native",
+                    "zh-CN", trail)).path("@graph");
+            JsonNode items = graph.get(1).path("itemListElement");
+            assertEquals(trail.size() + 2, items.size());
+            JsonNode current = items.get(items.size() - 1);
+            assertEquals("Cloud Native", current.path("name").asText());
+            assertEquals(ORIGIN + "/category/cloud-native", current.path("item").asText());
+            assertEquals(items.size(), current.path("position").asInt());
+        }
+    }
+
+    @Test
+    void missingBundledDefaultLogoIsNotAdvertisedAsAnImage() throws Exception {
+        service.configManager = new ConfigManager() {
+            @Override public String getString(String key, String field, String fallback) {
+                return "logo_url".equals(field) ? "/logo.png" : fallback;
+            }
+        };
+        assertNull(service.publisherLogoUrl());
+        JsonNode publisher = mapper.readTree(service.home(1, "zh-CN")).path("@graph").get(1);
+        assertFalse(publisher.has("logo"));
     }
 
     @Test

@@ -419,8 +419,7 @@ public class PostController {
 
         List<String> images = com.biliwind.blog.service.StructuredDataService.imageUrls(publicHtml, buildCanonicalUrl(slug));
         String imageUrl = images.isEmpty()
-                ? com.biliwind.blog.service.StructuredDataService.absoluteUrl(
-                        configManager.getString("appearance", "logo_url", "/logo.png"), buildCanonicalUrl(slug))
+                ? structuredDataService.publisherLogoUrl()
                 : images.getFirst();
         if (imageUrl != null) og.put("og:image", imageUrl);
 

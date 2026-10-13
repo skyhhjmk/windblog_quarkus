@@ -48,7 +48,15 @@ public class StructuredDataService {
         page.put("name", title);
         page.put("inLanguage", language);
         page.putObject("breadcrumb").put("@id", url + "#breadcrumb");
-        return graph(List.of(page, breadcrumb(url, trail)));
+        List<Breadcrumb> completeTrail = new ArrayList<>(trail);
+        String base = canonicalUrlService.buildPath("/");
+        String lastUrl = completeTrail.isEmpty() ? null
+                : absoluteUrl(completeTrail.getLast().path(), base);
+        // Imported category paths may omit the current category or resolve no ancestors.
+        if (!absoluteUrl(url, base).equals(lastUrl)) {
+            completeTrail.add(new Breadcrumb(title, url));
+        }
+        return graph(List.of(page, breadcrumb(url, completeTrail)));
     }
 
     public String article(PublicCacheRefreshService.PublicPostSnapshot snapshot, String title,
@@ -111,9 +119,19 @@ public class StructuredDataService {
         ObjectNode publisher = node("Organization", home + "#publisher");
         publisher.put("name", siteName());
         publisher.put("url", home);
-        String logo = absoluteUrl(configManager.getString("appearance", "logo_url", "/logo.png"), home);
+        String logo = publisherLogoUrl();
         if (logo != null) publisher.putObject("logo").put("@type", "ImageObject").put("url", logo);
         return publisher;
+    }
+
+    public String publisherLogoUrl() {
+        String configured = configManager.getString("appearance", "logo_url", "");
+        // Older settings seed this path even though the application ships no such asset.
+        if ("/logo.png".equals(configured.trim())
+                && StructuredDataService.class.getResource("/META-INF/resources/logo.png") == null) {
+            return null;
+        }
+        return absoluteUrl(configured, canonicalUrlService.buildPath("/"));
     }
 
     private String siteName() {
