@@ -36,6 +36,9 @@
     <meta name="keywords"
           content="{pageKeywords ?: config:siteKeywords}"
           data-site-content="{config:siteKeywords}"/>
+    {#if config:googleAdsensePublisherId}
+        <meta name="google-adsense-account" content="{config:googleAdsensePublisherId}"/>
+    {/if}
     <link rel="icon" href="{config:faviconUrl}"/>
 
     {#if canonicalUrl.or(null)}

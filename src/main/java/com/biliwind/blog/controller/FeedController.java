@@ -56,6 +56,15 @@ public class FeedController {
     }
 
     @GET
+    @Path("/ads.txt")
+    @Produces(MediaType.TEXT_PLAIN)
+    public String adsTxt() {
+        String publisherId = com.biliwind.blog.service.ConfigTemplateData.googleAdsensePublisherId();
+        if (publisherId.isEmpty()) return "";
+        return "google.com, " + publisherId.substring("ca-".length()) + ", DIRECT, f08c47fec0942fa0\n";
+    }
+
+    @GET
     @Path("/sitemap-posts.xml")
     @Produces(MediaType.APPLICATION_XML)
     public TemplateInstance sitemapPosts() {

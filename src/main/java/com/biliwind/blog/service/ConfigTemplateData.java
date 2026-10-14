@@ -243,6 +243,12 @@ public class ConfigTemplateData {
         return value == null ? "{}" : value.toString();
     }
 
+    public static String googleAdsensePublisherId() {
+        JsonNode value = configManager().get("google_adsense");
+        String clientId = value == null ? "" : value.path("clientId").asText("").trim();
+        return clientId.matches("ca-pub-\\d{16}") ? clientId : "";
+    }
+
     public static String logoUrl() {
         return configManager().getString("appearance", "logo_url", "/logo.png");
     }
