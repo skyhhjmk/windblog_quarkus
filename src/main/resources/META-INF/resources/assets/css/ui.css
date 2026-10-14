@@ -18,6 +18,11 @@
     vertical-align: middle;
 }
 
+/* Keep the idle state hidden even when utility styles have lower priority. */
+.spinner.hidden {
+    display: none;
+}
+
 /* Toast Notifications */
 .toast-container {
     position: fixed;
