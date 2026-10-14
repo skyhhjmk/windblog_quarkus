@@ -238,6 +238,11 @@ public class ConfigTemplateData {
         return Arc.container().instance(AnalyticsTrackingSettings.class).get().current();
     }
 
+    public static String adsenseConfig() {
+        JsonNode value = configManager().get("google_adsense");
+        return value == null ? "{}" : value.toString();
+    }
+
     public static String logoUrl() {
         return configManager().getString("appearance", "logo_url", "/logo.png");
     }

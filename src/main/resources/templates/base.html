@@ -239,22 +239,25 @@
 </header>
 
 <!-- Main Content -->
-<main class="flex-grow max-w-1400 mx-auto w-full px-4 py-10 md:px-6 md:py-16">
+<main data-wb-ads-config="{config:adsenseConfig}" class="flex-grow max-w-1400 mx-auto w-full px-4 py-10 md:px-6 md:py-16">
     <nav aria-label="面包屑" class="mb-10 text-xs text-meta font-mono">
         <span id="nav-path-text">{#insert navPath}{config:siteNavRoot}{/insert}</span>
     </nav>
     <div class="flex flex-col md:flex-row gap-10 md:gap-20">
         <!-- Primary Column -->
         <div id="pjax-container" class="flex-1 min-w-0">
+            <div data-wb-ad-placement="content_top"></div>
             {#insert content}
                 <div class="flex items-center justify-center h-64 border border-dashed border-border rounded-lg">
                     <p class="text-sm text-gray-600 uppercase tracking-widest font-mono">Content Placeholder</p>
                 </div>
             {/insert}
+            <div data-wb-ad-placement="content_bottom"></div>
         </div>
 
         <!-- Sidebar Column (Asymmetric 3:1 approx) -->
         <aside id="sidebar-container" class="w-full md:w-[320px] shrink-0">
+            <div data-wb-ad-placement="sidebar"></div>
             {#insert sidebar}
                 <div class="space-y-12">
                     {#insert sidebar-content}
@@ -325,6 +328,12 @@
 <!-- UI Components -->
     {#include system/ui.html /}
 
+<style>
+.wb-ad-block { margin: 1.5rem 0; }
+@media (max-width: 767px) { .wb-ad-desktop { display: none; } }
+@media (min-width: 768px) { .wb-ad-mobile { display: none; } }
+</style>
+
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js" defer></script>
 <script src="/assets/js/main.js?v=pjax-20260921-pagination-v7" defer></script>
@@ -332,7 +341,7 @@
 <script src="/assets/js/article-images.js?v=article-image-placeholder-20261007" defer></script>
 <script src="/assets/js/user.js?v=user-center-inventory-silent-save-20260923" defer></script>
 <script src="/assets/js/comment.js?v=comment-visitor-20261012" defer></script>
-<script src="/assets/js/ads.js" defer></script>
+<script src="/assets/js/ads.js?v=adsense-20261014" defer></script>
 <script src="/assets/js/link.js" defer></script>
 <script src="/assets/js/post-premium.js?v=repost-license-access-fix-20260925" defer></script>
 <script src="/assets/js/post-quote.js" defer></script>
