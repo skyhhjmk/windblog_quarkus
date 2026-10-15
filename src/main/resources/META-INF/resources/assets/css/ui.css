@@ -600,6 +600,10 @@ button:disabled {
     min-width: .72em;
 }
 
+.windblog-pagination-n-page.windblog-pagination-page {
+    font: inherit;
+}
+
 .windblog-pagination-n-letter {
     position: absolute;
     top: 50%;
@@ -610,7 +614,9 @@ button:disabled {
     transform: translate(-50%, -50%);
 }
 
-.windblog-pagination-n-page .windblog-pagination-page {
+.windblog-pagination-page-number {
+    font-family: var(--font-mono);
+    font-weight: 700;
     position: absolute;
     top: calc(50% + 1.55rem);
     left: 50%;
@@ -656,7 +662,7 @@ button:disabled {
     -webkit-appearance: none;
 }
 
-.windblog-pagination-form:focus-within .windblog-pagination-page-input {
+.windblog-pagination-page-input:focus-within {
     border-color: #a8c2f4;
     box-shadow: 0 0 0 3px rgba(22, 104, 217, .16);
 }
@@ -691,7 +697,7 @@ button:disabled {
     white-space: nowrap;
 }
 
-.windblog-pagination-form:focus-within .windblog-pagination-go {
+.windblog-pagination-form:has(.windblog-pagination-page-input input:focus, .windblog-pagination-go:focus) .windblog-pagination-go {
     width: 5.7rem;
     background: var(--pagination-accent);
     color: #fff;
@@ -703,7 +709,7 @@ button:disabled {
     transition: opacity .2s ease;
 }
 
-.windblog-pagination-form:focus-within .windblog-pagination-go-extra {
+.windblog-pagination-form:has(.windblog-pagination-page-input input:focus, .windblog-pagination-go:focus) .windblog-pagination-go-extra {
     opacity: 1;
 }
 
@@ -755,7 +761,7 @@ button:disabled {
     animation: windblog-pagination-invalid .46s ease-in-out;
 }
 
-.windblog-pagination-form:focus-within .windblog-pagination-go.is-invalid {
+.windblog-pagination-form:has(.windblog-pagination-page-input input:focus, .windblog-pagination-go:focus) .windblog-pagination-go.is-invalid {
     background: #ef4444;
     color: #fff;
 }
@@ -769,11 +775,6 @@ button:disabled {
 .windblog-pagination-page:hover,
 .windblog-pagination-page:focus-visible {
     transform: translateY(-1px);
-}
-
-.windblog-pagination-n-page .windblog-pagination-page:hover,
-.windblog-pagination-n-page .windblog-pagination-page:focus-visible {
-    transform: translate(-50%, -1px);
 }
 
 .windblog-pagination-status {
@@ -829,7 +830,7 @@ button:disabled {
         font-size: 1.7rem;
     }
 
-    .windblog-pagination-form:focus-within .windblog-pagination-go {
+    .windblog-pagination-form:has(.windblog-pagination-page-input input:focus, .windblog-pagination-go:focus) .windblog-pagination-go {
         width: 5.9rem;
         font-size: 1.7rem;
     }
@@ -864,7 +865,7 @@ button:disabled {
         box-shadow: 0 0 0 4px rgba(239, 68, 68, .12);
     }
 
-    .windblog-pagination-form:focus-within .windblog-pagination-go.is-invalid {
+    .windblog-pagination-form:has(.windblog-pagination-page-input input:focus, .windblog-pagination-go:focus) .windblog-pagination-go.is-invalid {
         background: #ef4444;
         color: #fff;
     }

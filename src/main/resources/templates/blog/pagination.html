@@ -24,13 +24,14 @@
             <span class="windblog-pagination-fixed" aria-hidden="true">Wi</span>
             <span class="windblog-pagination-n-pages" aria-label="页码">
                 {#for pageLink in paginationPages}
-                    <span class="windblog-pagination-n-page">
+                    <a class="windblog-pagination-n-page windblog-pagination-page{#if pageLink.current} is-current{/if}"
+                       href="{pageLink.url}"
+                       data-page="{pageLink.number}"
+                       aria-label="第 {pageLink.number} 页"
+                       {#if pageLink.current}aria-current="page"{/if}>
                         <span class="windblog-pagination-n-letter" aria-hidden="true">n</span>
-                        <a class="windblog-pagination-page{#if pageLink.current} is-current{/if}"
-                           href="{pageLink.url}"
-                           data-page="{pageLink.number}"
-                           {#if pageLink.current}aria-current="page"{/if}>{pageLink.number}</a>
-                    </span>
+                        <span class="windblog-pagination-page-number" aria-hidden="true">{pageLink.number}</span>
+                    </a>
                 {/for}
             </span>
             <span class="windblog-pagination-fixed" aria-hidden="true">d-BL</span>
