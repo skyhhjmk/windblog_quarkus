@@ -20,6 +20,7 @@ import java.time.OffsetDateTime;
 import java.util.Optional;
 
 @Path("/")
+@io.smallrye.common.annotation.Blocking
 public class AmpController {
 
     @Inject

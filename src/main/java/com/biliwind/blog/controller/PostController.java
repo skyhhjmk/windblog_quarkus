@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Path("/")
+@io.smallrye.common.annotation.Blocking
 public class PostController {
 
     private static final Map<String, String> CONTENT_DECLARATION_LABELS = Map.of(
@@ -66,6 +67,9 @@ public class PostController {
 
     @Inject
     com.biliwind.blog.service.CanonicalUrlService canonicalUrlService;
+
+    @Inject com.biliwind.blog.service.SeoAuditService seoAuditService;
+    @Inject com.biliwind.blog.service.SeoManagementService seoManagementService;
 
     @Inject
     com.biliwind.blog.service.AmpPageService ampPageService;
@@ -148,7 +152,8 @@ public class PostController {
 
         long epoch = lastUpdated.toEpochSecond();
         String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion
-                + (pjaxRequest ? "_pjax" : "_full");
+                + (pjaxRequest ? "_pjax" : "_full")
+                + "_" + seoManagementService.robots(("zh-cn".equalsIgnoreCase(resolvedLang) ? "" : "/" + resolvedLang) + "/post/" + slug);
         EntityTag etag = new EntityTag(etagValue);
         boolean protectedPage = snapshot.visibility() == 2;
 
@@ -285,6 +290,7 @@ public class PostController {
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
                 .data("postSlug", slug)
+                .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())
                 .data("postTitle", displayTitle)
                 .data("pageTitle", seoTitle)
                 .data("pageDescription", pageDescription)
@@ -300,6 +306,7 @@ public class PostController {
                 .data("postBodyJson", escapeJavaScript(postBody.body()))
                 .data("postCategory", postCategory)
                 .data("postCategorySlug", postCategorySlug)
+                .data("breadcrumbCategorySlug", snapshot.categorySlug())
                 .data("postCategories", postCategories)
                 .data("postPrice", postPrice)
                 // Public pages use the read model; protected pages are no-store and may
@@ -309,6 +316,7 @@ public class PostController {
                 .data("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
                 .data("attachments", attachments)
                 .data("relatedStoreItems", snapshot.relatedStoreItems())
+                .data("relatedArticles", seoAuditService.related(com.biliwind.blog.model.Post.findById(snapshot.postId()), resolvedLang))
                 .data("repostPolicyCode", repostPolicy.code())
                 .data("repostPolicyName", repostPolicy.name())
                 .data("repostPolicySummary", repostPolicy.summary())

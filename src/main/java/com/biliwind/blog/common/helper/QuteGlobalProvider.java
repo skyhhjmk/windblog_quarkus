@@ -77,4 +77,15 @@ public class QuteGlobalProvider {
         }
         return baseUrl + requestPath;
     }
+    @TemplateGlobal
+    public static java.util.List<com.biliwind.blog.service.SeoPageService.Alternate> seoAlternates() {
+        HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
+        return Arc.container().instance(com.biliwind.blog.service.SeoPageService.class).get().alternates(request.path());
+    }
+
+    @TemplateGlobal
+    public static String seoRobots() {
+        HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
+        return Arc.container().instance(com.biliwind.blog.service.SeoManagementService.class).get().robots(request.path());
+    }
 }

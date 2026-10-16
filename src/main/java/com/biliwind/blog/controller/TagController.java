@@ -31,6 +31,7 @@ import java.util.Locale;
 import java.util.stream.IntStream;
 
 @Path("/tag")
+@io.smallrye.common.annotation.Blocking
 public class TagController {
 
     @Inject

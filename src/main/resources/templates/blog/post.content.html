@@ -1,9 +1,12 @@
-<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+<div data-page-robots="{seoRobots}" id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
      data-page-title="{pageTitle ?: postTitle ?: '文章信息'}"
      data-page-description="{pageDescription ?: ''}"
      data-page-keywords="{pageKeywords ?: ''}"
      data-page-canonical="{canonicalUrl ?: ''}">
     <template id="pjax-head-metadata">
+        {#for alternate in seoAlternates}
+        <link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}" data-pjax-managed="true"/>
+        {/for}
         {#if ogData.or(null)}
             {#for entry in ogData.entrySet}
                 {#if entry.key.startsWith('og:')}
@@ -169,6 +172,13 @@
 
 
     <div class="card card-static p-5 md:p-12">
+        <nav aria-label="面包屑" class="text-sm mb-4">
+            <a href="/">首页</a>
+            {#if breadcrumbCategorySlug}
+            <span aria-hidden="true"> / </span><a href="/category/{breadcrumbCategorySlug}">{postCategory}</a>
+            {/if}
+            <span aria-hidden="true"> / </span><span>{postTitle}</span>
+        </nav>
         <article class="space-y-10 md:space-y-16" data-article-transition-slug="{postSlug}">
             <header class="space-y-8 md:space-y-12 mb-10 md:mb-16">
                 <div class="space-y-6">
@@ -437,4 +447,18 @@
             </section>
         {/if}
     </div>
+    {#if relatedArticles && !relatedArticles.isEmpty}
+    <aside aria-label="相关文章" class="mt-8 p-4">
+        <h2 class="text-lg font-bold">相关文章</h2>
+        <ul>{#for article in relatedArticles}<li><a href="{article.url}">{article.title}</a></li>{/for}</ul>
+    </aside>
+    {/if}
+    {#if internalLinkGraphVisible}
+    <section data-internal-link-graph data-slug="{postSlug}" aria-label="内部链接图" class="mt-8 p-4 border border-border rounded-xl">
+        <h2 class="text-lg font-bold">内部链接图</h2>
+        <p data-graph-status role="status" class="text-sm text-gray-500 my-3">正在读取当前文章的直接引用关系…</p>
+        <div data-graph-view style="max-height:420px;overflow:auto"></div>
+        <details class="mt-3"><summary class="cursor-pointer text-sm">查看关联文章列表</summary><ul data-graph-list class="space-y-2 mt-3"></ul></details>
+    </section>
+    {/if}
 </div>

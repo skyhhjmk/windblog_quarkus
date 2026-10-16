@@ -3,13 +3,19 @@
    <sitemap>
       <loc>{baseUrl}/sitemap-pages.xml</loc>
    </sitemap>
+   {#for page in postPages}
    <sitemap>
-      <loc>{baseUrl}/sitemap-posts.xml</loc>
+      <loc>{baseUrl}/sitemap-posts-{page}.xml</loc>
    </sitemap>
+   {/for}
+   {#for page in categoryPages}
    <sitemap>
-      <loc>{baseUrl}/sitemap-categories.xml</loc>
+      <loc>{baseUrl}/sitemap-categories-{page}.xml</loc>
    </sitemap>
+   {/for}
+   {#for page in tagPages}
    <sitemap>
-      <loc>{baseUrl}/sitemap-tags.xml</loc>
+      <loc>{baseUrl}/sitemap-tags-{page}.xml</loc>
    </sitemap>
+   {/for}
 </sitemapindex>

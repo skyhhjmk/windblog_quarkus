@@ -268,4 +268,10 @@ public class ConfigTemplateData {
     public static boolean toggle(String key) {
         return configManager().getBoolean("feature_toggles", key, true);
     }
+    public static String googleSiteVerification() {
+        return configManager().getString("seo", "google_site_verification", "");
+    }
+    public static boolean internalLinkGraphEnabled() {
+        return configManager().getBoolean("seo", "internal_link_graph_enabled", false);
+    }
 }

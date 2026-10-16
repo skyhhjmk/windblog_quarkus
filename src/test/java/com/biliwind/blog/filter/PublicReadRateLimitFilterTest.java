@@ -16,6 +16,8 @@ class PublicReadRateLimitFilterTest {
                 PublicReadRateLimitFilter.classify("post/example"));
         assertEquals(PublicReadRateLimitFilter.ReadRoute.POST,
                 PublicReadRateLimitFilter.classify("/zh/post/example"));
+        assertEquals(PublicReadRateLimitFilter.ReadRoute.POST,
+                PublicReadRateLimitFilter.classify("/api/posts/example/link-graph"));
         assertEquals(PublicReadRateLimitFilter.ReadRoute.SEARCH,
                 PublicReadRateLimitFilter.classify("/search"));
         assertEquals(PublicReadRateLimitFilter.ReadRoute.BROWSE,

@@ -69,7 +69,7 @@ public final class MarkdownHelper {
         PublicMediaUrlPolicy.removeDisallowedImages(document);
         injectMediaDimensions(document);
         for (org.jsoup.nodes.Element anchor : document.select("a")) {
-            anchor.attr("rel", "nofollow noopener noreferrer");
+            com.biliwind.blog.service.SeoLinkPolicy.apply(anchor, getBlogUrl());
         }
         return document.body().html();
     }

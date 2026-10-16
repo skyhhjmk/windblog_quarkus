@@ -1,4 +1,4 @@
-<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{pageTitle ?: '分类'}">
+<div id="pjax-content-root" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{pageTitle ?: '分类'}">
     <template id="pjax-head-metadata">
         {#if jsonLd.or(null)}
             <script type="application/ld+json" nonce="{cspNonce}" data-pjax-managed="true">{jsonLd.raw}</script>

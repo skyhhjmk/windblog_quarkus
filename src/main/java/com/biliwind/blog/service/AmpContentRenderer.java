@@ -66,7 +66,7 @@ public class AmpContentRenderer {
         }
 
         for (Element anchor : document.body().select("a")) {
-            anchor.attr("rel", "nofollow noopener noreferrer");
+            // Link policy was applied by PublicContentSanitizer.
         }
 
         return new RenderedContent(document.body().html(), imageCount, removedElementCount);

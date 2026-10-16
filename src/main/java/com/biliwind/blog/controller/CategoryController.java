@@ -33,6 +33,7 @@ import java.util.Locale;
 import java.util.stream.IntStream;
 
 @Path("/category")
+@io.smallrye.common.annotation.Blocking
 public class CategoryController {
 
     @Inject

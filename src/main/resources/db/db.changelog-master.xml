@@ -143,4 +143,6 @@
     <include file="db/migration/142-add-link-keyword-fraud-status.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/143-add-comment-visitor-details.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/144-add-google-adsense-settings.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/145-add-seo-management.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/146-add-internal-link-graph-setting.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

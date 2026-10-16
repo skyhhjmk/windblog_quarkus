@@ -717,7 +717,7 @@
             }
 
             document.head.querySelectorAll(
-                'meta[property^="og:"], meta[name^="twitter:"], script[type="application/ld+json"]'
+                'meta[property^="og:"], meta[name^="twitter:"], script[type="application/ld+json"], link[rel="alternate"][hreflang]'
             ).forEach(function (metadataNode) {
                 metadataNode.remove();
             });
@@ -725,6 +725,16 @@
             const metadataTemplate = pageRoot.querySelector('#pjax-head-metadata');
             if (metadataTemplate) {
                 document.head.appendChild(metadataTemplate.content.cloneNode(true));
+            }
+            if (!document.head.querySelector('meta[property="og:title"]')) {
+                const description = document.head.querySelector('meta[name="description"]')?.content || '';
+                const canonical = document.head.querySelector('link[rel="canonical"]')?.href || url;
+                [['og:title', document.title], ['og:description', description], ['og:type', 'website'], ['og:url', canonical], ['twitter:card', 'summary'], ['twitter:title', document.title], ['twitter:description', description]].forEach(([name, content]) => {
+                    const meta = document.createElement('meta');
+                    meta.setAttribute(name.startsWith('og:') ? 'property' : 'name', name);
+                    meta.content = content;
+                    document.head.appendChild(meta);
+                });
             }
         }
 

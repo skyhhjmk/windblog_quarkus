@@ -9,6 +9,8 @@ import org.jsoup.safety.Safelist;
 @ApplicationScoped
 public class PublicContentSanitizer {
 
+    @jakarta.inject.Inject PublicUrlService publicUrlService;
+
     private static final Safelist PUBLIC_HTML = Safelist.relaxed()
             .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div")
             .addAttributes("code", "class")
@@ -33,7 +35,7 @@ public class PublicContentSanitizer {
         Document document = Jsoup.parseBodyFragment(sanitized);
         PublicMediaUrlPolicy.removeDisallowedImages(document);
         for (Element anchor : document.select("a")) {
-            anchor.attr("rel", "nofollow noopener noreferrer");
+            SeoLinkPolicy.apply(anchor, publicUrlService == null ? null : publicUrlService.getBaseUrl());
         }
         return document.body().html();
     }

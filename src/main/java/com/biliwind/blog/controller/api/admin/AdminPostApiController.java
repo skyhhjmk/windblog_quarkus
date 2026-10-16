@@ -766,6 +766,8 @@ public class AdminPostApiController {
         return changed;
     }
 
+    @Inject com.biliwind.blog.service.SeoManagementService seoManagementService;
+
     private boolean updateBasicFields(Post post, PostUpdateRequest request) {
         boolean changed = false;
 
@@ -779,6 +781,7 @@ public class AdminPostApiController {
                 throw conflict("slug 已存在");
             }
             if (!nextSlug.equals(post.slug)) {
+                seoManagementService.recordPostMove(post.slug, nextSlug);
                 changed = true;
             }
             post.slug = nextSlug;

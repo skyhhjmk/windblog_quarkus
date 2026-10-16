@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @Path("/")
+@io.smallrye.common.annotation.Blocking
 public class FeedController {
 
     @Inject
@@ -52,7 +53,10 @@ public class FeedController {
     @Produces(MediaType.APPLICATION_XML)
     public TemplateInstance sitemapIndex() {
         return sitemapIndexTemplate
-                .data("baseUrl", feedService.getBaseUrl());
+                .data("baseUrl", feedService.getBaseUrl())
+                .data("postPages", feedService.getPostSitemapPages())
+                .data("categoryPages", feedService.getCategorySitemapPages())
+                .data("tagPages", feedService.getTagSitemapPages());
     }
 
     @GET
@@ -70,7 +74,14 @@ public class FeedController {
     public TemplateInstance sitemapPosts() {
         return sitemapPostsTemplate
                 .data("baseUrl", feedService.getBaseUrl())
-                .data("posts", feedService.getPublishedPosts());
+                .data("items", feedService.getPostSitemapUrls(1));
+    }
+
+    @GET
+    @Path("/sitemap-posts-{page}.xml")
+    @Produces(MediaType.APPLICATION_XML)
+    public TemplateInstance sitemapPostsPage(@jakarta.ws.rs.PathParam("page") int page) {
+        return sitemapPostsTemplate.data("items", feedService.getPostSitemapUrls(page));
     }
 
     @GET
@@ -97,6 +108,20 @@ public class FeedController {
         return sitemapTagsTemplate
                 .data("baseUrl", feedService.getBaseUrl())
                 .data("items", feedService.getTagSitemapUrls());
+    }
+
+    @GET
+    @Path("/sitemap-categories-{page}.xml")
+    @Produces(MediaType.APPLICATION_XML)
+    public TemplateInstance sitemapCategoriesPage(@jakarta.ws.rs.PathParam("page") int page) {
+        return sitemapCategoriesTemplate.data("items", feedService.getCategorySitemapUrls(page));
+    }
+
+    @GET
+    @Path("/sitemap-tags-{page}.xml")
+    @Produces(MediaType.APPLICATION_XML)
+    public TemplateInstance sitemapTagsPage(@jakarta.ws.rs.PathParam("page") int page) {
+        return sitemapTagsTemplate.data("items", feedService.getTagSitemapUrls(page));
     }
 
     @GET
@@ -127,7 +152,6 @@ public class FeedController {
                 + "Allow: /\n"
                 + "Disallow: /admin\n"
                 + "Disallow: /api/\n"
-                + "Disallow: /search\n"
                 + "Sitemap: " + feedService.getBaseUrl() + "/sitemap.xml\n";
     }
 }

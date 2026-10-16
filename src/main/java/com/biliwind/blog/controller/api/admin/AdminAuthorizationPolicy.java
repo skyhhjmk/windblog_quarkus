@@ -163,6 +163,8 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static String resourceFor(String path) {
+        if (path.startsWith("/api/admin/seo/posts/") || path.startsWith("/api/admin/seo/link-graph")) return "post";
+        if (path.startsWith("/api/admin/seo")) return "settings";
         if (path.startsWith("/api/admin/security/honeypot")) {
             return "honeypot";
         }

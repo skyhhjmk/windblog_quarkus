@@ -23,6 +23,7 @@ import java.util.List;
  * Link page for PJAX testing.
  */
 @Path("/link")
+@io.smallrye.common.annotation.Blocking
 public class LinkController {
 
         @Inject

@@ -31,6 +31,7 @@ import java.util.stream.IntStream;
  * 首页控制器
  */
 @Path("/")
+@io.smallrye.common.annotation.Blocking
 public class IndexController {
 
     private static final int PAGE_SIZE = 10;

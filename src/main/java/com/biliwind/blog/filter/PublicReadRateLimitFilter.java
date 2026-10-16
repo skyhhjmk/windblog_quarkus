@@ -88,6 +88,7 @@ public class PublicReadRateLimitFilter implements ContainerRequestFilter {
         if ("/search".equals(path)) {
             return ReadRoute.SEARCH;
         }
+        if (path.matches("/api/posts/[^/]+/link-graph")) return ReadRoute.POST;
         if (path.startsWith("/post/") || path.matches("/[a-zA-Z]{2,8}/post/.*")) {
             return ReadRoute.POST;
         }
