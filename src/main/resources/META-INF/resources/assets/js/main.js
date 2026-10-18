@@ -292,18 +292,16 @@
             clearTimeout(slowRequestTimer);
         }
 
-        function showNavigationError(url, retry) {
-            navigationStatus.replaceChildren(document.createTextNode('页面加载失败，请重试。 '));
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.textContent = '重试';
-            button.addEventListener('click', retry);
-            const link = document.createElement('a');
-            link.href = url;
-            link.dataset.noPjax = 'true';
-            link.textContent = '完整打开';
-            navigationStatus.append(button, link);
+        function fallbackToFullPage(url) {
+            navigationStatus.textContent = '加载失败，正在重新加载页面…';
             navigationStatus.hidden = false;
+            // A document navigation uses normal HTML, without the PJAX headers.
+            // Reload explicitly for popstate failures and same-address navigation.
+            if (new URL(url, window.location.href).href === window.location.href) {
+                window.location.reload();
+            } else {
+                window.location.assign(url);
+            }
         }
 
         function showProgress() {
@@ -990,7 +988,7 @@
         async function loadByPjax(url, pushState, transitionSlug, navigationOptions) {
             const container = document.getElementById('pjax-container');
             if (!container) {
-                showNavigationError(url, () => loadByPjax(url, pushState, transitionSlug, navigationOptions));
+                fallbackToFullPage(url);
                 return;
             }
 
@@ -1102,14 +1100,12 @@
                 }
                 if (activePjaxController === requestController) finalizePjaxLoad(url);
             } catch (error) {
-                if (activePjaxController !== requestController || (error && error.name === 'AbortError')) {
+                if (activePjaxController !== requestController || requestController.signal.aborted) {
                     return;
                 }
                 document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url, error: error } }));
                 if (!committed) {
-                    window.history.replaceState(displayedHistoryState, '', displayedUrl);
-                    scrollToPositionInstantly(sourceScrollPosition);
-                    showNavigationError(url, () => loadByPjax(url, true, transitionSlug, navigationOptions));
+                    fallbackToFullPage(url);
                 }
                 console.warn('[PJAX] navigation failed', error);
             } finally {

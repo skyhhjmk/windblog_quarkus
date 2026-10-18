@@ -320,26 +320,17 @@ button:disabled {
     z-index: 10000;
     max-width: calc(100vw - 2rem);
     padding: .75rem 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid #f59e0b;
     border-radius: .75rem;
-    background: var(--card-bg);
-    color: var(--text-main);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, .35);
+    background: radial-gradient(ellipse at top, #fff7cc, #fef3c7 70%);
+    color: #78350f;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: center;
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, .25),
+        0 0 28px rgba(245, 158, 11, .4), 0 6px 20px rgba(0, 0, 0, .2);
 }
 .pjax-status[hidden] { display: none; }
-.pjax-status button, .pjax-status a {
-    margin-left: .75rem;
-    text-decoration: underline;
-    cursor: pointer;
-}
-.pjax-status button {
-    border: 1px solid var(--accent);
-    border-radius: .4rem;
-    padding: .2rem .55rem;
-    color: var(--accent);
-    background: transparent;
-}
-.pjax-status a { color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
     #pjax-progress { transition: none !important; }
 }

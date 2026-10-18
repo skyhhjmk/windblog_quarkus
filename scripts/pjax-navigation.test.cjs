@@ -28,7 +28,7 @@ function harness(fetch) {
         getHistoryScrollPosition: () => ({ left: 0, top: 0 }),
         isArticleDetailUrl: () => false, rememberArticleListUrl: () => '',
         cleanupArticleTransitionItems() {}, scrollToPositionInstantly() {},
-        showNavigationError: (url, retry) => failures.push({ url, retry }),
+        fallbackToFullPage: url => failures.push({ url }),
         extractPjaxHtml: html => { if (html === 'invalid') throw Error('Invalid fragment'); return html; },
         hasArticleTransitionSource: () => false, logArticleTransitionMode() {},
         analyticsBeginNavigation: () => analytics.push('begin'),
@@ -49,16 +49,38 @@ const response = (url, html = 'new', type = 'text/html') => ({
     ok: true, url, headers: { get: () => type }, text: async () => html
 });
 
-test('failed navigation preserves the document and exposes a working retry', async () => {
-    let fail = true;
-    const h = harness(async url => { if (fail) throw Error('offline'); return response(url); });
+test('failed navigation automatically falls back to the target document', async () => {
+    const h = harness(async () => { throw Error('offline'); });
     await h.context.loadByPjax('http://localhost/tag', true, '');
     assert.equal(h.container.innerHTML, 'original');
-    assert.equal(h.context.window.location.href, 'http://localhost/');
-    assert.equal(h.failures.length, 1);
-    fail = false;
-    await h.failures[0].retry();
-    assert.deepEqual(h.commits, ['http://localhost/tag']);
+    assert.deepEqual(h.failures, [{ url: 'http://localhost/tag' }]);
+    assert.equal(h.commits.length, 0);
+});
+
+test('full-page fallback reloads the current URL and assigns a different target', () => {
+    const calls = [];
+    const context = {
+        URL, navigationStatus: {},
+        window: { location: {
+            href: 'http://localhost/tag',
+            reload: () => calls.push('reload'),
+            assign: url => calls.push(url)
+        } }
+    };
+    const start = source.indexOf('        function fallbackToFullPage(');
+    const end = source.indexOf('        function showProgress()', start);
+    vm.runInNewContext(source.slice(start, end), context);
+    context.fallbackToFullPage('/tag');
+    context.fallbackToFullPage('/next');
+    assert.deepEqual(calls, ['reload', '/next']);
+    assert.equal(context.navigationStatus.hidden, false);
+});
+
+test('missing PJAX container automatically opens the target document', async () => {
+    const h = harness(async () => { throw Error('must not fetch'); });
+    h.context.document.getElementById = () => null;
+    await h.context.loadByPjax('http://localhost/tag', true, '');
+    assert.deepEqual(h.failures, [{ url: 'http://localhost/tag' }]);
 });
 
 test('a stale response cannot overwrite a newer navigation or finish its progress', async () => {
