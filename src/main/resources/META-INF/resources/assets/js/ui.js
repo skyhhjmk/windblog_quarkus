@@ -11,10 +11,38 @@
      * @param {string} type - success, error, info
      * @param {number} duration - ms
      */
-    window.showToast = function (message, type = 'info', duration = 3000) {
+    const errorCodePattern = /(?:错误码|error\s*code)\s*[：:]\s*([A-Z0-9-]+)/i;
+
+    window.formatErrorMessage = function (message, errorCode = 'WB-UI-UNCLASSIFIED-001') {
+        let text = message;
+        let code = errorCode;
+        if (message && typeof message === 'object') {
+            text = message.message || message.error || '请求失败';
+            code = message.errorCode || message.code || code;
+        }
+        text = String(text ?? '请求失败').trim();
+        const existingCode = text.match(errorCodePattern);
+        if (existingCode) return text;
+        const separator = /[。.!?！？]$/.test(text) ? ' ' : '。';
+        return `${text}${separator}错误码：${code || 'WB-UI-UNCLASSIFIED-001'}`;
+    };
+
+    window.getErrorCode = function (message, fallback = 'WB-UI-UNCLASSIFIED-001') {
+        if (message && typeof message === 'object' && (message.errorCode || message.code)) {
+            return message.errorCode || message.code;
+        }
+        const match = String(message ?? '').match(errorCodePattern);
+        return match ? match[1] : fallback;
+    };
+
+    window.showToast = function (message, type = 'info', duration = 3000, errorCode = null) {
+        const displayMessage = type === 'error'
+            ? window.formatErrorMessage(message, errorCode || window.getErrorCode(message))
+            : (message && typeof message === 'object' ? (message.message || String(message)) : message);
+        const displayDuration = type === 'error' && duration === 3000 ? 8000 : duration;
         const container = document.getElementById('toastContainer');
         if (!container) {
-            console.log(`[${type}] ${message}`);
+            console.log(`[${type}] ${displayMessage}`);
             return;
         }
 
@@ -29,7 +57,7 @@
         else icon = '<svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
         toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-message"></div><button type="button" class="toast-close" aria-label="关闭通知" title="关闭通知"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-width="2" stroke-linecap="round"/></svg></button>`;
-        toast.querySelector('.toast-message').textContent = String(message ?? '');
+        toast.querySelector('.toast-message').textContent = String(displayMessage ?? '');
 
         container.appendChild(toast);
         setTimeout(() => toast.classList.add('show'), 10);
@@ -39,7 +67,7 @@
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 400);
         };
-        const dismissTimer = setTimeout(dismiss, duration);
+        const dismissTimer = setTimeout(dismiss, displayDuration);
         toast.querySelector('.toast-close').addEventListener('click', () => {
             clearTimeout(dismissTimer);
             dismiss();

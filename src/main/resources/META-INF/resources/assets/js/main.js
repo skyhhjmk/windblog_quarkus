@@ -293,7 +293,9 @@
         }
 
         function fallbackToFullPage(url) {
-            navigationStatus.textContent = '加载失败，正在重新加载页面…';
+            navigationStatus.textContent = window.formatErrorMessage
+                ? window.formatErrorMessage('页面局部加载失败，正在重新加载页面', 'WB-UI-NAVIGATION-001')
+                : '页面局部加载失败，正在重新加载页面';
             navigationStatus.hidden = false;
             // A document navigation uses normal HTML, without the PJAX headers.
             // Reload explicitly for popstate failures and same-address navigation.

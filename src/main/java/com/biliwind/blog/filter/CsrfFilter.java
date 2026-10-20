@@ -1,5 +1,6 @@
 package com.biliwind.blog.filter;
 
+import com.biliwind.blog.common.error.ErrorCodeCatalog;
 import com.biliwind.blog.common.security.CsrfTokenManager;
 import com.biliwind.blog.service.SecurityMetricsService;
 import jakarta.annotation.Priority;
@@ -53,9 +54,12 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
 
             if (csrfCookie == null || !csrfTokenManager.verifyToken(csrfHeader, csrfCookie.getValue())) {
                 securityMetricsService.increment("csrf.denied", "token_mismatch");
+                String errorCode = ErrorCodeCatalog.CSRF_VALIDATION_FAILED;
                 requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
                         .type(MediaType.APPLICATION_JSON)
-                        .entity(Map.of("success", false, "message", "CSRF token mismatch or missing"))
+                        .entity(Map.of("success", false,
+                                "message", ErrorCodeCatalog.appendToMessage("CSRF 验证失败：请求令牌缺失或与 Cookie 不匹配", errorCode),
+                                "errorCode", errorCode))
                         .build());
             }
         }

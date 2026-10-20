@@ -200,7 +200,8 @@
             await testLinkConnectivity(siteUrlInput.value.trim());
             window.showToast('当前网络可以连接该站点', 'success');
         } catch (error) {
-            window.showToast(readErrorMessage(error, '当前网络无法连接该站点'), 'error');
+            window.showToast(readErrorMessage(error, '当前网络无法连接该站点'), 'error', 8000,
+                window.getErrorCode?.(error.message, 'WB-UI-LINK-PROBE-001'));
         } finally {
             window.setLoading(connectivityTestButton, false);
         }
@@ -238,7 +239,9 @@
                 applicationForm.dataset.testedUrl = '';
             }
             if (connectivityStatus) {
-                connectivityStatus.textContent = '连接失败，请检查地址、HTTPS 和站点状态';
+                connectivityStatus.textContent = window.formatErrorMessage
+                    ? window.formatErrorMessage('连接失败，请检查地址、HTTPS 和站点状态', 'WB-UI-LINK-PROBE-001')
+                    : '连接失败，请检查地址、HTTPS 和站点状态';
                 connectivityStatus.className = 'block text-xs text-red-500';
             }
             throw error;
@@ -289,7 +292,8 @@
             window.showToast(responseBody.message, 'success');
         } catch (error) {
             window.WindBlogAnalytics?.trackFormResult('link-application', false);
-            window.showToast(readErrorMessage(error, '提交失败，请稍后重试'), 'error');
+            window.showToast(readErrorMessage(error, '提交失败，请稍后重试'), 'error', 8000,
+                window.getErrorCode?.(error.message, 'WB-UI-LINK-APPLY-001'));
         } finally {
             window.setLoading(submitButton, false);
         }

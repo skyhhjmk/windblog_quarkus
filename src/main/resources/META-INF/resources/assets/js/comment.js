@@ -103,7 +103,7 @@
         return date.toLocaleString();
     }
 
-    function setFeedback(root, message, type) {
+    function setFeedback(root, message, type, errorCode = 'WB-UI-UNCLASSIFIED-001') {
         const box = root.querySelector('#comment-feedback');
         if (!box) return;
 
@@ -113,7 +113,9 @@
             return;
         }
 
-        box.textContent = message;
+        box.textContent = type === 'error' && window.formatErrorMessage
+            ? window.formatErrorMessage(message, errorCode)
+            : message;
         box.className = 'mt-4 rounded-sm border px-3 py-2 text-sm ' +
             (type === 'error' ? 'comment-feedback-error' : 'comment-feedback-success');
     }
@@ -270,6 +272,9 @@
             const url = `/api/comments/post/${encodeURIComponent(slug)}?page=${currentPage}&size=${pageSize}`;
             const response = await fetch(url);
             const result = await response.json();
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || '评论列表请求失败');
+            }
             const nodes = result && result.success && Array.isArray(result.data) ? result.data : [];
             const totalRoots = result.total || 0;
 
@@ -296,7 +301,14 @@
         } catch (error) {
             if (!isAppend) {
                 count.textContent = '0 条讨论';
-                list.innerHTML = `<div class="comment-empty">${window.i18n.load_comments_failed || '加载评论失败。'}</div>`;
+                const errorMessage = window.formatErrorMessage
+                    ? window.formatErrorMessage(error.message || window.i18n.load_comments_failed || '加载评论失败。',
+                        window.getErrorCode?.(error.message, 'WB-UI-COMMENT-LOAD-001'))
+                    : (error.message || window.i18n.load_comments_failed || '加载评论失败。');
+                const errorBox = document.createElement('div');
+                errorBox.className = 'comment-empty';
+                errorBox.textContent = errorMessage;
+                list.replaceChildren(errorBox);
             }
         } finally {
             if (loadMoreBtn) window.setLoading(loadMoreBtn, false);
@@ -334,14 +346,32 @@
         answer.value = '';
         try {
             const response = await fetch('/api/comments/captcha', {cache: 'no-store', credentials: 'same-origin', headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(10000)});
-            const result = await response.json();
+            const result = await response.json().catch(() => null);
             if (root.dataset.captchaVersion !== String(version)) return;
-            if (!response.ok || !result.success || !result.data?.id || !result.data?.question) throw new Error('验证码加载失败，请重试');
+            if (!response.ok || !result?.success || !result.data?.id || !result.data?.question) {
+                const message = result?.message || `验证码服务返回 HTTP ${response.status}，未提供错误详情`;
+                const failure = new Error(message);
+                failure.errorCode = result?.errorCode || response.headers.get('X-WindBlog-Error-Code');
+                throw failure;
+            }
             root.dataset.captchaId = result.data.id;
             question.textContent = result.data.question;
             updateSubmitState(root);
         } catch (error) {
-            if (root.dataset.captchaVersion === String(version)) question.textContent = error.name === 'TimeoutError' ? '加载超时，请重试' : '加载失败，请重试';
+            if (root.dataset.captchaVersion === String(version)) {
+                const fallbackMessage = error.name === 'TimeoutError'
+                    ? '验证码加载超时，请重试'
+                    : error.message === 'Failed to fetch'
+                        ? '网络连接失败，未能加载验证码'
+                        : '验证码加载失败，请重试';
+                const message = error.message && error.message !== 'Failed to fetch'
+                    && error.name !== 'TimeoutError' ? error.message : fallbackMessage;
+                const errorCode = error.errorCode
+                    || window.getErrorCode?.(message, 'WB-UI-COMMENT-CAPTCHA-002');
+                question.textContent = window.formatErrorMessage
+                    ? window.formatErrorMessage(message, errorCode)
+                    : message;
+            }
         }
     }
 
@@ -367,20 +397,21 @@
 
             if (root.dataset.commentSubmitting === 'true') return;
             if (!root.dataset.captchaId) {
-                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error');
+                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error', 'WB-UI-COMMENT-CAPTCHA-001');
                 return;
             }
 
             const content = textarea ? textarea.value.trim() : '';
             if (!content) {
-                window.showToast(window.i18n.content_required || 'Comment content is required.', 'error');
-                setFeedback(root, window.i18n.content_required || 'Comment content is required.', 'error');
+                const message = window.i18n.content_required || '请填写评论内容。';
+                window.showToast(message, 'error', 8000, 'WB-UI-COMMENT-CONTENT-001');
+                setFeedback(root, message, 'error', 'WB-UI-COMMENT-CONTENT-001');
                 return;
             }
 
             if (!form.reportValidity()) return;
             if (!root.dataset.captchaId) {
-                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error');
+                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error', 'WB-UI-COMMENT-CAPTCHA-001');
                 return;
             }
 
@@ -414,8 +445,12 @@
                 const result = await response.json().catch(() => null);
 
                 if (!response.ok || !result || !result.success) {
-                    const message = result && result.message ? result.message : (window.i18n.submit_failed || 'Failed to submit comment.');
-                    throw new Error(message);
+                    const message = result?.message
+                        || `服务器返回 HTTP ${response.status}，但未提供错误详情`;
+                    const error = new Error(message);
+                    error.errorCode = result?.errorCode || response.headers.get('X-WindBlog-Error-Code')
+                        || window.getErrorCode?.(message, 'WB-UI-COMMENT-SUBMIT-001');
+                    throw error;
                 }
 
                 form.reset();
@@ -436,8 +471,13 @@
                 }, 2000);
             } catch (error) {
                 window.WindBlogAnalytics?.trackFormResult('comment', false);
-                window.showToast(error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
-                setFeedback(root, error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
+                const detail = error.message === 'Failed to fetch'
+                    ? '网络连接失败，浏览器未能连接到服务器'
+                    : (error.message || '网络请求失败，未能收到服务器响应');
+                const message = detail.startsWith('评论提交失败') ? detail : `评论提交失败：${detail}`;
+                const errorCode = error.errorCode || window.getErrorCode?.(message, 'WB-UI-COMMENT-SUBMIT-001');
+                window.showToast(message, 'error', 8000, errorCode);
+                setFeedback(root, message, 'error', errorCode);
                 root.dataset.commentSubmitting = 'false';
                 window.setLoading(submit, false);
                 updateSubmitState(root);

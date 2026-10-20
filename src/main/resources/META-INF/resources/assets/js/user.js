@@ -161,17 +161,23 @@
                     }, 1000);
                 } else {
                     analyticsFormResult('login', false);
-                    window.showToast(result.message || window.i18n.login_failed || 'Login failed', 'error');
+                    const message = result.message || window.i18n.login_failed || '登录失败';
+                    window.showToast(message, 'error', 8000, result.errorCode || 'WB-UI-AUTH-LOGIN-001');
                     if (errorDiv) {
-                        errorDiv.textContent = result.message || window.i18n.login_failed || 'Login failed';
+                        errorDiv.textContent = window.formatErrorMessage
+                            ? window.formatErrorMessage(message, result.errorCode || 'WB-UI-AUTH-LOGIN-001')
+                            : message;
                         errorDiv.classList.remove('hidden');
                     }
                 }
             } catch (err) {
                 analyticsFormResult('login', false);
-                window.showToast(window.i18n.network_error || 'Network error', 'error');
+                const message = window.i18n.network_error || '登录请求失败，网络连接异常';
+                window.showToast(message, 'error', 8000, 'WB-UI-AUTH-LOGIN-002');
                 if (errorDiv) {
-                    errorDiv.textContent = window.i18n.network_error || 'Network error';
+                    errorDiv.textContent = window.formatErrorMessage
+                        ? window.formatErrorMessage(message, 'WB-UI-AUTH-LOGIN-002')
+                        : message;
                     errorDiv.classList.remove('hidden');
                 }
             } finally {
@@ -205,7 +211,10 @@
                 }
             })
             .catch(error => {
-                hint.textContent = error.message || '订阅偏好加载失败，请刷新重试。';
+                hint.textContent = window.formatErrorMessage
+                    ? window.formatErrorMessage(error.message || '订阅偏好加载失败，请刷新重试。',
+                        window.getErrorCode?.(error.message, 'WB-UI-USER-SUBSCRIPTIONS-LOAD-001'))
+                    : (error.message || '订阅偏好加载失败，请刷新重试。');
                 hint.classList.add('text-red-400');
             });
         form.onsubmit = async function (event) {
@@ -226,7 +235,8 @@
                 window.showToast('订阅偏好已保存', 'success');
             } catch (error) {
                 analyticsFormResult('subscription-preferences', false);
-                window.showToast(error.message || '订阅偏好保存失败，请稍后重试', 'error');
+                window.showToast(error.message || '订阅偏好保存失败，请稍后重试', 'error', 8000,
+                    'WB-UI-USER-SUBSCRIPTIONS-001');
             } finally {
                 window.setLoading(saveButton, false);
             }
@@ -303,7 +313,8 @@
                     window.showToast(result.message || '验证邮件已发送', 'success');
                 } catch (error) {
                     analyticsFormResult('change-email', false);
-                    window.showToast(error.message || '邮箱换绑失败，请稍后重试', 'error');
+                    window.showToast(error.message || '邮箱换绑失败，请稍后重试', 'error', 8000,
+                        'WB-UI-USER-EMAIL-001');
                 } finally {
                     window.setLoading(button, false);
                 }
@@ -333,7 +344,8 @@
                     window.showToast(result.message || '密码修改成功', 'success');
                 } catch (error) {
                     analyticsFormResult('change-password', false);
-                    window.showToast(error.message || '密码修改失败，请稍后重试', 'error');
+                    window.showToast(error.message || '密码修改失败，请稍后重试', 'error', 8000,
+                        'WB-UI-USER-PASSWORD-001');
                 } finally {
                     window.setLoading(button, false);
                 }
@@ -383,7 +395,8 @@
                 setState(result.favorited === true);
                 window.showToast(result.favorited ? '已加入收藏' : '已取消收藏', 'success');
             } catch (error) {
-                window.showToast(error.message || '收藏操作失败，请稍后重试', 'error');
+                window.showToast(error.message || '收藏操作失败，请稍后重试', 'error', 8000,
+                    'WB-UI-USER-FAVORITE-001');
             } finally {
                 button.disabled = false;
             }
@@ -405,9 +418,11 @@
         const resetButton = document.getElementById('resetUserPost');
         const feedback = document.getElementById('userPostFeedback');
 
-        const showFeedback = (message, error) => {
+        const showFeedback = (message, error, errorCode = 'WB-UI-USER-POST-001') => {
             if (!feedback) return;
-            feedback.textContent = message || '';
+            feedback.textContent = error && window.formatErrorMessage
+                ? window.formatErrorMessage(message || '用户文章操作失败', errorCode)
+                : (message || '');
             feedback.classList.remove('hidden', 'border-green-500/30', 'text-green-400', 'border-red-500/30', 'text-red-400');
             feedback.classList.add(error ? 'border-red-500/30' : 'border-green-500/30');
             feedback.classList.add(error ? 'text-red-400' : 'text-green-400');
@@ -458,13 +473,16 @@
                             contentInput.value = detail.contentMarkdown || '';
                             showFeedback(detail.statusName === 'DRAFT' ? '已载入草稿' : '已载入文章；待审核或已发布文章不能直接保存', false);
                         } catch (error) {
-                            showFeedback(error.message || '投稿加载失败', true);
+                            showFeedback(error.message || '投稿加载失败', true, 'WB-UI-USER-POST-LOAD-001');
                         }
                     };
                     list.appendChild(item);
                 });
             } catch (error) {
-                list.textContent = error.message || '投稿列表加载失败，请刷新重试。';
+                list.textContent = window.formatErrorMessage
+                    ? window.formatErrorMessage(error.message || '投稿列表加载失败，请刷新重试。',
+                        window.getErrorCode?.(error.message, 'WB-UI-USER-POST-LIST-001'))
+                    : (error.message || '投稿列表加载失败，请刷新重试。');
             }
         };
 
@@ -502,7 +520,7 @@
                 showFeedback('草稿已保存，可以继续编辑或提交审核。', false);
             } catch (error) {
                 analyticsFormResult('user-post-editor', false);
-                showFeedback(error.message || '草稿保存失败', true);
+                showFeedback(error.message || '草稿保存失败', true, 'WB-UI-USER-POST-SAVE-001');
             } finally {
                 window.setLoading(saveButton, false);
             }
@@ -523,7 +541,7 @@
                 await loadPosts();
             } catch (error) {
                 analyticsFormResult('user-post-editor', false);
-                showFeedback(error.message || '提交审核失败', true);
+                showFeedback(error.message || '提交审核失败', true, 'WB-UI-USER-POST-REVIEW-001');
             } finally {
                 window.setLoading(submitButton, false);
             }
@@ -554,7 +572,12 @@
                     list.appendChild(link);
                 });
             })
-            .catch(error => { list.textContent = error.message || '收藏加载失败，请刷新重试。'; });
+            .catch(error => {
+                list.textContent = window.formatErrorMessage
+                    ? window.formatErrorMessage(error.message || '收藏加载失败，请刷新重试。',
+                        window.getErrorCode?.(error.message, 'WB-UI-USER-FAVORITES-LOAD-001'))
+                    : (error.message || '收藏加载失败，请刷新重试。');
+            });
     }
 
     function bindUserNotifications() {
@@ -592,7 +615,12 @@
                     list.appendChild(item);
                 });
             })
-            .catch(error => { list.textContent = error.message || '通知加载失败，请刷新重试。'; });
+            .catch(error => {
+                list.textContent = window.formatErrorMessage
+                    ? window.formatErrorMessage(error.message || '通知加载失败，请刷新重试。',
+                        window.getErrorCode?.(error.message, 'WB-UI-USER-NOTIFICATIONS-LOAD-001'))
+                    : (error.message || '通知加载失败，请刷新重试。');
+            });
 
         if (readAllButton) {
             readAllButton.onclick = async () => {
@@ -620,9 +648,11 @@
 
             if (password && confirmPassword && password.value !== confirmPassword.value) {
                 const msg = window.i18n.password_mismatch || 'Passwords do not match';
-                window.showToast(msg, 'error');
+                window.showToast(msg, 'error', 8000, 'WB-AUTH-REGISTER-003');
                 if (errorDiv) {
-                    errorDiv.textContent = msg;
+                    errorDiv.textContent = window.formatErrorMessage
+                        ? window.formatErrorMessage(msg, 'WB-AUTH-REGISTER-003')
+                        : msg;
                     errorDiv.classList.remove('hidden');
                 }
                 return false;
@@ -664,17 +694,23 @@
                     }, 1500);
                 } else {
                     analyticsFormResult('register', false);
-                    window.showToast(result.message || window.i18n.register_failed || 'Registration failed', 'error');
+                    const message = result.message || window.i18n.register_failed || '注册失败';
+                    window.showToast(message, 'error', 8000, result.errorCode || 'WB-UI-AUTH-REGISTER-001');
                     if (errorDiv) {
-                        errorDiv.textContent = result.message || window.i18n.register_failed || 'Registration failed';
+                        errorDiv.textContent = window.formatErrorMessage
+                            ? window.formatErrorMessage(message, result.errorCode || 'WB-UI-AUTH-REGISTER-001')
+                            : message;
                         errorDiv.classList.remove('hidden');
                     }
                 }
             } catch (err) {
                 analyticsFormResult('register', false);
-                window.showToast(window.i18n.network_error || 'Network error', 'error');
+                const message = window.i18n.network_error || '注册请求失败，网络连接异常';
+                window.showToast(message, 'error', 8000, 'WB-UI-AUTH-REGISTER-009');
                 if (errorDiv) {
-                    errorDiv.textContent = window.i18n.network_error || 'Network error';
+                    errorDiv.textContent = window.formatErrorMessage
+                        ? window.formatErrorMessage(message, 'WB-UI-AUTH-REGISTER-009')
+                        : message;
                     errorDiv.classList.remove('hidden');
                 }
             } finally {
@@ -734,7 +770,20 @@
                 updateWalletPagination();
             }
         } catch (e) {
-            list.innerHTML = '<div class="text-center py-20"><div class="text-red-400/20 text-6xl mb-4">!</div><p class="text-red-400 text-sm">加载失败，请检查网络连接</p></div>';
+            const message = window.formatErrorMessage
+                ? window.formatErrorMessage('积分记录加载失败，请检查网络连接', 'WB-UI-USER-WALLET-LOAD-001')
+                : '积分记录加载失败，请检查网络连接';
+            const errorText = document.createElement('p');
+            errorText.className = 'text-red-400 text-sm';
+            errorText.textContent = message;
+            list.replaceChildren();
+            const errorContainer = document.createElement('div');
+            errorContainer.className = 'text-center py-20';
+            const errorIcon = document.createElement('div');
+            errorIcon.className = 'text-red-400/20 text-6xl mb-4';
+            errorIcon.textContent = '!';
+            errorContainer.append(errorIcon, errorText);
+            list.appendChild(errorContainer);
         }
     }
 
@@ -831,12 +880,13 @@
                         checkInBtn.className = "px-8 py-3 bg-gray-500/20 text-gray-500 border border-gray-500/30 rounded cursor-not-allowed flex items-center gap-2";
                         checkInBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>今日已签到';
                     } else {
-                        window.showToast(result.message || '签到失败', 'error');
+                        window.showToast(result.message || '签到失败', 'error', 8000,
+                            result.errorCode || 'WB-UI-USER-CHECKIN-001');
                         checkInBtn.disabled = false;
                         checkInBtn.innerHTML = originalHtml;
                     }
                 } catch (e) {
-                    window.showToast('网络异常', 'error');
+                    window.showToast('签到请求失败，网络连接异常', 'error', 8000, 'WB-UI-USER-CHECKIN-002');
                     checkInBtn.disabled = false;
                     checkInBtn.innerHTML = originalHtml;
                 }
@@ -978,10 +1028,12 @@
                     message.classList.remove('hidden');
                 }
                 analyticsFormResult('forgot-password', result.success === true);
-                window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error');
+                window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error',
+                    result.success ? 3000 : 8000, result.errorCode || 'WB-UI-AUTH-FORGOT-001');
             } catch (_) {
                 analyticsFormResult('forgot-password', false);
-                window.showToast(window.i18n.network_error || '网络错误，请稍后重试', 'error');
+                window.showToast(window.i18n.network_error || '找回密码请求失败，网络连接异常', 'error', 8000,
+                    'WB-UI-AUTH-FORGOT-002');
             } finally {
                 window.setLoading(button, false);
             }
@@ -1025,10 +1077,14 @@
             } catch (error) {
                 analyticsFormResult('reset-password', false);
                 if (message) {
-                    message.textContent = error.message || '密码重置失败';
+                    message.textContent = window.formatErrorMessage
+                        ? window.formatErrorMessage(error.message || '密码重置失败',
+                            window.getErrorCode?.(error.message, 'WB-UI-AUTH-RESET-001'))
+                        : (error.message || '密码重置失败');
                     message.classList.remove('hidden');
                 }
-                window.showToast(error.message || '密码重置失败', 'error');
+                window.showToast(error.message || '密码重置失败', 'error', 8000,
+                    window.getErrorCode?.(error.message, 'WB-UI-AUTH-RESET-001'));
             } finally {
                 window.setLoading(button, false);
             }
@@ -1053,10 +1109,12 @@
                 });
                 const result = await response.json();
                 analyticsFormResult('resend-verification', result.success === true);
-                window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error');
+                window.showToast(result.message || '请求已提交', result.success ? 'success' : 'error',
+                    result.success ? 3000 : 8000, result.errorCode || 'WB-UI-AUTH-RESEND-001');
             } catch (_) {
                 analyticsFormResult('resend-verification', false);
-                window.showToast(window.i18n.network_error || '网络错误，请稍后重试', 'error');
+                window.showToast(window.i18n.network_error || '验证邮件请求失败，网络连接异常', 'error', 8000,
+                    'WB-UI-AUTH-RESEND-002');
             } finally {
                 window.setLoading(button, false);
             }
@@ -1152,9 +1210,11 @@
         let snapshot = null;
         let busy = false;
 
-        const showFeedback = (message, error = false) => {
+        const showFeedback = (message, error = false, errorCode = 'WB-UI-USER-INVENTORY-001') => {
             if (!feedback) return;
-            feedback.textContent = message;
+            feedback.textContent = error && window.formatErrorMessage
+                ? window.formatErrorMessage(message || '仓库操作失败', errorCode)
+                : message;
             feedback.classList.remove('hidden', 'border-red-500/40', 'text-red-400', 'border-green-500/40', 'text-green-400');
             feedback.classList.add(error ? 'border-red-500/40' : 'border-green-500/40', error ? 'text-red-400' : 'text-green-400');
         };
@@ -1172,7 +1232,7 @@
                 renderInventoryBoard(snapshot);
                 if (feedback) feedback.classList.add('hidden');
             } catch (error) {
-                showFeedback(error.message || '仓库加载失败，请刷新重试', true);
+                showFeedback(error.message || '仓库加载失败，请刷新重试', true, 'WB-UI-USER-INVENTORY-LOAD-001');
             }
         };
         const dropAt = async (event) => {
@@ -1210,7 +1270,7 @@
             } catch (error) {
                 snapshot = original;
                 renderInventoryBoard(snapshot);
-                showFeedback(error.message || '保存位置失败，请重试', true);
+                showFeedback(error.message || '保存位置失败，请重试', true, 'WB-UI-USER-INVENTORY-SAVE-001');
                 if (error.message?.includes('版本已变化')) await load();
             } finally {
                 busy = false;

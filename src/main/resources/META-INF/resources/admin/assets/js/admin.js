@@ -128,7 +128,7 @@ const AdminUtils = {
     },
     
     // 显示提示消息
-    showToast(message, type = 'info') {
+    showToast(message, type = 'info', errorCode = 'WB-UI-UNCLASSIFIED-001') {
         const colors = {
             success: 'bg-green-500',
             error: 'bg-red-500',
@@ -138,7 +138,12 @@ const AdminUtils = {
         
         const toast = document.createElement('div');
         toast.className = `${colors[type]} text-white px-6 py-3 rounded-md shadow-lg fixed top-4 right-4 z-50 transition-opacity duration-300`;
-        toast.textContent = message;
+        const text = String(message ?? '请求失败').trim();
+        const hasCode = /(?:错误码|error\s*code)\s*[：:]\s*[A-Z0-9-]+/i.test(text);
+        const displayMessage = type === 'error' && !hasCode
+            ? `${text}${/[。.!?！？]$/.test(text) ? ' ' : '。'}错误码：${errorCode}`
+            : text;
+        toast.textContent = displayMessage;
         
         document.body.appendChild(toast);
         

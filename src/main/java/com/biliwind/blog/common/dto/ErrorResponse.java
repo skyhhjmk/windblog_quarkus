@@ -11,13 +11,19 @@ public record ErrorResponse(
         String errorType,
         OffsetDateTime timestamp,
         String trackingId,
-        String trackingText
+        String trackingText,
+        String errorCode
 ) {
     public ErrorResponse(String message, String errorType) {
-        this(false, message, errorType, OffsetDateTime.now(java.time.ZoneOffset.UTC), null, null);
+        this(false, message, errorType, OffsetDateTime.now(java.time.ZoneOffset.UTC), null, null, null);
     }
 
     public ErrorResponse(String message, String errorType, String trackingId, String trackingText) {
-        this(false, message, errorType, OffsetDateTime.now(java.time.ZoneOffset.UTC), trackingId, trackingText);
+        this(false, message, errorType, OffsetDateTime.now(java.time.ZoneOffset.UTC), trackingId, trackingText, null);
+    }
+
+    public ErrorResponse(String message, String errorType, String trackingId, String trackingText, String errorCode) {
+        this(false, message, errorType, OffsetDateTime.now(java.time.ZoneOffset.UTC), trackingId, trackingText,
+                errorCode);
     }
 }

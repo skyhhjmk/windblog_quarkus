@@ -296,7 +296,7 @@
     function setupQuotePreview(selection) {
         const commentSection = document.getElementById('comment-section');
         if (!commentSection) {
-            window.showToast("评论区加载失败", "error");
+            window.showToast("评论区加载失败", "error", 8000, "WB-UI-QUOTE-SECTION-001");
             return;
         }
 
@@ -390,7 +390,7 @@
         document.getElementById('correction-btn-submit').onclick = async function () {
             const explanation = textarea.value.trim();
             if (!explanation) {
-                window.showToast("请输入纠错说明", "error");
+                window.showToast("请输入纠错说明", "error", 8000, "WB-UI-CORRECTION-REQUIRED-001");
                 return;
             }
 
@@ -398,7 +398,7 @@
             const postSlug = selection.postSlug || commentSection?.getAttribute('data-post-slug');
 
             if (!postSlug) {
-                window.showToast("未能获取到文章标识", "error");
+                window.showToast("未能获取到文章标识", "error", 8000, "WB-UI-CORRECTION-POST-001");
                 return;
             }
 
@@ -451,7 +451,10 @@
                     }
                 }
             } catch (error) {
-                window.showToast(error.message || "网络提交纠错失败", "error");
+                const detail = error.message || "网络请求失败，未收到服务端响应";
+                const message = detail.startsWith("纠错提交失败") ? detail : `纠错提交失败：${detail}`;
+                window.showToast(message, "error", 8000,
+                    window.getErrorCode?.(error.message, "WB-UI-CORRECTION-SUBMIT-001"));
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = "提交反馈";

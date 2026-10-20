@@ -286,7 +286,7 @@
             }
         } catch (e) {
             console.error('购买失败:', e);
-            window.showToast('网络异常', 'error');
+            window.showToast('解锁请求失败，网络连接异常', 'error', 8000, 'WB-UI-PREMIUM-NETWORK-001');
         } finally {
             if (window.setLoading && button) {
                 window.setLoading(button, false);
@@ -296,12 +296,13 @@
 
     function handlePurchaseError(result) {
         if (result.message && (result.message.includes('未登录') || result.message.includes('必须登录'))) {
-            window.showToast('请先登录', 'error');
+            window.showToast('请先登录', 'error', 8000, 'WB-UI-PREMIUM-AUTH-001');
             setTimeout(() => {
                 window.location.href = '/user/login?redirect=' + encodeURIComponent(window.location.pathname);
             }, 1000);
         } else {
-            window.showToast(result.message || '购买失败', 'error');
+            window.showToast(result.message || '购买失败', 'error', 8000,
+                result.errorCode || 'WB-UI-PREMIUM-PURCHASE-001');
         }
     }
 

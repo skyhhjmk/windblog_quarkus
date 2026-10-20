@@ -34,7 +34,7 @@ async function loadQueueStatus() {
         }
     } catch (error) {
         console.error('加载队列状态失败:', error);
-        AdminUtils.showToast('加载队列状态失败', 'error');
+        AdminUtils.showToast('加载队列状态失败', 'error', 'WB-UI-ADMIN-QUEUE-STATUS-001');
     }
 }
 
@@ -50,7 +50,7 @@ async function loadExample() {
         }
     } catch (error) {
         console.error('加载示例失败:', error);
-        AdminUtils.showToast('加载示例失败', 'error');
+        AdminUtils.showToast('加载示例失败', 'error', 'WB-UI-ADMIN-QUEUE-EXAMPLE-001');
     }
 }
 
@@ -82,7 +82,7 @@ async function publishTestMessage() {
         }
     } catch (error) {
         console.error('推送消息失败:', error);
-        AdminUtils.showToast(error.message || '推送消息失败', 'error');
+        AdminUtils.showToast(error.message || '推送消息失败', 'error', 'WB-UI-ADMIN-QUEUE-PUSH-001');
     }
 }
 
@@ -116,7 +116,7 @@ async function loadDeadLetters() {
     } catch (error) {
         console.error('加载死信消息失败:', error);
         loadingIndicator.classList.add('hidden');
-        AdminUtils.showToast('加载死信消息失败', 'error');
+        AdminUtils.showToast('加载死信消息失败', 'error', 'WB-UI-ADMIN-DLX-LOAD-001');
     }
 }
 
@@ -171,7 +171,7 @@ async function retryDeadLetter(id) {
         }
     } catch (error) {
         console.error('重试失败:', error);
-        AdminUtils.showToast(error.message || '重试失败', 'error');
+        AdminUtils.showToast(error.message || '重试失败', 'error', 'WB-UI-ADMIN-DLX-RETRY-001');
     }
 }
 
@@ -189,7 +189,7 @@ async function retryBatch() {
         }
     } catch (error) {
         console.error('批量重试失败:', error);
-        AdminUtils.showToast(error.message || '批量重试失败', 'error');
+        AdminUtils.showToast(error.message || '批量重试失败', 'error', 'WB-UI-ADMIN-DLX-BATCH-RETRY-001');
     }
 }
 
@@ -206,7 +206,7 @@ async function dismissDeadLetter(id) {
         }
     } catch (error) {
         console.error('标记失败:', error);
-        AdminUtils.showToast(error.message || '标记失败', 'error');
+        AdminUtils.showToast(error.message || '标记失败', 'error', 'WB-UI-ADMIN-DLX-DISMISS-001');
     }
 }
 
@@ -223,6 +223,6 @@ async function deleteDeadLetter(id) {
         }
     } catch (error) {
         console.error('删除失败:', error);
-        AdminUtils.showToast(error.message || '删除失败', 'error');
+        AdminUtils.showToast(error.message || '删除失败', 'error', 'WB-UI-ADMIN-DLX-DELETE-001');
     }
 }

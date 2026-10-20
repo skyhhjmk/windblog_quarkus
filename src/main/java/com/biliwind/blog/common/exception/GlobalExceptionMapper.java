@@ -1,6 +1,7 @@
 package com.biliwind.blog.common.exception;
 
 import com.biliwind.blog.common.dto.ErrorResponse;
+import com.biliwind.blog.common.error.ErrorCodeCatalog;
 import com.biliwind.blog.common.helper.RsaHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import io.quarkus.qute.Template;
@@ -86,6 +87,9 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         String trackingId = null;
         String trackingText = null;
         Response.Status.Family family = status.getFamily();
+        String path = request == null ? null : request.path();
+        String errorCode = ErrorCodeCatalog.resolve(path, status.getStatusCode(), message);
+        message = ErrorCodeCatalog.appendToMessage(message, errorCode);
         if (family == Response.Status.Family.SERVER_ERROR) {
             UUID uuid = UUID.randomUUID();
             trackingId = uuid.toString();
@@ -105,6 +109,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
             instance.data("errorType", errorType);
             instance.data("trackingId", trackingId);
             instance.data("trackingText", trackingText);
+            instance.data("errorCode", errorCode);
 
             return Response.status(status)
                     .type(MediaType.TEXT_HTML)
@@ -113,7 +118,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         }
 
         // 默认返回 JSON
-        ErrorResponse errorResponse = new ErrorResponse(message, errorType, trackingId, trackingText);
+        ErrorResponse errorResponse = new ErrorResponse(message, errorType, trackingId, trackingText, errorCode);
         return Response.status(status)
                 .type(MediaType.APPLICATION_JSON)
                 .entity(errorResponse)
@@ -124,7 +129,8 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         // API clients need a machine-readable error even when the browser sends
         // Accept: */*. Existing pages may keep older JavaScript cached, so do
         // not let content negotiation turn an API error into the HTML error page.
-        if (request != null && request.path() != null && request.path().startsWith("/api/")) {
+        if (request != null && request.path() != null
+                && (request.path().startsWith("/api/") || request.path().startsWith("/user/api/"))) {
             return false;
         }
         if (headers == null) {

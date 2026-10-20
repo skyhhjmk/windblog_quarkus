@@ -287,7 +287,7 @@ const VditorEditor = {
                 }
             } catch (error) {
                 console.error('上传失败:', error);
-                AdminUtils.showToast(`图片上传失败：${error.message}`, 'error');
+                AdminUtils.showToast(`图片上传失败：${error.message}`, 'error', 'WB-UI-ADMIN-IMAGE-UPLOAD-001');
             }
         }
         
@@ -468,7 +468,7 @@ const VditorEditor = {
                         reject(new Error('响应解析失败'));
                     }
                 } else if (xhr.status === 401) {
-                    AdminUtils.showToast('未授权，请重新登录', 'error');
+                    AdminUtils.showToast('未授权，请重新登录', 'error', 'WB-UI-ADMIN-SESSION-001');
                     reject(new Error('未授权'));
                 } else {
                     try {
