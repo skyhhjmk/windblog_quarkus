@@ -246,11 +246,8 @@
      * @returns {string}
      */
     window.getCsrfToken = function () {
-        // 1. Try meta tag (highest priority)
-        const meta = document.head.querySelector('meta[name="csrf-token"]');
-        if (meta && meta.content) return meta.content;
-
-        // 2. Try cookies (XSRF-TOKEN is set by CsrfFilter)
+        // The double-submit cookie is authoritative. A page or PJAX fragment
+        // can outlive the cookie value rendered into its meta tag.
         const getCookie = (name) => {
             const cookie = document.cookie.split(';').map(s => s.trim());
             for (const c of cookie) {
@@ -259,6 +256,10 @@
             return null;
         };
 
-        return getCookie('XSRF-TOKEN') || getCookie('_token') || '';
+        const cookieToken = getCookie('XSRF-TOKEN');
+        if (cookieToken) return cookieToken;
+
+        const meta = document.head.querySelector('meta[name="csrf-token"]');
+        return (meta && meta.content) || getCookie('_token') || '';
     };
 })();

@@ -7,6 +7,7 @@
     let hasMore = true;
     const commentIndex = new Map();
     let expandListenerBound = false;
+    const guestInfoStorageKey = 'windblog.comment.guest-info.v1';
 
     function ready(fn) {
         if (document.readyState !== 'loading') fn();
@@ -21,6 +22,69 @@
         return fetch('/user/api/profile', {signal: AbortSignal.timeout(10000)})
             .then(r => r.ok ? r.json() : null)
             .catch(() => null);
+    }
+
+    function updateSubmitState(root) {
+        const submit = root.querySelector('#comment-submit');
+        if (!submit) return;
+        submit.disabled = !root.dataset.captchaId
+            || root.dataset.commentSubmitting === 'true';
+    }
+
+    function readSavedGuestInfo() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(guestInfoStorageKey) || 'null');
+            return saved && typeof saved === 'object' ? saved : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function saveGuestInfo(root) {
+        const remember = root.querySelector('#comment-remember-info');
+        if (!remember) return;
+        try {
+            if (!remember.checked) {
+                localStorage.removeItem(guestInfoStorageKey);
+                return;
+            }
+            const info = {
+                name: root.querySelector('#comment-guest-name')?.value || '',
+                email: root.querySelector('#comment-guest-email')?.value || '',
+                website: root.querySelector('#comment-guest-website')?.value || ''
+            };
+            if (Object.values(info).some(value => value.trim())) {
+                localStorage.setItem(guestInfoStorageKey, JSON.stringify(info));
+            }
+        } catch (_) {
+            // Storage can be unavailable in private browsing or restricted contexts.
+        }
+    }
+
+    function restoreGuestInfo(root) {
+        const remember = root.querySelector('#comment-remember-info');
+        const name = root.querySelector('#comment-guest-name');
+        const email = root.querySelector('#comment-guest-email');
+        const website = root.querySelector('#comment-guest-website');
+        const saved = readSavedGuestInfo();
+        if (!remember || !saved) return;
+        remember.checked = true;
+        if (name && typeof saved.name === 'string') name.value = saved.name.slice(0, 80);
+        if (email && typeof saved.email === 'string') email.value = saved.email.slice(0, 255);
+        if (website && typeof saved.website === 'string') website.value = saved.website.slice(0, 2048);
+    }
+
+    function bindGuestInfo(root) {
+        const form = root.querySelector('#comment-form');
+        if (!form || form.dataset.guestInfoBound === 'true') return;
+        form.dataset.guestInfoBound = 'true';
+        restoreGuestInfo(root);
+        const remember = root.querySelector('#comment-remember-info');
+        if (remember) remember.addEventListener('change', () => saveGuestInfo(root));
+        ['#comment-guest-name', '#comment-guest-email', '#comment-guest-website'].forEach(selector => {
+            const input = root.querySelector(selector);
+            if (input) input.addEventListener('input', () => saveGuestInfo(root));
+        });
     }
 
     function escapeHtml(value) {
@@ -261,13 +325,12 @@
     async function loadCaptcha(root) {
         const question = root.querySelector('#comment-captcha-question');
         const answer = root.querySelector('#comment-captcha-answer');
-        const submit = root.querySelector('#comment-submit');
         const version = (Number(root.dataset.captchaVersion) || 0) + 1;
         root.dataset.captchaVersion = String(version);
         root.dataset.captchaId = '';
         if (!question || !answer) return;
         question.textContent = '正在加载...';
-        if (submit) submit.disabled = true;
+        updateSubmitState(root);
         answer.value = '';
         try {
             const response = await fetch('/api/comments/captcha', {cache: 'no-store', credentials: 'same-origin', headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(10000)});
@@ -276,7 +339,7 @@
             if (!response.ok || !result.success || !result.data?.id || !result.data?.question) throw new Error('验证码加载失败，请重试');
             root.dataset.captchaId = result.data.id;
             question.textContent = result.data.question;
-            if (submit) submit.disabled = false;
+            updateSubmitState(root);
         } catch (error) {
             if (root.dataset.captchaVersion === String(version)) question.textContent = error.name === 'TimeoutError' ? '加载超时，请重试' : '加载失败，请重试';
         }
@@ -302,6 +365,12 @@
             event.preventDefault();
             event.stopPropagation();
 
+            if (root.dataset.commentSubmitting === 'true') return;
+            if (!root.dataset.captchaId) {
+                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error');
+                return;
+            }
+
             const content = textarea ? textarea.value.trim() : '';
             if (!content) {
                 window.showToast(window.i18n.content_required || 'Comment content is required.', 'error');
@@ -326,12 +395,16 @@
                 captchaAnswer: root.querySelector('#comment-captcha-answer')?.value.trim() || ''
             };
 
+            saveGuestInfo(root);
+            root.dataset.commentSubmitting = 'true';
+            updateSubmitState(root);
             window.setLoading(submit, true);
             setFeedback(root, '', 'success');
 
             try {
                 const response = await fetch('/api/comments', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-XSRF-TOKEN': window.getCsrfToken()
@@ -346,6 +419,7 @@
                 }
 
                 form.reset();
+                restoreGuestInfo(root);
                 currentReply = null;
                 updateReplyUi(root);
                 window.WindBlogAnalytics?.trackFormResult('comment', true);
@@ -354,14 +428,19 @@
                 
                 // Keep disabled for a short duration to show success
                 setTimeout(() => {
+                    root.dataset.commentSubmitting = 'false';
+                    root.dataset.captchaId = '';
                     window.setLoading(submit, false);
+                    updateSubmitState(root);
                     loadCaptcha(root);
                 }, 2000);
             } catch (error) {
                 window.WindBlogAnalytics?.trackFormResult('comment', false);
                 window.showToast(error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
                 setFeedback(root, error.message || (window.i18n.submit_failed || 'Failed to submit comment.'), 'error');
+                root.dataset.commentSubmitting = 'false';
                 window.setLoading(submit, false);
+                updateSubmitState(root);
                 loadCaptcha(root);
             }
         };
@@ -373,6 +452,8 @@
 
         currentReply = null;
         updateReplyUi(root);
+        root.dataset.commentSubmitting = 'false';
+        bindGuestInfo(root);
         bindForm(root);
 
         const loadMoreBtn = root.querySelector('#btn-load-more');

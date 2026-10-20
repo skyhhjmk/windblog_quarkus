@@ -637,6 +637,7 @@
             try {
                 const response = await fetch('/user/api/register', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                         'X-XSRF-TOKEN': window.getCsrfToken()

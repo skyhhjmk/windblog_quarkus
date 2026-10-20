@@ -1294,6 +1294,8 @@ kbd {
 .comment-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .comment-field input::placeholder { color: var(--text-meta); opacity: .75; }
 .comment-field-note { grid-column: 1 / -1; color: var(--text-meta); font-size: 12px; margin: -4px 0 0; }
+.comment-remember-info { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 8px; width: fit-content; color: var(--text-meta); font-size: 12px; cursor: pointer; }
+.comment-remember-info input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
 .comment-captcha-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .comment-captcha-question { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 126px; padding: 10px 16px; border: 1px dashed var(--border); border-radius: 8px; background: var(--card-bg); color: var(--accent); font: 600 14px ui-monospace, monospace; }
 .comment-captcha-row input { width: 140px; }
