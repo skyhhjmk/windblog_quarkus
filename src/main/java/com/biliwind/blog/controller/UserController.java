@@ -136,13 +136,18 @@ public class UserController {
     @GET
     @Path("/login")
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance loginPage(@QueryParam("redirect") String redirect, @Context HttpHeaders headers) {
+    public Response loginPage(@QueryParam("redirect") String redirect, @Context HttpHeaders headers) {
+        if (resolveUserFromCookie(headers) != null) {
+            return redirectToUserCenter();
+        }
         String targetRedirect = sanitizeRedirect(redirect);
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? loginContentTemplate : loginTemplate;
-        return template
+        return Response.ok(template
                 .data("language", languageContext.getLang())
-                .data("redirect", targetRedirect);
+                .data("redirect", targetRedirect))
+                .type(MediaType.TEXT_HTML_TYPE)
+                .build();
     }
 
     /**
@@ -151,16 +156,21 @@ public class UserController {
     @GET
     @Path("/register")
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance registerPage(@QueryParam("redirect") String redirect, @Context HttpHeaders headers) {
+    public Response registerPage(@QueryParam("redirect") String redirect, @Context HttpHeaders headers) {
+        if (resolveUserFromCookie(headers) != null) {
+            return redirectToUserCenter();
+        }
         if (!configManager.getBoolean("feature_toggles", "enable_registration", true)) {
             throw new ForbiddenException("注册功能暂未开放");
         }
         String targetRedirect = sanitizeRedirect(redirect);
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? registerContentTemplate : registerTemplate;
-        return template
+        return Response.ok(template
                 .data("language", languageContext.getLang())
-                .data("redirect", targetRedirect);
+                .data("redirect", targetRedirect))
+                .type(MediaType.TEXT_HTML_TYPE)
+                .build();
     }
 
     @GET
@@ -190,7 +200,7 @@ public class UserController {
     @GET
     @Path("/center")
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance centerPage(@Context HttpHeaders headers) {
+    public Response centerPage(@Context HttpHeaders headers) {
         UserProfile profile = resolveUserFromCookie(headers);
         if (profile == null) {
             return loginPage("/user/center", headers);
@@ -213,7 +223,7 @@ public class UserController {
 
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
         Template template = isPjax ? centerContentTemplate : centerTemplate;
-        return template
+        return Response.ok(template
                 .data("language", languageContext.getLang())
                 .data("user", profile)
                 .data("pointsBalance", pointsBalance)
@@ -225,7 +235,9 @@ public class UserController {
                 .data("expToNextLevel", Math.max(0, currentLevelMaxExp - currentLevelExp))
                 .data("expPercent", expPercent)
                 .data("allowUserPostSubmission",
-                        configManager.getBoolean("feature_toggles", "enable_user_post_submission", true));
+                        configManager.getBoolean("feature_toggles", "enable_user_post_submission", true)))
+                .type(MediaType.TEXT_HTML_TYPE)
+                .build();
     }
 
     // ==================== API接口 ====================
@@ -662,6 +674,10 @@ public class UserController {
         boolean verified = token != null && emailVerificationService.verify(token);
         String message = verified ? "邮箱验证成功，您现在可以发表评论和管理订阅。" : "验证链接无效或已过期。";
         return Response.ok("<html><body><h1>" + message + "</h1><p><a href=\"/user/login\">返回登录</a></p></body></html>").build();
+    }
+
+    private Response redirectToUserCenter() {
+        return Response.seeOther(UriBuilder.fromPath("/user/center").build()).build();
     }
 
     private String sanitizeRedirect(String redirect) {

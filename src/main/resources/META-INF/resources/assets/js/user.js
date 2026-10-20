@@ -23,9 +23,16 @@
 
 
     function checkUserStatus() {
-        fetch('/user/api/profile')
+        fetch('/user/api/profile', {cache: 'no-store', credentials: 'same-origin'})
             .then(r => r.json())
             .then(data => {
+                const path = window.location.pathname.replace(/\/+$/, '') || '/';
+                if (data && data.success && data.data &&
+                    (path === '/user/login' || path === '/user/register')) {
+                    window.location.replace('/user/center');
+                    return;
+                }
+
                 const loggedOutNodes = document.querySelectorAll('#userNotLoggedIn, [data-mobile-user-logged-out]');
                 const loggedInNodes = document.querySelectorAll('#userLoggedIn, [data-mobile-user-logged-in]');
                 const userNickname = document.getElementById('userNickname');
@@ -1239,6 +1246,10 @@
         document.addEventListener('pjax:complete', () => {
             init();
         });
+    });
+
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) checkUserStatus();
     });
 })();
 ``
