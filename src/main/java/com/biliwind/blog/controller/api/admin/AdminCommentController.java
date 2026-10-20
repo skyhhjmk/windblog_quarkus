@@ -11,6 +11,8 @@ import com.biliwind.blog.service.ai.AiManager;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -22,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Path("/api/admin/comments")
 @Produces(MediaType.APPLICATION_JSON)
@@ -46,6 +49,9 @@ public class AdminCommentController {
 
     @Inject
     AdminRequestContext adminRequestContext;
+
+    @Inject
+    EntityManager entityManager;
 
     @Inject
     com.biliwind.blog.common.CacheService cacheService;
@@ -184,35 +190,25 @@ public class AdminCommentController {
 
     @POST
     @Path("/{id}/audit")
+    @Transactional
     @Operation(summary = "AI 审核评论")
     public AdminCommentItem audit(@PathParam("id") final Long id) {
-        // 定义一个临时类来携带数据
-        class AuditData {
-            AdminCommentItem item;
-            String content;
+        Comment comment = entityManager.find(Comment.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (comment == null || comment.deletedAt != null) {
+            throw new NotFoundException();
+        }
+        if (comment.isReviewing) {
+            return toItem(comment);
         }
 
-        final AuditData data = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() -> {
-            Comment c = Comment.findById(id);
-            if (c == null || c.deletedAt != null) {
-                throw new jakarta.ws.rs.NotFoundException();
-            }
-            if (!c.isReviewing) {
-                c.isReviewing = true;
-                c.auditStatus = 1;
-                c.persist();
-            }
-            AuditData ad = new AuditData();
-            ad.item = toItem(c);
-            ad.content = c.content;
-            return ad;
-        });
-
-        // 事务提交后发送异步任务
+        comment.isReviewing = true;
+        comment.auditStatus = Comment.AUDIT_STATUS_REVIEWING;
+        comment.aiReviewData = null;
         reliableAiTaskService.enqueueAudit(
-                new com.biliwind.blog.service.ai.AiAuditTask(id, data.content));
+                new com.biliwind.blog.service.ai.AiAuditTask(id, comment.content),
+                UUID.randomUUID().toString());
 
-        return data.item;
+        return toItem(comment);
     }
 
     private AdminCommentItem toItem(Comment comment) {

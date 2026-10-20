@@ -13,6 +13,11 @@ import java.time.OffsetDateTime;
 @Entity
 @Table(name = "comments")
 public class Comment extends PanacheEntityBase {
+    public static final short AUDIT_STATUS_PENDING = 0;
+    public static final short AUDIT_STATUS_REVIEWING = 1;
+    public static final short AUDIT_STATUS_APPROVED = 2;
+    public static final short AUDIT_STATUS_REJECTED = 3;
+    public static final short AUDIT_STATUS_FAILED = 4;
 
     /** 主键ID */
     @Id
@@ -76,7 +81,7 @@ public class Comment extends PanacheEntityBase {
     public OffsetDateTime deletedAt;
 
     /**
-     * 审核状态：0=未审核 1=审核中 2=审核通过 3=审核拒绝
+     * 审核状态：0=未审核 1=审核中 2=审核通过 3=审核拒绝 4=审核失败
      */
     @Column(name = "audit_status", nullable = false)
     public short auditStatus;

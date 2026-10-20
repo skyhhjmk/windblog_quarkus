@@ -3,11 +3,14 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.controller.api.admin.dto.AdminUserDtos.PageResult;
 import com.biliwind.blog.model.OutboxEvent;
+import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.service.AuditService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -37,6 +40,9 @@ public class AdminOutboxController {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    EntityManager entityManager;
 
     @GET
     @Transactional
@@ -96,6 +102,18 @@ public class AdminOutboxController {
                     .build();
         }
 
+        Comment comment = null;
+        if ("AI_AUDIT".equals(event.eventType)) {
+            try {
+                comment = entityManager.find(
+                        Comment.class, Long.valueOf(event.aggregateId), LockModeType.PESSIMISTIC_WRITE);
+            } catch (NumberFormatException exception) {
+                return Response.status(Response.Status.CONFLICT)
+                        .entity(Map.of("success", false, "message", "AI 审核事件的评论 ID 无效"))
+                        .build();
+            }
+        }
+
         String oldStatus = event.status;
         event.status = "PENDING";
         event.attemptCount = 0;
@@ -104,6 +122,11 @@ public class AdminOutboxController {
         event.lockOwner = null;
         event.lastError = null;
         event.publishedAt = null;
+        if (comment != null && comment.deletedAt == null) {
+            comment.isReviewing = true;
+            comment.auditStatus = Comment.AUDIT_STATUS_REVIEWING;
+            comment.aiReviewData = null;
+        }
         event.persist();
 
         auditService.log("outbox_event", event.id, "replay",

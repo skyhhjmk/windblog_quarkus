@@ -32,18 +32,29 @@ public class ReliableAiTaskService {
     }
 
     public void enqueueAudit(AiAuditTask task) {
+        enqueueAudit(task, null);
+    }
+
+    /** Enqueue an explicitly requested audit run with a distinct idempotency key. */
+    public void enqueueAudit(AiAuditTask task, String auditRunId) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("commentId", task.commentId());
         payload.put("content", task.content());
         payload.put("retryCount", task.retryCount());
-        enqueue("AI_AUDIT", "COMMENT", String.valueOf(task.commentId()), payload);
+        enqueue("AI_AUDIT", "COMMENT", String.valueOf(task.commentId()), payload, auditRunId);
     }
 
     private void enqueue(String type, String aggregateType, String aggregateId,
                          Map<String, Object> payload) {
+        enqueue(type, aggregateType, aggregateId, payload, null);
+    }
+
+    private void enqueue(String type, String aggregateType, String aggregateId,
+                         Map<String, Object> payload, String idempotencySalt) {
         try {
             String serialized = objectMapper.writeValueAsString(payload);
-            String eventKey = type + ":" + aggregateId + ":" + digest(serialized);
+            String keyInput = idempotencySalt == null ? serialized : serialized + ":" + idempotencySalt;
+            String eventKey = type + ":" + aggregateId + ":" + digest(keyInput);
             outboxEventService.enqueue(eventKey, type, aggregateType, aggregateId, payload, null);
         } catch (Exception exception) {
             throw new IllegalStateException("AI 任务写入 outbox 失败", exception);

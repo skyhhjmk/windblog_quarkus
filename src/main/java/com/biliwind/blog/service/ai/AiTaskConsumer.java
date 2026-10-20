@@ -227,10 +227,11 @@ public class AiTaskConsumer {
                 com.biliwind.blog.model.Comment comment = com.biliwind.blog.model.Comment.findById(task.commentId());
                 if (comment != null) {
                     comment.isReviewing = false;
-                    comment.auditStatus = 0;
+                    comment.auditStatus = com.biliwind.blog.model.Comment.AUDIT_STATUS_FAILED;
                     Map<String, Object> failureData = new HashMap<>();
                     failureData.put("reviewRequired", true);
-                    failureData.put("reason", "AI 审核失败，已转人工审核");
+                    failureData.put("failed", true);
+                    failureData.put("reason", "AI 审核任务失败，可重新发起审核");
                     failureData.put("error", safeError);
                     failureData.put("auditTime", System.currentTimeMillis());
                     comment.aiReviewData = failureData;

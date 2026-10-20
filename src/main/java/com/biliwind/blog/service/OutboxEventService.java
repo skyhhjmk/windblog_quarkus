@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.OutboxEvent;
+import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.context.AdminAuditRequestContext;
 import com.biliwind.blog.service.elasticsearch.EsSyncTask;
 import com.biliwind.blog.service.ai.AiAuditTask;
@@ -15,6 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
@@ -109,8 +111,60 @@ public class OutboxEventService {
         }
         OutboxEvent existing = OutboxEvent.find("eventKey", eventKey).firstResult();
         if (existing != null) {
+            replayFailedAiAudit(existing, eventType, payload, traceId);
             return;
         }
+        Duration effectiveDelay = delay == null || delay.isNegative() ? Duration.ZERO : delay;
+        OffsetDateTime availableAt = OffsetDateTime.now().plus(effectiveDelay);
+        ensurePendingCapacity();
+        String payloadJson;
+        try {
+            payloadJson = objectMapper.writeValueAsString(payload);
+        } catch (Exception exception) {
+            throw new IllegalStateException("outbox 事件序列化失败", exception);
+        }
+        int inserted = entityManager.createNativeQuery(
+                        "insert into outbox_events "
+                                + "(event_key, event_type, aggregate_type, aggregate_id, payload, status, "
+                                + "attempt_count, available_at, trace_id, created_at) "
+                                + "values (:eventKey, :eventType, :aggregateType, :aggregateId, "
+                                + "cast(:payload as jsonb), 'PENDING', 0, :availableAt, :traceId, :availableAt) "
+                                + "on conflict (event_key) do nothing")
+                .setParameter("eventKey", eventKey)
+                .setParameter("eventType", eventType)
+                .setParameter("aggregateType", aggregateType)
+                .setParameter("aggregateId", aggregateId)
+                .setParameter("payload", payloadJson)
+                .setParameter("availableAt", availableAt)
+                .setParameter("traceId", resolveTraceId(traceId))
+                .executeUpdate();
+        if (inserted == 0) {
+            OutboxEvent racedEvent = OutboxEvent.find("eventKey", eventKey).firstResult();
+            if (racedEvent != null) {
+                replayFailedAiAudit(racedEvent, eventType, payload, traceId);
+            }
+        }
+    }
+
+    private void replayFailedAiAudit(OutboxEvent event, String eventType,
+                                    Map<String, Object> payload, String traceId) {
+        if (!"AI_AUDIT".equals(eventType) || !"FAILED".equals(event.status)
+                || !"AI_AUDIT".equals(event.eventType)) {
+            return;
+        }
+        ensurePendingCapacity();
+        event.status = "PENDING";
+        event.attemptCount = 0;
+        event.availableAt = OffsetDateTime.now();
+        event.lockedUntil = null;
+        event.lockOwner = null;
+        event.lastError = null;
+        event.publishedAt = null;
+        event.payload = payload;
+        event.traceId = resolveTraceId(traceId);
+    }
+
+    private void ensurePendingCapacity() {
         Number pendingCount = (Number) entityManager.createNativeQuery(
                 "select count(*) from outbox_events where status in ('PENDING', 'IN_FLIGHT')")
                 .getSingleResult();
@@ -118,17 +172,6 @@ public class OutboxEventService {
             securityMetricsService.increment("outbox.rejected", "pending_limit");
             throw new IllegalStateException("outbox 待处理事件已达到配置上限");
         }
-        OutboxEvent event = new OutboxEvent();
-        event.eventKey = eventKey;
-        event.eventType = eventType;
-        event.aggregateType = aggregateType;
-        event.aggregateId = aggregateId;
-        event.payload = payload;
-        event.traceId = resolveTraceId(traceId);
-        Duration effectiveDelay = delay == null || delay.isNegative() ? Duration.ZERO : delay;
-        event.availableAt = OffsetDateTime.now().plus(effectiveDelay);
-        event.createdAt = event.availableAt;
-        event.persist();
     }
 
     @Scheduled(every = "5s", identity = "outbox-dispatcher")
@@ -315,8 +358,12 @@ public class OutboxEventService {
         refreshMetrics();
     }
 
-    @Transactional
     void markFailed(Long eventId, String owner, String error) {
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew()
+                .run(() -> markFailedInTransaction(eventId, owner, error));
+    }
+
+    private void markFailedInTransaction(Long eventId, String owner, String error) {
         OutboxEvent event = OutboxEvent.find("id = ?1 and lockOwner = ?2", eventId, owner).firstResult();
         if (event == null) {
             return;
@@ -326,7 +373,31 @@ public class OutboxEventService {
         event.lastError = truncate(error);
         event.lockedUntil = null;
         event.lockOwner = null;
+        if ("FAILED".equals(event.status) && "AI_AUDIT".equals(event.eventType)) {
+            markCommentAuditFailed(event, error);
+        }
         refreshMetrics();
+    }
+
+    private void markCommentAuditFailed(OutboxEvent event, String error) {
+        try {
+            Long commentId = Long.valueOf(event.aggregateId);
+            Comment comment = entityManager.find(Comment.class, commentId, LockModeType.PESSIMISTIC_WRITE);
+            if (comment == null || !comment.isReviewing) {
+                return;
+            }
+            comment.isReviewing = false;
+            comment.auditStatus = Comment.AUDIT_STATUS_FAILED;
+            Map<String, Object> failureData = new java.util.HashMap<>();
+            failureData.put("reviewRequired", true);
+            failureData.put("failed", true);
+            failureData.put("reason", "AI 审核任务失败，可重新发起审核");
+            failureData.put("error", error == null ? "AI 审核任务失败" : error);
+            failureData.put("auditTime", System.currentTimeMillis());
+            comment.aiReviewData = failureData;
+        } catch (NumberFormatException exception) {
+            log.warnf("AI_AUDIT outbox event has invalid comment id, eventId=%d", event.id);
+        }
     }
 
     private void refreshMetrics() {
