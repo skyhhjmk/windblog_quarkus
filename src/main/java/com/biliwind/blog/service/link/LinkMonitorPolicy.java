@@ -58,6 +58,11 @@ public final class LinkMonitorPolicy {
         return value == null ? "" : value.toString();
     }
 
+    public static String placementUrl(Link link) {
+        Object value = setting(link, "placementUrl");
+        return value == null ? "" : value.toString().trim();
+    }
+
     public static List<String> backlinkCheckUrls(Link link) {
         Object value = setting(link, "backlinkCheckUrls");
         if (value instanceof List<?> list) {

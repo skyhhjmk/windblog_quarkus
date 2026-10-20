@@ -390,6 +390,7 @@ public class AdminLinkController {
         l.seoTitle = req.seoTitle();
         l.seoKeywords = req.seoKeywords();
         l.seoDescription = req.seoDescription();
+        applyPlacementUrlSetting(l, req.placementUrl());
         applyMonitoringSettings(
                 l,
                 req.monitoringEnabled() == null ? true : req.monitoringEnabled(),
@@ -455,6 +456,8 @@ public class AdminLinkController {
             l.seoKeywords = req.seoKeywords();
         if (req.seoDescription() != null)
             l.seoDescription = req.seoDescription();
+        if (req.placementUrl() != null)
+            applyPlacementUrlSetting(l, req.placementUrl());
 
         if (req.monitoringEnabled() != null
                 || req.monitoringIntervalMinutes() != null
@@ -622,6 +625,34 @@ public class AdminLinkController {
         if (requestsNotification && (link.email == null || link.email.isBlank())) {
             throw new BadRequestException("启用站长通知前，请先填写友链邮箱");
         }
+        link.settings = settings;
+    }
+
+    private void applyPlacementUrlSetting(Link link, String placementUrl) {
+        Map<String, Object> settings = link.settings == null
+                ? new HashMap<>()
+                : new HashMap<>(link.settings);
+        if (placementUrl == null || placementUrl.isBlank()) {
+            settings.remove("placementUrl");
+            link.settings = settings;
+            return;
+        }
+
+        String normalizedUrl = placementUrl.trim();
+        if (normalizedUrl.length() > 2000) {
+            throw new BadRequestException("友链放置页面链接不能超过 2000 个字符");
+        }
+        try {
+            URI uri = URI.create(normalizedUrl);
+            String scheme = uri.getScheme();
+            if (uri.getHost() == null || uri.getUserInfo() != null
+                    || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                throw new IllegalArgumentException("invalid URL");
+            }
+        } catch (IllegalArgumentException exception) {
+            throw new BadRequestException("友链放置页面必须是有效的 HTTP 或 HTTPS 地址");
+        }
+        settings.put("placementUrl", normalizedUrl);
         link.settings = settings;
     }
 

@@ -25,23 +25,28 @@ public class DistributedLinkProbeService {
     @Inject
     PrimaryEdgeChannelRegistry channelRegistry;
 
-    public List<NodeLinkProbeResult> probeOnlineEdgeNodes(String url, List<String> siteUrls, String siteName,
-                                                          String configuredKeywords, String targetName) {
+    public List<NodeLinkProbeResult> probeOnlineEdgeNodes(String url, String backlinkPageUrl, List<String> siteUrls,
+                                                          String siteName, String configuredKeywords,
+                                                          String targetName) {
         List<String> nodeIds = channelRegistry.listOnlineNodeIds();
         List<PendingNodeProbe> pendingNodeProbes = new ArrayList<>();
         List<String> expectedKeywords = expectedKeywords(siteName, configuredKeywords);
         List<String> safeSiteUrls = siteUrls == null ? List.of() : List.copyOf(siteUrls);
         String primarySiteUrl = safeSiteUrls.isEmpty() ? "" : safeSiteUrls.get(0);
+        String safeBacklinkPageUrl = backlinkPageUrl == null || backlinkPageUrl.isBlank()
+                ? url : backlinkPageUrl;
 
         for (String nodeId : nodeIds) {
             String requestId = UUID.randomUUID().toString();
             CompletableFuture<LinkProbeResult> future = new CompletableFuture<>();
             pendingRequests.put(requestId, future);
             pendingContexts.put(requestId,
-                    new ProbeContext(url, targetName, primarySiteUrl, safeSiteUrls, siteName, expectedKeywords));
+                    new ProbeContext(safeBacklinkPageUrl, targetName, primarySiteUrl, safeSiteUrls, siteName,
+                            expectedKeywords));
 
             LinkProbeRequest probeRequest = LinkProbeRequest.newBuilder()
                     .setUrl(url)
+                    .setBacklinkPageUrl(safeBacklinkPageUrl)
                     .setSiteUrl(primarySiteUrl)
                     .setTargetName(targetName == null ? "" : targetName)
                     .setSiteName(siteName == null ? "" : siteName)

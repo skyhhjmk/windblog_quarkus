@@ -150,6 +150,7 @@ message LinkProbeRequest {
   string site_name = 4;
   repeated string monitoring_keywords = 5;
   repeated string site_urls = 6;
+  string backlink_page_url = 7;
 }
 
 message LinkProbeResponse {

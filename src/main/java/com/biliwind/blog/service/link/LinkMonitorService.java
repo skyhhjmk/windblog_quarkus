@@ -189,10 +189,12 @@ public class LinkMonitorService {
         OffsetDateTime checkedAt = OffsetDateTime.now(ZoneOffset.UTC);
         List<NodeLinkProbeResult> nodeResults = new ArrayList<>();
         LinkProbeResult primaryResult = linkProbeService.probe(
-                target.url(), target.expectedSiteUrls(), siteName, target.monitoringKeywords(), target.name());
+                target.url(), target.backlinkPageUrl(), target.expectedSiteUrls(), siteName,
+                target.monitoringKeywords(), target.name());
         nodeResults.add(new NodeLinkProbeResult("main", "主节点", primaryResult));
         nodeResults.addAll(distributedLinkProbeService.probeOnlineEdgeNodes(
-                target.url(), target.expectedSiteUrls(), siteName, target.monitoringKeywords(), target.name()));
+                target.url(), target.backlinkPageUrl(), target.expectedSiteUrls(), siteName,
+                target.monitoringKeywords(), target.name()));
 
         persistLogAndState(target.id(), checkBatchId, checkedAt, nodeResults, readOnly, source);
     }
@@ -461,8 +463,10 @@ public class LinkMonitorService {
         List<String> expectedUrls = manualUrls.isEmpty()
                 ? (regionalUrls.isEmpty() ? List.of(siteLinkUrlService.urlFor(region)) : regionalUrls)
                 : manualUrls;
+        String placementUrl = LinkMonitorPolicy.placementUrl(link);
+        String backlinkPageUrl = placementUrl.isBlank() ? link.url : placementUrl;
         return new LinkCheckTarget(link.id, link.url, link.name, LinkMonitorPolicy.monitoringKeywords(link),
-                List.copyOf(expectedUrls));
+                List.copyOf(expectedUrls), backlinkPageUrl);
     }
 
     private List<String> regionRuleSiteUrls(BlogRegion region) {
@@ -524,7 +528,7 @@ public class LinkMonitorService {
     }
 
     private record LinkCheckTarget(Long id, String url, String name, String monitoringKeywords,
-                                   List<String> expectedSiteUrls) {
+                                   List<String> expectedSiteUrls, String backlinkPageUrl) {
     }
 
     private static final class CheckJob {

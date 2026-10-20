@@ -42,35 +42,67 @@ public class LinkProbeService {
 
     public LinkProbeResult probe(String url, List<String> expectedSiteUrls, String siteName,
                                  String configuredKeywords, String targetName) {
+        return probe(url, url, expectedSiteUrls, siteName, configuredKeywords, targetName);
+    }
+
+    public LinkProbeResult probe(String url, String backlinkPageUrl, List<String> expectedSiteUrls, String siteName,
+                                 String configuredKeywords, String targetName) {
         long startedAt = System.currentTimeMillis();
         List<String> expectedKeywords = parseKeywords(siteName, configuredKeywords);
         List<String> normalizedSiteUrls = expectedSiteUrls == null ? List.of()
                 : expectedSiteUrls.stream().filter(value -> value != null && !value.isBlank())
                 .map(String::trim).distinct().toList();
         String primarySiteUrl = normalizedSiteUrls.isEmpty() ? "" : normalizedSiteUrls.get(0);
+        String normalizedBacklinkPageUrl = backlinkPageUrl == null || backlinkPageUrl.isBlank()
+                ? url : backlinkPageUrl.trim();
         try {
             SafeExternalHttpService.ExternalHttpResponse response = safeExternalHttpService.get(
                     url,
                     "WindBlog-Link-Monitor/1.0"
             );
             int statusCode = response.statusCode();
-            int loadTimeMs = calculateLoadTime(startedAt);
             boolean reachable = statusCode >= 200 && statusCode < 400;
             if (!reachable) {
-                return result(false, statusCode, loadTimeMs, false, "", url, targetName, primarySiteUrl,
+                return result(false, statusCode, calculateLoadTime(startedAt), false, "", normalizedBacklinkPageUrl,
+                        targetName, primarySiteUrl,
                         normalizedSiteUrls, siteName, expectedKeywords, List.of(), List.of(), List.of(), false,
                         List.of(), 0, false);
             }
 
+            SafeExternalHttpService.ExternalHttpResponse backlinkResponse = response;
+            if (!normalizedBacklinkPageUrl.equals(url)) {
+                try {
+                    backlinkResponse = safeExternalHttpService.get(
+                            normalizedBacklinkPageUrl,
+                            "WindBlog-Link-Monitor/1.0"
+                    );
+                } catch (Exception exception) {
+                    return result(true, statusCode, calculateLoadTime(startedAt), false,
+                            "友链所在页面请求失败，请检查页面是否可公开访问", normalizedBacklinkPageUrl, targetName,
+                            primarySiteUrl, normalizedSiteUrls, siteName, expectedKeywords, List.of(), List.of(),
+                            List.of(), false, List.of(), 0, true);
+                }
+            }
+            boolean backlinkPageReachable = backlinkResponse.statusCode() >= 200
+                    && backlinkResponse.statusCode() < 400;
+            if (!backlinkPageReachable) {
+                return result(true, statusCode, calculateLoadTime(startedAt), false,
+                        "友链所在页面请求失败（HTTP " + backlinkResponse.statusCode() + "）",
+                        normalizedBacklinkPageUrl, targetName, primarySiteUrl, normalizedSiteUrls, siteName,
+                        expectedKeywords, List.of(), List.of(), List.of(), false, List.of(), 0, true);
+            }
+
             DetectionResult detection = inspectBacklinks(
-                    response.bodyAsText(), url, normalizedSiteUrls, expectedKeywords);
-            return result(true, statusCode, loadTimeMs, detection.backlinkFound(), "", url, targetName,
+                    backlinkResponse.bodyAsText(), normalizedBacklinkPageUrl, normalizedSiteUrls, expectedKeywords);
+            return result(true, statusCode, calculateLoadTime(startedAt), detection.backlinkFound(), "",
+                    normalizedBacklinkPageUrl, targetName,
                     primarySiteUrl, normalizedSiteUrls, siteName, expectedKeywords, detection.matchedKeywords(),
                     detection.matchedUrls(),
                     detection.matchedAnchorTexts(), detection.fraudDetected(), detection.fraudReasons(),
                     detection.domParseErrorCount(), true);
         } catch (Exception exception) {
-            return result(false, 0, calculateLoadTime(startedAt), false, "外部地址请求失败", url, targetName,
+            return result(false, 0, calculateLoadTime(startedAt), false, "外部地址请求失败",
+                    normalizedBacklinkPageUrl, targetName,
                     primarySiteUrl, normalizedSiteUrls, siteName, expectedKeywords, List.of(), List.of(), List.of(),
                     false, List.of(), 0, false);
         }

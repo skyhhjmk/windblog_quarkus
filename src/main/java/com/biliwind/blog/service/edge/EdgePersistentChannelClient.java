@@ -284,8 +284,10 @@ public class EdgePersistentChannelClient {
         List<String> siteUrls = request.getSiteUrlsCount() == 0
                 ? (request.getSiteUrl().isBlank() ? List.of() : List.of(request.getSiteUrl()))
                 : request.getSiteUrlsList();
+        String backlinkPageUrl = request.getBacklinkPageUrl().isBlank()
+                ? request.getUrl() : request.getBacklinkPageUrl();
         com.biliwind.blog.service.link.LinkProbeResult probeResult =
-                linkProbeService.probe(request.getUrl(), siteUrls, request.getSiteName(),
+                linkProbeService.probe(request.getUrl(), backlinkPageUrl, siteUrls, request.getSiteName(),
                         String.join(",", request.getMonitoringKeywordsList()), request.getTargetName());
 
         com.biliwind.blog.service.link.LinkProbeEvidence evidence = probeResult.evidence();
