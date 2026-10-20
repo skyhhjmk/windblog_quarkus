@@ -521,6 +521,10 @@ input::placeholder {
     font-size: 15px;
 }
 
+.prose p {
+    margin-bottom: 1em;
+}
+
 .prose h1, .prose h2, .prose h3 {
     color: var(--text-main);
     margin-top: 2.5em;
@@ -1301,3 +1305,58 @@ kbd {
 .comment-client-divider { opacity: .45; }
 .comment-author-link:hover { text-decoration: underline; }
 @media (max-width: 640px) { .comment-identity-grid { grid-template-columns: 1fr; gap: 14px; } .comment-captcha-row { gap: 8px; } .comment-captcha-row input { flex: 1; min-width: 100px; } }
+
+/* Markdown article reference: ::: article + an ordinary article link. */
+.article-reference-card {
+    position: relative;
+    margin: 16px 0;
+    padding: 20px;
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    border-radius: 12px;
+    background: var(--card-hover);
+    transition: border-color .2s, background-color .2s;
+    overflow-wrap: anywhere;
+}
+.article-reference-card::before {
+    content: "引用文章";
+    display: block;
+    margin-bottom: 10px;
+    color: var(--text-meta);
+    font-size: 12px;
+    font-style: normal;
+}
+.article-reference-card::after {
+    content: "↗";
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: var(--accent);
+    pointer-events: none;
+}
+.article-reference-card > p:first-of-type > a {
+    display: block;
+    padding-right: 24px;
+    color: var(--accent);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+    border: 0;
+}
+.article-reference-card > p:first-of-type > a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+}
+.article-reference-card > p + p {
+    margin-top: 8px;
+    color: var(--text-body);
+    font-size: 13px;
+}
+.article-reference-card:has(a):hover,
+.article-reference-card:focus-within {
+    border-color: var(--accent);
+    background: var(--input-bg);
+}
+@media (prefers-reduced-motion: reduce) {
+    .article-reference-card { transition: none; }
+}

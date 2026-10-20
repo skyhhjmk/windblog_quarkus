@@ -48,7 +48,8 @@ public class MdProtocolNodeRenderer implements NodeRenderer {
             name = "basic";
         }
 
-        html.attr("class", "custom-block block-" + name)
+        html.attr("class", "article".equals(name)
+                ? "article-reference-card" : "custom-block block-" + name)
                 .attr("data-name", name)
                 .attr("data-block-id", blockId);
 

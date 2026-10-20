@@ -43,7 +43,7 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
      *
      * @param status     状态
      * @param categoryId 分类ID
-     * @param keyword    关键词（匹配 slug）
+     * @param keyword    关键词（匹配 slug 和各语言标题）
      * @return 文章查询对象
      */
     public io.quarkus.hibernate.orm.panache.PanacheQuery<Post> findAdminPosts(
@@ -73,8 +73,8 @@ public class PostRepository implements PanacheRepositoryBase<Post, Long> {
             }
         }
         if (keyword != null && !keyword.isBlank()) {
-            where.append(" and lower(slug) like :keyword");
-            parameters.put("keyword", "%" + keyword.trim().toLowerCase() + "%");
+            where.append(" and (lower(slug) like :keyword or lower(cast(title as string)) like :keyword)");
+            parameters.put("keyword", "%" + keyword.trim().toLowerCase(java.util.Locale.ROOT) + "%");
         }
 
         String orderBy = switch (sortBy == null ? "id" : sortBy) {

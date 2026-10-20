@@ -63,11 +63,19 @@ public class CustomContainerBlockParser extends AbstractBlockParser {
 
     @Override
     public BlockContinue tryContinue(ParserState state) {
+        // A container cannot be finalized while its paragraph/list child is
+        // still active: Flexmark only pops the deepest parser in that case.
+        // Consume the marker as an empty line, then close the whole stack on
+        // the next line so subsequent prose remains outside the container.
+        if (this.block.isClosed()) {
+            return BlockContinue.none();
+        }
         BasedSequence line = state.getLine();
         String trimmed = line.toString().trim();
-        if (trimmed.equals("::: /" + this.name)) {
+        if (trimmed.equals("::: /" + this.name)
+                && !(state.getActiveBlockParser().getBlock() instanceof com.vladsch.flexmark.ast.FencedCodeBlock)) {
             this.block.setClosed(true);
-            return BlockContinue.finished();
+            return BlockContinue.atIndex(state.getLineEndIndex());
         }
         return BlockContinue.atIndex(state.getIndex());
     }

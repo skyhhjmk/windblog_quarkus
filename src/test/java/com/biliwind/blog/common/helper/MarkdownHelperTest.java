@@ -191,6 +191,50 @@ class MarkdownHelperTest {
     }
 
     @Test
+    void shouldRenderArticleReferenceCardWithPortableInternalLink() {
+        String html = MarkdownHelper.toHtml("::: article\n[相关文章](/post/reference-target)\n\n可选的介绍文字\n::: /article");
+        var doc = org.jsoup.Jsoup.parseBodyFragment(html);
+        var card = doc.selectFirst(".article-reference-card");
+        assertTrue(card != null);
+        assertEquals("/post/reference-target", card.selectFirst("a").attr("href"));
+        assertEquals("相关文章", card.selectFirst("a").text());
+        assertTrue(card.text().contains("可选的介绍文字"));
+        org.junit.jupiter.api.Assertions.assertFalse(card.hasClass("custom-block"));
+    }
+
+    @Test
+    void shouldKeepFollowingProseAndAdjacentCardsOutsideReference() {
+        String html = MarkdownHelper.toHtml("before\n\n::: article\n[First](/post/first)\n::: /article\n\nafter\n\n::: article\n[Second](/post/second)\n::: /article\n\nlast");
+        var doc = org.jsoup.Jsoup.parseBodyFragment(html);
+        var cards = doc.select(".article-reference-card");
+        assertEquals(2, cards.size());
+        assertEquals("First", cards.get(0).text());
+        assertEquals("Second", cards.get(1).text());
+        assertEquals("after", cards.get(0).nextElementSibling().text());
+        assertEquals("last", cards.get(1).nextElementSibling().text());
+    }
+
+    @Test
+    void shouldKeepContainerEndMarkerInsideCodeFenceLiteral() {
+        String html = MarkdownHelper.toHtml("::: article\n[Title](/post/title)\n\n```text\n::: /article\n```\n\ninside\n::: /article\n\noutside");
+        var card = org.jsoup.Jsoup.parseBodyFragment(html).selectFirst(".article-reference-card");
+        assertTrue(card != null);
+        assertEquals("::: /article", card.selectFirst("code").text());
+        assertTrue(card.text().contains("inside"));
+        assertEquals("outside", card.nextElementSibling().text());
+    }
+
+    @Test
+    void shouldKeepReferenceSyntaxLiteralInsideCodeFenceAndSanitizeReferenceLinks() {
+        String fenced = MarkdownHelper.toHtml("```markdown\n::: article\n[标题](/post/example)\n::: /article\n```");
+        assertTrue(org.jsoup.Jsoup.parseBodyFragment(fenced).select(".article-reference-card").isEmpty());
+        String unsafe = MarkdownHelper.toHtml("::: article\n[坏链接](javascript:alert(1))\n<script>alert(1)</script>\n::: /article");
+        var card = org.jsoup.Jsoup.parseBodyFragment(unsafe).selectFirst(".article-reference-card");
+        assertTrue(card != null);
+        assertTrue(card.select("a[href],script").isEmpty());
+    }
+
+    @Test
     void shouldRemoveMarkdownHtmlScriptStyleSvgAndUnsafeImagePayloads() {
         String markdown = "<script>alert(1)</script><div style=\"background:url(https://evil.example)\">text</div>\n\n"
                 + "<svg onload=alert(1)><path /></svg>\n\n"
