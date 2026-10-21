@@ -58,6 +58,11 @@ public class ConfigInitializer {
                 boolean defaultValueChanged = false;
                 if (setting.configValue != null && def.defaultValue != null && setting.configValue.isObject() && def.defaultValue.isObject()) {
                     defaultValueChanged = mergeMissingObjectFields((ObjectNode) setting.configValue, def.defaultValue);
+                    if ("appearance".equals(def.key)
+                            && "/favicon.ico".equals(setting.configValue.path("favicon_url").asText())) {
+                        ((ObjectNode) setting.configValue).put("favicon_url", "");
+                        defaultValueChanged = true;
+                    }
                 }
 
                 if (definitionChanged || defaultValueChanged) {
@@ -164,12 +169,13 @@ public class ConfigInitializer {
         appearanceSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode appearanceFields = appearanceSchema.putArray("fields");
         appearanceFields.addObject().put("key", "logo_url").put("label", "Logo链接").put("widget", "input");
-        appearanceFields.addObject().put("key", "favicon_url").put("label", "Favicon链接").put("widget", "input");
+        appearanceFields.addObject().put("key", "favicon_url").put("label", "Favicon").put("widget", "media_picker")
+                .put("hint", "从媒体库选择图片；favicon.ico、.jpg、.jpeg、.png、.webp、.svg、.gif 和 .avif 地址都会提供该图标。");
         appearanceFields.addObject().put("key", "theme_color").put("label", "主题色").put("widget", "input");
 
         ObjectNode appearanceValue = mapper.createObjectNode();
         appearanceValue.put("logo_url", "/logo.png");
-        appearanceValue.put("favicon_url", "/favicon.ico");
+        appearanceValue.put("favicon_url", "");
         appearanceValue.put("theme_color", "#1A1A1A");
 
         list.add(new SettingDefinition("appearance", appearanceValue, "object", "外观设置", appearanceSchema, "外观样式设置"));
