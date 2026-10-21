@@ -117,7 +117,7 @@ public class AdminPostApiController {
                 com.biliwind.blog.common.helper.PostHelper.prepareContentForAi(rev.contentMarkdown),
                 1, // Medium priority
                 userId
-        ));
+        ), UUID.randomUUID().toString());
 
         return Response.ok(java.util.Map.of("success", true, "message", "摘要任务已触发")).build();
     }

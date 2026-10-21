@@ -22,13 +22,18 @@ public class ReliableAiTaskService {
     ObjectMapper objectMapper;
 
     public void enqueueSummary(AiSummaryTask task) {
+        enqueueSummary(task, null);
+    }
+
+    /** Enqueue a separately auditable summary run when explicitly requested. */
+    public void enqueueSummary(AiSummaryTask task, String runId) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("postId", task.postId());
         payload.put("content", task.content());
         payload.put("priority", task.priority());
         payload.put("retryCount", task.retryCount());
         payload.put("performedBy", task.performedBy());
-        enqueue("AI_SUMMARY", "POST", String.valueOf(task.postId()), payload);
+        enqueue("AI_SUMMARY", "POST", String.valueOf(task.postId()), payload, runId);
     }
 
     public void enqueueAudit(AiAuditTask task) {
