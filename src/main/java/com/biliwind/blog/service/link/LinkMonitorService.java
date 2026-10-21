@@ -93,6 +93,7 @@ public class LinkMonitorService {
     }
 
     public void checkAllLinks() {
+        // Keep auto-hidden links in the queue, even if normal monitoring was disabled, so recovery can restore visibility.
         List<Link> links = Link.list(
                 "type = ?1 and applicationStatus = ?2",
                 LinkType.FRIENDLY_LINK,
@@ -100,7 +101,7 @@ public class LinkMonitorService {
         );
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         for (Link link : links) {
-            if (!LinkMonitorPolicy.isMonitoringEnabled(link)) {
+            if (!LinkMonitorPolicy.isMonitoringEnabled(link) && !LinkMonitorPolicy.isAutomaticallyHidden(link)) {
                 continue;
             }
             OffsetDateTime dueAt = now.minusMinutes(LinkMonitorPolicy.intervalMinutes(link));

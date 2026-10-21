@@ -5,6 +5,7 @@ import com.biliwind.blog.model.Link;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,15 @@ public final class LinkMonitorPolicy {
 
     public static boolean shouldHideWhenKeywordFraudDetected(Link link) {
         return readBoolean(link, "hideWhenKeywordFraudDetected", false);
+    }
+
+    public static boolean isAutomaticallyHidden(Link link) {
+        for (String condition : List.of(OFFLINE, BACKLINK_MISSING, KEYWORD_FRAUD)) {
+            if (isHideEnabled(link, condition) && isHidden(link, condition)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean shouldNotify(Link link, String condition) {
@@ -107,19 +117,35 @@ public final class LinkMonitorPolicy {
     }
 
     public static String autoHideMessage(Link link) {
+        List<String> hiddenReasons = new ArrayList<>();
+        List<String> bufferingMessages = new ArrayList<>();
         for (String condition : List.of(OFFLINE, BACKLINK_MISSING, KEYWORD_FRAUD)) {
-            if (!isHideEnabled(link, condition) || !isBuffering(link, condition)) {
+            if (!isHideEnabled(link, condition)) {
                 continue;
             }
-            long days = remainingDays(lifecycleState(link, condition));
-            String reason = switch (condition) {
-                case OFFLINE -> "无法访问";
-                case BACKLINK_MISSING -> "未检测到反链";
-                default -> "检测到关键词欺诈";
-            };
-            return reason + " - " + (days <= 0 ? "即将" : days + " 天后") + "自动隐藏";
+            String reason = conditionLabel(condition);
+            Map<String, Object> state = lifecycleState(link, condition);
+            if (isHidden(link, condition)) {
+                hiddenReasons.add(reason);
+            } else if (isBuffering(link, condition)) {
+                long days = remainingDays(state);
+                bufferingMessages.add(reason + " - " + (days <= 0 ? "即将" : days + " 天后") + "自动隐藏");
+            }
         }
-        return "";
+        if (!hiddenReasons.isEmpty()) {
+            return "已自动隐藏：" + String.join("、", hiddenReasons)
+                    + "；系统仍在持续检测，导致隐藏的异常全部恢复后将自动重新上线。";
+        }
+        return String.join("；", bufferingMessages);
+    }
+
+    private static String conditionLabel(String condition) {
+        return switch (condition) {
+            case OFFLINE -> "无法访问";
+            case BACKLINK_MISSING -> "未检测到反链";
+            case KEYWORD_FRAUD -> "检测到关键词欺诈";
+            default -> condition;
+        };
     }
 
     public static boolean isHideEnabled(Link link, String condition) {
