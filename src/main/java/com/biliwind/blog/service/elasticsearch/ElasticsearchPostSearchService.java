@@ -403,6 +403,23 @@ public class ElasticsearchPostSearchService {
         }
 
         List<String> existingIndices = getPostIndexNames();
+        if (postIndexNameExists()) {
+            String targetIndex = createEmptyPostIndexGeneration();
+            HttpResponse<String> deleteLegacyResponse = connectionManager.sendRequest(HttpRequest.newBuilder()
+                    .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS))
+                    .DELETE()
+                    .build());
+            if (deleteLegacyResponse.statusCode() != 200 && deleteLegacyResponse.statusCode() != 404) {
+                throw new IllegalStateException("Unable to remove legacy concrete article index: "
+                        + deleteLegacyResponse.statusCode() + " - "
+                        + SensitiveMessageSanitizer.sanitize(deleteLegacyResponse.body()));
+            }
+            addPostIndexAlias(targetIndex);
+            log.warnf("Migrated legacy concrete article index to alias %s -> %s; database sync will repopulate it",
+                    POST_INDEX_ALIAS, targetIndex);
+            return;
+        }
+
         String targetIndex = existingIndices.stream()
                 .max(Comparator.comparingLong(ElasticsearchPostSearchService::indexGeneration)
                         .thenComparing(Comparator.naturalOrder()))
@@ -428,26 +445,42 @@ public class ElasticsearchPostSearchService {
                     + SensitiveMessageSanitizer.sanitize(createResponse.body()));
         }
 
+        addPostIndexAlias(targetIndex);
+        log.warnf("Reattached missing article alias %s to existing index %s", POST_INDEX_ALIAS, targetIndex);
+    }
+
+    private boolean postIndexNameExists() throws Exception {
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS))
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                .build());
+        if (response.statusCode() == 200) {
+            return true;
+        }
+        if (response.statusCode() == 404) {
+            return false;
+        }
+        throw new IllegalStateException("Unable to inspect legacy concrete article index: "
+                + response.statusCode());
+    }
+
+    private void addPostIndexAlias(String targetIndex) throws Exception {
         com.fasterxml.jackson.databind.node.ObjectNode body = objectMapper.createObjectNode();
         body.putArray("actions").addObject().putObject("add")
                 .put("index", targetIndex)
                 .put("alias", POST_INDEX_ALIAS)
                 .put("is_write_index", true);
-        HttpResponse<String> addAliasResponse = connectionManager.sendRequest(HttpRequest.newBuilder()
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
                 .uri(connectionManager.resolveUri("/_aliases"))
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .header("Content-Type", "application/json")
                 .build());
-        if (addAliasResponse.statusCode() == 200) {
-            log.warnf("Reattached missing article alias %s to existing index %s", POST_INDEX_ALIAS, targetIndex);
+        if (response.statusCode() == 200 || (response.statusCode() == 400 && postAliasExists())) {
             return;
         }
-        if (addAliasResponse.statusCode() == 400 && postAliasExists()) {
-            return;
-        }
-        throw new IllegalStateException("Unable to reattach Elasticsearch article alias: "
-                + addAliasResponse.statusCode() + " - "
-                + SensitiveMessageSanitizer.sanitize(addAliasResponse.body()));
+        throw new IllegalStateException("Unable to attach Elasticsearch article alias: "
+                + response.statusCode() + " - "
+                + SensitiveMessageSanitizer.sanitize(response.body()));
     }
 
     private boolean postAliasExists() throws Exception {
@@ -487,6 +520,10 @@ public class ElasticsearchPostSearchService {
 
     public String createRebuildIndex() throws Exception {
         ensurePostIndexReady();
+        return createEmptyPostIndexGeneration();
+    }
+
+    private String createEmptyPostIndexGeneration() throws Exception {
         long generation = getPostIndexNames().stream()
                 .mapToLong(ElasticsearchPostSearchService::indexGeneration)
                 .max()
