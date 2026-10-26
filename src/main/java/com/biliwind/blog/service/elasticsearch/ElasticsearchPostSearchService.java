@@ -5,6 +5,7 @@ import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.common.helper.SearchContentHelper;
+import com.biliwind.blog.common.dto.SearchHighlightSegment;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
@@ -26,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -922,7 +924,9 @@ public class ElasticsearchPostSearchService {
         int from = (page - 1) * size;
 
         StringBuilder searchBody;
+        HighlightMarkers highlightMarkers = null;
         if (query != null && !query.trim().isEmpty()) {
+            highlightMarkers = HighlightMarkers.create();
             searchBody = new StringBuilder(String.format("""
                     {
                       "from": %d,
@@ -961,11 +965,12 @@ public class ElasticsearchPostSearchService {
                           "content": { "fragment_size": 150, "number_of_fragments": 3 },
                           "summary": {}
                         },
-                        "pre_tags": ["<em>"],
-                        "post_tags": ["</em>"]
+                        "pre_tags": ["%s"],
+                        "post_tags": ["%s"]
                       }
                     }
-                    """, from, size, escapeJson(query), region));
+                    """, from, size, escapeJson(query), region,
+                    highlightMarkers.preTag(), highlightMarkers.postTag()));
         } else {
             searchBody = new StringBuilder(String.format("""
                 {
@@ -1005,7 +1010,7 @@ public class ElasticsearchPostSearchService {
         var response = connectionManager.sendRequest(request);
 
         if (response.statusCode() == 200) {
-            return parseSearchResponse(response.body());
+            return parseSearchResponse(response.body(), highlightMarkers);
         } else {
             log.error("Search failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
             throw new ElasticsearchUnavailableException("Search failed: " + response.statusCode());
@@ -1064,7 +1069,7 @@ public class ElasticsearchPostSearchService {
         return results;
     }
 
-    private SearchResult parseSearchResponse(String responseBody) throws IOException {
+    private SearchResult parseSearchResponse(String responseBody, HighlightMarkers highlightMarkers) throws IOException {
         var rootNode = objectMapper.readTree(responseBody);
 
         long total = rootNode.path("hits").path("total").path("value").asLong();
@@ -1074,6 +1079,15 @@ public class ElasticsearchPostSearchService {
         for (var hit : hits) {
             var source = hit.path("_source");
             var highlight = hit.path("highlight");
+
+            String title = source.path("title").asText("");
+            String summary = source.path("summary").asText("");
+            List<SearchHighlightSegment> titleSegments = highlightedFieldSegments(
+                    highlight.path("title"), title, highlightMarkers);
+            List<SearchHighlightSegment> summarySegments = highlightedFieldSegments(
+                    highlight.path("summary"), summary, highlightMarkers);
+            List<List<SearchHighlightSegment>> contentSnippets = highlightedSnippets(
+                    highlight.path("content"), highlightMarkers);
 
             List<String> tagList = new ArrayList<>();
             var tagsNode = source.path("tags");
@@ -1094,8 +1108,8 @@ public class ElasticsearchPostSearchService {
 
             SearchedPost post = new SearchedPost(
                 source.path("id").asLong(),
-                    source.path("title").asText(""),
-                source.path("summary").asText(""),
+                    title,
+                summary,
                     source.path("aiSummary").asText(""),
                 source.path("slug").asText(""),
                 source.path("authorName").asText(""),
@@ -1106,12 +1120,77 @@ public class ElasticsearchPostSearchService {
                     tagList,
                 source.path("viewCount").asInt(0),
                 source.path("featured").asBoolean(false),
-                source.path("publishedAt").asText("")
+                source.path("publishedAt").asText(""),
+                    titleSegments,
+                    summarySegments,
+                    contentSnippets
             );
             posts.add(post);
         }
 
         return new SearchResult(total, posts);
+    }
+
+    private List<SearchHighlightSegment> highlightedFieldSegments(
+            com.fasterxml.jackson.databind.JsonNode fragments, String fallback, HighlightMarkers markers) {
+        if (markers != null && fragments.isArray() && !fragments.isEmpty()) {
+            return parseHighlightedFragment(fragments.get(0).asText(""), markers);
+        }
+        return fallback == null || fallback.isEmpty()
+                ? List.of()
+                : List.of(new SearchHighlightSegment(fallback, false));
+    }
+
+    private List<List<SearchHighlightSegment>> highlightedSnippets(
+            com.fasterxml.jackson.databind.JsonNode fragments, HighlightMarkers markers) {
+        if (markers == null || !fragments.isArray()) {
+            return List.of();
+        }
+        List<List<SearchHighlightSegment>> snippets = new ArrayList<>();
+        for (com.fasterxml.jackson.databind.JsonNode fragment : fragments) {
+            List<SearchHighlightSegment> segments = parseHighlightedFragment(fragment.asText(""), markers);
+            if (segments.stream().anyMatch(SearchHighlightSegment::highlighted)) {
+                snippets.add(segments);
+            }
+        }
+        return snippets;
+    }
+
+    private List<SearchHighlightSegment> parseHighlightedFragment(String fragment, HighlightMarkers markers) {
+        if (fragment == null || fragment.isEmpty() || markers == null) {
+            return List.of();
+        }
+        List<SearchHighlightSegment> segments = new ArrayList<>();
+        int cursor = 0;
+        while (cursor < fragment.length()) {
+            int start = fragment.indexOf(markers.preTag(), cursor);
+            if (start < 0) {
+                addHighlightSegment(segments, fragment.substring(cursor), false);
+                break;
+            }
+            addHighlightSegment(segments, fragment.substring(cursor, start), false);
+            int highlightedStart = start + markers.preTag().length();
+            int end = fragment.indexOf(markers.postTag(), highlightedStart);
+            if (end < 0) {
+                addHighlightSegment(segments, fragment.substring(start), false);
+                break;
+            }
+            addHighlightSegment(segments, fragment.substring(highlightedStart, end), true);
+            cursor = end + markers.postTag().length();
+        }
+        return segments;
+    }
+
+    private void addHighlightSegment(List<SearchHighlightSegment> segments, String text, boolean highlighted) {
+        if (text.isEmpty()) {
+            return;
+        }
+        if (!segments.isEmpty() && segments.get(segments.size() - 1).highlighted() == highlighted) {
+            SearchHighlightSegment previous = segments.remove(segments.size() - 1);
+            segments.add(new SearchHighlightSegment(previous.text() + text, highlighted));
+        } else {
+            segments.add(new SearchHighlightSegment(text, highlighted));
+        }
     }
 
     /**
@@ -1261,6 +1340,13 @@ public class ElasticsearchPostSearchService {
 
     public record SearchCategory(String name, String slug) {}
 
+    private record HighlightMarkers(String preTag, String postTag) {
+        private static HighlightMarkers create() {
+            String marker = UUID.randomUUID().toString().replace("-", "");
+            return new HighlightMarkers("__WBHL_" + marker + "_START__", "__WBHL_" + marker + "_END__");
+        }
+    }
+
     public record SearchedPost(
         Long id,
         String title,
@@ -1275,7 +1361,10 @@ public class ElasticsearchPostSearchService {
         List<String> tags,
         int viewCount,
         boolean featured,
-        String publishedAt
+        String publishedAt,
+        List<SearchHighlightSegment> titleSegments,
+        List<SearchHighlightSegment> summarySegments,
+        List<List<SearchHighlightSegment>> contentSnippets
     ) {}
 
     public record HealthResult(String status, boolean ilmPolicyExists, boolean indexTemplateExists,

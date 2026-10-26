@@ -1,6 +1,8 @@
 package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.dto.PaginationPage;
+import com.biliwind.blog.common.dto.SearchHighlightSegment;
+import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
@@ -280,7 +282,7 @@ public class SearchController {
         List<SearchHit> hits = new ArrayList<>();
         Map<Long, List<IndexController.TagItem>> tagsByPost = loadTagsByPost(posts, lang);
         for (Post post : posts) {
-            hits.add(toPostHit(post, lang, tagsByPost));
+            hits.add(toPostHit(post, lang, tagsByPost, keyword));
         }
 
         String countSql = "select count(*) from posts p where " + where;
@@ -363,7 +365,7 @@ public class SearchController {
         List<SearchHit> candidates = new ArrayList<>();
         Map<Long, List<IndexController.TagItem>> tagsByPost = loadTagsByPost(posts.items(), lang);
         for (Post post : posts.items()) {
-            candidates.add(toPostHit(post, lang, tagsByPost));
+            candidates.add(toPostHit(post, lang, tagsByPost, keyword));
         }
         for (Tag tag : tags.tags()) {
             candidates.add(toTagHit(tag, lang));
@@ -552,11 +554,13 @@ public class SearchController {
                     hitNode.path("categoryName").asText(""), hitNode.path("categorySlug").asText("")));
         }
 
+        String title = hitNode.path("title").asText("");
+        String summary = hitNode.path("summary").asText("");
         return new SearchHit(
                 hitNode.path("type").asText("post"),
                 hitNode.path("typeLabel").asText("Post"),
-                hitNode.path("title").asText(""),
-                hitNode.path("summary").asText(""),
+                title,
+                summary,
                 hitNode.path("aiSummary").asText(""),
                 hitNode.path("url").asText(""),
                 hitNode.path("slug").asText(""),
@@ -568,8 +572,41 @@ public class SearchController {
                 textOrNull(hitNode.path("categorySlug")),
                 hitNode.path("viewCount").asLong(0),
                 tags,
-                categories
+                categories,
+                parseHighlightSegments(hitNode.path("titleSegments"), title),
+                parseHighlightSegments(hitNode.path("summarySegments"), summary),
+                parseContentSnippets(hitNode.path("contentSnippets"))
         );
+    }
+
+    private List<SearchHighlightSegment> parseHighlightSegments(JsonNode segmentNodes, String fallback) {
+        List<SearchHighlightSegment> segments = new ArrayList<>();
+        if (segmentNodes.isArray()) {
+            for (JsonNode segmentNode : segmentNodes) {
+                String text = segmentNode.path("text").asText("");
+                if (!text.isEmpty()) {
+                    segments.add(new SearchHighlightSegment(text, segmentNode.path("highlighted").asBoolean(false)));
+                }
+            }
+        }
+        if (segments.isEmpty() && fallback != null && !fallback.isEmpty()) {
+            segments.add(new SearchHighlightSegment(fallback, false));
+        }
+        return segments;
+    }
+
+    private List<List<SearchHighlightSegment>> parseContentSnippets(JsonNode snippetNodes) {
+        List<List<SearchHighlightSegment>> snippets = new ArrayList<>();
+        if (!snippetNodes.isArray()) {
+            return snippets;
+        }
+        for (JsonNode snippetNode : snippetNodes) {
+            List<SearchHighlightSegment> segments = parseHighlightSegments(snippetNode, null);
+            if (!segments.isEmpty()) {
+                snippets.add(segments);
+            }
+        }
+        return snippets;
     }
 
     private List<String> buildLocalSuggestions(String keyword) {
@@ -652,7 +689,10 @@ public class SearchController {
                         post.viewCount(),
                         List.of(),
                         post.categories().stream().map(category -> new IndexController.CategoryItem(
-                                category.name(), category.slug())).toList()
+                                category.name(), category.slug())).toList(),
+                        post.titleSegments(),
+                        post.summarySegments(),
+                        post.contentSnippets()
                 );
                 hits.add(hit);
             }
@@ -700,7 +740,8 @@ public class SearchController {
     }
 
     private SearchHit toPostHit(Post post, String lang,
-                                Map<Long, List<IndexController.TagItem>> tagsByPost) {
+                                Map<Long, List<IndexController.TagItem>> tagsByPost,
+                                String keyword) {
         String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
 
@@ -733,6 +774,11 @@ public class SearchController {
         if (post.viewCount != null) {
             viewCount = post.viewCount;
         }
+        String content = post.publishedRevision == null || post.publishedRevision.contentMarkdown == null
+                ? ""
+                : LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
+        List<List<SearchHighlightSegment>> contentSnippets = fallbackContentSnippets(
+                SearchContentHelper.toSearchableText(content, post.renderType), keyword);
         return new SearchHit(
                 "post",
                 "Post",
@@ -749,8 +795,98 @@ public class SearchController {
                 categorySlug,
                 viewCount,
                 tags,
-                categories
+                categories,
+                fallbackHighlight(title, keyword),
+                fallbackHighlight(summary, keyword),
+                contentSnippets
         );
+    }
+
+    private List<SearchHighlightSegment> fallbackHighlight(String value, String keyword) {
+        if (value == null || value.isEmpty()) {
+            return List.of();
+        }
+        List<String> terms = highlightTerms(keyword);
+        if (terms.isEmpty()) {
+            return List.of(new SearchHighlightSegment(value, false));
+        }
+
+        List<SearchHighlightSegment> segments = new ArrayList<>();
+        int cursor = 0;
+        while (cursor < value.length()) {
+            int matchStart = -1;
+            String matchedTerm = null;
+            for (String term : terms) {
+                int candidate = value.toLowerCase(Locale.ROOT).indexOf(term.toLowerCase(Locale.ROOT), cursor);
+                if (candidate >= 0 && (matchStart < 0 || candidate < matchStart
+                        || (candidate == matchStart && term.length() > matchedTerm.length()))) {
+                    matchStart = candidate;
+                    matchedTerm = term;
+                }
+            }
+            if (matchStart < 0) {
+                addPlainSegment(segments, value.substring(cursor));
+                break;
+            }
+            addPlainSegment(segments, value.substring(cursor, matchStart));
+            segments.add(new SearchHighlightSegment(value.substring(matchStart, matchStart + matchedTerm.length()), true));
+            cursor = matchStart + matchedTerm.length();
+        }
+        return segments.isEmpty() ? List.of(new SearchHighlightSegment(value, false)) : segments;
+    }
+
+    private List<List<SearchHighlightSegment>> fallbackContentSnippets(String content, String keyword) {
+        if (content == null || content.isEmpty()) {
+            return List.of();
+        }
+        List<String> terms = highlightTerms(keyword);
+        if (terms.isEmpty()) {
+            return List.of();
+        }
+        int matchStart = -1;
+        String matchedTerm = null;
+        String foldedContent = content.toLowerCase(Locale.ROOT);
+        for (String term : terms) {
+            int candidate = foldedContent.indexOf(term.toLowerCase(Locale.ROOT));
+            if (candidate >= 0 && (matchStart < 0 || candidate < matchStart
+                    || (candidate == matchStart && term.length() > matchedTerm.length()))) {
+                matchStart = candidate;
+                matchedTerm = term;
+            }
+        }
+        if (matchStart < 0) {
+            return List.of();
+        }
+
+        int start = Math.max(0, matchStart - 90);
+        int end = Math.min(content.length(), matchStart + matchedTerm.length() + 110);
+        String excerpt = content.substring(start, end);
+        List<SearchHighlightSegment> segments = new ArrayList<>();
+        if (start > 0) {
+            segments.add(new SearchHighlightSegment("…", false));
+        }
+        segments.addAll(fallbackHighlight(excerpt, keyword));
+        if (end < content.length()) {
+            segments.add(new SearchHighlightSegment("…", false));
+        }
+        return List.of(segments);
+    }
+
+    private List<String> highlightTerms(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(keyword.trim().split("\\s+"))
+                .filter(term -> !term.isBlank())
+                .distinct()
+                .limit(8)
+                .toList();
+    }
+
+    private void addPlainSegment(List<SearchHighlightSegment> segments, String text) {
+        if (!text.isEmpty()) {
+            segments.add(new SearchHighlightSegment(text, false));
+        }
     }
 
     private SearchHit toTagHit(Tag tag, String lang) {
@@ -1006,8 +1142,21 @@ public class SearchController {
             String categorySlug,
             long viewCount,
             List<IndexController.TagItem> tags,
-            List<IndexController.CategoryItem> categories
+            List<IndexController.CategoryItem> categories,
+            List<SearchHighlightSegment> titleSegments,
+            List<SearchHighlightSegment> summarySegments,
+            List<List<SearchHighlightSegment>> contentSnippets
     ) {
+        public SearchHit(String type, String typeLabel, String title, String summary, String aiSummary,
+                         String url, String slug, OffsetDateTime date, String dateText, String meta,
+                         String actionLabel, String categoryName, String categorySlug, long viewCount,
+                         List<IndexController.TagItem> tags, List<IndexController.CategoryItem> categories) {
+            this(type, typeLabel, title, summary, aiSummary, url, slug, date, dateText, meta, actionLabel,
+                    categoryName, categorySlug, viewCount, tags, categories,
+                    title == null || title.isEmpty() ? List.of() : List.of(new SearchHighlightSegment(title, false)),
+                    summary == null || summary.isEmpty() ? List.of() : List.of(new SearchHighlightSegment(summary, false)),
+                    List.of());
+        }
     }
 
     @TemplateData

@@ -103,7 +103,15 @@
                                 <h2 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight"
                                     data-article-transition-part="title"
                                     data-article-transition-slug="{hit.slug}">
-                                    <a href="{hit.url}" class="block after:absolute after:inset-0">{hit.title}</a>
+                                    <a href="{hit.url}" class="block after:absolute after:inset-0">
+                                        {#for segment in hit.titleSegments}
+                                            {#if segment.highlighted}
+                                                <mark class="rounded-sm bg-amber-300/20 px-0.5 font-semibold text-amber-100">{segment.text}</mark>
+                                            {#else}
+                                                {segment.text}
+                                            {/if}
+                                        {/for}
+                                    </a>
                                 </h2>
 
                                 <!-- AI Summary (Optional) -->
@@ -129,8 +137,31 @@
 
                                 <!-- Summary -->
                                 <p class="mt-4 text-[15px] leading-relaxed text-body line-clamp-2 font-light">
-                                    {hit.summary}
+                                    {#for segment in hit.summarySegments}
+                                        {#if segment.highlighted}
+                                            <mark class="rounded-sm bg-amber-300/20 px-0.5 font-semibold text-amber-100">{segment.text}</mark>
+                                        {#else}
+                                            {segment.text}
+                                        {/if}
+                                    {/for}
                                 </p>
+
+                                {#if hit.contentSnippets && hit.contentSnippets.size > 0}
+                                    <div class="mt-3 space-y-2" aria-label="正文搜索匹配内容">
+                                        <span class="text-[11px] font-mono uppercase tracking-wider text-accent">正文命中</span>
+                                        {#for snippet in hit.contentSnippets}
+                                            <p class="text-sm leading-relaxed text-body/90 line-clamp-3">
+                                                {#for segment in snippet}
+                                                    {#if segment.highlighted}
+                                                        <mark class="rounded-sm bg-amber-300/20 px-0.5 font-semibold text-amber-100">{segment.text}</mark>
+                                                    {#else}
+                                                        {segment.text}
+                                                    {/if}
+                                                {/for}
+                                            </p>
+                                        {/for}
+                                    </div>
+                                {/if}
 
                                 <!-- Footer -->
                                 <div class="mt-6 md:mt-8 flex items-center justify-between border-t border-border pt-5 md:pt-6">
