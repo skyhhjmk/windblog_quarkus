@@ -1122,6 +1122,7 @@ public class ElasticsearchPostSearchService {
                 source.path("viewCount").asInt(0),
                 source.path("featured").asBoolean(false),
                 source.path("publishedAt").asText(""),
+                    source.path("createdAt").asText(""),
                     titleSegments,
                     summarySegments,
                     contentSnippets
@@ -1364,6 +1365,7 @@ public class ElasticsearchPostSearchService {
         int viewCount,
         boolean featured,
         String publishedAt,
+        String createdAt,
         List<SearchHighlightSegment> titleSegments,
         List<SearchHighlightSegment> summarySegments,
         List<List<SearchHighlightSegment>> contentSnippets

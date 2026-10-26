@@ -686,7 +686,7 @@ public class SearchController {
             List<SearchHit> hits = new ArrayList<>();
 
             for (ElasticsearchPostSearchService.SearchedPost post : searchResult.posts()) {
-                OffsetDateTime publishedAt = parseSearchPublishedAt(post.publishedAt());
+                OffsetDateTime publishedAt = resolveSearchDate(post);
                 if (threshold != null && publishedAt != null && publishedAt.isBefore(threshold)) {
                     continue;
                 }
@@ -730,6 +730,20 @@ public class SearchController {
             log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);
             return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
         }
+    }
+
+    private OffsetDateTime resolveSearchDate(ElasticsearchPostSearchService.SearchedPost post) {
+        OffsetDateTime date = parseSearchPublishedAt(post.publishedAt());
+        if (date == null) {
+            date = parseSearchPublishedAt(post.createdAt());
+        }
+        if (date == null && post.id() != null) {
+            Post databasePost = entityManager.find(Post.class, post.id());
+            if (databasePost != null) {
+                date = effectiveDate(databasePost);
+            }
+        }
+        return date;
     }
 
     private OffsetDateTime parseSearchPublishedAt(String value) {
