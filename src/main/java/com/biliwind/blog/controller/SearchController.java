@@ -31,7 +31,11 @@ import org.jboss.logging.Logger;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -661,15 +665,9 @@ public class SearchController {
             List<SearchHit> hits = new ArrayList<>();
 
             for (ElasticsearchPostSearchService.SearchedPost post : searchResult.posts()) {
-                if (threshold != null && post.publishedAt() != null) {
-                    try {
-                        OffsetDateTime postDate = OffsetDateTime.parse(post.publishedAt());
-                        if (postDate.isBefore(threshold)) {
-                            continue;
-                        }
-                    } catch (Exception e) {
-                        log.debugf("解析日期失败：%s", post.publishedAt());
-                    }
+                OffsetDateTime publishedAt = parseSearchPublishedAt(post.publishedAt());
+                if (threshold != null && publishedAt != null && publishedAt.isBefore(threshold)) {
+                    continue;
                 }
 
                 SearchHit hit = new SearchHit(
@@ -680,8 +678,8 @@ public class SearchController {
                     post.aiSummary(),
                     "/post/" + post.slug(),
                     post.slug(),
-                    post.publishedAt() != null ? OffsetDateTime.parse(post.publishedAt()) : null,
-                    post.publishedAt() != null ? formatDate(OffsetDateTime.parse(post.publishedAt())) : "unknown",
+                    publishedAt,
+                    publishedAt != null ? formatDate(publishedAt) : "unknown",
                     "author: " + post.authorName() + " | views: " + post.viewCount(),
                         "[Read More]",
                         post.categoryName(),
@@ -709,6 +707,26 @@ public class SearchController {
         } catch (Exception e) {
             log.error("Elasticsearch 搜索失败，回退到数据库搜索", e);
             return searchWithDatabaseFallback(keyword, type, sort, date, lang, page);
+        }
+    }
+
+    private OffsetDateTime parseSearchPublishedAt(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value);
+        } catch (DateTimeException exception) {
+            try {
+                return LocalDateTime.parse(value).atOffset(ZoneOffset.UTC);
+            } catch (DateTimeException ignored) {
+                try {
+                    return LocalDate.parse(value).atStartOfDay().atOffset(ZoneOffset.UTC);
+                } catch (DateTimeException invalidDate) {
+                    log.debugf("无法解析 Elasticsearch 文章发布时间，保留搜索结果: %s", value);
+                    return null;
+                }
+            }
         }
     }
 
