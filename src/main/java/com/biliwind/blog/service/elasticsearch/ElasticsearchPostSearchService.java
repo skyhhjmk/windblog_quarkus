@@ -1108,6 +1108,7 @@ public class ElasticsearchPostSearchService {
 
             SearchedPost post = new SearchedPost(
                 source.path("id").asLong(),
+                    source.path("authorId").asLong(0),
                     title,
                 summary,
                     source.path("aiSummary").asText(""),
@@ -1349,6 +1350,7 @@ public class ElasticsearchPostSearchService {
 
     public record SearchedPost(
         Long id,
+        Long authorId,
         String title,
         String summary,
         String aiSummary,

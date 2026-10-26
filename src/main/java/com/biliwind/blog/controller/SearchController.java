@@ -3,6 +3,7 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.dto.SearchHighlightSegment;
 import com.biliwind.blog.common.helper.SearchContentHelper;
+import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
@@ -560,6 +561,11 @@ public class SearchController {
 
         String title = hitNode.path("title").asText("");
         String summary = hitNode.path("summary").asText("");
+        String meta = hitNode.path("meta").asText("");
+        String authorName = hitNode.path("authorName").asText("");
+        if (authorName.isBlank()) {
+            authorName = authorNameFromMeta(meta);
+        }
         return new SearchHit(
                 hitNode.path("type").asText("post"),
                 hitNode.path("typeLabel").asText("Post"),
@@ -570,7 +576,7 @@ public class SearchController {
                 hitNode.path("slug").asText(""),
                 date,
                 dateText,
-                hitNode.path("meta").asText(""),
+                meta,
                 hitNode.path("actionLabel").asText("[Read More]"),
                 textOrNull(hitNode.path("categoryName")),
                 textOrNull(hitNode.path("categorySlug")),
@@ -579,8 +585,23 @@ public class SearchController {
                 categories,
                 parseHighlightSegments(hitNode.path("titleSegments"), title),
                 parseHighlightSegments(hitNode.path("summarySegments"), summary),
-                parseContentSnippets(hitNode.path("contentSnippets"))
+                parseContentSnippets(hitNode.path("contentSnippets")),
+                authorName
         );
+    }
+
+    private String authorNameFromMeta(String meta) {
+        if (meta == null) {
+            return "";
+        }
+        int authorStart = meta.indexOf("author:");
+        if (authorStart < 0) {
+            return "";
+        }
+        int nameStart = authorStart + "author:".length();
+        int nameEnd = meta.indexOf('|', nameStart);
+        String authorName = meta.substring(nameStart, nameEnd < 0 ? meta.length() : nameEnd).trim();
+        return authorName.equalsIgnoreCase("unknown") ? "" : authorName;
     }
 
     private List<SearchHighlightSegment> parseHighlightSegments(JsonNode segmentNodes, String fallback) {
@@ -690,7 +711,8 @@ public class SearchController {
                                 category.name(), category.slug())).toList(),
                         post.titleSegments(),
                         post.summarySegments(),
-                        post.contentSnippets()
+                        post.contentSnippets(),
+                        resolveSearchAuthorName(post.authorId(), post.authorName())
                 );
                 hits.add(hit);
             }
@@ -728,6 +750,20 @@ public class SearchController {
                 }
             }
         }
+    }
+
+    private String resolveSearchAuthorName(Long authorId, String indexedAuthorName) {
+        if (indexedAuthorName != null && !indexedAuthorName.isBlank()
+                && !"unknown".equalsIgnoreCase(indexedAuthorName.trim())) {
+            return indexedAuthorName.trim();
+        }
+        if (authorId != null && authorId > 0) {
+            User user = entityManager.find(User.class, authorId);
+            if (user != null && user.username != null && !user.username.isBlank()) {
+                return user.username.trim();
+            }
+        }
+        return "Unknown";
     }
 
     private Map<Long, List<IndexController.TagItem>> loadTagsByPost(List<Post> posts, String lang) {
@@ -816,7 +852,8 @@ public class SearchController {
                 categories,
                 fallbackHighlight(title, keyword),
                 fallbackHighlight(summary, keyword),
-                contentSnippets
+                contentSnippets,
+                PostAuthorHelper.displayName(post)
         );
     }
 
@@ -1163,7 +1200,8 @@ public class SearchController {
             List<IndexController.CategoryItem> categories,
             List<SearchHighlightSegment> titleSegments,
             List<SearchHighlightSegment> summarySegments,
-            List<List<SearchHighlightSegment>> contentSnippets
+            List<List<SearchHighlightSegment>> contentSnippets,
+            String authorName
     ) {
         public SearchHit(String type, String typeLabel, String title, String summary, String aiSummary,
                          String url, String slug, OffsetDateTime date, String dateText, String meta,
@@ -1173,7 +1211,7 @@ public class SearchController {
                     categoryName, categorySlug, viewCount, tags, categories,
                     title == null || title.isEmpty() ? List.of() : List.of(new SearchHighlightSegment(title, false)),
                     summary == null || summary.isEmpty() ? List.of() : List.of(new SearchHighlightSegment(summary, false)),
-                    List.of());
+                    List.of(), "");
         }
     }
 
