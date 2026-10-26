@@ -21,9 +21,14 @@ import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Elasticsearch article search service
@@ -147,7 +152,8 @@ public class ElasticsearchPostSearchService {
         HealthResult healthResult = checkHealth();
         boolean existingIndexSetupReady = "healthy".equals(healthResult.status())
                 && healthResult.ilmPolicyExists()
-                && healthResult.indexTemplateExists();
+                && healthResult.indexTemplateExists()
+                && healthResult.postAliasExists();
         if (existingIndexSetupReady) {
             indexInitialized.set(true);
             log.info("Elasticsearch article index status restored from existing ES metadata");
@@ -353,34 +359,7 @@ public class ElasticsearchPostSearchService {
     }
 
     private void createInitialPostIndex() throws Exception {
-        log.info("Creating initial article index: " + POST_INDEX_PATTERN);
-
-        String indexBody = """
-            {
-              "aliases": {
-                "%s": {}
-              }
-            }
-            """.formatted(POST_INDEX_ALIAS);
-
-        var request = HttpRequest.newBuilder()
-            .uri(connectionManager.resolveUri("/windblog-posts-000001"))
-            .PUT(HttpRequest.BodyPublishers.ofString(indexBody))
-            .header("Content-Type", "application/json")
-            .build();
-
-        var response = connectionManager.sendRequest(request);
-
-        if (response.statusCode() == 200) {
-            log.info("Initial article index created successfully");
-        } else if (response.statusCode() == 400) {
-            log.warn("Initial article index may already exist: "
-                    + SensitiveMessageSanitizer.sanitize(response.body()));
-        } else {
-            log.error("Initial article index creation failed: "
-                    + SensitiveMessageSanitizer.sanitize(response.body()));
-            throw new RuntimeException("Initial article index creation failed: " + response.statusCode());
-        }
+        ensurePostIndexAlias();
     }
 
     public void applyIndexConfiguration() throws Exception {
@@ -390,32 +369,218 @@ public class ElasticsearchPostSearchService {
         indexInitialized.set(true);
     }
 
-    public void rebuildPostIndex() throws Exception {
-        HttpRequest aliasRequest = HttpRequest.newBuilder()
+    /**
+     * Ensures that the article write alias exists. If an earlier failed rebuild left
+     * an index behind without its alias, reattach the newest existing generation.
+     */
+    public void ensurePostIndexReady() throws Exception {
+        if (!connectionManager.isAvailable()) {
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
+        }
+        if (!indexInitialized.get()) {
+            createIlmPolicy();
+            createPostIndexTemplate();
+        }
+        ensurePostIndexAlias();
+        indexInitialized.set(true);
+    }
+
+    private void ensurePostIndexAlias() throws Exception {
+        HttpResponse<String> aliasResponse = connectionManager.sendRequest(HttpRequest.newBuilder()
                 .uri(connectionManager.resolveUri("/_alias/" + POST_INDEX_ALIAS))
                 .GET()
-                .build();
-        HttpResponse<String> aliasResponse = connectionManager.sendRequest(aliasRequest);
+                .build());
+        if (aliasResponse.statusCode() == 200) {
+            com.fasterxml.jackson.databind.JsonNode aliases = objectMapper.readTree(aliasResponse.body());
+            if (aliases.isObject() && !aliases.isEmpty()) {
+                return;
+            }
+            throw new IllegalStateException("Elasticsearch article alias has no index targets");
+        }
+        if (aliasResponse.statusCode() != 404) {
+            throw new IllegalStateException("Unable to inspect Elasticsearch article alias: "
+                    + aliasResponse.statusCode());
+        }
+
+        List<String> existingIndices = getPostIndexNames();
+        String targetIndex = existingIndices.stream()
+                .max(Comparator.comparingLong(ElasticsearchPostSearchService::indexGeneration)
+                        .thenComparing(Comparator.naturalOrder()))
+                .orElse("windblog-posts-000001");
+
+        if (existingIndices.isEmpty()) {
+            String indexBody = objectMapper.writeValueAsString(Map.of(
+                    "aliases", Map.of(POST_INDEX_ALIAS, Map.of("is_write_index", true))));
+            HttpResponse<String> createResponse = connectionManager.sendRequest(HttpRequest.newBuilder()
+                    .uri(connectionManager.resolveUri("/" + targetIndex))
+                    .PUT(HttpRequest.BodyPublishers.ofString(indexBody))
+                    .header("Content-Type", "application/json")
+                    .build());
+            if (createResponse.statusCode() == 200 || createResponse.statusCode() == 201) {
+                log.infof("Created article index %s with write alias %s", targetIndex, POST_INDEX_ALIAS);
+                return;
+            }
+            if (createResponse.statusCode() == 400 && postAliasExists()) {
+                return;
+            }
+            throw new IllegalStateException("Unable to create Elasticsearch article index: "
+                    + createResponse.statusCode() + " - "
+                    + SensitiveMessageSanitizer.sanitize(createResponse.body()));
+        }
+
+        com.fasterxml.jackson.databind.node.ObjectNode body = objectMapper.createObjectNode();
+        body.putArray("actions").addObject().putObject("add")
+                .put("index", targetIndex)
+                .put("alias", POST_INDEX_ALIAS)
+                .put("is_write_index", true);
+        HttpResponse<String> addAliasResponse = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_aliases"))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .header("Content-Type", "application/json")
+                .build());
+        if (addAliasResponse.statusCode() == 200) {
+            log.warnf("Reattached missing article alias %s to existing index %s", POST_INDEX_ALIAS, targetIndex);
+            return;
+        }
+        if (addAliasResponse.statusCode() == 400 && postAliasExists()) {
+            return;
+        }
+        throw new IllegalStateException("Unable to reattach Elasticsearch article alias: "
+                + addAliasResponse.statusCode() + " - "
+                + SensitiveMessageSanitizer.sanitize(addAliasResponse.body()));
+    }
+
+    private boolean postAliasExists() throws Exception {
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_alias/" + POST_INDEX_ALIAS))
+                .GET()
+                .build());
+        return response.statusCode() == 200;
+    }
+
+    private List<String> getPostIndexNames() throws Exception {
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_cat/indices/" + POST_INDEX_PATTERN + "?h=index"))
+                .GET()
+                .build());
+        if (response.statusCode() == 404) {
+            return List.of();
+        }
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("Unable to list Elasticsearch article indices: "
+                    + response.statusCode());
+        }
+        return response.body().lines().map(String::trim).filter(name -> !name.isEmpty()).toList();
+    }
+
+    private static long indexGeneration(String indexName) {
+        Matcher matcher = Pattern.compile("windblog-posts-(\\d+)$").matcher(indexName);
+        if (!matcher.find()) {
+            return -1;
+        }
+        try {
+            return Long.parseLong(matcher.group(1));
+        } catch (NumberFormatException exception) {
+            return -1;
+        }
+    }
+
+    public String createRebuildIndex() throws Exception {
+        ensurePostIndexReady();
+        long generation = getPostIndexNames().stream()
+                .mapToLong(ElasticsearchPostSearchService::indexGeneration)
+                .max()
+                .orElse(0) + 1;
+        for (int attempt = 0; attempt < 10; attempt++, generation++) {
+            String indexName = "windblog-posts-%06d".formatted(generation);
+            HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                    .uri(connectionManager.resolveUri("/" + indexName))
+                    .PUT(HttpRequest.BodyPublishers.ofString("{}"))
+                    .header("Content-Type", "application/json")
+                    .build());
+            if (response.statusCode() == 200 || response.statusCode() == 201) {
+                return indexName;
+            }
+            if (response.statusCode() != 400) {
+                throw new IllegalStateException("Unable to create replacement article index: "
+                        + response.statusCode() + " - "
+                        + SensitiveMessageSanitizer.sanitize(response.body()));
+            }
+        }
+        throw new IllegalStateException("Unable to reserve a new Elasticsearch article index generation");
+    }
+
+    public void promoteRebuildIndex(String newIndex) throws Exception {
+        HttpResponse<String> aliasResponse = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_alias/" + POST_INDEX_ALIAS))
+                .GET()
+                .build());
+        if (aliasResponse.statusCode() != 200 && aliasResponse.statusCode() != 404) {
+            throw new IllegalStateException("Unable to inspect article alias before promotion: "
+                    + aliasResponse.statusCode());
+        }
+
+        com.fasterxml.jackson.databind.node.ArrayNode actions = objectMapper.createArrayNode();
         if (aliasResponse.statusCode() == 200) {
             com.fasterxml.jackson.databind.JsonNode aliasRoot = objectMapper.readTree(aliasResponse.body());
             java.util.Iterator<String> indexNames = aliasRoot.fieldNames();
             while (indexNames.hasNext()) {
                 String indexName = indexNames.next();
-                HttpRequest deleteRequest = HttpRequest.newBuilder()
-                        .uri(connectionManager.resolveUri("/" + indexName))
-                        .DELETE()
-                        .build();
-                HttpResponse<String> deleteResponse = connectionManager.sendRequest(deleteRequest);
-                if (deleteResponse.statusCode() != 200 && deleteResponse.statusCode() != 404) {
-                    throw new IllegalStateException("删除旧索引失败: " + deleteResponse.body());
+                if (!newIndex.equals(indexName)) {
+                    actions.addObject().putObject("remove")
+                            .put("index", indexName)
+                            .put("alias", POST_INDEX_ALIAS);
                 }
             }
-        } else if (aliasResponse.statusCode() != 404) {
-            throw new IllegalStateException("读取索引别名失败: " + aliasResponse.body());
         }
+        actions.addObject().putObject("add")
+                .put("index", newIndex)
+                .put("alias", POST_INDEX_ALIAS)
+                .put("is_write_index", true);
+        com.fasterxml.jackson.databind.node.ObjectNode body = objectMapper.createObjectNode();
+        body.set("actions", actions);
 
-        indexInitialized.set(false);
-        applyIndexConfiguration();
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_aliases"))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .header("Content-Type", "application/json")
+                .build());
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("Unable to promote replacement article index: "
+                    + response.statusCode() + " - "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
+        }
+        indexInitialized.set(true);
+    }
+
+    public boolean isPostIndexAliasTarget(String indexName) throws Exception {
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/_alias/" + POST_INDEX_ALIAS))
+                .GET()
+                .build());
+        if (response.statusCode() == 404) {
+            return false;
+        }
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("Unable to verify article alias target: " + response.statusCode());
+        }
+        com.fasterxml.jackson.databind.JsonNode aliasRoot = objectMapper.readTree(response.body());
+        return aliasRoot.path(indexName).path("aliases").has(POST_INDEX_ALIAS);
+    }
+
+    public void deleteIndexGeneration(String indexName) {
+        try {
+            HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                    .uri(connectionManager.resolveUri("/" + indexName))
+                    .DELETE()
+                    .build());
+            if (response.statusCode() != 200 && response.statusCode() != 404) {
+                log.warnf("Could not remove failed replacement index %s: %d", indexName, response.statusCode());
+            }
+        } catch (Exception exception) {
+            log.warnf("Could not remove failed replacement index %s: %s", indexName,
+                    SensitiveMessageSanitizer.sanitize(exception.getMessage()));
+        }
     }
 
     public List<String> analyzeText(String text) throws Exception {
@@ -460,16 +625,32 @@ public class ElasticsearchPostSearchService {
      */
     @jakarta.transaction.Transactional
     public void indexPost(Post post, List<String> tags) throws Exception {
+        indexPost(post, tags, POST_INDEX_ALIAS);
+    }
+
+    @jakarta.transaction.Transactional
+    public boolean indexPublicPostById(Long postId, String targetIndex) throws Exception {
+        Post post = Post.findById(postId);
+        if (!canIndexPost(post)) {
+            deletePostIndex(postId, targetIndex);
+            return false;
+        }
+        indexPost(post, getPostTags(postId), targetIndex);
+        return true;
+    }
+
+    @jakarta.transaction.Transactional
+    public void indexPost(Post post, List<String> tags, String targetIndex) throws Exception {
+        validateIndexName(targetIndex);
         if (!connectionManager.isAvailable()) {
-            log.debugf("Elasticsearch unavailable, skipping article index: %d", post.id);
-            return;
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
         }
 
         log.infof("Indexing article: %d - %s", post.id, post.slug);
 
         if (!canIndexPost(post)) {
             log.debugf("Skipping non-public article index: %d", post.id);
-            deletePostIndex(post.id);
+            deletePostIndex(post.id, targetIndex);
             return;
         }
 
@@ -561,7 +742,7 @@ public class ElasticsearchPostSearchService {
             .writeValueAsString(document);
 
         var request = HttpRequest.newBuilder()
-            .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_doc/" + post.id))
+            .uri(connectionManager.resolveUri("/" + targetIndex + "/_doc/" + post.id))
             .PUT(HttpRequest.BodyPublishers.ofString(documentJson))
             .header("Content-Type", "application/json")
             .build();
@@ -571,8 +752,8 @@ public class ElasticsearchPostSearchService {
         if (response.statusCode() == 200 || response.statusCode() == 201) {
             log.infof("Article indexed successfully: %d", post.id);
         } else {
-            log.errorf("Article indexing failed: %d - %s", post.id,
-                    SensitiveMessageSanitizer.sanitize(response.body()));
+            throw new IllegalStateException("Article indexing failed: " + response.statusCode() + " - "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
         }
     }
 
@@ -580,25 +761,109 @@ public class ElasticsearchPostSearchService {
      * Delete article index
      */
     public void deletePostIndex(Long postId) throws Exception {
+        deletePostIndex(postId, POST_INDEX_ALIAS);
+    }
+
+    public void deletePostIndex(Long postId, String indexName) throws Exception {
+        validateIndexName(indexName);
         if (!connectionManager.isAvailable()) {
-            log.debugf("Elasticsearch unavailable, skipping delete article index: %d", postId);
-            return;
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
         }
 
         log.infof("Deleting article index: %d", postId);
 
         var request = HttpRequest.newBuilder()
-            .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_doc/" + postId))
+            .uri(connectionManager.resolveUri("/" + indexName + "/_doc/" + postId))
             .DELETE()
             .build();
 
         var response = connectionManager.sendRequest(request);
 
-        if (response.statusCode() == 200 || response.statusCode() == 404) {
+        if (response.statusCode() == 200 || response.statusCode() == 202 || response.statusCode() == 404) {
             log.infof("Article index deleted successfully: %d", postId);
         } else {
-            log.errorf("Article index deletion failed: %d - %s", postId,
-                    SensitiveMessageSanitizer.sanitize(response.body()));
+            throw new IllegalStateException("Article index deletion failed: " + response.statusCode() + " - "
+                    + SensitiveMessageSanitizer.sanitize(response.body()));
+        }
+    }
+
+    public long getPostIndexCount(String indexName) throws Exception {
+        validateIndexName(indexName);
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + indexName + "/_count"))
+                .GET()
+                .build());
+        if (response.statusCode() != 200) {
+            throw new ElasticsearchUnavailableException("Unable to count article index: " + response.statusCode());
+        }
+        return objectMapper.readTree(response.body()).path("count").asLong(0);
+    }
+
+    public Set<Long> getIndexedPostIds(String indexName) throws Exception {
+        validateIndexName(indexName);
+        Set<Long> ids = new LinkedHashSet<>();
+        Long searchAfterId = null;
+        while (true) {
+            com.fasterxml.jackson.databind.node.ObjectNode body = objectMapper.createObjectNode();
+            body.put("size", 1000);
+            body.put("_source", false);
+            body.putObject("query").putObject("match_all");
+            body.putArray("sort").addObject().putObject("id").put("order", "asc");
+            if (searchAfterId != null) {
+                body.putArray("search_after").add(searchAfterId);
+            }
+
+            HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                    .uri(connectionManager.resolveUri("/" + indexName + "/_search"))
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                    .header("Content-Type", "application/json")
+                    .build());
+            if (response.statusCode() != 200) {
+                throw new ElasticsearchUnavailableException("Unable to inspect article index documents: "
+                        + response.statusCode());
+            }
+
+            com.fasterxml.jackson.databind.JsonNode hits = objectMapper.readTree(response.body())
+                    .path("hits").path("hits");
+            if (!hits.isArray() || hits.isEmpty()) {
+                break;
+            }
+            Long lastId = null;
+            for (com.fasterxml.jackson.databind.JsonNode hit : hits) {
+                long id = hit.path("_id").asLong(-1);
+                if (id < 0) {
+                    throw new IllegalStateException("Article index contains a non-numeric document id");
+                }
+                ids.add(id);
+                com.fasterxml.jackson.databind.JsonNode sort = hit.path("sort");
+                if (!sort.isArray() || sort.isEmpty()) {
+                    throw new IllegalStateException("Article index response omitted the stable sort key");
+                }
+                lastId = sort.get(0).asLong();
+            }
+            if (hits.size() < 1000 || lastId == null || lastId.equals(searchAfterId)) {
+                break;
+            }
+            searchAfterId = lastId;
+        }
+        return ids;
+    }
+
+    public void refreshPostIndex(String indexName) throws Exception {
+        validateIndexName(indexName);
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + indexName + "/_refresh"))
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build());
+        if (response.statusCode() != 200) {
+            throw new ElasticsearchUnavailableException("Unable to refresh article index: " + response.statusCode());
+        }
+    }
+
+    private void validateIndexName(String indexName) {
+        if (indexName == null || !(POST_INDEX_ALIAS.equals(indexName)
+                || indexName.matches("windblog-posts-[0-9]{6,}"))) {
+            throw new IllegalArgumentException("Invalid article index target");
         }
     }
 
@@ -839,9 +1104,10 @@ public class ElasticsearchPostSearchService {
         boolean healthy = false;
         boolean ilmPolicyExists = false;
         boolean indexTemplateExists = false;
+        boolean postAliasExists = false;
 
         if (!connectionManager.isAvailable()) {
-            return new HealthResult("unavailable", false, false);
+            return new HealthResult("unavailable", false, false, false);
         }
 
         try {
@@ -877,8 +1143,22 @@ public class ElasticsearchPostSearchService {
             log.debug("Index template check failed", e);
         }
 
+        try {
+            var aliasRequest = HttpRequest.newBuilder()
+                    .uri(connectionManager.resolveUri("/_alias/" + POST_INDEX_ALIAS))
+                    .GET()
+                    .build();
+            var aliasResponse = connectionManager.sendRequest(aliasRequest);
+            if (aliasResponse.statusCode() == 200) {
+                com.fasterxml.jackson.databind.JsonNode aliases = objectMapper.readTree(aliasResponse.body());
+                postAliasExists = aliases.isObject() && !aliases.isEmpty();
+            }
+        } catch (Exception e) {
+            log.debug("Article index alias check failed", e);
+        }
+
         String status = healthy ? "healthy" : "degraded";
-        return new HealthResult(status, ilmPolicyExists, indexTemplateExists);
+        return new HealthResult(status, ilmPolicyExists, indexTemplateExists, postAliasExists);
     }
 
     /**
@@ -961,7 +1241,8 @@ public class ElasticsearchPostSearchService {
         String publishedAt
     ) {}
 
-    public record HealthResult(String status, boolean ilmPolicyExists, boolean indexTemplateExists) {
+    public record HealthResult(String status, boolean ilmPolicyExists, boolean indexTemplateExists,
+                               boolean postAliasExists) {
     }
 
     public record ServiceStatus(boolean connectionAvailable, boolean indexInitialized, String healthStatus) {

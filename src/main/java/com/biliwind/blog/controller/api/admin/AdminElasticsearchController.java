@@ -5,6 +5,7 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchConnectionManager;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchIndexService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchLogBufferService;
+import com.biliwind.blog.service.elasticsearch.ElasticsearchPostIndexFeedbackService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchSettingsService;
 import com.biliwind.blog.service.edge.NodeRoleService;
@@ -16,6 +17,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.jboss.logging.Logger;
 
 import java.util.HashMap;
 import java.util.List;
@@ -27,8 +29,13 @@ import java.util.Map;
 @SecurityRequirement(name = "adminBearerAuth")
 public class AdminElasticsearchController {
 
+    private static final Logger log = Logger.getLogger(AdminElasticsearchController.class);
+
     @Inject
     ElasticsearchPostSearchService postSearchService;
+
+    @Inject
+    ElasticsearchPostIndexFeedbackService postIndexFeedbackService;
 
     @Inject
     ElasticsearchIndexService indexService;
@@ -83,6 +90,7 @@ public class AdminElasticsearchController {
                 "queueSize", logBufferService.getQueueSize(),
                 "isReady", logBufferService.isReady()
         ));
+        result.put("postIndexFeedback", postIndexFeedbackService.getFeedback());
 
         boolean allHealthy = connectionStatus.available() &&
                 postSearchStatus.indexInitialized() &&
@@ -124,14 +132,20 @@ public class AdminElasticsearchController {
             result.put("postSearchHealth", Map.of(
                     "status", healthResult.status(),
                     "ilmPolicyExists", healthResult.ilmPolicyExists(),
-                    "indexTemplateExists", healthResult.indexTemplateExists()
+                    "indexTemplateExists", healthResult.indexTemplateExists(),
+                    "postAliasExists", healthResult.postAliasExists()
             ));
         } catch (Exception e) {
             result.put("postSearchHealth", Map.of(
                     "status", "error",
-                    "message", SensitiveMessageSanitizer.sanitize(e.getMessage())
+                    "ilmPolicyExists", false,
+                    "indexTemplateExists", false,
+                    "postAliasExists", false,
+                    "message", safeErrorMessage(e)
             ));
         }
+
+        result.put("postIndexFeedback", postIndexFeedbackService.getFeedback());
 
         var logIndexStatus = indexService.getServiceStatus();
         result.put("logIndex", Map.of(
@@ -359,19 +373,19 @@ public class AdminElasticsearchController {
                         .build();
             }
 
-            List<String> tags = postSearchService.getPostTags(id);
-            postSearchService.indexPost(post, tags);
+            boolean indexed = postSearchService.indexPublicPostById(id, "windblog-posts");
 
             return Response.ok(Map.of(
                     "success", true,
-                    "message", "文章索引成功",
+                    "message", indexed ? "文章索引成功" : "文章当前不可公开，已跳过索引",
                     "postId", id,
-                    "tagsCount", tags.size()
+                    "indexed", indexed
             )).build();
         } catch (Exception e) {
+            log.error("Manual Elasticsearch article indexing failed", e);
             return Response.serverError().entity(Map.of(
                     "success", false,
-                    "error", SensitiveMessageSanitizer.sanitize(e.getMessage())
+                    "error", safeErrorMessage(e)
             )).build();
         }
     }
@@ -432,22 +446,27 @@ public class AdminElasticsearchController {
                         .entity(Map.of("success", false, "message", "Elasticsearch 当前不可用"))
                         .build();
             }
-            List<Post> posts = Post.list(
-                    "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null",
-                    com.biliwind.blog.model.PostStatus.PUBLISHED);
-            int count = 0;
-            for (Post post : posts) {
-                List<String> tags = postSearchService.getPostTags(post.id);
-                postSearchService.indexPost(post, tags);
-                count++;
-            }
+            ElasticsearchPostIndexFeedbackService.SyncResult sync = postIndexFeedbackService.synchronizeAll();
             return Response.ok(Map.of(
                     "success", true,
                     "message", "全量索引完成",
-                    "totalCount", count
+                    "totalCount", sync.indexedCount(),
+                    "expectedCount", sync.expectedCount(),
+                    "postIndexFeedback", postIndexFeedbackService.getFeedback()
+            )).build();
+        } catch (ElasticsearchPostIndexFeedbackService.SyncAlreadyRunningException e) {
+            return Response.status(Response.Status.CONFLICT).entity(Map.of(
+                    "success", false,
+                    "message", e.getMessage(),
+                    "postIndexFeedback", postIndexFeedbackService.getFeedback()
             )).build();
         } catch (Exception e) {
-            return Response.serverError().entity(Map.of("error", SensitiveMessageSanitizer.sanitize(e.getMessage()))).build();
+            log.error("Full Elasticsearch article synchronization failed", e);
+            return Response.serverError().entity(Map.of(
+                    "success", false,
+                    "error", safeErrorMessage(e),
+                    "postIndexFeedback", postIndexFeedbackService.getFeedback()
+            )).build();
         }
     }
 
@@ -522,25 +541,33 @@ public class AdminElasticsearchController {
                     .build();
         }
         try {
-            postSearchService.rebuildPostIndex();
-            boolean logIndexReady = indexService.initializeIndexNow();
-            Response postResponse = reindexAll();
-            if (!logIndexReady) {
-                return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                        .entity(Map.of(
-                                "success", false,
-                                "message", "文章索引重建已执行，但日志索引仍未就绪",
-                                "logIndexInitialized", false,
-                                "postIndexResponse", postResponse.getEntity()
-                        )).build();
-            }
-            return postResponse;
+            ElasticsearchPostIndexFeedbackService.SyncResult sync = postIndexFeedbackService.rebuildIndex();
+            return Response.ok(Map.of(
+                    "success", true,
+                    "message", "文章索引已重建并验证",
+                    "totalCount", sync.indexedCount(),
+                    "expectedCount", sync.expectedCount(),
+                    "postIndexFeedback", postIndexFeedbackService.getFeedback()
+            )).build();
+        } catch (ElasticsearchPostIndexFeedbackService.SyncAlreadyRunningException e) {
+            return Response.status(Response.Status.CONFLICT).entity(Map.of(
+                    "success", false,
+                    "message", e.getMessage(),
+                    "postIndexFeedback", postIndexFeedbackService.getFeedback()
+            )).build();
         } catch (Exception exception) {
+            log.error("Elasticsearch article index rebuild failed", exception);
             return Response.serverError().entity(Map.of(
                     "success", false,
-                    "message", SensitiveMessageSanitizer.sanitize(exception.getMessage())
+                    "message", safeErrorMessage(exception),
+                    "postIndexFeedback", postIndexFeedbackService.getFeedback()
             )).build();
         }
+    }
+
+    private String safeErrorMessage(Exception exception) {
+        String message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
+        return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
     @POST
