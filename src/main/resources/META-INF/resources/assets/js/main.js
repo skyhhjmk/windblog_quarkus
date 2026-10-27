@@ -869,7 +869,6 @@
                 fontStyle: styleSnapshot.fontStyle,
                 fontWeight: styleSnapshot.fontWeight,
                 height: rect.height + 'px',
-                left: rect.left + 'px',
                 letterSpacing: styleSnapshot.letterSpacing,
                 lineHeight: styleSnapshot.lineHeight,
                 paddingBottom: styleSnapshot.paddingBottom,
@@ -878,7 +877,7 @@
                 paddingTop: styleSnapshot.paddingTop,
                 textAlign: styleSnapshot.textAlign,
                 textTransform: styleSnapshot.textTransform,
-                top: rect.top + 'px',
+                transform: 'translate3d(' + rect.left + 'px, ' + rect.top + 'px, 0)',
                 width: rect.width + 'px'
             };
         }
@@ -930,30 +929,51 @@
                 return Promise.resolve();
             }
 
-            const animations = [];
-            preparedItems.forEach(function (preparedItem) {
-                const cloneElement = preparedItem.cloneElement;
-                cloneElement.style.left = preparedItem.sourceRect.left + 'px';
-                cloneElement.style.top = preparedItem.sourceRect.top + 'px';
-                cloneElement.style.width = preparedItem.sourceRect.width + 'px';
-                cloneElement.style.height = preparedItem.sourceRect.height + 'px';
-                applyArticleTransitionStyleSnapshot(cloneElement, preparedItem.sourceStyle);
-                document.body.appendChild(cloneElement);
+            const activeAnimations = [];
+            let onScrollHandler = null;
 
-                const animation = cloneElement.animate([
-                    buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
-                    buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
-                ], {
-                    duration: 320,
-                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                    fill: 'forwards'
+            const transitionPromise = new Promise(function (resolve) {
+                const animationPromises = [];
+
+                // 监听动画执行过程中的滚动，若用户快速滑动页面则提前完成动画，防止克隆元素与页面内容脱节
+                onScrollHandler = function () {
+                    activeAnimations.forEach(function (animation) {
+                        try {
+                            if (animation.playState !== 'finished') {
+                                animation.finish();
+                            }
+                        } catch (_) {}
+                    });
+                };
+                window.addEventListener('scroll', onScrollHandler, { passive: true, once: true });
+
+                preparedItems.forEach(function (preparedItem) {
+                    const cloneElement = preparedItem.cloneElement;
+                    cloneElement.style.transform = 'translate3d(' + preparedItem.sourceRect.left + 'px, ' + preparedItem.sourceRect.top + 'px, 0)';
+                    cloneElement.style.width = preparedItem.sourceRect.width + 'px';
+                    cloneElement.style.height = preparedItem.sourceRect.height + 'px';
+                    applyArticleTransitionStyleSnapshot(cloneElement, preparedItem.sourceStyle);
+                    document.body.appendChild(cloneElement);
+
+                    const animation = cloneElement.animate([
+                        buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
+                        buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
+                    ], {
+                        duration: 320,
+                        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                        fill: 'forwards'
+                    });
+                    activeAnimations.push(animation);
+                    animationPromises.push(animation.finished);
                 });
-                animations.push(animation.finished);
+
+                Promise.all(animationPromises).then(resolve).catch(resolve);
             });
 
-            return Promise.all(animations).then(function () {
-                cleanupArticleTransitionItems(preparedItems);
-            }).catch(function () {
+            return transitionPromise.then(function () {
+                if (onScrollHandler) {
+                    window.removeEventListener('scroll', onScrollHandler);
+                }
                 cleanupArticleTransitionItems(preparedItems);
             });
         }
@@ -1087,6 +1107,15 @@
                         activeTransitionItems = preparedItems;
                         if (preparedItems.length > 0) {
                             logArticleTransitionMode(url, transitionSlug, true, '');
+                            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && container.animate) {
+                                container.animate([
+                                    { opacity: 0.72, transform: 'translateY(6px)' },
+                                    { opacity: 1, transform: 'translateY(0)' }
+                                ], {
+                                    duration: 320,
+                                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
+                                });
+                            }
                             await animateArticleTransitionItems(preparedItems);
                         } else {
                             logArticleTransitionMode(url, transitionSlug, false, 'target page does not expose a matching article transition target');

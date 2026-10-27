@@ -266,13 +266,15 @@
 
 .pjax-article-transition-clone {
     position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
     z-index: 10000;
     box-sizing: border-box;
     margin: 0 !important;
     overflow: hidden;
     pointer-events: none;
     transform-origin: left top;
-    will-change: left, top, width, height, font-size, line-height;
+    will-change: transform, width, height, font-size, line-height;
 }
 
 .pjax-article-transition-clone::before,
