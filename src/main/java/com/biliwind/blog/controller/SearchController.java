@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.dto.SearchHighlightSegment;
 import com.biliwind.blog.common.helper.SearchContentHelper;
@@ -81,6 +82,8 @@ public class SearchController {
 
     @Inject
     com.biliwind.blog.context.RegionContext regionContext;
+    @Inject
+    com.biliwind.blog.common.CacheService cacheService;
 
     @QueryParam("use-es")
     @DefaultValue("true")
@@ -112,6 +115,31 @@ public class SearchController {
         boolean deepSearchRequested = deep && edgeNode;
         boolean deepSearchFailed = false;
 
+        String cacheKey = null;
+        if (!searchKeyword.isBlank() && cacheService != null) {
+            String region = regionContext != null && regionContext.getCurrentRegion() != null
+                    ? regionContext.getCurrentRegion().getCode()
+                    : "global";
+            String querySignature = String.join(":",
+                    searchKeyword, searchType, searchSort, searchDate, lang, String.valueOf(currentPage),
+                    String.valueOf(edgeNode), String.valueOf(deepSearchRequested), String.valueOf(useElasticsearch), region);
+            cacheKey = CacheService.Keys.searchResults(Integer.toHexString(querySignature.hashCode()));
+            java.util.Optional<SearchCacheResult> cachedResult = cacheService.get(cacheKey, SearchCacheResult.class);
+            if (cachedResult.isPresent()) {
+                SearchCacheResult cached = cachedResult.get();
+                searchHits = cached.hits();
+                totalCount = cached.totalCount();
+                usedElasticsearch = cached.usedElasticsearch();
+                esDegraded = cached.degraded();
+                deepSearchFailed = cached.degraded();
+                searchResultAlreadyPaged = cached.alreadyPaged();
+                return renderSearchTemplate(
+                        searchKeyword, searchType, searchSort, searchDate, lang, currentPage,
+                        searchHits, totalCount, searchResultAlreadyPaged, usedElasticsearch,
+                        esDegraded, edgeNode, deepSearchRequested, deepSearchFailed, httpHeaders);
+            }
+        }
+
         if (deepSearchRequested && !searchKeyword.isBlank() && canUseDeepSearch(searchType)) {
             ElasticsearchResult primaryResult = searchPrimaryWithElasticsearch(searchKeyword, searchType, searchSort, searchDate, lang, currentPage);
             searchHits = primaryResult.hits();
@@ -136,6 +164,34 @@ public class SearchController {
             esDegraded = databaseResult.degraded();
         }
 
+        if (cacheKey != null && cacheService != null && !esDegraded) {
+            cacheService.set(cacheKey, new SearchCacheResult(
+                    searchHits, totalCount, usedElasticsearch, esDegraded, searchResultAlreadyPaged
+            ), java.time.Duration.ofMinutes(3));
+        }
+
+        return renderSearchTemplate(
+                searchKeyword, searchType, searchSort, searchDate, lang, currentPage,
+                searchHits, totalCount, searchResultAlreadyPaged, usedElasticsearch,
+                esDegraded, edgeNode, deepSearchRequested, deepSearchFailed, httpHeaders);
+    }
+
+    private TemplateInstance renderSearchTemplate(
+            String searchKeyword,
+            String searchType,
+            String searchSort,
+            String searchDate,
+            String lang,
+            int currentPage,
+            List<SearchHit> searchHits,
+            long totalCount,
+            boolean searchResultAlreadyPaged,
+            boolean usedElasticsearch,
+            boolean esDegraded,
+            boolean edgeNode,
+            boolean deepSearchRequested,
+            boolean deepSearchFailed,
+            HttpHeaders httpHeaders) {
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);
         if (currentPage > totalPages) {
             currentPage = totalPages;
@@ -1231,6 +1287,15 @@ public class SearchController {
 
     @TemplateData
     public record FilterLink(String label, String url, String cssClass) {
+    }
+
+    public record SearchCacheResult(
+            List<SearchHit> hits,
+            long totalCount,
+            boolean usedElasticsearch,
+            boolean degraded,
+            boolean alreadyPaged
+    ) {
     }
 
     /**

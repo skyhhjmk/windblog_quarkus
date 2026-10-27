@@ -95,7 +95,7 @@
                                 <!-- Meta Information -->
                                 <div class="flex items-center justify-between mb-3">
                                     <div class="flex items-center gap-4 text-[11px] font-mono text-meta tracking-widest uppercase">
-                                        {#if hit.type == 'post' && hit.authorName && ! hit.authorName.isEmpty}
+                                        {#if hit.type == 'post' && hit.authorName && !hit.authorName.isEmpty()}
                                             <span class="text-accent">作者：{hit.authorName}</span>
                                         {/if}
                                         <time class="timestamp" data-timestamp="{hit.dateText}">{hit.dateText}</time>

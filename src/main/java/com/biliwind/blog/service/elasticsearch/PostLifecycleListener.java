@@ -46,6 +46,8 @@ public class PostLifecycleListener {
         cacheService.deletePattern(CacheService.Keys.SIDEBAR_RECENT_POSTS + "*");
         // 清理侧边栏统计
         cacheService.delete(CacheService.Keys.SIDEBAR_STATS);
+        // 清理搜索结果缓存
+        cacheService.deletePattern(CacheService.Keys.SEARCH_CACHE_PREFIX + "*");
     }
 
     void onStart(@Observes StartupEvent event) {

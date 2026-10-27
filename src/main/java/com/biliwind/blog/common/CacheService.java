@@ -259,6 +259,7 @@ public class CacheService {
         // Versioned after moving public article rendering to an explicit read model.
         public static final String POST_META_PREFIX = "post:meta:v4:";
         public static final String MEDIA_META_PREFIX = "media:meta:v2:";
+        public static final String SEARCH_CACHE_PREFIX = "search:v1:";
         
         public static final String ALL_CATEGORIES = "categories:all";
         public static final String ALL_TAGS = "tags:all";
@@ -292,6 +293,10 @@ public class CacheService {
 
         public static String mediaMeta(String storageKey) {
             return MEDIA_META_PREFIX + storageKey;
+        }
+
+        public static String searchResults(String queryHash) {
+            return SEARCH_CACHE_PREFIX + queryHash;
         }
     }
 }
