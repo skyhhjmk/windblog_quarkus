@@ -232,9 +232,15 @@
             const maskBinStr = longToBinaryString(maskLong);
             const netBinStr = longToBinaryString(networkLong);
 
-            renderBitmaskRow(bitsContainerIp, ipBinStr, prefix, 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40', 'bg-amber-500/20 text-amber-300 border border-amber-500/40');
-            renderBitmaskRow(bitsContainerMask, maskBinStr, prefix, 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40', 'bg-border text-meta border-border/40');
-            renderBitmaskRow(bitsContainerNet, netBinStr, prefix, 'bg-cyan-500/30 text-cyan-200 font-extrabold border border-cyan-400', 'bg-card text-meta/40 border border-border/30');
+            const netColorClass = 'bg-cyan-100 text-cyan-800 border border-cyan-300 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/40';
+            const hostColorClass = 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40';
+            const maskHostColorClass = 'bg-gray-200 text-gray-500 border border-gray-300 dark:bg-card dark:text-meta/40 dark:border-border/40';
+            const netResultClass = 'bg-cyan-200 text-cyan-900 font-extrabold border border-cyan-400 dark:bg-cyan-500/30 dark:text-cyan-200 dark:border-cyan-400';
+            const netResultHostClass = 'bg-gray-100 text-gray-400 border border-gray-200 dark:bg-card dark:text-meta/30 dark:border-border/20';
+
+            renderBitmaskRow(bitsContainerIp, ipBinStr, prefix, netColorClass, hostColorClass);
+            renderBitmaskRow(bitsContainerMask, maskBinStr, prefix, netColorClass, maskHostColorClass);
+            renderBitmaskRow(bitsContainerNet, netBinStr, prefix, netResultClass, netResultHostClass);
 
             // Render Step-by-Step Derivation
             renderStepByStep(ipLong, maskLong, networkLong, broadcastLong, prefix, totalHosts, usableHosts, firstHostLong, lastHostLong);
@@ -303,14 +309,14 @@
 
             steps.forEach(step => {
                 const card = document.createElement('div');
-                card.className = 'p-3.5 rounded-xl bg-input-bg/60 border border-border/50 space-y-2';
+                card.className = 'p-4 rounded-xl bg-input-bg border border-border space-y-2.5';
                 card.innerHTML = `
                     <div class="flex items-center gap-2 text-main font-bold text-xs md:text-sm">
                         <i class="fa-solid fa-calculator text-accent text-xs"></i>
                         <span>${step.title}</span>
                     </div>
-                    <p class="text-[11px] md:text-xs text-body leading-relaxed">${step.desc}</p>
-                    <pre class="p-2.5 rounded-lg bg-bg/80 border border-border/40 text-[11px] text-accent font-mono overflow-x-auto whitespace-pre leading-normal">${step.formula}</pre>
+                    <p class="text-xs text-body leading-relaxed">${step.desc}</p>
+                    <pre class="p-3 rounded-lg bg-bg border border-border text-xs text-cyan-800 dark:text-cyan-300 font-mono overflow-x-auto whitespace-pre leading-normal">${step.formula}</pre>
                 `;
                 stepByStepContainer.appendChild(card);
             });
@@ -397,13 +403,13 @@
                 const usable = blockSize > 2 ? blockSize - 2 : (blockSize === 2 ? 2 : 1);
 
                 const tr = document.createElement('tr');
-                tr.className = 'hover:bg-accent/5 transition-colors';
+                tr.className = 'hover:bg-accent/10 transition-colors';
                 tr.innerHTML = `
                     <td class="p-2.5 text-accent font-bold">#${i + 1}</td>
                     <td class="p-2.5 text-main font-semibold select-all">${longToIp(subNet)} /${targetPrefix}</td>
                     <td class="p-2.5 text-body select-all">${longToIp(subFirst)} ~ ${longToIp(subLast)}</td>
                     <td class="p-2.5 text-meta select-all">${longToIp(subBrd)}</td>
-                    <td class="p-2.5 text-right font-bold text-emerald-400">${usable.toLocaleString()}</td>
+                    <td class="p-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400">${usable.toLocaleString()}</td>
                 `;
                 vlsmSubnetsTbody.appendChild(tr);
             }

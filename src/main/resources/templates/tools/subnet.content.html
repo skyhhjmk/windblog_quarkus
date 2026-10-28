@@ -123,7 +123,7 @@
                 </div>
                 <div class="bg-card border border-border rounded-xl p-4 space-y-1">
                     <span class="text-[11px] font-mono uppercase text-meta block">有效主机数 / 总容量</span>
-                    <span id="resUsableHosts" class="text-base md:text-lg font-bold font-mono text-emerald-400 block truncate">-</span>
+                    <span id="resUsableHosts" class="text-base md:text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 block truncate">-</span>
                     <span id="resTotalAddresses" class="text-[10px] text-meta">总地址: -</span>
                 </div>
             </div>
@@ -137,11 +137,11 @@
                     </div>
                     <div class="flex items-center gap-4 text-xs font-mono">
                         <span class="flex items-center gap-1.5">
-                            <span class="w-3 h-3 rounded bg-cyan-500/30 border border-cyan-400 inline-block"></span>
+                            <span class="w-3 h-3 rounded bg-cyan-500/20 dark:bg-cyan-500/30 border border-cyan-600 dark:border-cyan-400 inline-block"></span>
                             <span class="text-meta">网络位 (Network: <b id="bitNetworkCount" class="text-main">24</b>)</span>
                         </span>
                         <span class="flex items-center gap-1.5">
-                            <span class="w-3 h-3 rounded bg-amber-500/30 border border-amber-400 inline-block"></span>
+                            <span class="w-3 h-3 rounded bg-amber-500/20 dark:bg-amber-500/30 border border-amber-600 dark:border-amber-400 inline-block"></span>
                             <span class="text-meta">主机位 (Host: <b id="bitHostCount" class="text-main">8</b>)</span>
                         </span>
                     </div>
@@ -153,9 +153,9 @@
                     <div class="space-y-1.5 min-w-[540px]">
                         <div class="flex justify-between text-meta text-[11px]">
                             <span>输入 IP 二进制表示:</span>
-                            <span id="labelIpDec" class="text-main">192.168.1.100</span>
+                            <span id="labelIpDec" class="text-main font-semibold">192.168.1.100</span>
                         </div>
-                        <div id="bitsContainerIp" class="flex gap-1.5 p-2 rounded-lg bg-input-bg border border-border/60">
+                        <div id="bitsContainerIp" class="flex gap-1.5 p-2.5 rounded-lg bg-input-bg border border-border">
                             <!-- 动态 4 字节位方块 -->
                         </div>
                     </div>
@@ -164,9 +164,9 @@
                     <div class="space-y-1.5 min-w-[540px]">
                         <div class="flex justify-between text-meta text-[11px]">
                             <span>子网掩码二进制:</span>
-                            <span id="labelMaskDec" class="text-accent">255.255.255.0</span>
+                            <span id="labelMaskDec" class="text-accent font-semibold">255.255.255.0</span>
                         </div>
-                        <div id="bitsContainerMask" class="flex gap-1.5 p-2 rounded-lg bg-input-bg border border-border/60">
+                        <div id="bitsContainerMask" class="flex gap-1.5 p-2.5 rounded-lg bg-input-bg border border-border">
                             <!-- 动态 4 字节位方块 -->
                         </div>
                     </div>
@@ -175,9 +175,9 @@
                     <div class="space-y-1.5 min-w-[540px]">
                         <div class="flex justify-between text-meta text-[11px]">
                             <span>网络地址 (IP AND MASK):</span>
-                            <span id="labelNetDec" class="text-cyan-400 font-bold">192.168.1.0</span>
+                            <span id="labelNetDec" class="text-cyan-700 dark:text-cyan-400 font-bold">192.168.1.0</span>
                         </div>
-                        <div id="bitsContainerNet" class="flex gap-1.5 p-2 rounded-lg bg-cyan-950/20 border border-cyan-500/30">
+                        <div id="bitsContainerNet" class="flex gap-1.5 p-2.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-500/30">
                             <!-- 动态 4 字节位方块 -->
                         </div>
                     </div>
