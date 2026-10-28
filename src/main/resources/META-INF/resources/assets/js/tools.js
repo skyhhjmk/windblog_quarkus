@@ -2163,6 +2163,103 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
             return hashFn(outer);
         }
 
+        // Pure JS SHA-1 fallback
+        function sha1(input) {
+            let bytes = typeof input === 'string' ? new TextEncoder().encode(input) : new Uint8Array(input);
+            let n = bytes.length;
+            let bitLen = n * 8;
+            let padLen = ((n + 9 + 63) >>> 6) << 6;
+            let msg = new Uint8Array(padLen);
+            msg.set(bytes);
+            msg[n] = 0x80;
+            let view = new DataView(msg.buffer);
+            view.setUint32(padLen - 8, Math.floor(bitLen / 0x100000000), false);
+            view.setUint32(padLen - 4, bitLen >>> 0, false);
+            let H = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+            function rotl(x, n) { return (x << n) | (x >>> (32 - n)); }
+            let W = new Uint32Array(80);
+            for (let offset = 0; offset < padLen; offset += 64) {
+                for (let t = 0; t < 16; t++) W[t] = view.getUint32(offset + t * 4, false);
+                for (let t = 16; t < 80; t++) W[t] = rotl(W[t - 3] ^ W[t - 8] ^ W[t - 14] ^ W[t - 16], 1);
+                let [a, b, c, d, e] = H;
+                for (let t = 0; t < 80; t++) {
+                    let f, k;
+                    if (t < 20) { f = (b & c) | ((~b) & d); k = 0x5a827999; }
+                    else if (t < 40) { f = b ^ c ^ d; k = 0x6ed9eba1; }
+                    else if (t < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8f1bbcdc; }
+                    else { f = b ^ c ^ d; k = 0xca62c1d6; }
+                    let temp = (rotl(a, 5) + f + e + k + W[t]) >>> 0;
+                    e = d; d = c; c = rotl(b, 30); b = a; a = temp;
+                }
+                H[0] = (H[0] + a) >>> 0;
+                H[1] = (H[1] + b) >>> 0;
+                H[2] = (H[2] + c) >>> 0;
+                H[3] = (H[3] + d) >>> 0;
+                H[4] = (H[4] + e) >>> 0;
+            }
+            let res = new Uint8Array(20);
+            let rv = new DataView(res.buffer);
+            for (let i = 0; i < 5; i++) rv.setUint32(i * 4, H[i], false);
+            return res;
+        }
+
+        // Pure JS SHA-256 fallback
+        function sha256(input) {
+            let bytes = typeof input === 'string' ? new TextEncoder().encode(input) : new Uint8Array(input);
+            let n = bytes.length;
+            let bitLen = n * 8;
+            let padLen = ((n + 9 + 63) >>> 6) << 6;
+            let msg = new Uint8Array(padLen);
+            msg.set(bytes);
+            msg[n] = 0x80;
+            let view = new DataView(msg.buffer);
+            view.setUint32(padLen - 8, Math.floor(bitLen / 0x100000000), false);
+            view.setUint32(padLen - 4, bitLen >>> 0, false);
+            let H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+            const K = [
+                0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+                0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+                0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+                0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+                0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+                0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+                0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+                0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+            ];
+            function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+            let W = new Uint32Array(64);
+            for (let offset = 0; offset < padLen; offset += 64) {
+                for (let t = 0; t < 16; t++) W[t] = view.getUint32(offset + t * 4, false);
+                for (let t = 16; t < 64; t++) {
+                    let s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
+                    let s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
+                    W[t] = (W[t - 16] + s0 + W[t - 7] + s1) >>> 0;
+                }
+                let [a, b, c, d, e, f, g, h] = H;
+                for (let t = 0; t < 64; t++) {
+                    let S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+                    let ch = (e & f) ^ ((~e) & g);
+                    let temp1 = (h + S1 + ch + K[t] + W[t]) >>> 0;
+                    let S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+                    let maj = (a & b) ^ (a & c) ^ (b & c);
+                    let temp2 = (S0 + maj) >>> 0;
+                    h = g; g = f; f = e; e = (d + temp1) >>> 0; d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+                }
+                H[0] = (H[0] + a) >>> 0;
+                H[1] = (H[1] + b) >>> 0;
+                H[2] = (H[2] + c) >>> 0;
+                H[3] = (H[3] + d) >>> 0;
+                H[4] = (H[4] + e) >>> 0;
+                H[5] = (H[5] + f) >>> 0;
+                H[6] = (H[6] + g) >>> 0;
+                H[7] = (H[7] + h) >>> 0;
+            }
+            let res = new Uint8Array(32);
+            let rv = new DataView(res.buffer);
+            for (let i = 0; i < 8; i++) rv.setUint32(i * 4, H[i], false);
+            return res;
+        }
+
         function bufferToHex(buf) {
             const arr = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
             let s = '';
@@ -2192,53 +2289,84 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         async function computeHashes() {
             let dataBytes;
             if (currentMode === 'text') {
-                const text = textInput.value;
+                const text = textInput ? textInput.value : '';
                 dataBytes = new TextEncoder().encode(text);
-                textStats.textContent = `${text.length} 字符 / ${dataBytes.length} 字节`;
+                if (textStats) textStats.textContent = `${text.length} 字符 / ${dataBytes.length} 字节`;
             } else {
                 dataBytes = currentFileBytes || new Uint8Array(0);
             }
 
-            const useHmac = chkEnableHmac.checked;
-            const hmacKeyStr = hmacKeyInput.value;
+            const useHmac = chkEnableHmac ? chkEnableHmac.checked : false;
+            const hmacKeyStr = hmacKeyInput ? hmacKeyInput.value : '';
             const hmacKeyBytes = new TextEncoder().encode(hmacKeyStr);
 
+            const cryptoObj = window.crypto || window.msCrypto;
+            const hasSubtle = cryptoObj && cryptoObj.subtle;
+
+            // 1. MD5 (Pure JS)
             try {
-                let md5Bytes, sm3Bytes, sha1Bytes, sha256Bytes, sha512Bytes;
-
-                if (useHmac) {
-                    md5Bytes = hmacCustom(md5, 64, hmacKeyBytes, dataBytes);
-                    sm3Bytes = hmacCustom(sm3, 64, hmacKeyBytes, dataBytes);
-
-                    const keySha1 = await crypto.subtle.importKey('raw', hmacKeyBytes, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-                    sha1Bytes = new Uint8Array(await crypto.subtle.sign('HMAC', keySha1, dataBytes));
-
-                    const keySha256 = await crypto.subtle.importKey('raw', hmacKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-                    sha256Bytes = new Uint8Array(await crypto.subtle.sign('HMAC', keySha256, dataBytes));
-
-                    const keySha512 = await crypto.subtle.importKey('raw', hmacKeyBytes, { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
-                    sha512Bytes = new Uint8Array(await crypto.subtle.sign('HMAC', keySha512, dataBytes));
-                } else {
-                    md5Bytes = md5(dataBytes);
-                    sm3Bytes = sm3(dataBytes);
-                    sha1Bytes = new Uint8Array(await crypto.subtle.digest('SHA-1', dataBytes));
-                    sha256Bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', dataBytes));
-                    sha512Bytes = new Uint8Array(await crypto.subtle.digest('SHA-512', dataBytes));
-                }
-
-                lastComputed = {
-                    'hash-sha256': sha256Bytes,
-                    'hash-sm3': sm3Bytes,
-                    'hash-md5': md5Bytes,
-                    'hash-sha1': sha1Bytes,
-                    'hash-sha512': sha512Bytes
-                };
-
-                renderOutputs();
-                performVerification();
+                lastComputed['hash-md5'] = useHmac ? hmacCustom(md5, 64, hmacKeyBytes, dataBytes) : md5(dataBytes);
             } catch (err) {
-                console.error('Hash calculation error:', err);
+                console.error('MD5 calculation error:', err);
             }
+
+            // 2. SM3 (Pure JS)
+            try {
+                lastComputed['hash-sm3'] = useHmac ? hmacCustom(sm3, 64, hmacKeyBytes, dataBytes) : sm3(dataBytes);
+            } catch (err) {
+                console.error('SM3 calculation error:', err);
+            }
+
+            // 3. SHA-1 (Web Crypto with Pure JS fallback)
+            try {
+                if (hasSubtle && !useHmac) {
+                    lastComputed['hash-sha1'] = new Uint8Array(await cryptoObj.subtle.digest('SHA-1', dataBytes));
+                } else if (hasSubtle && useHmac) {
+                    const key = await cryptoObj.subtle.importKey('raw', hmacKeyBytes, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+                    lastComputed['hash-sha1'] = new Uint8Array(await cryptoObj.subtle.sign('HMAC', key, dataBytes));
+                } else {
+                    lastComputed['hash-sha1'] = useHmac ? hmacCustom(sha1, 64, hmacKeyBytes, dataBytes) : sha1(dataBytes);
+                }
+            } catch (err) {
+                try {
+                    lastComputed['hash-sha1'] = useHmac ? hmacCustom(sha1, 64, hmacKeyBytes, dataBytes) : sha1(dataBytes);
+                } catch (e2) {
+                    console.error('SHA-1 fallback error:', e2);
+                }
+            }
+
+            // 4. SHA-256 (Web Crypto with Pure JS fallback)
+            try {
+                if (hasSubtle && !useHmac) {
+                    lastComputed['hash-sha256'] = new Uint8Array(await cryptoObj.subtle.digest('SHA-256', dataBytes));
+                } else if (hasSubtle && useHmac) {
+                    const key = await cryptoObj.subtle.importKey('raw', hmacKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+                    lastComputed['hash-sha256'] = new Uint8Array(await cryptoObj.subtle.sign('HMAC', key, dataBytes));
+                } else {
+                    lastComputed['hash-sha256'] = useHmac ? hmacCustom(sha256, 64, hmacKeyBytes, dataBytes) : sha256(dataBytes);
+                }
+            } catch (err) {
+                try {
+                    lastComputed['hash-sha256'] = useHmac ? hmacCustom(sha256, 64, hmacKeyBytes, dataBytes) : sha256(dataBytes);
+                } catch (e2) {
+                    console.error('SHA-256 fallback error:', e2);
+                }
+            }
+
+            // 5. SHA-512 (Web Crypto)
+            try {
+                if (hasSubtle && !useHmac) {
+                    lastComputed['hash-sha512'] = new Uint8Array(await cryptoObj.subtle.digest('SHA-512', dataBytes));
+                } else if (hasSubtle && useHmac) {
+                    const key = await cryptoObj.subtle.importKey('raw', hmacKeyBytes, { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
+                    lastComputed['hash-sha512'] = new Uint8Array(await cryptoObj.subtle.sign('HMAC', key, dataBytes));
+                }
+            } catch (err) {
+                console.error('SHA-512 calculation error:', err);
+            }
+
+            renderOutputs();
+            performVerification();
         }
 
         function renderOutputs() {
@@ -2399,6 +2527,11 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         }
 
         function handleFile(file) {
+            currentMode = 'file';
+            btnSourceFile.className = 'px-4 py-1.5 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold transition-all';
+            btnSourceText.className = 'px-4 py-1.5 rounded-lg text-meta hover:text-main font-medium transition-all';
+            filePanel.classList.remove('hidden');
+            textPanel.classList.add('hidden');
             metaFileName.textContent = file.name;
             metaFileSize.textContent = formatBytes(file.size);
             metaFileType.textContent = file.type || '二进制/未知文件类型';
