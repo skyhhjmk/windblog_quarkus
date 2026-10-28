@@ -4,6 +4,7 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -36,6 +37,7 @@ public class ToolsController {
     @Location("tools/subnet.content.html")
     Template subnetContentTemplate;
 
+    @RegisterForReflection
     public static record ToolItem(
             String id,
             String name,
