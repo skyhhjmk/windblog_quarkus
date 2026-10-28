@@ -144,26 +144,26 @@
     <link rel="stylesheet" href="/assets/css/post-quote.css"/>
 </head>
 
-<body class="min-h-screen flex flex-col bg-bg text-body font-sans">
+<body class="min-h-screen flex flex-col bg-bg text-body font-sans selection:bg-accent/20 selection:text-accent">
 <!-- Header -->
-<header class="sticky top-0 z-50 bg-bg/80 backdrop-blur-md border-b border-border">
-    <div class="max-w-1400 mx-auto px-6 h-16 flex items-center justify-between">
+<header class="sticky top-0 z-50 bg-bg/80 backdrop-blur-xl border-b border-border transition-colors">
+    <div class="max-w-1400 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <!-- Logo / Brand -->
         <a href="/" class="flex items-center gap-3 group" data-article-return-link>
-            <div class="w-8 h-8 bg-accent rounded-sm flex items-center justify-center transform group-hover:rotate-12 transition-transform duration-300">
-                <span class="brand-initial font-bold text-lg">{config:siteTitleInitial}</span>
+            <div class="w-8 h-8 bg-accent text-[var(--accent-foreground)] rounded-lg flex items-center justify-center font-black text-base shadow-sm group-hover:scale-105 group-hover:shadow-[0_0_12px_rgba(var(--accent-rgb),0.35)] transition-all duration-300">
+                <span class="brand-initial">{config:siteTitleInitial}</span>
             </div>
-            <span class="text-main font-bold tracking-tight text-lg">{config:siteTitle}</span>
+            <span class="text-main font-bold tracking-tight text-base group-hover:text-accent transition-colors">{config:siteTitle}</span>
         </a>
 
         <!-- Navigation -->
-        <nav class="hidden md:flex items-center gap-8">
-            <div class="flex items-center gap-6">
-                <a href="/" class="text-sm font-medium text-body hover:text-main transition-colors">首页</a>
-                <a href="/tools" class="text-sm font-medium text-body hover:text-main transition-colors">工具箱</a>
-                <a href="/link" class="text-sm font-medium text-body hover:text-main transition-colors">友链</a>
-                <a href="/tag" class="text-sm font-medium text-body hover:text-main transition-colors">标签</a>
-                <a href="/category" class="text-sm font-medium text-body hover:text-main transition-colors">分类</a>
+        <nav class="hidden md:flex items-center gap-6">
+            <div class="flex items-center gap-1.5">
+                <a href="/" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">首页</a>
+                <a href="/tools" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">工具箱</a>
+                <a href="/link" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">友链</a>
+                <a href="/tag" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">标签</a>
+                <a href="/category" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">分类</a>
             </div>
 
             <div class="h-4 w-[1px] bg-border"></div>
@@ -173,43 +173,44 @@
                 <input
                         type="text"
                         name="q"
-                        placeholder="搜索文章...（Ctrl+K）"
+                        placeholder="搜索文章..."
                         data-shortcut-target="search"
-                        class="pl-10 pr-4 py-1.5 text-sm w-48 bg-card border border-border rounded-md text-main placeholder:text-meta"/>
-                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="pl-9 pr-14 py-1.5 text-xs w-52 bg-input-bg border border-border rounded-lg text-main placeholder:text-meta/70 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/40 transition-all"/>
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-meta group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
+                <kbd class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-mono bg-card border border-border/80 rounded text-meta">⌘K</kbd>
             </form>
 
             <div class="h-4 w-[1px] bg-border"></div>
 
             <!-- Theme Toggle -->
-                <button type="button" class="theme-toggle p-2 rounded-md hover:bg-accent/5 transition-colors border border-transparent hover:border-border text-meta hover:text-main"
-                        title="切换主题" aria-label="切换主题">
-                <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
-                <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <button type="button" class="theme-toggle w-9 h-9 rounded-lg hover:bg-white/5 transition-colors border border-border/60 hover:border-border text-meta hover:text-main flex items-center justify-center"
+                    title="切换主题" aria-label="切换主题">
+                <svg class="theme-icon-dark w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                <svg class="theme-icon-light w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </button>
 
             <!-- User -->
             <div class="relative" id="userMenuContainer">
                 <button type="button" id="userMenuBtn" aria-expanded="false" aria-haspopup="menu"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-accent/5 transition-colors border border-transparent hover:border-border">
-                    <span class="text-sm font-medium">账户</span>
-                    <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors border border-border/60 hover:border-border text-body hover:text-main">
+                    <span>账户</span>
+                    <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
-                <div id="userDropdown" class="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-2xl hidden p-1.5 z-50 overflow-hidden">
+                <div id="userDropdown" class="absolute right-0 top-full mt-2 w-48 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-2xl hidden p-1.5 z-50 overflow-hidden">
                     <div id="userNotLoggedIn" class="space-y-0.5">
                         <a href="/user/login"
-                           class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors">登录</a>
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">登录</a>
                         <a href="/user/register"
-                           class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors">注册</a>
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">注册</a>
                     </div>
                     <div id="userLoggedIn" class="hidden space-y-0.5">
-                        <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-border/50 mb-1" id="userNickname">User</div>
+                        <div class="px-3 py-1.5 text-[11px] font-semibold text-meta uppercase tracking-wider border-b border-border/50 mb-1" id="userNickname">User</div>
                         <a href="/user/center"
-                           class="block px-3 py-2 text-sm rounded-md hover:bg-accent/10 hover:text-accent transition-colors">个人中心</a>
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">个人中心</a>
                         <a href="#" id="logoutLink"
-                           class="block px-3 py-2 text-sm rounded-md hover:bg-red-500/10 text-red-500/80 hover:text-red-600 transition-colors">退出登录</a>
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors">退出登录</a>
                     </div>
                 </div>
             </div>
@@ -222,47 +223,47 @@
     </div>
 
     <!-- Mobile Menu -->
-    <div id="mobileMenu" class="hidden md:hidden bg-bg border-t border-border px-6 py-4 space-y-4 shadow-xl">
-        <div class="flex flex-col gap-3">
-            <a href="/" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">首页</a>
-            <a href="/tools" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">工具箱</a>
-            <a href="/link" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">友链</a>
-            <a href="/tag" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">标签</a>
-            <a href="/category" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">分类</a>
+    <div id="mobileMenu" class="hidden md:hidden bg-bg/95 backdrop-blur-xl border-t border-border px-6 py-4 space-y-4 shadow-xl">
+        <div class="flex flex-col gap-2">
+            <a href="/" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">首页</a>
+            <a href="/tools" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">工具箱</a>
+            <a href="/link" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">友链</a>
+            <a href="/tag" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">标签</a>
+            <a href="/category" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">分类</a>
         </div>
         <form action="/search" method="get" class="relative group pt-4 border-t border-border" data-shortcut-form="search">
             <label class="sr-only" for="mobileSearchInput">搜索文章</label>
             <input id="mobileSearchInput" type="search" name="q" placeholder="搜索文章...（Ctrl+K）" data-shortcut-target="search"
-                   class="w-full pl-4 pr-4 py-2 text-sm bg-card border border-border rounded-md text-main placeholder:text-meta" />
+                   class="w-full pl-4 pr-4 py-2 text-sm bg-card border border-border rounded-lg text-main placeholder:text-meta" />
         </form>
         <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">
             <div class="flex items-center justify-between py-2">
                 <span class="text-sm font-medium">外观</span>
-                <button type="button" class="theme-toggle p-2 rounded-md hover:bg-accent/5 transition-colors border border-border text-meta hover:text-main"
+                <button type="button" class="theme-toggle p-2 rounded-lg hover:bg-white/5 transition-colors border border-border text-meta hover:text-main"
                         title="切换主题" aria-label="切换主题">
                     <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                     <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </button>
             </div>
-            <div data-mobile-user-logged-out class="flex flex-col gap-3">
-                <a href="/user/login" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">登录</a>
-                <a href="/user/register" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">注册</a>
+            <div data-mobile-user-logged-out class="flex flex-col gap-2">
+                <a href="/user/login" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">登录</a>
+                <a href="/user/register" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">注册</a>
             </div>
-            <div data-mobile-user-logged-in class="hidden flex flex-col gap-3">
-                <span class="text-sm text-meta">已登录为 <strong data-mobile-user-nickname class="text-main"></strong></span>
-                <a href="/user/center" class="text-sm py-2 text-body hover:text-main transition-colors font-medium">个人中心</a>
-                <a href="#" data-mobile-logout class="text-sm py-2 text-red-400 hover:text-red-300 transition-colors font-medium">退出登录</a>
+            <div data-mobile-user-logged-in class="hidden flex flex-col gap-2">
+                <span class="text-xs text-meta px-3">已登录为 <strong data-mobile-user-nickname class="text-main"></strong></span>
+                <a href="/user/center" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">个人中心</a>
+                <a href="#" data-mobile-logout class="text-sm py-2 px-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors font-medium">退出登录</a>
             </div>
         </div>
     </div>
 </header>
 
 <!-- Main Content -->
-<main data-wb-ads-config="{config:adsenseConfig}" class="flex-grow max-w-1400 mx-auto w-full px-4 py-10 md:px-6 md:py-16">
-    <nav aria-label="面包屑" class="mb-10 text-xs text-meta font-mono">
-        <span id="nav-path-text">{#insert navPath}{config:siteNavRoot}{/insert}</span>
+<main data-wb-ads-config="{config:adsenseConfig}" class="flex-grow max-w-1400 mx-auto w-full px-4 py-8 md:px-6 md:py-12">
+    <nav aria-label="面包屑" class="mb-8 text-xs text-meta font-mono flex items-center">
+        <span id="nav-path-text" class="px-2.5 py-1 rounded-md bg-card/60 border border-border/60 text-meta">{#insert navPath}{config:siteNavRoot}{/insert}</span>
     </nav>
-    <div class="flex flex-col md:flex-row gap-10 md:gap-20">
+    <div class="flex flex-col md:flex-row gap-8 md:gap-14">
         <!-- Primary Column -->
         <div id="pjax-container" class="flex-1 min-w-0">
             <div data-wb-ad-placement="content_top"></div>
@@ -342,7 +343,7 @@
 </footer>
 
 <!-- Progress Bar -->
-<div id="pjax-progress" class="fixed top-0 left-0 h-0.5 w-0 z-[9999] bg-accent shadow-[0_0_10px_rgba(6,182,212,0.5)] transition-all"></div>
+<div id="pjax-progress" class="fixed top-0 left-0 h-[2px] w-0 z-[9999] bg-accent shadow-[0_0_10px_rgba(var(--accent-rgb),0.75)] transition-all pointer-events-none"></div>
 
 <!-- UI Components -->
     {#include system/ui.html /}

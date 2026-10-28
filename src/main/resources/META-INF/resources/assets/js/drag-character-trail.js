@@ -9,7 +9,13 @@
     const lifetimeFrames = 70;
     const minimumPointDistance = 40;
     const maximumPoints = 60;
-    const color = '#e5490a';
+    function resolveTrailColor() {
+        try {
+            const val = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+            if (val) return val;
+        } catch (_) {}
+        return '#0ea5e9';
+    }
     if (!window.matchMedia) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -131,7 +137,7 @@
             if (glyph === ' ') continue;
 
             context.globalAlpha = intensity > 0.25 ? intensity * 0.55 : intensity * 0.4;
-            context.fillStyle = color;
+            context.fillStyle = resolveTrailColor();
             context.fillText(glyph, x, y);
         }
         context.globalAlpha = 1;
