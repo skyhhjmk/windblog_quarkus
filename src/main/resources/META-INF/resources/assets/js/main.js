@@ -929,58 +929,36 @@
                 return Promise.resolve();
             }
 
-            const activeAnimations = [];
-            let onScrollHandler = null;
+            const animationPromises = [];
 
-            const transitionPromise = new Promise(function (resolve) {
-                const animationPromises = [];
+            preparedItems.forEach(function (preparedItem) {
+                const cloneElement = preparedItem.cloneElement;
+                cloneElement.style.transform = 'translate3d(' + preparedItem.sourceRect.left + 'px, ' + preparedItem.sourceRect.top + 'px, 0)';
+                cloneElement.style.width = preparedItem.sourceRect.width + 'px';
+                cloneElement.style.height = preparedItem.sourceRect.height + 'px';
+                applyArticleTransitionStyleSnapshot(cloneElement, preparedItem.sourceStyle);
+                document.body.appendChild(cloneElement);
 
-                // 监听动画执行过程中的滚动，若用户快速滑动页面则提前完成动画，防止克隆元素与页面内容脱节
-                onScrollHandler = function () {
-                    activeAnimations.forEach(function (animation) {
-                        try {
-                            if (animation.playState !== 'finished') {
-                                animation.finish();
-                            }
-                        } catch (_) {}
-                    });
-                };
-                window.addEventListener('scroll', onScrollHandler, { passive: true, once: true });
-
-                preparedItems.forEach(function (preparedItem) {
-                    const cloneElement = preparedItem.cloneElement;
-                    cloneElement.style.transform = 'translate3d(' + preparedItem.sourceRect.left + 'px, ' + preparedItem.sourceRect.top + 'px, 0)';
-                    cloneElement.style.width = preparedItem.sourceRect.width + 'px';
-                    cloneElement.style.height = preparedItem.sourceRect.height + 'px';
-                    applyArticleTransitionStyleSnapshot(cloneElement, preparedItem.sourceStyle);
-                    document.body.appendChild(cloneElement);
-
-                    const animation = cloneElement.animate([
-                        buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
-                        buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
-                    ], {
-                        duration: 320,
-                        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                        fill: 'forwards'
-                    });
-                    activeAnimations.push(animation);
-                    animationPromises.push(animation.finished);
+                const animation = cloneElement.animate([
+                    buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
+                    buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
+                ], {
+                    duration: 320,
+                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                    fill: 'forwards'
                 });
-
-                Promise.all(animationPromises).then(resolve).catch(resolve);
+                animationPromises.push(animation.finished);
             });
 
-            return transitionPromise.then(function () {
-                if (onScrollHandler) {
-                    window.removeEventListener('scroll', onScrollHandler);
-                }
+            return Promise.all(animationPromises).then(function () {
+                cleanupArticleTransitionItems(preparedItems);
+            }).catch(function () {
                 cleanupArticleTransitionItems(preparedItems);
             });
         }
 
         function cleanupArticleTransitionItems(preparedItems) {
             preparedItems.forEach(function (preparedItem) {
-                preparedItem.cloneElement.getAnimations?.().forEach(animation => animation.cancel());
                 preparedItem.targetElement.classList.remove('pjax-article-transition-target-hidden');
                 preparedItem.cloneElement.remove();
             });
@@ -1153,6 +1131,18 @@
 
             const parser = new DOMParser();
             const documentSnapshot = parser.parseFromString(html, 'text/html');
+
+            if (transitionSlug) {
+                const titleTarget = documentSnapshot.querySelector(getArticleTransitionSelector(transitionSlug, 'title'));
+                if (titleTarget) {
+                    titleTarget.classList.add('pjax-article-transition-target-hidden');
+                }
+                const summaryTarget = documentSnapshot.querySelector(getArticleTransitionSelector(transitionSlug, 'summary'));
+                if (summaryTarget) {
+                    summaryTarget.classList.add('pjax-article-transition-target-hidden');
+                }
+            }
+
             const contentRoot = documentSnapshot.querySelector('#pjax-content-root');
             if (contentRoot) {
                 return contentRoot.outerHTML;

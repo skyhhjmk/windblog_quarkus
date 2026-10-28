@@ -271,10 +271,11 @@
     z-index: 10000;
     box-sizing: border-box;
     margin: 0 !important;
-    overflow: hidden;
+    overflow: visible;
     pointer-events: none;
     transform-origin: left top;
     will-change: transform, width, height, font-size, line-height;
+    word-break: break-word;
 }
 
 .pjax-article-transition-clone::before,

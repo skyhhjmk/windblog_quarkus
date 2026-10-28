@@ -171,7 +171,7 @@
     </div>
 
 
-    <div class="card card-static p-6 sm:p-8 md:p-12 rounded-3xl border border-border bg-card shadow-sm">
+    <div class="card card-static p-6 sm:p-7 md:p-8 rounded-2xl border border-border bg-card shadow-sm">
         <nav aria-label="面包屑" class="text-xs text-meta font-mono mb-6 flex items-center gap-1.5">
             <a href="/" class="hover:text-accent transition-colors">首页</a>
             {#if breadcrumbCategorySlug}
@@ -224,6 +224,28 @@
                         </span>
                     </div>
                 </div>
+
+                {#if aiSummary && ! aiSummary.isEmpty}
+                    <div class="my-3 p-4 sm:p-5 rounded-xl bg-accent/[0.04] border border-accent/20 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="badge-ai">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                     stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4"
+                                                                                              y="8" rx="2"></rect><path
+                                            d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path
+                                            d="M9 13v2"></path></svg>
+                                AI 摘要
+                            </span>
+                        </div>
+                        <div class="text-sm sm:text-base text-body leading-relaxed italic"
+                             data-article-transition-part="summary"
+                             data-article-transition-slug="{postSlug}">
+                            {aiSummary}
+                        </div>
+                    </div>
+                {/if}
+
                 {#if contentDeclarations && ! contentDeclarations.isEmpty}
                     <div class="rounded-lg border border-accent/30 bg-accent/[0.04] px-4 py-3 text-sm text-body"
                          aria-label="内容声明">
@@ -286,27 +308,7 @@
                 </div>
             </header>
 
-            {#if aiSummary && ! aiSummary.isEmpty}
-                <section class="card card-static p-8 bg-accent/[0.02] border-accent/20 group">
-                    <div class="flex items-center gap-4 mb-6">
-                        <span class="badge-ai">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                                 stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4"
-                                                                                          y="8" rx="2"></rect><path
-                                        d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path
-                                        d="M9 13v2"></path></svg>
-                            AI 摘要
-                        </span>
-                        <div class="decorative-line flex-1"></div>
-                    </div>
-                    <div class="text-lg text-body leading-relaxed italic"
-                         data-article-transition-part="summary"
-                         data-article-transition-slug="{postSlug}">
-                        {aiSummary}
-                    </div>
-                </section>
-            {/if}
+
 
 
             <!-- 付费内容安全加载：初始只显示预览内容 -->
