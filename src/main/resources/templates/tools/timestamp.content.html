@@ -1,0 +1,183 @@
+<div id="pjax-content-root" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1" data-page-title="时间戳在线转换与推演">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="/tools" class="hover:text-accent transition-colors">tools</a> / timestamp</div>
+
+    <section class="space-y-8" id="timestampToolApp">
+        <!-- 头部导航 -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">TIME & TIMEZONE</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    Unix 时间戳 / 日期时间全能双向转换
+                </h1>
+                <p class="text-body text-xs md:text-sm">
+                    支持毫秒(13位)/秒(10位)/微秒纳秒时间戳互转、全球主要时区转换、相对时间推算及常用编程语言时间戳获取语法。
+                </p>
+            </div>
+            <!-- 当前时间跳动钟 -->
+            <div class="bg-card border border-border rounded-xl p-3 flex items-center gap-4 text-xs font-mono">
+                <div class="space-y-0.5">
+                    <span class="text-[10px] text-meta block">当前 Unix 时间戳 (秒 / 毫秒)</span>
+                    <div class="flex items-center gap-2">
+                        <span id="currentSecStamp" class="font-bold text-accent text-sm select-all">0</span>
+                        <span class="text-meta/40">/</span>
+                        <span id="currentMsStamp" class="text-main font-semibold select-all">0</span>
+                    </div>
+                </div>
+                <button type="button" id="btnPauseClock" class="px-2.5 py-1.5 rounded bg-input-bg border border-border text-meta hover:text-main" title="暂停/继续时钟">
+                    <i class="fa-solid fa-pause"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 转换交互网格 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- 模块 1：时间戳转日期 -->
+            <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-border/40 pb-3">
+                    <h2 class="text-sm font-bold text-main flex items-center gap-2">
+                        <i class="fa-regular fa-clock text-accent"></i>
+                        <span>时间戳 ➔ 日期时间 (To Date)</span>
+                    </h2>
+                    <div class="flex gap-1.5 text-xs">
+                        <button type="button" class="btn-stamp-quick px-2 py-0.5 rounded bg-input-bg border border-border text-meta hover:text-accent font-mono" data-val="now">当前</button>
+                        <button type="button" class="btn-stamp-quick px-2 py-0.5 rounded bg-input-bg border border-border text-meta hover:text-accent font-mono" data-val="today_start">今日零点</button>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="space-y-1">
+                        <label for="inputTimestamp" class="block text-xs font-medium text-meta">输入 Unix 时间戳:</label>
+                        <div class="flex gap-2">
+                            <input id="inputTimestamp" type="text" placeholder="例如: 1774780800 或 1774780800000"
+                                   class="flex-1 bg-input-bg border border-border rounded-xl px-3.5 py-2 text-main font-mono text-sm focus:border-accent outline-none" />
+                            <select id="selectStampUnit" class="bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs focus:border-accent outline-none">
+                                <option value="auto">自动识别</option>
+                                <option value="s">秒 (10位)</option>
+                                <option value="ms">毫秒 (13位)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-2">
+                        <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                            <span class="text-[10px] text-meta font-mono block">本地时区 (Local Time / CST UTC+8):</span>
+                            <span id="resLocalDate" class="text-main font-bold font-mono text-sm select-all block">-</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                            <span class="text-[10px] text-meta font-mono block">UTC 世界标准时间 (ISO 8601):</span>
+                            <span id="resUtcDate" class="text-accent font-semibold font-mono text-sm select-all block">-</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                            <span class="text-[10px] text-meta font-mono block">相对时间推算 (Relative):</span>
+                            <span id="resRelativeTime" class="text-body font-mono text-xs select-all block">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模块 2：日期时间转时间戳 -->
+            <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-border/40 pb-3">
+                    <h2 class="text-sm font-bold text-main flex items-center gap-2">
+                        <i class="fa-regular fa-calendar-days text-accent"></i>
+                        <span>日期时间 ➔ 时间戳 (To Timestamp)</span>
+                    </h2>
+                    <button type="button" id="btnFillNowDate" class="px-2 py-0.5 rounded bg-input-bg border border-border text-meta hover:text-accent font-mono text-xs">当前时间</button>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="space-y-1">
+                        <label for="inputDateTimeStr" class="block text-xs font-medium text-meta">输入标准日期时间格式 (YYYY-MM-DD HH:mm:ss):</label>
+                        <input id="inputDateTimeStr" type="text" placeholder="例如: 2026-10-28 10:45:00"
+                               class="w-full bg-input-bg border border-border rounded-xl px-3.5 py-2 text-main font-mono text-sm focus:border-accent outline-none" />
+                    </div>
+
+                    <div class="space-y-2 pt-2">
+                        <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                            <span class="text-[10px] text-meta font-mono block">秒级时间戳 (Seconds / 10位):</span>
+                            <div class="flex items-center justify-between">
+                                <span id="resStampSec" class="text-main font-bold font-mono text-sm select-all">-</span>
+                                <button type="button" class="btn-copy-val text-xs text-meta hover:text-accent" data-target="resStampSec"><i class="fa-regular fa-copy"></i></button>
+                            </div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                            <span class="text-[10px] text-meta font-mono block">毫秒级时间戳 (Milliseconds / 13位):</span>
+                            <div class="flex items-center justify-between">
+                                <span id="resStampMs" class="text-accent font-semibold font-mono text-sm select-all">-</span>
+                                <button type="button" class="btn-copy-val text-xs text-meta hover:text-accent" data-target="resStampMs"><i class="fa-regular fa-copy"></i></button>
+                            </div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                            <span class="text-[10px] text-meta font-mono block">星期与所在年第几周 (Week info):</span>
+                            <span id="resWeekInfo" class="text-body font-mono text-xs select-all block">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 全球时区一览推演卡片 -->
+        <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-border/40 pb-3">
+                <h2 class="text-sm font-bold text-main flex items-center gap-2">
+                    <i class="fa-solid fa-earth-americas text-accent"></i>
+                    <span>跨国时区对照表 (World Timezones Comparison)</span>
+                </h2>
+                <span class="text-xs text-meta font-mono">同步自当前选定时间点</span>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono" id="worldTimezonesGrid">
+                <!-- 动态填充时区卡片 -->
+            </div>
+        </div>
+
+        <!-- 常用编程语言获取时间戳速查 -->
+        <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-4">
+            <h2 class="text-sm font-bold text-main flex items-center gap-2 border-b border-border/40 pb-3">
+                <i class="fa-solid fa-code text-accent"></i>
+                <span>常见编程语言获取时间戳速查 (Code Cheatsheet)</span>
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
+                <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                    <span class="text-accent font-bold">Java</span>
+                    <pre class="text-[11px] text-body overflow-x-auto">System.currentTimeMillis() / 1000L;
+Instant.now().getEpochSecond();</pre>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                    <span class="text-accent font-bold">JavaScript / Node.js</span>
+                    <pre class="text-[11px] text-body overflow-x-auto">Math.floor(Date.now() / 1000);
+Date.now(); // 毫秒</pre>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                    <span class="text-accent font-bold">Python</span>
+                    <pre class="text-[11px] text-body overflow-x-auto">import time
+int(time.time())</pre>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                    <span class="text-accent font-bold">Go (Golang)</span>
+                    <pre class="text-[11px] text-body overflow-x-auto">time.Now().Unix()
+time.Now().UnixMilli()</pre>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                    <span class="text-accent font-bold">PHP</span>
+                    <pre class="text-[11px] text-body overflow-x-auto">time();
+microtime(true);</pre>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/60 space-y-1">
+                    <span class="text-accent font-bold">MySQL / PostgreSQL</span>
+                    <pre class="text-[11px] text-body overflow-x-auto">UNIX_TIMESTAMP();
+EXTRACT(EPOCH FROM NOW());</pre>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script src="/assets/js/tools/timestamp-tool.js" defer></script>

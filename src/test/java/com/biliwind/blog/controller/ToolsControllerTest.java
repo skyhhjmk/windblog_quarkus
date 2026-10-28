@@ -33,6 +33,39 @@ class ToolsControllerTest {
     }
 
     @Test
+    void shouldReturnTimestampPage() {
+        given()
+                .when().get("/tools/timestamp")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("Unix 时间戳"))
+                .body(containsString("timestamp-tool.js"));
+    }
+
+    @Test
+    void shouldReturnLogFormatterPage() {
+        given()
+                .when().get("/tools/log-formatter")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("日志格式化"))
+                .body(containsString("log-formatter.js"));
+    }
+
+    @Test
+    void shouldReturnBaseEncoderPage() {
+        given()
+                .when().get("/tools/base-encoder")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("Base64"))
+                .body(containsString("base-encoder.js"));
+    }
+
+    @Test
     void shouldSupportPjaxHeader() {
         given()
                 .header("X-PJAX", "true")

@@ -1,0 +1,87 @@
+<div id="pjax-content-root" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1" data-page-title="Base64 及常见 Base 变体编解码器">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="/tools" class="hover:text-accent transition-colors">tools</a> / base-encoder</div>
+
+    <section class="space-y-8" id="baseEncoderToolApp">
+        <!-- 头部 -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">ENCODING TOOLS</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    Base64 / Base 编码全家桶在线转换
+                </h1>
+                <p class="text-body text-xs md:text-sm">
+                    支持标准 Base64、URL 安全 Base64 (RFC 4648)、Base32、Base16 (Hex)、Base58 (比特币/区块链常用变体) 及 Base85/Ascii85，原生支持 UTF-8 中文与二进制安全处理。
+                </p>
+            </div>
+            <!-- 模式切换与选项 -->
+            <div class="flex items-center gap-2">
+                <div class="grid grid-cols-2 p-1 rounded-xl bg-input-bg border border-border text-xs font-mono">
+                    <button type="button" id="btnModeEncode" class="px-4 py-1.5 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold transition-all">编码 (Encode)</button>
+                    <button type="button" id="btnModeDecode" class="px-4 py-1.5 rounded-lg text-meta hover:text-main font-medium transition-all">解码 (Decode)</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主操作卡片 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 输入区 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-3 flex flex-col">
+                <div class="flex items-center justify-between text-xs font-mono text-meta">
+                    <label for="baseInputText" id="baseInputLabel" class="font-bold text-main">输入明文字符串 (Plain Text):</label>
+                    <div class="flex items-center gap-2">
+                        <span id="baseInputStats">0 字符</span>
+                        <button type="button" id="btnClearBaseInput" class="hover:text-accent">清空</button>
+                    </div>
+                </div>
+                <textarea id="baseInputText" rows="12" placeholder="在此输入需要编码或解码的文本（完整支持中文字符集与符号）..."
+                          class="w-full flex-1 bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none leading-relaxed resize-y"></textarea>
+                <!-- 快捷选项 -->
+                <div class="flex flex-wrap items-center gap-3 pt-2 text-xs text-meta border-t border-border/40 font-mono">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" id="chkUrlSafe" class="accent-cyan-500 rounded" />
+                        <span>URL Safe 模式 (- 与 _ 替代 + 与 /，省略 = 填充)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 输出与变体一览 -->
+            <div class="space-y-4">
+                <!-- 主要结果面板 -->
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                    <div class="flex items-center justify-between text-xs font-mono text-meta border-b border-border/40 pb-3">
+                        <span id="baseOutputLabel" class="font-bold text-main">标准 Base64 结果:</span>
+                        <div class="flex items-center gap-2">
+                            <span id="baseOutputStats">0 字符</span>
+                            <button type="button" id="btnCopyPrimaryBase" class="px-2.5 py-1 rounded bg-input-bg border border-border text-meta hover:text-accent" title="复制">
+                                <i class="fa-regular fa-copy mr-1"></i>复制
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="baseOutputPrimary" rows="5" readonly
+                              class="w-full bg-input-bg border border-border rounded-xl p-3 text-accent font-mono text-xs md:text-sm select-all outline-none resize-none leading-relaxed"></textarea>
+                </div>
+
+                <!-- 常见 Base 变体实时对比表格 (多算法一览) -->
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                    <div class="flex items-center justify-between border-b border-border/40 pb-2">
+                        <h3 class="text-xs font-bold font-mono text-main">常见 Base 算法变体实时对照 (Variants)</h3>
+                        <span class="text-[10px] font-mono text-meta">实时并行运算</span>
+                    </div>
+
+                    <div class="space-y-2.5 text-xs font-mono" id="baseVariantsContainer">
+                        <!-- JS 动态注入 Base16, Base32, Base58, Base85 等 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script src="/assets/js/tools/base-encoder.js" defer></script>

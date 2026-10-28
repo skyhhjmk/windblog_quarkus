@@ -232,11 +232,11 @@
             const maskBinStr = longToBinaryString(maskLong);
             const netBinStr = longToBinaryString(networkLong);
 
-            const netColorClass = 'bg-cyan-100 text-cyan-800 border border-cyan-300 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/40';
-            const hostColorClass = 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40';
-            const maskHostColorClass = 'bg-gray-200 text-gray-500 border border-gray-300 dark:bg-card dark:text-meta/40 dark:border-border/40';
-            const netResultClass = 'bg-cyan-200 text-cyan-900 font-extrabold border border-cyan-400 dark:bg-cyan-500/30 dark:text-cyan-200 dark:border-cyan-400';
-            const netResultHostClass = 'bg-gray-100 text-gray-400 border border-gray-200 dark:bg-card dark:text-meta/30 dark:border-border/20';
+            const netColorClass = 'bg-cyan-500/15 text-cyan-800 border border-cyan-400/40 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30';
+            const hostColorClass = 'bg-amber-500/15 text-amber-900 border border-amber-400/40 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30';
+            const maskHostColorClass = 'bg-border/60 text-meta border border-border/80 dark:bg-card dark:text-meta/40 dark:border-border/30';
+            const netResultClass = 'bg-accent/25 text-main font-extrabold border border-accent/60 dark:bg-accent/20 dark:text-cyan-200 dark:border-accent/40';
+            const netResultHostClass = 'bg-card text-meta/40 border border-border/30 dark:bg-card dark:text-meta/30 dark:border-border/20';
 
             renderBitmaskRow(bitsContainerIp, ipBinStr, prefix, netColorClass, hostColorClass);
             renderBitmaskRow(bitsContainerMask, maskBinStr, prefix, netColorClass, maskHostColorClass);
