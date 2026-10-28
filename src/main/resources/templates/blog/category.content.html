@@ -74,51 +74,49 @@
                 {#if posts && posts.size > 0}
                     <div class="grid grid-cols-1 gap-6 md:gap-8">
                         {#for post in posts}
-                            <article class="group card p-5 sm:p-6 md:p-8 transition-all duration-300 relative" data-article-transition-slug="{post.slug}">
-                                <div class="flex flex-col md:flex-row gap-5 md:gap-8">
-                                    <!-- Left Indicator -->
-                                    <div class="hidden md:block w-[3px] h-20 bg-[var(--accent-line)] rounded-full group-hover:bg-accent transition-colors duration-500"></div>
+                            <article class="group card p-6 sm:p-7 md:p-8 transition-all duration-300 relative rounded-2xl border border-border hover:border-accent/40 bg-card hover:shadow-xl" data-article-transition-slug="{post.slug}">
+                                <div class="flex flex-col gap-4">
+                                    <!-- Meta Information -->
+                                    <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono">
+                                        {#for category in post.categories}
+                                            <a class="text-accent font-semibold hover:underline" href="/category/{category.slug}">{category.name}</a>
+                                        {/for}
+                                        <span class="text-border">•</span>
+                                        <time class="timestamp text-meta" data-timestamp="{post.publishedAtText}">{post.publishedAtText}</time>
+                                    </div>
 
-                                    <div class="flex-1">
-                                        <!-- Meta Information -->
-                                        <div class="flex items-center gap-4 text-[11px] font-mono text-meta mb-3 tracking-widest uppercase">
-                                            {#for category in post.categories}
-                                                <a class="text-accent font-semibold" href="/category/{category.slug}">{category.name}</a>
-                                            {/for}
-                                            <time class="timestamp" data-timestamp="{post.publishedAtText}">{post.publishedAtText}</time>
-                                        </div>
+                                    <!-- Title -->
+                                    <h3 class="text-xl sm:text-2xl font-bold text-main group-hover:text-accent transition-colors tracking-tight leading-snug"
+                                        data-article-transition-part="title"
+                                        data-article-transition-slug="{post.slug}">
+                                        <a href="/post/{post.slug}" class="block after:absolute after:inset-0">
+                                            {post.title}
+                                        </a>
+                                    </h3>
 
-                                        <!-- Title -->
-                                        <h3 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight"
-                                            data-article-transition-part="title"
-                                            data-article-transition-slug="{post.slug}">
-                                            <a href="/post/{post.slug}" class="block after:absolute after:inset-0">
-                                                {post.title}
-                                            </a>
-                                        </h3>
-
-                                        <!-- Summary -->
-                                        <p class="mt-4 text-[15px] leading-relaxed text-body line-clamp-2 font-light">
+                                    <!-- Summary -->
+                                    {#if post.summary}
+                                        <p class="text-sm leading-relaxed text-body line-clamp-3 font-normal">
                                             {post.summary}
                                         </p>
+                                    {/if}
 
-                                        <!-- Footer -->
-                                    <div class="mt-6 md:mt-8 flex items-center justify-between border-t border-border pt-5 md:pt-6">
-                                            <div class="flex flex-wrap gap-2">
-                                                <span class="text-[10px] text-meta border border-border px-2.5 py-0.5 rounded font-mono">Slug: {post.slug}</span>
-                                                {#for tag in post.tags}
-                                                    <a href="/tag/{tag.slug}" class="text-[10px] text-accent border border-accent/20 px-2.5 py-0.5 rounded font-mono hover:bg-accent/5 transition-colors">#{tag.name}</a>
-                                                {#else}
-                                                {/for}
-                                            </div>
-
-                                            <a href="/post/{post.slug}" class="flex items-center gap-2 text-xs font-medium text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
-                                                <span>阅读全文</span>
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                                </svg>
-                                            </a>
+                                    <!-- Footer -->
+                                    <div class="mt-2 pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/50">
+                                        <div class="flex flex-wrap gap-2">
+                                            {#for tag in post.tags}
+                                                <a href="/tag/{tag.slug}" class="badge-tag relative z-10">
+                                                    #{tag.name}
+                                                </a>
+                                            {/for}
                                         </div>
+
+                                        <a href="/post/{post.slug}" class="flex items-center gap-1.5 text-xs font-semibold text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
+                                            <span>阅读全文</span>
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </a>
                                     </div>
                                 </div>
                             </article>

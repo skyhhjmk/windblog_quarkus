@@ -171,56 +171,55 @@
     </div>
 
 
-    <div class="card card-static p-5 md:p-12">
-        <nav aria-label="面包屑" class="text-sm mb-4">
-            <a href="/">首页</a>
+    <div class="card card-static p-6 sm:p-8 md:p-12 rounded-3xl border border-border bg-card shadow-sm">
+        <nav aria-label="面包屑" class="text-xs text-meta font-mono mb-6 flex items-center gap-1.5">
+            <a href="/" class="hover:text-accent transition-colors">首页</a>
             {#if breadcrumbCategorySlug}
-            <span aria-hidden="true"> / </span><a href="/category/{breadcrumbCategorySlug}">{postCategory}</a>
+            <span aria-hidden="true" class="text-border">/</span><a href="/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors">{postCategory}</a>
             {/if}
-            <span aria-hidden="true"> / </span><span>{postTitle}</span>
+            <span aria-hidden="true" class="text-border">/</span><span class="text-main truncate max-w-xs">{postTitle}</span>
         </nav>
-        <article class="space-y-10 md:space-y-16" data-article-transition-slug="{postSlug}">
-            <header class="space-y-8 md:space-y-12 mb-10 md:mb-16">
-                <div class="space-y-6">
-                    <div class="flex items-center gap-4">
+        <article class="space-y-8 md:space-y-12" data-article-transition-slug="{postSlug}">
+            <header class="space-y-6 md:space-y-8 mb-8 md:mb-12">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
                         {#for category in postCategories}
                             <a href="/category/{category.slug}" class="badge-category">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
                                      stroke-linejoin="round">
                                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                                 </svg>
                                 {category.name}
                             </a>
                         {/for}
-                        <div class="h-[1px] flex-1 bg-gradient-to-r from-accent/20 to-transparent"></div>
                     </div>
-                    <h1 class="text-4xl sm:text-5xl md:text-6xl font-black text-main tracking-tight leading-[1.1]"
+                    <h1 class="text-3xl sm:text-4xl md:text-5xl font-black text-main tracking-tight leading-[1.18]"
                         data-article-transition-part="title"
                         data-article-transition-slug="{postSlug}">{postTitle ?: '文章信息'}</h1>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-6 md:gap-12 py-5 md:py-6 border-y border-border/40">
+                <div class="flex flex-wrap items-center gap-4 sm:gap-8 py-4 sm:py-5 border-y border-border/50 text-xs font-mono">
                     <div class="post-meta-item">
                         <span class="post-meta-label">作者</span>
                         <div class="flex items-center gap-2">
                             <img src="{authorAvatar}" alt="{authorName}"
-                                 class="w-6 h-6 rounded-full ring-2 ring-accent/20">
-                            <span class="post-meta-value">{authorName}</span>
+                                 class="w-5 h-5 rounded-full ring-1 ring-border">
+                            <span class="post-meta-value text-xs">{authorName}</span>
                         </div>
                     </div>
                     <div class="post-meta-item">
                         <span class="post-meta-label">发布时间</span>
-                        <time class="timestamp post-meta-value" data-timestamp="{publishedAt}">{publishedAt}</time>
+                        <time class="timestamp post-meta-value text-xs" data-timestamp="{publishedAt}">{publishedAt}</time>
                     </div>
                     <div class="post-meta-item">
                         <span class="post-meta-label">资源状态</span>
-                        <span class="post-meta-value flex items-center gap-2" data-purchase-status="true">
+                        <span class="post-meta-value text-xs flex items-center gap-1.5" data-purchase-status="true">
                             {#if postPrice > 0}
-                                <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-green-500' : 'bg-accent'}"></span>
+                                <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-emerald-500' : 'bg-accent'}"></span>
                                 {hasPurchased ? '已解锁' : '付费专享'}
                             {#else}
-                                <span class="w-2 h-2 rounded-full bg-green-500"></span> 免费阅读
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 免费阅读
                             {/if}
                         </span>
                     </div>

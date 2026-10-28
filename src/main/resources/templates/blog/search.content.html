@@ -86,123 +86,117 @@
         {#if hits && hits.size > 0}
             <div class="grid grid-cols-1 gap-6 md:gap-8">
                 {#for hit in hits}
-                    <article class="group card p-5 sm:p-6 md:p-8 transition-all duration-300 relative" data-article-transition-slug="{hit.slug}">
-                        <div class="flex flex-col md:flex-row gap-5 md:gap-8">
-                            <!-- Left Indicator -->
-                            <div class="hidden md:block w-[3px] h-20 bg-[var(--accent-line)] rounded-full group-hover:bg-accent transition-colors duration-500"></div>
-
-                            <div class="flex-1">
-                                <!-- Meta Information -->
-                                <div class="flex items-center justify-between mb-3">
-                                    <div class="flex items-center gap-4 text-[11px] font-mono text-meta tracking-widest uppercase">
-                                        {#if hit.type == 'post' && hit.authorName && !hit.authorName.isEmpty()}
-                                            <span class="text-accent">作者：{hit.authorName}</span>
-                                        {/if}
-                                        <time class="timestamp" data-timestamp="{hit.dateText}">{hit.dateText}</time>
-                                    </div>
-                                </div>
-
-                                <!-- Title -->
-                                <h2 class="text-2xl font-semibold text-main group-hover:text-accent transition-colors tracking-tight"
-                                    data-article-transition-part="title"
-                                    data-article-transition-slug="{hit.slug}">
-                                    <a href="{hit.url}" class="block after:absolute after:inset-0">
-                                        {#for segment in hit.titleSegments}
-                                            {#if segment.highlighted}
-                                                <mark class="rounded-sm bg-amber-300/20 px-0.5 font-semibold text-amber-100">{segment.text}</mark>
-                                            {#else}
-                                                {segment.text}
-                                            {/if}
-                                        {/for}
-                                    </a>
-                                </h2>
-
-                                <!-- AI Summary (Optional) -->
-                                {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
-                                    <div class="mt-4 mb-2">
-                                        <span class="badge-ai">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
-                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path
-                                                        d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8"
-                                                                                   rx="2"></rect><path
-                                                        d="M2 14h2"></path><path d="M20 14h2"></path><path
-                                                        d="M15 13v2"></path><path d="M9 13v2"></path></svg>
-                                            AI 摘要
-                                        </span>
-                                    </div>
-                                    <p class="mt-4 text-sm italic text-gray-400 border-l-2 border-accent/30 pl-4 py-1 line-clamp-2"
-                                       data-article-transition-part="summary"
-                                       data-article-transition-slug="{hit.slug}">
-                                        {hit.aiSummary}
-                                    </p>
+                    <article class="group card p-6 sm:p-7 md:p-8 transition-all duration-300 relative rounded-2xl border border-border hover:border-accent/40 bg-card hover:shadow-xl" data-article-transition-slug="{hit.slug}">
+                        <div class="flex flex-col gap-4">
+                            <!-- Meta Information -->
+                            <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono">
+                                {#if hit.type == 'post' && hit.authorName && !hit.authorName.isEmpty()}
+                                    <span class="text-main font-semibold flex items-center gap-1.5">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-accent/70"></span>
+                                        {hit.authorName}
+                                    </span>
+                                    <span class="text-border">•</span>
                                 {/if}
+                                <time class="timestamp text-meta" data-timestamp="{hit.dateText}">{hit.dateText}</time>
+                            </div>
 
-                                <!-- Summary -->
-                                <p class="mt-4 text-[15px] leading-relaxed text-body line-clamp-2 font-light">
-                                    {#for segment in hit.summarySegments}
+                            <!-- Title -->
+                            <h2 class="text-xl sm:text-2xl font-bold text-main group-hover:text-accent transition-colors tracking-tight leading-snug"
+                                data-article-transition-part="title"
+                                data-article-transition-slug="{hit.slug}">
+                                <a href="{hit.url}" class="block after:absolute after:inset-0">
+                                    {#for segment in hit.titleSegments}
                                         {#if segment.highlighted}
-                                            <mark class="rounded-sm bg-amber-300/20 px-0.5 font-semibold text-amber-100">{segment.text}</mark>
+                                            <mark class="rounded bg-amber-400/20 px-1 py-0.5 font-semibold text-amber-200">{segment.text}</mark>
                                         {#else}
                                             {segment.text}
                                         {/if}
                                     {/for}
-                                </p>
+                                </a>
+                            </h2>
 
-                                {#if hit.contentSnippets && hit.contentSnippets.size > 0}
-                                    <div class="mt-3 space-y-2" aria-label="正文搜索匹配内容">
-                                        <span class="text-[11px] font-mono uppercase tracking-wider text-accent">正文命中</span>
-                                        {#for snippet in hit.contentSnippets}
-                                            <p class="text-sm leading-relaxed text-body/90 line-clamp-3">
-                                                {#for segment in snippet}
-                                                    {#if segment.highlighted}
-                                                        <mark class="rounded-sm bg-amber-300/20 px-0.5 font-semibold text-amber-100">{segment.text}</mark>
-                                                    {#else}
-                                                        {segment.text}
-                                                    {/if}
-                                                {/for}
-                                            </p>
-                                        {/for}
+                            <!-- AI Summary (Optional) -->
+                            {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
+                                <div class="my-1 p-3.5 rounded-xl bg-accent/[0.04] border border-accent/15 space-y-1.5">
+                                    <div class="flex items-center gap-2">
+                                        <span class="badge-ai">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path
+                                                            d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8"
+                                                                                       rx="2"></rect><path
+                                                            d="M2 14h2"></path><path d="M20 14h2"></path><path
+                                                            d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+                                            AI 摘要
+                                        </span>
                                     </div>
-                                {/if}
+                                    <p class="text-xs sm:text-sm text-body line-clamp-2 leading-relaxed"
+                                       data-article-transition-part="summary"
+                                       data-article-transition-slug="{hit.slug}">
+                                        {hit.aiSummary}
+                                    </p>
+                                </div>
+                            {/if}
 
-                                <!-- Footer -->
-                                <div class="mt-6 md:mt-8 flex items-center justify-between border-t border-border pt-5 md:pt-6">
-                                    <div class="flex flex-wrap gap-3">
-                                        {#for category in hit.categories}
-                                            <a href="/category/{category.slug}" class="badge-category relative z-10">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                                     stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                                                     stroke-linejoin="round">
-                                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                                                </svg>
-                                                {category.name}
+                            <!-- Summary -->
+                            <p class="text-sm leading-relaxed text-body line-clamp-3 font-normal">
+                                {#for segment in hit.summarySegments}
+                                    {#if segment.highlighted}
+                                        <mark class="rounded bg-amber-400/20 px-1 py-0.5 font-semibold text-amber-200">{segment.text}</mark>
+                                    {#else}
+                                        {segment.text}
+                                    {/if}
+                                {/for}
+                            </p>
+
+                            {#if hit.contentSnippets && hit.contentSnippets.size > 0}
+                                <div class="mt-1 p-3 rounded-xl bg-input-bg border border-border/60 space-y-1.5" aria-label="正文搜索匹配内容">
+                                    <span class="text-[10px] font-mono uppercase tracking-wider text-accent font-semibold flex items-center gap-1.5">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>
+                                        正文命中片段
+                                    </span>
+                                    {#for snippet in hit.contentSnippets}
+                                        <p class="text-xs leading-relaxed text-body line-clamp-2">
+                                            {#for segment in snippet}
+                                                {#if segment.highlighted}
+                                                    <mark class="rounded bg-amber-400/20 px-1 py-0.5 font-semibold text-amber-200">{segment.text}</mark>
+                                                {#else}
+                                                    {segment.text}
+                                                {/if}
+                                            {/for}
+                                        </p>
+                                    {/for}
+                                </div>
+                            {/if}
+
+                            <!-- Footer -->
+                            <div class="mt-2 pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/50">
+                                <div class="flex flex-wrap gap-2">
+                                    {#for category in hit.categories}
+                                        <a href="/category/{category.slug}" class="badge-category relative z-10">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                                 stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                                                 stroke-linejoin="round">
+                                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                            </svg>
+                                            {category.name}
+                                        </a>
+                                    {/for}
+                                    {#if hit.tags}
+                                        {#for tag in hit.tags}
+                                            <a href="/tag/{tag.slug}" class="badge-tag relative z-10">
+                                                #{tag.name}
                                             </a>
                                         {/for}
-                                        {#if hit.tags}
-                                            {#for tag in hit.tags}
-                                                <a href="/tag/{tag.slug}" class="badge-tag relative z-10">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                                         fill="none" stroke="currentColor" stroke-width="2.5"
-                                                         stroke-linecap="round" stroke-linejoin="round">
-                                                        <line x1="4" y1="9" x2="20" y2="9"></line>
-                                                        <line x1="4" y1="15" x2="20" y2="15"></line>
-                                                        <line x1="10" y1="3" x2="8" y2="21"></line>
-                                                        <line x1="16" y1="3" x2="14" y2="21"></line>
-                                                    </svg>
-                                                    {tag.name}
-                                                </a>
-                                            {/for}
-                                        {/if}
-                                    </div>
-
-                                    <a href="{hit.url}" class="flex items-center gap-2 text-xs font-medium text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
-                                        <span>查看内容</span>
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                        </svg>
-                                    </a>
+                                    {/if}
                                 </div>
+
+                                <a href="{hit.url}" class="flex items-center gap-1.5 text-xs font-semibold text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
+                                    <span>查看内容</span>
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </a>
                             </div>
                         </div>
                     </article>
