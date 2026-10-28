@@ -29,7 +29,7 @@ class ToolsControllerTest {
                 .contentType("text/html;charset=UTF-8")
                 .body(containsString("新一代智能子网掩码推演计算器"))
                 .body(containsString("32-Bit 二进制位图可视化"))
-                .body(containsString("subnet-calculator.js"));
+                .body(containsString("tools.js"));
     }
 
     @Test
@@ -40,7 +40,7 @@ class ToolsControllerTest {
                 .statusCode(200)
                 .contentType("text/html;charset=UTF-8")
                 .body(containsString("Unix 时间戳"))
-                .body(containsString("timestamp-tool.js"));
+                .body(containsString("tools.js"));
     }
 
     @Test
@@ -51,7 +51,7 @@ class ToolsControllerTest {
                 .statusCode(200)
                 .contentType("text/html;charset=UTF-8")
                 .body(containsString("日志格式化"))
-                .body(containsString("log-formatter.js"));
+                .body(containsString("tools.js"));
     }
 
     @Test
@@ -62,7 +62,7 @@ class ToolsControllerTest {
                 .statusCode(200)
                 .contentType("text/html;charset=UTF-8")
                 .body(containsString("Base64"))
-                .body(containsString("base-encoder.js"));
+                .body(containsString("tools.js"));
     }
 
     @Test

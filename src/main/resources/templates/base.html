@@ -89,7 +89,7 @@
     <script src="/assets/js/webmcp.js?v=webmcp-20261012"></script>
 
     {#if config:analyticsTrackingEnabled}
-        <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-navigation-mode="manual"
+        <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-navigation-mode="manual" data-credentials="include"
                 {#if config:analyticsTrackingRequireConsent}data-require-consent="true"{/if}
                 {#if config:analyticsTrackingHeatmapsEnabled}data-heatmap{/if}
                 {#if config:analyticsTrackingWebVitalsEnabled}data-web-vitals{/if}
@@ -363,6 +363,7 @@
 <script src="/assets/js/comment.js?v=error-codes-20261020" defer></script>
 <script src="/assets/js/ads.js?v=adsense-20261014" defer></script>
 <script src="/assets/js/link.js?v=error-codes-20261020" defer></script>
+<script src="/assets/js/tools.js?v=20261028-1" defer></script>
 <script src="/assets/js/post-premium.js?v=error-codes-20261020" defer></script>
 <script src="/assets/js/post-quote.js?v=error-codes-20261020" defer></script>
 </body>
