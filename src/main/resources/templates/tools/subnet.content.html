@@ -1,0 +1,265 @@
+<div id="pjax-content-root" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1" data-page-title="新一代智能子网掩码计算器">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="/tools" class="hover:text-accent transition-colors">tools</a> / subnet</div>
+
+    <section class="space-y-8" id="subnetCalculatorApp">
+        <!-- 工具头部 -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">NEXT-GEN SUBNET</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    新一代智能子网掩码推演计算器
+                </h1>
+                <p class="text-body text-xs md:text-sm">
+                    不仅输出网络地址与可用范围，还为您拆解<b>按位逻辑计算过程</b>、<b>32位二进制可视化色块图</b>与<b>VLSM子网划分树</b>。
+                </p>
+            </div>
+            <!-- 预设示例快捷按钮 -->
+            <div class="flex flex-wrap gap-2 items-center text-xs">
+                <span class="text-meta">快捷示例:</span>
+                <button type="button" class="btn-preset px-2.5 py-1 rounded bg-card border border-border text-meta hover:text-accent hover:border-accent/40 font-mono transition-colors" data-ip="192.168.1.100" data-mask="24">192.168.1.100/24</button>
+                <button type="button" class="btn-preset px-2.5 py-1 rounded bg-card border border-border text-meta hover:text-accent hover:border-accent/40 font-mono transition-colors" data-ip="10.88.16.5" data-mask="21">10.88.16.5/21</button>
+                <button type="button" class="btn-preset px-2.5 py-1 rounded bg-card border border-border text-meta hover:text-accent hover:border-accent/40 font-mono transition-colors" data-ip="172.16.0.1" data-mask="255.255.240.0">172.16.0.1/20</button>
+                <button type="button" class="btn-preset px-2.5 py-1 rounded bg-card border border-border text-meta hover:text-accent hover:border-accent/40 font-mono transition-colors" data-ip="2001:db8:abcd:12::1" data-mask="64">IPv6 /64</button>
+            </div>
+        </header>
+
+        <!-- 输入控制面板 -->
+        <div class="bg-card border border-border rounded-2xl p-5 md:p-6 shadow-sm space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                <!-- IP 地址输入 -->
+                <div class="md:col-span-5 space-y-1.5">
+                    <label for="subnetIpInput" class="block text-xs font-bold text-main uppercase tracking-wider flex items-center justify-between">
+                        <span>IP 地址 (IPv4 或 IPv6)</span>
+                        <span id="ipTypeBadge" class="font-mono text-[10px] text-accent font-semibold">IPv4</span>
+                    </label>
+                    <div class="relative">
+                        <input id="subnetIpInput" type="text" value="192.168.1.100" placeholder="例如: 192.168.1.1 或 10.0.0.1"
+                               class="w-full bg-input-bg border border-border rounded-xl px-3.5 py-2.5 text-main font-mono text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all" />
+                        <button type="button" id="clearIpBtn" class="absolute right-3 top-1/2 -translate-y-1/2 text-meta hover:text-main text-xs" title="清空">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 掩码 / 前缀输入与下拉选择 -->
+                <div class="md:col-span-4 space-y-1.5">
+                    <label for="subnetMaskSelect" class="block text-xs font-bold text-main uppercase tracking-wider flex items-center justify-between">
+                        <span>子网掩码 / 前缀 (CIDR)</span>
+                        <span id="cidrBadge" class="font-mono text-[10px] text-accent font-semibold">/24</span>
+                    </label>
+                    <div class="relative">
+                        <select id="subnetMaskSelect" class="w-full bg-input-bg border border-border rounded-xl px-3.5 py-2.5 text-main font-mono text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all cursor-pointer">
+                            <!-- 动态填充 0 - 32 -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 快速操作按钮 -->
+                <div class="md:col-span-3 flex gap-2">
+                    <button type="button" id="btnCalculate" class="flex-1 bg-accent text-[var(--accent-foreground)] font-bold py-2.5 px-4 rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+                        <i class="fa-solid fa-calculator"></i>
+                        <span>重新计算</span>
+                    </button>
+                    <button type="button" id="btnCopyResult" class="bg-card border border-border hover:border-accent/40 text-meta hover:text-main py-2.5 px-3.5 rounded-xl text-sm transition-all" title="复制所有结果文本">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 滑块直观调节掩码 CIDR -->
+            <div class="space-y-2 pt-2 border-t border-border/40">
+                <div class="flex items-center justify-between text-xs font-mono text-meta">
+                    <span class="flex items-center gap-1.5">
+                        <i class="fa-solid fa-sliders text-accent"></i>
+                        <span>前缀长度快速滑块:</span>
+                        <strong id="sliderValueText" class="text-accent text-sm">/24</strong>
+                    </span>
+                    <span id="sliderUsableHostsText">可用主机数: 254</span>
+                </div>
+                <input id="cidrSlider" type="range" min="1" max="32" value="24"
+                       class="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                <div class="flex justify-between text-[10px] font-mono text-meta/60 px-1">
+                    <span>/1 (超大网段)</span>
+                    <span>/8 (A类)</span>
+                    <span>/16 (B类)</span>
+                    <span>/24 (C类)</span>
+                    <span>/30 (互联)</span>
+                    <span>/32 (单机)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 错误提示容器 -->
+        <div id="calcErrorAlert" class="hidden rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs md:text-sm text-red-400 flex items-center gap-3">
+            <i class="fa-solid fa-circle-exclamation text-base"></i>
+            <span id="calcErrorMessage">输入的 IP 或子网格式有误，请检查。</span>
+        </div>
+
+        <!-- 计算结果核心面板 -->
+        <div id="calcResultContainer" class="space-y-8">
+            <!-- 1. 核心属性指标卡片 -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-card border border-border rounded-xl p-4 space-y-1">
+                    <span class="text-[11px] font-mono uppercase text-meta block">网络地址 (Network ID)</span>
+                    <span id="resNetworkIp" class="text-base md:text-lg font-bold font-mono text-main select-all block truncate">-</span>
+                    <span class="text-[10px] text-meta">子网起始代表</span>
+                </div>
+                <div class="bg-card border border-border rounded-xl p-4 space-y-1">
+                    <span class="text-[11px] font-mono uppercase text-meta block">广播地址 (Broadcast)</span>
+                    <span id="resBroadcastIp" class="text-base md:text-lg font-bold font-mono text-accent select-all block truncate">-</span>
+                    <span class="text-[10px] text-meta">子网广播目标</span>
+                </div>
+                <div class="bg-card border border-border rounded-xl p-4 space-y-1">
+                    <span class="text-[11px] font-mono uppercase text-meta block">有效可用主机范围</span>
+                    <span id="resHostRange" class="text-xs md:text-sm font-bold font-mono text-main select-all block truncate">-</span>
+                    <span class="text-[10px] text-meta">可分配给设备的 IP</span>
+                </div>
+                <div class="bg-card border border-border rounded-xl p-4 space-y-1">
+                    <span class="text-[11px] font-mono uppercase text-meta block">有效主机数 / 总容量</span>
+                    <span id="resUsableHosts" class="text-base md:text-lg font-bold font-mono text-emerald-400 block truncate">-</span>
+                    <span id="resTotalAddresses" class="text-[10px] text-meta">总地址: -</span>
+                </div>
+            </div>
+
+            <!-- 2. 二进制位图与位域可视化（核心特色） -->
+            <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/40 pb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-4 bg-accent rounded-full"></div>
+                        <h2 class="text-base font-bold text-main">32-Bit 二进制位图可视化 (Bitmask Breakdown)</h2>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs font-mono">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded bg-cyan-500/30 border border-cyan-400 inline-block"></span>
+                            <span class="text-meta">网络位 (Network: <b id="bitNetworkCount" class="text-main">24</b>)</span>
+                        </span>
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded bg-amber-500/30 border border-amber-400 inline-block"></span>
+                            <span class="text-meta">主机位 (Host: <b id="bitHostCount" class="text-main">8</b>)</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 位图渲染条目 -->
+                <div class="space-y-4 font-mono text-xs md:text-sm overflow-x-auto pb-2">
+                    <!-- IP 二进制行 -->
+                    <div class="space-y-1.5 min-w-[540px]">
+                        <div class="flex justify-between text-meta text-[11px]">
+                            <span>输入 IP 二进制表示:</span>
+                            <span id="labelIpDec" class="text-main">192.168.1.100</span>
+                        </div>
+                        <div id="bitsContainerIp" class="flex gap-1.5 p-2 rounded-lg bg-input-bg border border-border/60">
+                            <!-- 动态 4 字节位方块 -->
+                        </div>
+                    </div>
+
+                    <!-- 掩码二进制行 -->
+                    <div class="space-y-1.5 min-w-[540px]">
+                        <div class="flex justify-between text-meta text-[11px]">
+                            <span>子网掩码二进制:</span>
+                            <span id="labelMaskDec" class="text-accent">255.255.255.0</span>
+                        </div>
+                        <div id="bitsContainerMask" class="flex gap-1.5 p-2 rounded-lg bg-input-bg border border-border/60">
+                            <!-- 动态 4 字节位方块 -->
+                        </div>
+                    </div>
+
+                    <!-- 网络地址二进制计算 (与操作) -->
+                    <div class="space-y-1.5 min-w-[540px]">
+                        <div class="flex justify-between text-meta text-[11px]">
+                            <span>网络地址 (IP AND MASK):</span>
+                            <span id="labelNetDec" class="text-cyan-400 font-bold">192.168.1.0</span>
+                        </div>
+                        <div id="bitsContainerNet" class="flex gap-1.5 p-2 rounded-lg bg-cyan-950/20 border border-cyan-500/30">
+                            <!-- 动态 4 字节位方块 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 颜色图例说明 -->
+                <p class="text-[11px] text-meta leading-relaxed">
+                    <i class="fa-solid fa-circle-info text-accent mr-1"></i>
+                    浅青色方块代表<b>网络位 (Prefix)</b>，在同一个子网中这部分数值保持绝对恒定；金色方块代表<b>主机位</b>，可在有效区间内分配给网卡或路由器接口。全 0 视作网络号，全 1 视作广播号。
+                </p>
+            </div>
+
+            <!-- 3. 图解数学与计算步骤推导 (新一代亮点功能) -->
+            <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-4">
+                <div class="flex items-center gap-2 border-b border-border/40 pb-4">
+                    <div class="w-2 h-4 bg-emerald-400 rounded-full"></div>
+                    <h2 class="text-base font-bold text-main">计算过程与算法分步推演 (Step-by-step Math Derivation)</h2>
+                </div>
+
+                <div id="stepByStepContainer" class="space-y-3 font-mono text-xs md:text-sm">
+                    <!-- 动态生成分步推导卡片 -->
+                </div>
+            </div>
+
+            <!-- 4. 详细规格与网段属性表 -->
+            <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-border/40 pb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-4 bg-purple-400 rounded-full"></div>
+                        <h2 class="text-base font-bold text-main">全量网络规格详情 (Full Specifications)</h2>
+                    </div>
+                    <span class="text-xs font-mono text-meta">RFC 1918 / IANA Compliant</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left font-mono text-xs md:text-sm">
+                        <tbody id="specsTableBody" class="divide-y divide-border/40">
+                            <!-- JS 动态注入所有属性行 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 5. 可变长子网划分 VLSM 工具模块 (高级功能) -->
+            <div class="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40 pb-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-2 h-4 bg-amber-400 rounded-full"></div>
+                            <h2 class="text-base font-bold text-main">VLSM 子网再划分推演器 (Subnetting / Sub-branches)</h2>
+                        </div>
+                        <p class="text-xs text-meta mt-1">将当前网络划分成若干个等长子网，清晰展示每个子网段范围与掩码。</p>
+                    </div>
+
+                    <div class="flex items-center gap-2 text-xs">
+                        <label for="subdividePrefixSelect" class="text-meta">划分至目标前缀:</label>
+                        <select id="subdividePrefixSelect" class="bg-input-bg border border-border rounded-lg px-2.5 py-1 text-main font-mono text-xs focus:border-accent outline-none">
+                            <!-- 动态填充大于当前掩码的前缀 -->
+                        </select>
+                    </div>
+                </div>
+
+                <div id="vlsmTableContainer" class="overflow-x-auto max-h-80 overflow-y-auto">
+                    <table class="w-full text-left font-mono text-xs">
+                        <thead class="bg-bg/60 sticky top-0 border-b border-border text-meta">
+                            <tr>
+                                <th class="p-2.5">子网序号</th>
+                                <th class="p-2.5">子网网络地址</th>
+                                <th class="p-2.5">可用地址范围</th>
+                                <th class="p-2.5">广播地址</th>
+                                <th class="p-2.5 text-right">可用主机数</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vlsmSubnetsTbody" class="divide-y divide-border/30">
+                            <!-- 动态子网行 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- 脚本引用 -->
+<script src="/assets/js/tools/subnet-calculator.js" defer></script>
