@@ -1,0 +1,244 @@
+<div id="pjax-content-root" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}"
+     data-page-description="{pageDescription}"
+     data-page-keywords="{pageKeywords}">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="/tools" class="hover:text-accent transition-colors">tools</a> / hash</div>
+
+    <section class="space-y-8" id="hashToolApp">
+        <!-- 头部导航与标题 -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">SECURITY & CRYPTO</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    现代哈希计算与本地文件校验器
+                </h1>
+                <p class="text-body text-xs md:text-sm">
+                    支持 MD5、SHA-1/256/384/512 与国密 SM3 算法。所有运算 100% 在您浏览器本地完成，文件与文本零上传，杜绝泄密。
+                </p>
+            </div>
+            <!-- 输入源切换：文本 vs 本地文件 -->
+            <div class="flex items-center gap-2">
+                <div class="grid grid-cols-2 p-1 rounded-xl bg-input-bg border border-border text-xs font-mono">
+                    <button type="button" id="btnHashSourceText" class="px-4 py-1.5 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold transition-all">文本输入</button>
+                    <button type="button" id="btnHashSourceFile" class="px-4 py-1.5 rounded-lg text-meta hover:text-main font-medium transition-all">本地文件拖拽</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 输入区卡片 -->
+        <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
+            <!-- 文本输入面板 -->
+            <div id="hashTextPanel" class="space-y-3">
+                <div class="flex items-center justify-between text-xs font-mono text-meta">
+                    <label for="hashTextInput" class="font-bold text-main">输入待计算文本 (Plain Text):</label>
+                    <div class="flex items-center gap-2">
+                        <span id="hashTextStats">0 字符 / 0 字节</span>
+                        <button type="button" id="btnClearHashText" class="hover:text-accent">清空</button>
+                    </div>
+                </div>
+                <textarea id="hashTextInput" rows="5" placeholder="在此输入需要计算哈希的明文或字符串..."
+                          class="w-full bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none leading-relaxed resize-y"></textarea>
+            </div>
+
+            <!-- 文件输入面板 (默认隐藏) -->
+            <div id="hashFilePanel" class="hidden space-y-3">
+                <div class="flex items-center justify-between text-xs font-mono text-meta">
+                    <span class="font-bold text-main">选择或拖拽本地文件进行校验 (文件仅在本地读取，不经过网络):</span>
+                    <button type="button" id="btnClearHashFile" class="hover:text-accent hidden">移除文件</button>
+                </div>
+                <div id="hashDropZone" class="border-2 border-dashed border-border hover:border-accent rounded-2xl p-8 text-center cursor-pointer transition-colors bg-input-bg/40">
+                    <input type="file" id="hashFileInput" class="hidden" />
+                    <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-accent/10 flex items-center justify-center text-accent text-xl">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <div class="text-sm font-bold text-main mb-1" id="hashDropZoneTitle">点击选择文件，或直接拖拽文件至此</div>
+                    <p class="text-xs text-meta" id="hashDropZoneDesc">支持任意格式文件 (ISO、安装包、固件、压缩包等)</p>
+                    <div id="hashFileMetaInfo" class="hidden mt-3 text-xs font-mono text-main bg-card p-3 rounded-xl border border-border max-w-md mx-auto text-left">
+                        <div class="truncate font-bold" id="hashMetaFileName">-</div>
+                        <div class="text-meta text-[11px] flex gap-3 mt-1">
+                            <span id="hashMetaFileSize">-</span>
+                            <span id="hashMetaFileType">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 控制选项行：HMAC 密钥 & 输出格式 -->
+            <div class="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-border/40 text-xs font-mono">
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" id="chkEnableHmac" class="accent-cyan-500 rounded" />
+                        <span class="font-medium text-main">启用 HMAC 模式 (带密钥散列)</span>
+                    </label>
+                    <div id="hmacKeyContainer" class="hidden items-center gap-2">
+                        <span class="text-meta">Key:</span>
+                        <input type="text" id="hmacKeyInput" placeholder="输入 HMAC 密钥字符串..."
+                               class="bg-input-bg border border-border rounded-lg px-2.5 py-1 text-xs text-main outline-none focus:border-accent w-48 md:w-64" />
+                    </div>
+                </div>
+
+                <!-- 输出大小写与格式 -->
+                <div class="flex items-center gap-2">
+                    <span class="text-meta">输出格式:</span>
+                    <div class="flex rounded-lg bg-input-bg border border-border p-0.5 text-[11px]">
+                        <button type="button" id="btnCaseLower" class="px-2.5 py-1 rounded bg-accent text-[var(--accent-foreground)] font-bold transition-all">小写 Hex</button>
+                        <button type="button" id="btnCaseUpper" class="px-2.5 py-1 rounded text-meta hover:text-main font-medium transition-all">大写 HEX</button>
+                        <button type="button" id="btnCaseBase64" class="px-2.5 py-1 rounded text-meta hover:text-main font-medium transition-all">Base64</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 校验码智能比对器 (Verify Checksum) -->
+        <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                <label for="hashVerifyInput" class="text-xs font-mono font-bold text-main flex items-center gap-2">
+                    <i class="fa-solid fa-clipboard-check text-accent"></i>
+                    <span>哈希比对校验器 (粘贴官方 Checksum 进行验证):</span>
+                </label>
+                <div id="hashVerifyResultBadge" class="hidden px-3 py-1 rounded-full text-xs font-mono font-bold flex items-center gap-1.5 self-start md:self-auto">
+                    <!-- 动态状态: 匹配成功 / 不匹配 -->
+                </div>
+            </div>
+            <input type="text" id="hashVerifyInput" placeholder="在此粘贴预期的 Hash 校验字符串（自动忽略大小写与空格）..."
+                   class="w-full bg-input-bg border border-border rounded-xl px-4 py-2.5 text-main font-mono text-xs md:text-sm focus:border-accent outline-none" />
+        </div>
+
+        <!-- 核心算法计算结果展示面板列表 -->
+        <div class="space-y-4" id="hashResultsList">
+            <!-- SHA-256 (推荐主流) -->
+            <div class="bg-card border-2 border-accent/40 rounded-2xl p-5 space-y-2 relative transition-all" id="card-sha256">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-main font-mono">SHA-256</span>
+                        <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">现代工业标准 (256-Bit)</span>
+                        <span class="verify-match-tag hidden px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">✓ 比对匹配</span>
+                    </div>
+                    <button type="button" class="btn-copy-hash text-xs font-mono text-accent hover:opacity-80 flex items-center gap-1" data-target="hash-sha256">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>复制</span>
+                    </button>
+                </div>
+                <div class="font-mono text-xs md:text-sm text-main bg-input-bg p-3 rounded-xl border border-border break-all select-all leading-relaxed" id="hash-sha256">
+                    -
+                </div>
+            </div>
+
+            <!-- 国密 SM3 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-2 relative transition-all" id="card-sm3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-main font-mono">国密 SM3</span>
+                        <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">中国商用密码 (GM/T 0004-2012)</span>
+                        <span class="verify-match-tag hidden px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">✓ 比对匹配</span>
+                    </div>
+                    <button type="button" class="btn-copy-hash text-xs font-mono text-accent hover:opacity-80 flex items-center gap-1" data-target="hash-sm3">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>复制</span>
+                    </button>
+                </div>
+                <div class="font-mono text-xs md:text-sm text-main bg-input-bg p-3 rounded-xl border border-border break-all select-all leading-relaxed" id="hash-sm3">
+                    -
+                </div>
+            </div>
+
+            <!-- MD5 (经典) -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-2 relative transition-all" id="card-md5">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-main font-mono">MD5</span>
+                        <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">128-Bit 经典校验</span>
+                        <span class="verify-match-tag hidden px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">✓ 比对匹配</span>
+                    </div>
+                    <button type="button" class="btn-copy-hash text-xs font-mono text-accent hover:opacity-80 flex items-center gap-1" data-target="hash-md5">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>复制</span>
+                    </button>
+                </div>
+                <div class="font-mono text-xs md:text-sm text-main bg-input-bg p-3 rounded-xl border border-border break-all select-all leading-relaxed" id="hash-md5">
+                    -
+                </div>
+            </div>
+
+            <!-- SHA-1 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-2 relative transition-all" id="card-sha1">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-main font-mono">SHA-1</span>
+                        <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">160-Bit (Git 早期常用)</span>
+                        <span class="verify-match-tag hidden px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">✓ 比对匹配</span>
+                    </div>
+                    <button type="button" class="btn-copy-hash text-xs font-mono text-accent hover:opacity-80 flex items-center gap-1" data-target="hash-sha1">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>复制</span>
+                    </button>
+                </div>
+                <div class="font-mono text-xs md:text-sm text-main bg-input-bg p-3 rounded-xl border border-border break-all select-all leading-relaxed" id="hash-sha1">
+                    -
+                </div>
+            </div>
+
+            <!-- SHA-512 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-2 relative transition-all" id="card-sha512">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-main font-mono">SHA-512</span>
+                        <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 border border-purple-500/20">512-Bit 超高强度</span>
+                        <span class="verify-match-tag hidden px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">✓ 比对匹配</span>
+                    </div>
+                    <button type="button" class="btn-copy-hash text-xs font-mono text-accent hover:opacity-80 flex items-center gap-1" data-target="hash-sha512">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>复制</span>
+                    </button>
+                </div>
+                <div class="font-mono text-xs md:text-sm text-main bg-input-bg p-3 rounded-xl border border-border break-all select-all leading-relaxed" id="hash-sha512">
+                    -
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部说明与安全知识卡片 -->
+        <div class="bg-card border border-border rounded-2xl p-6 space-y-4">
+            <h3 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                <i class="fa-solid fa-shield-virus text-accent"></i>
+                <span>密码学哈希安全与常见算法选用建议</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
+                    <div class="font-bold text-emerald-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>SHA-256 (首选推荐)</span>
+                    </div>
+                    <div class="text-meta text-[11px] leading-relaxed">
+                        目前全球公认安全、抗碰撞性优异的哈希标准，广泛应用于 TLS 证书、区块链、软件发布校验及数据完整性防护。
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
+                    <div class="font-bold text-cyan-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-certificate"></i>
+                        <span>国密 SM3 (合规标准)</span>
+                    </div>
+                    <div class="text-meta text-[11px] leading-relaxed">
+                        国家密码管理局发布的商用密码杂凑算法标准，安全性与 SHA-256 相当，适用于信创系统与等保测评项目。
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
+                    <div class="font-bold text-amber-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>MD5 与 SHA-1 (仅作校验)</span>
+                    </div>
+                    <div class="text-meta text-[11px] leading-relaxed">
+                        已被证实存在实际碰撞攻击漏洞，不推荐用于密码存储或数字签名，但常用于非安全敏感的文件传输完整性快速比对。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

@@ -1,0 +1,221 @@
+<div id="pjax-content-root" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}"
+     data-page-description="{pageDescription}"
+     data-page-keywords="{pageKeywords}">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="/tools" class="hover:text-accent transition-colors">tools</a> / json-diff</div>
+
+    <section class="space-y-8" id="jsonDiffToolApp">
+        <!-- 头部导航与标题 -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">DATA TOOLS</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    JSON 在线格式化与可视化差分对比 (Diff)
+                </h1>
+                <p class="text-body text-xs md:text-sm">
+                    支持 JSON 展开美化、紧凑压缩、单引号/尾随逗号智能修复、转义去转义，以及双栏结构化差异可视化比对（增删改精准高亮）。
+                </p>
+            </div>
+            <!-- 主模式切换：格式化清洗 vs 可视化 Diff -->
+            <div class="flex items-center gap-2">
+                <div class="grid grid-cols-2 p-1 rounded-xl bg-input-bg border border-border text-xs font-mono">
+                    <button type="button" id="btnJsonTabFormat" class="px-3.5 py-1.5 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold transition-all">格式化与清洗</button>
+                    <button type="button" id="btnJsonTabDiff" class="px-3.5 py-1.5 rounded-lg text-meta hover:text-main font-medium transition-all">可视化 Diff 对比</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 模式一：格式化、美化与清洗面板 -->
+        <div id="jsonFormatModeContainer" class="space-y-6">
+            <!-- 工具操作栏 -->
+            <div class="bg-card border border-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                    <!-- 缩进选项 -->
+                    <div class="flex items-center gap-1.5 bg-input-bg border border-border rounded-xl px-2.5 py-1">
+                        <span class="text-meta">缩进:</span>
+                        <select id="selJsonIndent" class="bg-transparent text-main font-bold outline-none cursor-pointer">
+                            <option value="2">2 空格</option>
+                            <option value="4">4 空格</option>
+                            <option value="tab">Tab 制表符</option>
+                        </select>
+                    </div>
+
+                    <button type="button" id="btnFormatJson" class="px-3.5 py-1.5 rounded-xl bg-accent text-[var(--accent-foreground)] font-bold hover:opacity-90 flex items-center gap-1.5 transition-all">
+                        <i class="fa-solid fa-code"></i>
+                        <span>格式化美化</span>
+                    </button>
+                    <button type="button" id="btnMinifyJson" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-medium hover:border-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-compress"></i>
+                        <span>压缩紧凑</span>
+                    </button>
+                    <button type="button" id="btnFixJson" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-medium hover:border-accent transition-colors flex items-center gap-1" title="自动修复单引号、尾随逗号及注释">
+                        <i class="fa-solid fa-wrench text-amber-500"></i>
+                        <span>智能容错修复</span>
+                    </button>
+                    <button type="button" id="btnEscapeJson" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-medium hover:border-accent transition-colors">
+                        转义字符串
+                    </button>
+                    <button type="button" id="btnUnescapeJson" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-medium hover:border-accent transition-colors">
+                        去除转义
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2 text-xs font-mono">
+                    <button type="button" id="btnLoadJsonDemo" class="text-accent hover:underline">载入示例</button>
+                    <span class="text-meta/40">•</span>
+                    <button type="button" id="btnClearJsonFormat" class="hover:text-accent text-meta">清空</button>
+                    <button type="button" id="btnCopyJsonFormat" class="px-3 py-1.5 rounded-xl bg-accent/10 border border-accent/20 text-accent font-semibold hover:bg-accent hover:text-[var(--accent-foreground)] transition-all flex items-center gap-1">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>复制结果</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- JSON Path 查询条 -->
+            <div class="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-2.5 text-xs font-mono">
+                <span class="text-accent font-bold shrink-0">
+                    <i class="fa-solid fa-magnifying-glass mr-1"></i>JSON 属性提取:
+                </span>
+                <input type="text" id="jsonPathQueryInput" placeholder="输入属性路径，例如 user.name 或 items[0].id (回车筛选)..."
+                       class="flex-1 bg-input-bg border border-border rounded-lg px-3 py-1.5 text-main font-mono text-xs outline-none focus:border-accent" />
+                <button type="button" id="btnExecJsonPath" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border hover:border-accent text-main font-medium">提取</button>
+                <button type="button" id="btnResetJsonPath" class="text-meta hover:text-main hidden">还原</button>
+            </div>
+
+            <!-- 错误提示框 -->
+            <div id="jsonFormatErrorAlert" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-mono flex items-center gap-2">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span id="jsonFormatErrorMessage">JSON 语法错误</span>
+            </div>
+
+            <!-- 编辑器与统计 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                <div class="flex items-center justify-between text-xs font-mono text-meta">
+                    <span class="font-bold text-main">JSON 内容编辑与展示区:</span>
+                    <div class="flex items-center gap-3">
+                        <span id="jsonFormatStats">0 字符 / 0 行</span>
+                        <span id="jsonValidBadge" class="hidden px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">有效 JSON ✓</span>
+                    </div>
+                </div>
+                <textarea id="jsonFormatTextarea" rows="18" placeholder="在此粘贴或输入需要格式化、压缩或清洗的 JSON 数据..."
+                          class="w-full bg-input-bg border border-border rounded-xl p-4 text-main font-mono text-xs md:text-sm focus:border-accent outline-none leading-relaxed resize-y"></textarea>
+            </div>
+        </div>
+
+        <!-- 模式二：双栏可视化 Diff 对比面板 (默认隐藏) -->
+        <div id="jsonDiffModeContainer" class="hidden space-y-6">
+            <!-- Diff 操作控制栏 -->
+            <div class="bg-card border border-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                    <button type="button" id="btnRunDiff" class="px-4 py-2 rounded-xl bg-accent text-[var(--accent-foreground)] font-bold hover:opacity-90 flex items-center gap-2 transition-all">
+                        <i class="fa-solid fa-code-compare"></i>
+                        <span>对比差异 (Compare Diff)</span>
+                    </button>
+                    <button type="button" id="btnSwapDiff" class="px-3 py-2 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-medium hover:border-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                        <span>交换左右</span>
+                    </button>
+                    <button type="button" id="btnLoadDiffDemo" class="px-3 py-2 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-medium hover:border-accent transition-colors">
+                        载入对比示例
+                    </button>
+                    <button type="button" id="btnClearDiff" class="px-3 py-2 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-medium hover:border-accent transition-colors">
+                        清空两侧
+                    </button>
+                </div>
+
+                <!-- 差异统计徽章 -->
+                <div class="flex items-center gap-2 text-xs font-mono" id="diffStatsContainer">
+                    <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold" id="diffStatAdded">+0 新增</span>
+                    <span class="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 font-bold" id="diffStatRemoved">-0 删除</span>
+                    <span class="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold" id="diffStatModified">~0 修改</span>
+                </div>
+            </div>
+
+            <!-- 双栏输入区 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 原 JSON (Left) -->
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3 flex flex-col">
+                    <div class="flex items-center justify-between text-xs font-mono text-meta">
+                        <label for="diffLeftInput" class="font-bold text-main flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
+                            <span>基准 / 原始 JSON (Original)</span>
+                        </label>
+                        <button type="button" id="btnFormatLeft" class="text-accent hover:underline">格式化</button>
+                    </div>
+                    <textarea id="diffLeftInput" rows="12" placeholder="在此粘贴基准原始 JSON..."
+                              class="w-full flex-1 bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none leading-relaxed resize-y"></textarea>
+                </div>
+
+                <!-- 修改后 JSON (Right) -->
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3 flex flex-col">
+                    <div class="flex items-center justify-between text-xs font-mono text-meta">
+                        <label for="diffRightInput" class="font-bold text-main flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
+                            <span>修改 / 目标 JSON (Modified)</span>
+                        </label>
+                        <button type="button" id="btnFormatRight" class="text-accent hover:underline">格式化</button>
+                    </div>
+                    <textarea id="diffRightInput" rows="12" placeholder="在此粘贴修改后的 JSON..."
+                              class="w-full flex-1 bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none leading-relaxed resize-y"></textarea>
+                </div>
+            </div>
+
+            <!-- 可视化差分对比结果展示 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                <div class="flex items-center justify-between text-xs font-mono border-b border-border/60 pb-3">
+                    <h3 class="font-bold text-main flex items-center gap-2">
+                        <i class="fa-solid fa-bars-staggered text-accent"></i>
+                        <span>差异对比分析视图 (Diff Output)</span>
+                    </h3>
+                    <div class="flex items-center gap-4 text-meta text-[11px]">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> 绿色为新增</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> 红色为移除</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> 黄色为修改</span>
+                    </div>
+                </div>
+
+                <!-- 差分展示容器 -->
+                <div id="diffVisualOutput" class="space-y-1 font-mono text-xs md:text-sm p-3 rounded-xl bg-input-bg border border-border max-h-[32rem] overflow-y-auto leading-relaxed">
+                    <div class="text-center py-10 text-meta text-xs">
+                        点击上方「对比差异 (Compare Diff)」即可生成双边结构化比对视图
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部说明卡片 -->
+        <div class="bg-card border border-border rounded-2xl p-6 space-y-4">
+            <h3 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                <i class="fa-solid fa-circle-question text-accent"></i>
+                <span>JSON 格式化与容错修复小贴士</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">智能容错修复</div>
+                    <div class="text-meta text-[11px] leading-relaxed">
+                        当 JSON 来自 JS 对象字面量、日志或配置文件时，常伴随单引号、键名未加引号或尾随逗号 (trailing commas)，点击「智能容错修复」即可自动转为标准 RFC 8259 JSON。
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">快速属性提取</div>
+                    <div class="text-meta text-[11px] leading-relaxed">
+                        支持以点语法快速提取大型 JSON 嵌套数据，例如 `data.users[0].email`，提取后可直接进行独立查看与复制。
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">结构化对比模式</div>
+                    <div class="text-meta text-[11px] leading-relaxed">
+                        对比引擎在比较前自动进行缩进与键名规范化，精准识别对象属性与数组项的变动，排查接口返回差异与配置文件变更极其高效。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

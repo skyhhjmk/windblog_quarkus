@@ -172,6 +172,10 @@ public class FeedService {
                 new SitemapUrlView(normalizedBaseUrl + "/tools/timestamp", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/tools/log-formatter", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/tools/base-encoder", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/cron", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/regex", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/hash", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/json-diff", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/category", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/tag", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/link", "")

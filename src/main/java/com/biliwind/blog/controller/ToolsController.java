@@ -61,6 +61,38 @@ public class ToolsController {
     @Location("tools/base-encoder.content.html")
     Template baseEncoderContentTemplate;
 
+    @Inject
+    @Location("tools/cron.html")
+    Template cronTemplate;
+
+    @Inject
+    @Location("tools/cron.content.html")
+    Template cronContentTemplate;
+
+    @Inject
+    @Location("tools/regex.html")
+    Template regexTemplate;
+
+    @Inject
+    @Location("tools/regex.content.html")
+    Template regexContentTemplate;
+
+    @Inject
+    @Location("tools/hash.html")
+    Template hashTemplate;
+
+    @Inject
+    @Location("tools/hash.content.html")
+    Template hashContentTemplate;
+
+    @Inject
+    @Location("tools/json-diff.html")
+    Template jsonDiffTemplate;
+
+    @Inject
+    @Location("tools/json-diff.content.html")
+    Template jsonDiffContentTemplate;
+
     @RegisterForReflection
     public static record ToolItem(
             String id,
@@ -108,6 +140,42 @@ public class ToolsController {
                     "/tools/base-encoder",
                     "常用转换",
                     "amber"
+            ),
+            new ToolItem(
+                    "cron-generator",
+                    "Cron 表达式生成与执行模拟器",
+                    "Linux Crontab 与 Quartz/Spring 6段式表达式可视化生成、人类自然语言释义、未来多次触发时间推算与语言模板速查。",
+                    "fa-solid fa-calendar-check",
+                    "/tools/cron",
+                    "开发运维",
+                    "blue"
+            ),
+            new ToolItem(
+                    "regex-tester",
+                    "正则表达式在线调试与速查",
+                    "即时 RegExp 正则匹配、多色块高亮与捕获组拆解、字符串替换实时预览，内置常用经典正则速查库一键套用。",
+                    "fa-solid fa-code-branch",
+                    "/tools/regex",
+                    "开发运维",
+                    "rose"
+            ),
+            new ToolItem(
+                    "hash-calculator",
+                    "现代哈希计算与文件本地校验",
+                    "支持 MD5、SHA-1/256/512 及国密 SM3 算法，纯本地浏览器沙箱极速计算、支持文本与大文件拖拽校验及 HMAC 密钥模式。",
+                    "fa-solid fa-shield-halved",
+                    "/tools/hash",
+                    "安全加密",
+                    "teal"
+            ),
+            new ToolItem(
+                    "json-diff",
+                    "JSON 格式化与可视化对比 (Diff)",
+                    "JSON 语法美化、紧凑压缩、容错修复、转义清洗，以及双栏结构化差异可视化比对（增、删、改精准定位）。",
+                    "fa-solid fa-code-compare",
+                    "/tools/json-diff",
+                    "数据处理",
+                    "indigo"
             )
     );
 
@@ -118,8 +186,8 @@ public class ToolsController {
         return template
                 .data("tools", ALL_TOOLS)
                 .data("pageTitle", "实用在线工具箱 - 开发者与网工高效工具集合")
-                .data("pageDescription", "WindBlog 常用在线工具箱，提供新一代子网掩码计算器、Unix 时间戳转换、日志格式化清洗、Base64/Base 变体全家桶等高交互、高可读性的在线实用工具。")
-                .data("pageKeywords", "在线工具,子网掩码计算器,VLSM划分,时间戳转换,日志格式化,Base64编码,Base58,开发工具");
+                .data("pageDescription", "WindBlog 实用在线工具箱，提供智能子网掩码、Unix 时间戳、日志格式化清洗、Base 编码全家桶、Cron 表达式模拟、正则表达式调试、MD5/SHA/SM3 哈希校验、JSON 可视化对比等纯前端隐私安全实用工具。")
+                .data("pageKeywords", "在线工具,子网掩码计算器,时间戳转换,日志格式化,Base64,Cron表达式,正则测试,哈希计算,SM3,JSON对比");
     }
 
     @GET
@@ -164,5 +232,49 @@ public class ToolsController {
                 .data("pageTitle", "Base64 / Base 编码全家桶在线转换 - Base16/Base32/Base58/Base64")
                 .data("pageDescription", "全能 Base 编码全家桶转换器。支持标准 Base64、URL 安全 Base64、Base16 (Hex)、Base32、Base58 (区块链/比特币变体)，原生支持 UTF-8 中文与二进制安全处理。")
                 .data("pageKeywords", "Base64编码,Base64解码,URL安全Base64,Base16,Hex,Base32,Base58,字符编码");
+    }
+
+    @GET
+    @Path("/cron")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance cronGenerator(@Context HttpHeaders headers) {
+        Template template = PjaxHelper.isPjaxRequest(headers) ? cronContentTemplate : cronTemplate;
+        return template
+                .data("pageTitle", "Cron 表达式在线生成与执行时间模拟器 - Crontab/Quartz")
+                .data("pageDescription", "全功能 Cron 表达式在线生成与推演模拟器。支持 Linux 5段式与 Quartz 6段式，提供直观分段选择、人类自然语言翻译、未来多次执行时间推算及编程语言代码模板。")
+                .data("pageKeywords", "Cron表达式,Crontab生成器,Quartz Cron,定时任务,执行时间模拟,Cron在线解析");
+    }
+
+    @GET
+    @Path("/regex")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance regexTester(@Context HttpHeaders headers) {
+        Template template = PjaxHelper.isPjaxRequest(headers) ? regexContentTemplate : regexTemplate;
+        return template
+                .data("pageTitle", "正则表达式在线测试与速查工具 - RegExp 调试与替换")
+                .data("pageDescription", "现代正则表达式在线调试与测试工具。支持多修饰符切换、即时多色块高亮、捕获组拆解、字符串替换预览及手机号/邮箱/IP等常用经典正则一键套用。")
+                .data("pageKeywords", "正则表达式,Regex测试,RegExp调试,正则高亮,正则捕获组,常用正则表达式");
+    }
+
+    @GET
+    @Path("/hash")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance hashCalculator(@Context HttpHeaders headers) {
+        Template template = PjaxHelper.isPjaxRequest(headers) ? hashContentTemplate : hashTemplate;
+        return template
+                .data("pageTitle", "现代哈希散列计算与本地文件校验器 - MD5/SHA256/SM3/HMAC")
+                .data("pageDescription", "纯本地隐私安全哈希计算器。支持 MD5、SHA-1、SHA-256、SHA-512 与国密 SM3 算法，原生硬件加速，支持纯文本与本地大文件拖拽校验、HMAC 密钥及校验码智能比对。")
+                .data("pageKeywords", "哈希计算,MD5计算,SHA256,SHA512,国密SM3,文件校验,Checksum,HMAC");
+    }
+
+    @GET
+    @Path("/json-diff")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance jsonDiff(@Context HttpHeaders headers) {
+        Template template = PjaxHelper.isPjaxRequest(headers) ? jsonDiffContentTemplate : jsonDiffTemplate;
+        return template
+                .data("pageTitle", "JSON 在线格式化与可视化差分对比 (Diff) - 美化/清洗/修复/对比")
+                .data("pageDescription", "全能 JSON 在线工具箱。支持 JSON 语法美化、紧凑压缩、单引号/尾随逗号容错修复、转义去转义，以及双栏结构化差异可视化比对（增、删、改精准高亮）。")
+                .data("pageKeywords", "JSON格式化,JSON美化,JSON Diff,JSON对比,JSON压缩,JSON修复,JSONPath");
     }
 }

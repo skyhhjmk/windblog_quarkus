@@ -1,0 +1,344 @@
+<div id="pjax-content-root" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}"
+     data-page-description="{pageDescription}"
+     data-page-keywords="{pageKeywords}">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="/tools" class="hover:text-accent transition-colors">tools</a> / cron</div>
+
+    <section class="space-y-8" id="cronToolApp">
+        <!-- 头部导航与标题 -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">SCHEDULING TOOLS</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    Cron 表达式生成与执行时间模拟器
+                </h1>
+                <p class="text-body text-xs md:text-sm">
+                    支持 Linux Crontab (5段) 与 Quartz / Spring (6段) 定时任务表达式可视化配置、人类自然语言释义、未来多次触发时间推算与多语言定时模板速查。
+                </p>
+            </div>
+            <!-- 模式切换：5段 vs 6段 -->
+            <div class="flex items-center gap-2">
+                <div class="grid grid-cols-2 p-1 rounded-xl bg-input-bg border border-border text-xs font-mono">
+                    <button type="button" id="btnCronMode5" class="px-3.5 py-1.5 rounded-lg text-meta hover:text-main font-medium transition-all">Linux 5段式</button>
+                    <button type="button" id="btnCronMode6" class="px-3.5 py-1.5 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold transition-all">Quartz 6段式</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 顶部主展示卡片：当前表达式与即时中文自然语言翻译 -->
+        <div class="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="space-y-1.5 flex-1 min-w-0">
+                    <div class="flex items-center gap-2 text-xs font-mono text-meta">
+                        <i class="fa-solid fa-terminal text-accent"></i>
+                        <span>当前 CRON 表达式:</span>
+                        <span id="cronFormatBadge" class="px-2 py-0.5 rounded text-[11px] bg-accent/10 text-accent border border-accent/20">6 字段 (秒 分 时 日 月 周)</span>
+                        <span id="cronStatusBadge" class="px-2 py-0.5 rounded text-[11px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">格式有效 ✓</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text" id="cronExpressionInput" value="0 30 9 ? * MON-FRI" spellcheck="false"
+                               class="w-full bg-input-bg border-2 border-border focus:border-accent text-main font-mono text-xl md:text-2xl font-bold px-4 py-3 rounded-xl tracking-wider outline-none transition-all" />
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 self-end md:self-center">
+                    <button type="button" id="btnCopyCron" class="px-4 py-2.5 rounded-xl bg-accent text-[var(--accent-foreground)] font-semibold text-xs md:text-sm flex items-center gap-2 hover:opacity-95 transition-all shadow-sm">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>复制表达式</span>
+                    </button>
+                    <button type="button" id="btnResetCron" class="px-3 py-2.5 rounded-xl bg-input-bg border border-border text-meta hover:text-main font-mono text-xs transition-colors" title="恢复默认">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 自然语言解析说明横幅 -->
+            <div class="p-4 rounded-xl bg-accent/10 border border-accent/20 flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center text-accent text-sm shrink-0 mt-0.5">
+                    <i class="fa-regular fa-lightbulb"></i>
+                </div>
+                <div class="space-y-0.5 min-w-0">
+                    <div class="text-[11px] font-mono text-accent font-semibold uppercase tracking-wider">自然语言释义 (Human Readable)</div>
+                    <div id="cronHumanDesc" class="text-sm md:text-base font-bold text-main">
+                        在每周一至周五的上午 09:30:00 触发执行
+                    </div>
+                </div>
+            </div>
+
+            <!-- 常用快捷预设 (Quick Presets) -->
+            <div class="space-y-2 pt-1 border-t border-border/40">
+                <div class="text-xs font-mono text-meta font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-bolt text-amber-500"></i>
+                    <span>高频常用预设 (点击即用):</span>
+                </div>
+                <div class="flex flex-wrap gap-2 text-xs font-mono" id="cronPresetsContainer">
+                    <!-- JS 自动注入或静态预设 -->
+                    <button type="button" data-cron="0 * * * * ?" data-cron5="* * * * *" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">每分钟 (* * * * *)</button>
+                    <button type="button" data-cron="0 */5 * * * ?" data-cron5="*/5 * * * *" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">每 5 分钟 (*/5)</button>
+                    <button type="button" data-cron="0 */15 * * * ?" data-cron5="*/15 * * * *" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">每 15 分钟 (*/15)</button>
+                    <button type="button" data-cron="0 0 * * * ?" data-cron5="0 * * * *" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">每小时整点 (0 * * * *)</button>
+                    <button type="button" data-cron="0 0 0 * * ?" data-cron5="0 0 * * *" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">每天凌晨 00:00</button>
+                    <button type="button" data-cron="0 30 9 ? * MON-FRI" data-cron5="30 9 * * 1-5" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">工作日上午 09:30</button>
+                    <button type="button" data-cron="0 0 0 ? * SUN" data-cron5="0 0 * * 0" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">每周日午夜 00:00</button>
+                    <button type="button" data-cron="0 0 1 1 * ?" data-cron5="0 1 1 * *" class="cron-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">每月 1 号凌晨 01:00</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主配置面板与未来执行时间双栏 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- 左侧：可视化字段生成器 (8 cols) -->
+            <div class="lg:col-span-7 bg-card border border-border rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between border-b border-border/60 pb-3">
+                    <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-accent"></i>
+                        <span>分段参数可视化配置</span>
+                    </h2>
+                    <span class="text-xs text-meta">切换下方标签页微调各字段</span>
+                </div>
+
+                <!-- 字段 Tab 切换 -->
+                <div class="flex flex-wrap gap-1 p-1 rounded-xl bg-input-bg border border-border text-xs font-mono font-medium" id="cronFieldTabs">
+                    <button type="button" data-tab="seconds" id="tabSecondsBtn" class="cron-tab-btn flex-1 py-1.5 px-2 rounded-lg text-meta hover:text-main text-center transition-all">秒 (Sec)</button>
+                    <button type="button" data-tab="minutes" class="cron-tab-btn flex-1 py-1.5 px-2 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold text-center transition-all">分 (Min)</button>
+                    <button type="button" data-tab="hours" class="cron-tab-btn flex-1 py-1.5 px-2 rounded-lg text-meta hover:text-main text-center transition-all">时 (Hour)</button>
+                    <button type="button" data-tab="days" class="cron-tab-btn flex-1 py-1.5 px-2 rounded-lg text-meta hover:text-main text-center transition-all">日 (Day)</button>
+                    <button type="button" data-tab="months" class="cron-tab-btn flex-1 py-1.5 px-2 rounded-lg text-meta hover:text-main text-center transition-all">月 (Month)</button>
+                    <button type="button" data-tab="week" class="cron-tab-btn flex-1 py-1.5 px-2 rounded-lg text-meta hover:text-main text-center transition-all">周 (Week)</button>
+                </div>
+
+                <!-- 各字段配置内容容器 -->
+                <div id="cronFieldPanels" class="space-y-4 pt-2">
+                    <!-- 秒配置 (仅6段式) -->
+                    <div class="cron-panel hidden space-y-3" id="panel-seconds">
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-sec-mode" value="every" checked class="accent-cyan-500" />
+                            <span>每秒触发 (*)</span>
+                        </label>
+                        <div class="flex items-center gap-2 text-xs font-mono text-main">
+                            <input type="radio" name="cron-sec-mode" value="range" class="accent-cyan-500" />
+                            <span>在指定周期范围：从第</span>
+                            <input type="number" id="secRangeStart" min="0" max="59" value="1" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>秒到第</span>
+                            <input type="number" id="secRangeEnd" min="0" max="59" value="10" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>秒</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs font-mono text-main">
+                            <input type="radio" name="cron-sec-mode" value="step" class="accent-cyan-500" />
+                            <span>从第</span>
+                            <input type="number" id="secStepStart" min="0" max="59" value="0" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>秒开始，每隔</span>
+                            <input type="number" id="secStepInterval" min="1" max="59" value="5" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>秒执行一次</span>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                                <input type="radio" name="cron-sec-mode" value="specific" class="accent-cyan-500" />
+                                <span>指定具体秒数 (多选):</span>
+                            </label>
+                            <div class="grid grid-cols-6 sm:grid-cols-10 gap-1.5 p-2 rounded-xl bg-input-bg/60 border border-border/60 max-h-36 overflow-y-auto" id="secSpecificList">
+                                <!-- 0-59 checkboxes -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 分钟配置 -->
+                    <div class="cron-panel space-y-3" id="panel-minutes">
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-min-mode" value="every" class="accent-cyan-500" />
+                            <span>每分钟触发 (*)</span>
+                        </label>
+                        <div class="flex items-center gap-2 text-xs font-mono text-main">
+                            <input type="radio" name="cron-min-mode" value="step" checked class="accent-cyan-500" />
+                            <span>从第</span>
+                            <input type="number" id="minStepStart" min="0" max="59" value="0" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>分开始，每隔</span>
+                            <input type="number" id="minStepInterval" min="1" max="59" value="30" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>分钟执行一次</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs font-mono text-main">
+                            <input type="radio" name="cron-min-mode" value="range" class="accent-cyan-500" />
+                            <span>在周期范围：从第</span>
+                            <input type="number" id="minRangeStart" min="0" max="59" value="1" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>分到第</span>
+                            <input type="number" id="minRangeEnd" min="0" max="59" value="20" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>分</span>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                                <input type="radio" name="cron-min-mode" value="specific" class="accent-cyan-500" />
+                                <span>指定具体分钟数 (多选):</span>
+                            </label>
+                            <div class="grid grid-cols-6 sm:grid-cols-10 gap-1.5 p-2 rounded-xl bg-input-bg/60 border border-border/60 max-h-36 overflow-y-auto" id="minSpecificList">
+                                <!-- 0-59 checkboxes -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 小时配置 -->
+                    <div class="cron-panel hidden space-y-3" id="panel-hours">
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-hour-mode" value="every" class="accent-cyan-500" />
+                            <span>每小时触发 (*)</span>
+                        </label>
+                        <div class="flex items-center gap-2 text-xs font-mono text-main">
+                            <input type="radio" name="cron-hour-mode" value="step" class="accent-cyan-500" />
+                            <span>从第</span>
+                            <input type="number" id="hourStepStart" min="0" max="23" value="0" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>点开始，每隔</span>
+                            <input type="number" id="hourStepInterval" min="1" max="23" value="2" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>小时执行一次</span>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                                <input type="radio" name="cron-hour-mode" value="specific" checked class="accent-cyan-500" />
+                                <span>指定具体小时 (0-23):</span>
+                            </label>
+                            <div class="grid grid-cols-6 sm:grid-cols-8 gap-1.5 p-2 rounded-xl bg-input-bg/60 border border-border/60 max-h-36 overflow-y-auto" id="hourSpecificList">
+                                <!-- 0-23 checkboxes -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 日期 (Day of Month) 配置 -->
+                    <div class="cron-panel hidden space-y-3" id="panel-days">
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-day-mode" value="every" class="accent-cyan-500" />
+                            <span>每天 (*)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-day-mode" value="unspecified" checked class="accent-cyan-500" />
+                            <span>不指定 (?) <span class="text-meta text-[11px] font-normal">（与周冲突时常用）</span></span>
+                        </label>
+                        <div class="flex items-center gap-2 text-xs font-mono text-main">
+                            <input type="radio" name="cron-day-mode" value="step" class="accent-cyan-500" />
+                            <span>从第</span>
+                            <input type="number" id="dayStepStart" min="1" max="31" value="1" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>日开始，每隔</span>
+                            <input type="number" id="dayStepInterval" min="1" max="31" value="1" class="w-16 px-2 py-1 bg-input-bg border border-border rounded text-center outline-none focus:border-accent" />
+                            <span>天执行一次</span>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                                <input type="radio" name="cron-day-mode" value="specific" class="accent-cyan-500" />
+                                <span>指定具体日期 (1-31):</span>
+                            </label>
+                            <div class="grid grid-cols-6 sm:grid-cols-8 gap-1.5 p-2 rounded-xl bg-input-bg/60 border border-border/60 max-h-36 overflow-y-auto" id="daySpecificList">
+                                <!-- 1-31 checkboxes -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 月份配置 -->
+                    <div class="cron-panel hidden space-y-3" id="panel-months">
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-month-mode" value="every" checked class="accent-cyan-500" />
+                            <span>每月 (*)</span>
+                        </label>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                                <input type="radio" name="cron-month-mode" value="specific" class="accent-cyan-500" />
+                                <span>指定具体月份 (1-12):</span>
+                            </label>
+                            <div class="grid grid-cols-4 sm:grid-cols-6 gap-1.5 p-2 rounded-xl bg-input-bg/60 border border-border/60" id="monthSpecificList">
+                                <!-- 1-12 checkboxes -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 星期 (Day of Week) 配置 -->
+                    <div class="cron-panel hidden space-y-3" id="panel-week">
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-week-mode" value="every" class="accent-cyan-500" />
+                            <span>每周任意天 (*)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                            <input type="radio" name="cron-week-mode" value="unspecified" class="accent-cyan-500" />
+                            <span>不指定 (?) <span class="text-meta text-[11px] font-normal">（与日期冲突时常用）</span></span>
+                        </label>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                                <input type="radio" name="cron-week-mode" value="specific" checked class="accent-cyan-500" />
+                                <span>指定星期几 (周一至周日):</span>
+                            </label>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 rounded-xl bg-input-bg/60 border border-border/60" id="weekSpecificList">
+                                <!-- SUN-SAT checkboxes -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：未来执行时间推算模拟器 (5 cols) -->
+            <div class="lg:col-span-5 bg-card border border-border rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between border-b border-border/60 pb-3">
+                    <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                        <i class="fa-regular fa-clock text-accent"></i>
+                        <span>未来执行时间模拟 (Next Runs)</span>
+                    </h2>
+                    <span class="text-[11px] font-mono text-meta">前 8 次推算</span>
+                </div>
+
+                <div class="text-xs text-body leading-relaxed">
+                    依据当前系统时区 (<span id="userTimezoneDisplay" class="font-mono font-semibold text-main">Asia/Shanghai</span>) 计算接下来的触发时刻：
+                </div>
+
+                <!-- 未来时间列表 -->
+                <div class="space-y-2" id="cronNextRunsList">
+                    <!-- 动态生成下次触发时间项 -->
+                </div>
+
+                <!-- 编程语言代码配置速查 -->
+                <div class="pt-3 border-t border-border/40 space-y-2">
+                    <div class="flex items-center justify-between text-xs font-mono">
+                        <span class="text-meta font-medium">常用调度代码集成模板:</span>
+                        <select id="selCodeSnippetLang" class="bg-input-bg border border-border rounded px-2 py-1 text-[11px] outline-none">
+                            <option value="spring">Spring @Scheduled (Java)</option>
+                            <option value="crontab">Linux Crontab</option>
+                            <option value="node">Node.js (node-cron)</option>
+                            <option value="python">Python (APScheduler)</option>
+                        </select>
+                    </div>
+                    <div class="relative">
+                        <pre id="cronCodeSnippetPre" class="p-3 rounded-xl bg-input-bg border border-border font-mono text-[11px] text-main overflow-x-auto leading-relaxed"></pre>
+                        <button type="button" id="btnCopySnippet" class="absolute top-2 right-2 px-2 py-1 rounded bg-card border border-border hover:border-accent text-[10px] font-mono text-meta hover:text-main">
+                            复制
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部：Cron 语法与各字段取值说明卡片 -->
+        <div class="bg-card border border-border rounded-2xl p-6 space-y-4">
+            <h3 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                <i class="fa-solid fa-book-open text-accent"></i>
+                <span>Cron 表达式符号与结构速查指南</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">* (星号)</div>
+                    <div class="text-meta text-[11px]">匹配该字段的所有可能值。例如在分钟字段表示每分钟。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">? (问号)</div>
+                    <div class="text-meta text-[11px]">仅在「日」与「周」字段使用，表示不指定特定值，避免冲突。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">/ (斜杠 - 步长)</div>
+                    <div class="text-meta text-[11px]">从起始值开始每隔指定间隔触发。例如 */15 或 0/15 表示每隔 15。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">- (连字符 - 范围)</div>
+                    <div class="text-meta text-[11px]">指定闭区间范围。例如 9-17 表示 9点到 17点整的每个小时。</div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

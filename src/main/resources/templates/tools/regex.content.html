@@ -1,0 +1,226 @@
+<div id="pjax-content-root" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}"
+     data-page-description="{pageDescription}"
+     data-page-keywords="{pageKeywords}">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="/tools" class="hover:text-accent transition-colors">tools</a> / regex</div>
+
+    <section class="space-y-8" id="regexToolApp">
+        <!-- 头部导航与标题 -->
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">DEVELOPER TOOLS</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    正则表达式在线测试与速查工具
+                </h1>
+                <p class="text-body text-xs md:text-sm">
+                    原生 JavaScript RegExp 引擎，实时多色块高亮匹配、捕获组分拆、字符串替换实时预览，内置常用经典正则库一键套用。
+                </p>
+            </div>
+            <!-- 统计与状态 -->
+            <div class="flex items-center gap-3">
+                <div id="regexMatchStats" class="px-3.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="regexMatchCountText">0 处匹配</span>
+                    <span class="text-meta/40">•</span>
+                    <span id="regexDurationText" class="text-meta">0 ms</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 正则输入与修饰符控制台 -->
+        <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <label for="regexPatternInput" class="text-xs font-mono font-bold text-main flex items-center gap-2">
+                    <i class="fa-solid fa-code text-accent"></i>
+                    <span>正则表达式 (Pattern):</span>
+                </label>
+                <!-- Flags 修饰符复选框组 -->
+                <div class="flex flex-wrap items-center gap-2 text-xs font-mono" id="regexFlagsGroup">
+                    <label class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-input-bg border border-border cursor-pointer hover:border-accent transition-colors">
+                        <input type="checkbox" id="flag-g" value="g" checked class="accent-cyan-500 rounded" />
+                        <span class="font-bold text-main">g</span>
+                        <span class="text-meta text-[11px]">(全局)</span>
+                    </label>
+                    <label class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-input-bg border border-border cursor-pointer hover:border-accent transition-colors">
+                        <input type="checkbox" id="flag-i" value="i" checked class="accent-cyan-500 rounded" />
+                        <span class="font-bold text-main">i</span>
+                        <span class="text-meta text-[11px]">(忽略大小写)</span>
+                    </label>
+                    <label class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-input-bg border border-border cursor-pointer hover:border-accent transition-colors">
+                        <input type="checkbox" id="flag-m" value="m" class="accent-cyan-500 rounded" />
+                        <span class="font-bold text-main">m</span>
+                        <span class="text-meta text-[11px]">(多行)</span>
+                    </label>
+                    <label class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-input-bg border border-border cursor-pointer hover:border-accent transition-colors">
+                        <input type="checkbox" id="flag-s" value="s" class="accent-cyan-500 rounded" />
+                        <span class="font-bold text-main">s</span>
+                        <span class="text-meta text-[11px]">(单行dotAll)</span>
+                    </label>
+                    <label class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-input-bg border border-border cursor-pointer hover:border-accent transition-colors">
+                        <input type="checkbox" id="flag-u" value="u" class="accent-cyan-500 rounded" />
+                        <span class="font-bold text-main">u</span>
+                        <span class="text-meta text-[11px]">(Unicode)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 正则输入条 -->
+            <div class="flex items-center bg-input-bg border-2 border-border focus-within:border-accent rounded-xl px-3 py-2 transition-all">
+                <span class="text-xl font-mono text-meta/60 select-none mr-2">/</span>
+                <input type="text" id="regexPatternInput" value="(?:\+?86)?1[3-9]\d{9}" spellcheck="false"
+                       placeholder="在此输入正则表达式，例如 (?:\+?86)?1[3-9]\d{9}"
+                       class="flex-1 bg-transparent text-main font-mono text-base md:text-lg font-bold outline-none tracking-wide" />
+                <span class="text-xl font-mono text-meta/60 select-none mx-2">/</span>
+                <span id="activeFlagsDisplay" class="font-mono text-accent text-sm font-bold min-w-[2.5rem]">gi</span>
+            </div>
+
+            <!-- 语法错误提示框 -->
+            <div id="regexErrorAlert" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-mono flex items-center gap-2">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span id="regexErrorMessage">正则表达式语法有误</span>
+            </div>
+
+            <!-- 快捷预设库横幅 -->
+            <div class="space-y-2 pt-2 border-t border-border/40">
+                <div class="text-xs font-mono text-meta flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles text-accent"></i>
+                    <span>常用正则表达式速查库 (点击直接套用并填入测试文本):</span>
+                </div>
+                <div class="flex flex-wrap gap-2 text-xs font-mono" id="regexPresetsContainer">
+                    <button type="button" data-key="phone" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">中国大陆手机号</button>
+                    <button type="button" data-key="email" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">电子邮箱 (Email)</button>
+                    <button type="button" data-key="ipv4" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">IPv4 地址</button>
+                    <button type="button" data-key="url" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">HTTP(S) 网址</button>
+                    <button type="button" data-key="idcard" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">身份证号 (18位)</button>
+                    <button type="button" data-key="chinese" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">中文字符</button>
+                    <button type="button" data-key="date" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">日期 (YYYY-MM-DD)</button>
+                    <button type="button" data-key="color" class="regex-preset-btn px-2.5 py-1 rounded-lg bg-input-bg border border-border hover:border-accent hover:text-accent transition-colors">十六进制颜色 (#HEX)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 测试文本与高亮预览/捕获组双栏 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 左侧：测试文本输入与高亮容器 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-3 flex flex-col">
+                <div class="flex items-center justify-between text-xs font-mono text-meta">
+                    <label for="regexTestText" class="font-bold text-main">测试文本 (Test String):</label>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="btnClearTestText" class="hover:text-accent">清空</button>
+                    </div>
+                </div>
+                <textarea id="regexTestText" rows="10" placeholder="在此输入需要测试匹配的文本..."
+                          class="w-full flex-1 bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none leading-relaxed resize-y"></textarea>
+
+                <!-- 实时多色高亮渲染预览 -->
+                <div class="space-y-1.5 pt-2 border-t border-border/40">
+                    <div class="text-xs font-mono text-meta flex items-center justify-between">
+                        <span>实时高亮预览 (Live Highlight):</span>
+                        <span class="text-[11px] text-meta/60">交替色块标识不同匹配项</span>
+                    </div>
+                    <div id="regexHighlightDisplay"
+                         class="w-full min-h-[5rem] max-h-48 overflow-y-auto bg-input-bg/70 border border-border rounded-xl p-3 font-mono text-xs md:text-sm text-main whitespace-pre-wrap break-all leading-relaxed">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：匹配详情与子捕获组 (Matches & Groups) -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-4 flex flex-col">
+                <div class="flex items-center justify-between border-b border-border/60 pb-3">
+                    <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-accent"></i>
+                        <span>匹配明细与捕获组 (Match Details)</span>
+                    </h2>
+                    <span id="matchDetailSummary" class="text-xs font-mono text-meta">共 0 项</span>
+                </div>
+
+                <!-- 匹配列表 -->
+                <div id="regexMatchesContainer" class="flex-1 space-y-2.5 overflow-y-auto max-h-[26rem] pr-1">
+                    <div class="text-center py-10 text-meta text-xs font-mono">
+                        等待输入测试文本与正则表达式...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 文本替换模式 (Regex Replace) 卡片 -->
+        <div class="bg-card border border-border rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between border-b border-border/60 pb-3">
+                <h3 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                    <i class="fa-solid fa-repeat text-accent"></i>
+                    <span>正则替换模式 (Substitution Preview)</span>
+                </h3>
+                <span class="text-xs font-mono text-meta">支持 $1, $2, $& 捕获变量</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label for="regexReplacementInput" class="text-xs font-mono text-meta">替换模板 (Replacement Pattern):</label>
+                    <input type="text" id="regexReplacementInput" value="[脱敏手机号: $&]"
+                           class="w-full bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs md:text-sm focus:border-accent outline-none" />
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-xs font-mono text-meta">
+                        <span>替换结果 (Replaced Result):</span>
+                        <button type="button" id="btnCopyReplaced" class="hover:text-accent flex items-center gap-1">
+                            <i class="fa-regular fa-copy"></i>
+                            <span>复制</span>
+                        </button>
+                    </div>
+                    <div id="regexReplacedOutput"
+                         class="w-full min-h-[3rem] bg-input-bg border border-border rounded-xl p-3 font-mono text-xs md:text-sm text-main whitespace-pre-wrap break-all">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部：正则常用元字符速查备忘录 -->
+        <div class="bg-card border border-border rounded-2xl p-6 space-y-4">
+            <h3 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                <i class="fa-solid fa-book-bookmark text-accent"></i>
+                <span>正则表达式常用元字符与语法备忘速查</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">\d / \D</div>
+                    <div class="text-meta text-[11px]">\d 匹配任意数字 [0-9]；\D 匹配任意非数字字符。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">\w / \W</div>
+                    <div class="text-meta text-[11px]">\w 匹配字母、数字及下划线 [A-Za-z0-9_]；\W 匹配非单字。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">\s / \S</div>
+                    <div class="text-meta text-[11px]">\s 匹配任意空白符（空格、Tab、换行）；\S 匹配非空白符。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">^ 与 $</div>
+                    <div class="text-meta text-[11px]">^ 匹配字符串/行首；$ 匹配字符串/行尾。多行需 m 修饰符。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">*, +, ?</div>
+                    <div class="text-meta text-[11px]">* 匹配 0 次或多次；+ 匹配 1 次或多次；? 匹配 0 次或 1 次。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">{n,m}</div>
+                    <div class="text-meta text-[11px]">匹配至少 n 次、最多 m 次。例如 \d{2,4} 匹配 2 到 4 位数字。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">(...) 与 (?:...)</div>
+                    <div class="text-meta text-[11px]">(...) 捕获组；(?:...) 非捕获组，仅用于组合逻辑不记录分组。</div>
+                </div>
+                <div class="p-3 rounded-xl bg-input-bg border border-border/70 space-y-1">
+                    <div class="font-bold text-accent">(?=...) 与 (?!...)</div>
+                    <div class="text-meta text-[11px]">正向前瞻断言与负向前瞻断言，零宽匹配不计入匹配结果。</div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

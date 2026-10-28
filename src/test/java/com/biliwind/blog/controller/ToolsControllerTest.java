@@ -66,6 +66,50 @@ class ToolsControllerTest {
     }
 
     @Test
+    void shouldReturnCronPage() {
+        given()
+                .when().get("/tools/cron")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("Cron 表达式生成与执行时间模拟器"))
+                .body(containsString("tools.js"));
+    }
+
+    @Test
+    void shouldReturnRegexPage() {
+        given()
+                .when().get("/tools/regex")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("正则表达式在线测试与速查工具"))
+                .body(containsString("tools.js"));
+    }
+
+    @Test
+    void shouldReturnHashPage() {
+        given()
+                .when().get("/tools/hash")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("现代哈希计算与本地文件校验器"))
+                .body(containsString("tools.js"));
+    }
+
+    @Test
+    void shouldReturnJsonDiffPage() {
+        given()
+                .when().get("/tools/json-diff")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("JSON 在线格式化与可视化差分对比"))
+                .body(containsString("tools.js"));
+    }
+
+    @Test
     void shouldSupportPjaxHeader() {
         given()
                 .header("X-PJAX", "true")
