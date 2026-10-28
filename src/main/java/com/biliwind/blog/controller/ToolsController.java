@@ -117,8 +117,9 @@ public class ToolsController {
         Template template = PjaxHelper.isPjaxRequest(headers) ? toolsIndexContentTemplate : toolsIndexTemplate;
         return template
                 .data("tools", ALL_TOOLS)
-                .data("pageTitle", "实用工具箱 - 开发者与网工常用工具")
-                .data("pageDescription", "WindBlog 常用工具箱，提供网络、格式转换、开发调试等高交互、可视化在线实用工具。");
+                .data("pageTitle", "实用在线工具箱 - 开发者与网工高效工具集合")
+                .data("pageDescription", "WindBlog 常用在线工具箱，提供新一代子网掩码计算器、Unix 时间戳转换、日志格式化清洗、Base64/Base 变体全家桶等高交互、高可读性的在线实用工具。")
+                .data("pageKeywords", "在线工具,子网掩码计算器,VLSM划分,时间戳转换,日志格式化,Base64编码,Base58,开发工具");
     }
 
     @GET
@@ -127,8 +128,9 @@ public class ToolsController {
     public TemplateInstance subnetCalculator(@Context HttpHeaders headers) {
         Template template = PjaxHelper.isPjaxRequest(headers) ? subnetContentTemplate : subnetTemplate;
         return template
-                .data("pageTitle", "新一代智能子网掩码计算器 - IPv4/IPv6 VLSM 可视化推演")
-                .data("pageDescription", "新一代可视化子网掩码与网络推演计算器。支持按位逻辑与/或过程解析、位图色块标识、VLSM 自定义划分、通配符掩码与反向 DNS 自动生成。");
+                .data("pageTitle", "新一代智能子网掩码计算器 - IPv4/IPv6 CIDR 可视化推演与 VLSM 划分")
+                .data("pageDescription", "新一代可视化子网掩码与网络推演计算器。支持按位逻辑与/或过程解析、32位位图色块标识、VLSM 自定义划分、通配符掩码、可用主机范围与反向 DNS 自动生成。")
+                .data("pageKeywords", "子网掩码计算器,CIDR,VLSM,子网划分,网络地址,广播地址,通配符掩码,IPv4,IPv6");
     }
 
     @GET
@@ -137,8 +139,9 @@ public class ToolsController {
     public TemplateInstance timestampConverter(@Context HttpHeaders headers) {
         Template template = PjaxHelper.isPjaxRequest(headers) ? timestampContentTemplate : timestampTemplate;
         return template
-                .data("pageTitle", "Unix 时间戳与时区转换器 - 在线时间推算与代码速查")
-                .data("pageDescription", "在线 Unix 时间戳双向转换工具，支持秒与毫秒、全球主要城市时区对照、相对时间推算及编程语言语法。");
+                .data("pageTitle", "Unix 时间戳在线转换与时区推演 - 毫秒/秒/全球时区对照")
+                .data("pageDescription", "全功能在线 Unix 时间戳双向转换器。支持秒与毫秒快速互转、全球主要跨国时区对照、相对时间推算、日历星期分析及常用编程语言语法速查。")
+                .data("pageKeywords", "时间戳转换,Unix timestamp,时区转换,毫秒时间戳,UTC时间,时间计算");
     }
 
     @GET
@@ -147,8 +150,9 @@ public class ToolsController {
     public TemplateInstance logFormatter(@Context HttpHeaders headers) {
         Template template = PjaxHelper.isPjaxRequest(headers) ? logFormatterContentTemplate : logFormatterTemplate;
         return template
-                .data("pageTitle", "日志格式化与结构化清洗 - JSON/堆栈跟踪/Nginx日志")
-                .data("pageDescription", "开发者日志格式化与结构化清洗工具，支持 JSON展开、Java Exception 堆栈美化、Nginx日志解析与级别过滤。");
+                .data("pageTitle", "日志格式化与结构化清洗工具 - JSON/堆栈跟踪/Nginx日志")
+                .data("pageDescription", "开发者日志格式化与结构化清洗分析工具。支持 JSON/NDJSON 展开美化、Java Exception 堆栈跟踪高亮、Nginx 日志解析、级别过滤与即时关键词搜索。")
+                .data("pageKeywords", "日志格式化,JSON日志,Java堆栈日志,Nginx日志,日志高亮,日志清洗,开发调试");
     }
 
     @GET
@@ -158,6 +162,7 @@ public class ToolsController {
         Template template = PjaxHelper.isPjaxRequest(headers) ? baseEncoderContentTemplate : baseEncoderTemplate;
         return template
                 .data("pageTitle", "Base64 / Base 编码全家桶在线转换 - Base16/Base32/Base58/Base64")
-                .data("pageDescription", "全面支持 Base64、URL 安全 Base64、Base32、Hex (Base16) 与 Base58 的编解码工具，支持中文字符与二进制安全。");
+                .data("pageDescription", "全能 Base 编码全家桶转换器。支持标准 Base64、URL 安全 Base64、Base16 (Hex)、Base32、Base58 (区块链/比特币变体)，原生支持 UTF-8 中文与二进制安全处理。")
+                .data("pageKeywords", "Base64编码,Base64解码,URL安全Base64,Base16,Hex,Base32,Base58,字符编码");
     }
 }

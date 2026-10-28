@@ -167,6 +167,11 @@ public class FeedService {
         String normalizedBaseUrl = getBaseUrl();
         return List.of(
                 new SitemapUrlView(normalizedBaseUrl + "/", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/subnet", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/timestamp", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/log-formatter", ""),
+                new SitemapUrlView(normalizedBaseUrl + "/tools/base-encoder", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/category", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/tag", ""),
                 new SitemapUrlView(normalizedBaseUrl + "/link", "")
