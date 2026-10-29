@@ -92,6 +92,22 @@ class AdminPostApiControllerIT {
                 .when().post("/api/admin/posts/1/translation")
                 .then()
                 .statusCode(401);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"sourceLanguage\":\"zh-cn\",\"targetLanguage\":\"en-us\","
+                        + "\"title\":\"标题\",\"summary\":\"摘要\",\"contentMarkdown\":\"正文\"}")
+                .when().post("/api/admin/posts/translate")
+                .then()
+                .statusCode(401);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"targetLanguage\":\"en-us\","
+                        + "\"title\":\"Title\",\"summary\":\"Summary\",\"contentMarkdown\":\"Content\"}")
+                .when().put("/api/admin/posts/1/translation")
+                .then()
+                .statusCode(401);
     }
 
     @Test

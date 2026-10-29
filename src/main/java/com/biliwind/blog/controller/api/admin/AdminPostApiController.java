@@ -427,6 +427,110 @@ public class AdminPostApiController {
     }
 
     @POST
+    @Path("/translate")
+    @Transactional
+    @Blocking
+    @Operation(summary = "直接使用 AI 翻译文章文本内容")
+    @APIResponse(responseCode = "200", description = "翻译成功")
+    @APIResponse(responseCode = "400", description = "翻译参数或 AI 配置无效")
+    public PostTranslationResponse translateDirect(PostTranslationRequest request) {
+        if (request == null) {
+            throw badRequest("翻译请求不能为空");
+        }
+
+        String sourceLanguage = normalizeLanguage(request.sourceLanguage(), "sourceLanguage");
+        String targetLanguage = normalizeLanguage(request.targetLanguage(), "targetLanguage");
+        if (sourceLanguage.equals(targetLanguage)) {
+            throw badRequest("源语言和目标语言不能相同");
+        }
+        if (request.title() == null || request.title().isBlank()) {
+            throw badRequest("文章标题不能为空");
+        }
+        if (request.contentMarkdown() == null || request.contentMarkdown().isBlank()) {
+            throw badRequest("文章正文不能为空");
+        }
+
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("title", request.title());
+        fields.put("summary", request.summary() == null ? "" : request.summary());
+        fields.put("contentMarkdown", request.contentMarkdown());
+
+        try {
+            com.biliwind.blog.service.ai.AiResult result = aiManager
+                    .translate(sourceLanguage, targetLanguage, fields)
+                    .toCompletableFuture()
+                    .join();
+            String translatedTitle = requiredTranslation(result, "title");
+            String translatedSummary = requiredTranslation(result, "summary");
+            String translatedContent = requiredTranslation(result, "contentMarkdown");
+            return new PostTranslationResponse(sourceLanguage, targetLanguage,
+                    translatedTitle, translatedSummary, translatedContent);
+        } catch (java.util.concurrent.CompletionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
+        }
+    }
+
+    @PUT
+    @Path("/{id}/translation")
+    @Transactional
+    @Operation(summary = "保存或更新文章特定语言译本")
+    @APIResponse(responseCode = "200", description = "保存译本成功")
+    @APIResponse(responseCode = "400", description = "参数无效")
+    @APIResponse(responseCode = "404", description = "文章不存在")
+    public AdminPostDetail saveTranslation(@PathParam("id") Long id, PostSaveTranslationRequest request) {
+        Post post = mustFindPost(id);
+        if (request == null) {
+            throw badRequest("保存译本请求不能为空");
+        }
+        String targetLanguage = normalizeLanguage(request.targetLanguage(), "targetLanguage");
+        if (request.title() == null || request.title().isBlank()) {
+            throw badRequest("译本标题不能为空");
+        }
+        if (request.contentMarkdown() == null || request.contentMarkdown().isBlank()) {
+            throw badRequest("译本正文不能为空");
+        }
+
+        Map<String, String> nextTitle = new LinkedHashMap<>(post.title != null ? post.title : Map.of());
+        nextTitle.put(targetLanguage, request.title());
+
+        Map<String, String> nextSummary = new LinkedHashMap<>(post.summary != null ? post.summary : Map.of());
+        if (request.summary() != null) {
+            nextSummary.put(targetLanguage, request.summary());
+        }
+
+        Map<String, String> currentContent = post.currentRevision == null || post.currentRevision.contentMarkdown == null
+                ? Map.of() : post.currentRevision.contentMarkdown;
+        Map<String, String> nextContent = new LinkedHashMap<>(currentContent);
+        nextContent.put(targetLanguage, request.contentMarkdown());
+        nextContent = com.biliwind.blog.common.helper.PostHelper.injectBlockIds(nextContent);
+
+        short currentEditorType = post.currentRevision == null ? 0 : post.currentRevision.editorType;
+        User operator = mustFindOperator();
+        PostRevision nextRevision = new PostRevision();
+        nextRevision.post = post;
+        nextRevision.title = nextTitle;
+        nextRevision.contentMarkdown = nextContent;
+        nextRevision.editorType = currentEditorType;
+        nextRevision.revisionNumber = nextRevisionNumber(post.id);
+        nextRevision.createdBy = operator;
+        nextRevision.createdAt = OffsetDateTime.now();
+        nextRevision.persist();
+
+        post.currentRevision = nextRevision;
+        post.title = nextTitle;
+        post.summary = nextSummary;
+        post.updatedAt = OffsetDateTime.now();
+
+        mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
+        articleExternalLinkService.syncMarkdownLinks(post, nextRevision.contentMarkdown);
+        auditService.log("post", post.id, "save_translation", null,
+                Map.of("targetLanguage", targetLanguage, "revisionNumber", nextRevision.revisionNumber));
+        esSyncEvent.fire(new PostSyncedEvent(post.id));
+        return toDetail(post);
+    }
+
+    @POST
     @Path("/{id}/revisions/{revisionNumber}/publish")
     @Transactional
     @Operation(summary = "发布指定文章版本")

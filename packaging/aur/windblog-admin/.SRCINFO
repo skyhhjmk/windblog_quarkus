@@ -12,7 +12,7 @@ pkgbase = windblog-admin
 	makedepends = pkgconf
 	depends = gtk3
 	depends = libsecret
-	source = git+https://github.com/skyhhjmk/windblog_admin_flutter.git#commit=70bca75dfba89d6b338ec2e6fd3b00d429a754d4
+	source = git+https://github.com/skyhhjmk/windblog_admin_flutter.git#commit=0fe4d674799363249afa556b114aa04c84c28a07
 	source = windblog-admin.desktop
 	source = windblog-admin
 	sha256sums = SKIP

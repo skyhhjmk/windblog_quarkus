@@ -1,4 +1,4 @@
-/* Public browser-agent tools. Loaded once by the shared page shell, including PJAX pages. */
+/* WindBlog WebMCP tools. Loaded once by the shared page shell, including PJAX pages. */
 (() => {
     'use strict';
     if (window.windblogWebMcpLoaded) return;
@@ -7,6 +7,8 @@
     const schema = (properties = {}, required = []) => ({type: 'object', properties, required, additionalProperties: false});
     const slugSchema = {type: 'string', minLength: 1, maxLength: 200};
     const pageSchema = {type: 'integer', minimum: 1, maximum: 1000, default: 1};
+    const langSchema = {type: 'string', minLength: 2, maxLength: 30};
+
     function text(value, label, max = 200) {
         if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`Invalid ${label}`);
         return value.trim();
@@ -20,6 +22,16 @@
         if (value === '.' || value === '..' || /[\\/]/.test(value)) throw new Error('Invalid slug');
         return '/post/' + encodeURIComponent(value);
     }
+    function getAdminToken() {
+        try {
+            return (typeof localStorage !== 'undefined' && (
+                localStorage.getItem('windblog_admin_token') ||
+                localStorage.getItem('admin_auth_token') ||
+                localStorage.getItem('token')
+            )) || '';
+        } catch (_) { return ''; }
+    }
+
     async function retrieve(path, options = {}, json = false) {
         const signal = options.signal ? AbortSignal.any([options.signal, lifetime.signal]) : lifetime.signal;
         const response = await fetch(path, {credentials: 'omit', signal,
@@ -38,6 +50,56 @@
         }).filter(link => new URL(link.url).origin === location.origin && /\/(post|category|tag)\//.test(new URL(link.url).pathname));
         return {url: url.href, title: doc.title, text: content.textContent.trim().slice(0, 30000), links: links.slice(0, 100)};
     }
+
+    async function apiRequest(path, options = {}) {
+        const signal = options.signal ? AbortSignal.any([options.signal, lifetime.signal]) : lifetime.signal;
+        const headers = {'Accept': 'application/json', ...(options.headers || {})};
+        const adminToken = getAdminToken();
+        if (adminToken && !headers['Authorization']) {
+            headers['Authorization'] = 'Bearer ' + adminToken;
+        }
+        let body = options.body;
+        if (body && typeof body === 'object') {
+            headers['Content-Type'] = 'application/json';
+            body = JSON.stringify(body);
+        }
+        const response = await fetch(path, {
+            method: options.method || 'GET',
+            credentials: 'include',
+            signal,
+            headers,
+            body
+        });
+        const url = new URL(response.url || path, location.origin);
+        if (url.origin !== location.origin) throw new Error('Unexpected external redirect');
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || `Request failed (${response.status})`);
+        }
+        return data;
+    }
+
+    function extractCurrentArticle() {
+        if (typeof document === 'undefined') return null;
+        const pathname = (typeof location !== 'undefined' ? location.pathname : '') || '';
+        const match = pathname.match(/(?:^|\/)(?:[a-zA-Z0-9_-]+\/)?post\/([^/?#]+)/);
+        const slug = match ? decodeURIComponent(match[1]) : '';
+        const titleEl = document.querySelector('h1') || document.querySelector('article h1') || document.querySelector('.post-title');
+        const title = (titleEl ? titleEl.textContent : (document.title || '')).trim();
+        const articleEl = document.querySelector('article') || document.querySelector('.prose') || document.querySelector('#pjax-container');
+        const contentText = articleEl ? articleEl.textContent.trim() : '';
+        const postIdMeta = document.querySelector('meta[name="post-id"]') || document.querySelector('[data-post-id]');
+        const postId = postIdMeta ? (postIdMeta.getAttribute('content') || postIdMeta.getAttribute('data-post-id')) : null;
+        const lang = document.documentElement?.lang || 'zh-CN';
+        return {
+            slug,
+            postId: postId ? parseInt(postId, 10) : null,
+            title,
+            contentMarkdown: contentText,
+            sourceLanguage: lang
+        };
+    }
+
     function definitions() {
         return [
             {name: 'search_posts', description: 'Search published WindBlog articles by keyword and retrieve the public result page.',
@@ -62,9 +124,112 @@
                     const path = input.section === 'post' ? postPath(input.slug) : paths[input.section];
                     if (!path || !Object.hasOwn({...paths, post: true}, input.section)) throw new Error('Invalid section');
                     const url = new URL(path, location.origin).href;
-                    // Allow the tool result to reach the agent before unloading this document.
                     setTimeout(() => { if (!lifetime.signal.aborted) location.assign(url); }, 100);
                     return {url};
+                }},
+            {name: 'get_session_status', description: 'Check the current login session in WindBlog using browser credentials. Returns user details, role, and authentication status.',
+                inputSchema: schema(),
+                execute: async (input, options) => {
+                    const adminToken = getAdminToken();
+                    try {
+                        const userRes = await apiRequest('/user/api/profile', options);
+                        if (userRes && (userRes.success || userRes.data)) {
+                            return {authenticated: true, type: 'user', user: userRes.data || userRes};
+                        }
+                    } catch (_) {}
+                    if (adminToken) {
+                        return {authenticated: true, type: 'admin', hasAdminToken: true};
+                    }
+                    return {authenticated: false, type: 'anonymous'};
+                }},
+            {name: 'get_article_for_translation', description: 'Retrieve article title, summary, markdown content, and language for translation. If no slug/postId is provided, extracts from the current viewing article page.',
+                inputSchema: schema({slug: {type: 'string'}, postId: {type: 'integer'}}, []),
+                execute: async (input, options) => {
+                    const current = extractCurrentArticle();
+                    const targetSlug = input.slug || current?.slug;
+                    const targetPostId = input.postId || current?.postId;
+                    let title = current?.title || '';
+                    let contentMarkdown = current?.contentMarkdown || '';
+                    let summary = '';
+                    let sourceLanguage = current?.sourceLanguage || 'zh-CN';
+
+                    if (targetSlug && (!title || !contentMarkdown || input.slug)) {
+                        try {
+                            const publicPost = await retrieve(postPath(targetSlug), options);
+                            title = title || publicPost.title;
+                            contentMarkdown = contentMarkdown || publicPost.text;
+                        } catch (_) {}
+                    }
+                    return {
+                        postId: targetPostId,
+                        slug: targetSlug,
+                        title,
+                        summary,
+                        contentMarkdown,
+                        sourceLanguage
+                    };
+                }},
+            {name: 'translate_article', description: 'Translate article title, summary, and markdown content to targetLanguage using the active login session and WindBlog AI translation service.',
+                inputSchema: schema({
+                    sourceLanguage: langSchema,
+                    targetLanguage: langSchema,
+                    postId: {type: 'integer'},
+                    slug: {type: 'string'},
+                    title: {type: 'string'},
+                    summary: {type: 'string'},
+                    contentMarkdown: {type: 'string'}
+                }, ['sourceLanguage', 'targetLanguage']),
+                execute: async (input, options) => {
+                    const current = extractCurrentArticle();
+                    const title = (input.title || current?.title || '').trim();
+                    const summary = (input.summary || '').trim();
+                    const contentMarkdown = (input.contentMarkdown || current?.contentMarkdown || '').trim();
+                    const postId = input.postId || current?.postId;
+                    if (!title) throw new Error('Article title is required for translation');
+                    if (!contentMarkdown) throw new Error('Article content is required for translation');
+
+                    const payload = {
+                        sourceLanguage: text(input.sourceLanguage, 'sourceLanguage'),
+                        targetLanguage: text(input.targetLanguage, 'targetLanguage'),
+                        title,
+                        summary,
+                        contentMarkdown
+                    };
+
+                    const adminToken = getAdminToken();
+                    if (adminToken && postId) {
+                        return apiRequest('/api/admin/posts/' + postId + '/translation', {method: 'POST', body: payload, signal: options.signal});
+                    } else if (adminToken) {
+                        return apiRequest('/api/admin/posts/translate', {method: 'POST', body: payload, signal: options.signal});
+                    } else {
+                        const res = await apiRequest('/user/api/posts/translate', {method: 'POST', body: payload, signal: options.signal});
+                        return res.data || res;
+                    }
+                }},
+            {name: 'save_article_translation', description: 'Save a translated edition (targetLanguage, title, summary, contentMarkdown) of an article back to WindBlog using the authenticated session.',
+                inputSchema: schema({
+                    postId: {type: 'integer'},
+                    targetLanguage: langSchema,
+                    title: {type: 'string', minLength: 1},
+                    summary: {type: 'string'},
+                    contentMarkdown: {type: 'string', minLength: 1}
+                }, ['postId', 'targetLanguage', 'title', 'contentMarkdown']),
+                execute: async (input, options) => {
+                    const postId = input.postId;
+                    if (!Number.isInteger(postId) || postId <= 0) throw new Error('Invalid postId');
+                    const payload = {
+                        targetLanguage: text(input.targetLanguage, 'targetLanguage'),
+                        title: text(input.title, 'title', 500),
+                        summary: input.summary || '',
+                        contentMarkdown: text(input.contentMarkdown, 'contentMarkdown', 5000000)
+                    };
+                    const adminToken = getAdminToken();
+                    if (adminToken) {
+                        return apiRequest('/api/admin/posts/' + postId + '/translation', {method: 'PUT', body: payload, signal: options.signal});
+                    } else {
+                        const res = await apiRequest('/user/api/posts/' + postId + '/translation', {method: 'PUT', body: payload, signal: options.signal});
+                        return res.data || res;
+                    }
                 }}
         ];
     }

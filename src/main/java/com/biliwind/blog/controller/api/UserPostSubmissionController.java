@@ -3,12 +3,17 @@ package com.biliwind.blog.controller.api;
 import com.biliwind.blog.common.helper.PostHelper;
 import com.biliwind.blog.common.helper.SlugHelper;
 import com.biliwind.blog.common.security.UserTokenVerifier;
+import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PostSaveTranslationRequest;
+import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PostTranslationRequest;
+import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.PostTranslationResponse;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.UserNotificationService;
 import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.ai.AiManager;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
@@ -41,6 +46,9 @@ public class UserPostSubmissionController {
 
     @Inject
     ConfigManager configManager;
+
+    @Inject
+    AiManager aiManager;
 
     @GET
     @Transactional
@@ -164,6 +172,127 @@ public class UserPostSubmissionController {
         post.updatedAt = OffsetDateTime.now();
         notificationService.notifyPostSubmitted(post);
         return Response.ok(toDetail(post)).build();
+    }
+
+    @POST
+    @Path("/translate")
+    @Transactional
+    @Blocking
+    @Operation(summary = "前台用户使用 AI 翻译文章内容")
+    public Response translate(PostTranslationRequest request, @Context HttpHeaders headers) {
+        requireSubmissionEnabled();
+        requireUser(headers);
+        if (request == null) {
+            throw new BadRequestException("翻译请求不能为空");
+        }
+
+        String sourceLanguage = normalizeLanguage(request.sourceLanguage(), "sourceLanguage");
+        String targetLanguage = normalizeLanguage(request.targetLanguage(), "targetLanguage");
+        if (sourceLanguage.equals(targetLanguage)) {
+            throw new BadRequestException("源语言和目标语言不能相同");
+        }
+        if (request.title() == null || request.title().isBlank()) {
+            throw new BadRequestException("文章标题不能为空");
+        }
+        if (request.contentMarkdown() == null || request.contentMarkdown().isBlank()) {
+            throw new BadRequestException("文章正文不能为空");
+        }
+
+        Map<String, String> fields = new java.util.LinkedHashMap<>();
+        fields.put("title", request.title());
+        fields.put("summary", request.summary() == null ? "" : request.summary());
+        fields.put("contentMarkdown", request.contentMarkdown());
+
+        try {
+            com.biliwind.blog.service.ai.AiResult result = aiManager
+                    .translate(sourceLanguage, targetLanguage, fields)
+                    .toCompletableFuture()
+                    .join();
+            String translatedTitle = requiredTranslation(result, "title");
+            String translatedSummary = requiredTranslation(result, "summary");
+            String translatedContent = requiredTranslation(result, "contentMarkdown");
+            return Response.ok(Map.of(
+                    "success", true,
+                    "data", new PostTranslationResponse(sourceLanguage, targetLanguage,
+                            translatedTitle, translatedSummary, translatedContent)
+            )).build();
+        } catch (java.util.concurrent.CompletionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            String msg = cause.getMessage() == null ? "AI 翻译失败" : cause.getMessage();
+            throw new BadRequestException("AI 翻译失败: " + msg);
+        }
+    }
+
+    @PUT
+    @Path("/{id}/translation")
+    @Transactional
+    @Operation(summary = "保存或更新投稿特定语言译本")
+    public Response saveTranslation(@PathParam("id") Long id,
+                                    PostSaveTranslationRequest request,
+                                    @Context HttpHeaders headers) {
+        requireSubmissionEnabled();
+        User user = requireUser(headers);
+        Post post = ownPost(id, user);
+        if (request == null) {
+            throw new BadRequestException("保存译本请求不能为空");
+        }
+        String targetLanguage = normalizeLanguage(request.targetLanguage(), "targetLanguage");
+        if (request.title() == null || request.title().isBlank()) {
+            throw new BadRequestException("译本标题不能为空");
+        }
+        if (request.contentMarkdown() == null || request.contentMarkdown().isBlank()) {
+            throw new BadRequestException("译本正文不能为空");
+        }
+
+        Map<String, String> nextTitle = new java.util.LinkedHashMap<>(post.title != null ? post.title : Map.of());
+        nextTitle.put(targetLanguage, request.title().trim());
+
+        Map<String, String> nextSummary = new java.util.LinkedHashMap<>(post.summary != null ? post.summary : Map.of());
+        if (request.summary() != null && !request.summary().isBlank()) {
+            nextSummary.put(targetLanguage, request.summary().trim());
+        }
+
+        Map<String, String> currentContent = post.currentRevision == null || post.currentRevision.contentMarkdown == null
+                ? Map.of() : post.currentRevision.contentMarkdown;
+        Map<String, String> nextContent = new java.util.LinkedHashMap<>(currentContent);
+        nextContent.put(targetLanguage, request.contentMarkdown().trim());
+        nextContent = PostHelper.injectBlockIds(nextContent);
+
+        PostRevision revision = new PostRevision();
+        revision.post = post;
+        revision.title = nextTitle;
+        revision.contentMarkdown = nextContent;
+        revision.editorType = 0;
+        PostRevision latest = PostRevision.find("post.id = ?1 order by revisionNumber desc", post.id).firstResult();
+        revision.revisionNumber = latest == null ? 1 : latest.revisionNumber + 1;
+        revision.createdBy = user;
+        revision.createdAt = OffsetDateTime.now();
+        revision.persist();
+
+        post.currentRevision = revision;
+        post.title = nextTitle;
+        post.summary = nextSummary;
+        post.updatedAt = OffsetDateTime.now();
+
+        return Response.ok(Map.of("success", true, "data", toDetail(post))).build();
+    }
+
+    private String normalizeLanguage(String lang, String paramName) {
+        if (lang == null || lang.isBlank()) {
+            throw new BadRequestException(paramName + " 不能为空");
+        }
+        return lang.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private String requiredTranslation(com.biliwind.blog.service.ai.AiResult result, String field) {
+        if (result == null || result.contents == null) {
+            throw new BadRequestException("AI 翻译未返回有效结果");
+        }
+        String value = result.contents.get(field);
+        if (value == null) {
+            throw new BadRequestException("AI 翻译结果缺少字段: " + field);
+        }
+        return value.trim();
     }
 
     private PostRevision newRevision(Post post, User user, PostRequest request) {

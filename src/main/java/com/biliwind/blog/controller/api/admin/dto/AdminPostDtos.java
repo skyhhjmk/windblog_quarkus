@@ -79,6 +79,13 @@ public final class AdminPostDtos {
                         String contentMarkdown) {
         }
 
+        public record PostSaveTranslationRequest(
+                        String targetLanguage,
+                        String title,
+                        String summary,
+                        String contentMarkdown) {
+        }
+
         public record AdminPostItem(
                         Long id,
                         String slug,
