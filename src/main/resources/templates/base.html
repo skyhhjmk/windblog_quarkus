@@ -86,7 +86,7 @@
     <link rel="stylesheet" href="/assets/vendor/fontawesome/css/all.min.css"/>
 
     <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js?v=pjax-20260912"></script>
-    <script src="/assets/js/webmcp.js?v=webmcp-20261012"></script>
+    <script src="/assets/js/webmcp.js?v=webmcp-20261012" defer></script>
 
     {#if config:analyticsTrackingEnabled}
         <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-navigation-mode="manual" data-credentials="include"
@@ -111,15 +111,19 @@
             theme: {
                 extend: {
                     colors: {
-                        bg: 'var(--bg)',
-                        card: 'var(--card-bg)',
-                        border: 'var(--border)',
+                        // Channel triples + <alpha-value> keep opacity modifiers
+                        // (bg-accent/10, border-border/60) working on theme tokens.
+                        bg: 'rgb(var(--bg-channels) / <alpha-value>)',
+                        card: 'rgb(var(--card-bg-channels) / <alpha-value>)',
+                        'card-bg': 'rgb(var(--card-bg-channels) / <alpha-value>)',
+                        border: 'rgb(var(--border-channels) / calc(var(--border-alpha) * <alpha-value>))',
                         'border-hover': 'var(--border-hover)',
-                        accent: 'var(--accent)',
-                        main: 'var(--text-main)',
-                        body: 'var(--text-body)',
-                        meta: 'var(--text-meta)',
-                        'input-bg': 'var(--input-bg)',
+                        accent: 'rgb(var(--accent-channels) / <alpha-value>)',
+                        main: 'rgb(var(--text-main-channels) / <alpha-value>)',
+                        body: 'rgb(var(--text-body-channels) / <alpha-value>)',
+                        meta: 'rgb(var(--text-meta-channels) / <alpha-value>)',
+                        'input-bg': 'rgb(var(--input-bg-channels) / <alpha-value>)',
+                        'hover-surface': 'var(--hover-surface)',
                     },
                     maxWidth: {
                         '1400': '1400px',
@@ -138,15 +142,15 @@
     </script>
 
     <!-- Custom Theme Styles -->
-    <link rel="stylesheet" href="/assets/css/theme.css?v=code-headings-20261029" />
-    <link rel="stylesheet" href="/assets/css/drag-character-trail.css?v=drag-character-trail-20261011" />
-    <link rel="stylesheet" href="/assets/css/ui.css?v=code-headings-20261029"/>
-    <link rel="stylesheet" href="/assets/css/post-quote.css"/>
+    <link rel="stylesheet" href="/assets/css/theme.css?v=theme-audit-20261029" />
+    <link rel="stylesheet" href="/assets/css/drag-character-trail.css?v=theme-audit-20261029" />
+    <link rel="stylesheet" href="/assets/css/ui.css?v=theme-audit-20261029"/>
+    <link rel="stylesheet" href="/assets/css/post-quote.css?v=theme-audit-20261029"/>
 </head>
 
 <body class="min-h-screen flex flex-col bg-bg text-body font-sans selection:bg-accent/20 selection:text-accent">
 <!-- Header -->
-<header class="sticky top-0 z-50 bg-bg/80 backdrop-blur-xl border-b border-border transition-colors">
+<header class="sticky top-0 z-50 bg-bg/85 backdrop-blur-md border-b border-border transition-colors">
     <div class="max-w-1400 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <!-- Logo / Brand -->
         <a href="/" class="flex items-center gap-3 group" data-article-return-link>
@@ -159,11 +163,11 @@
         <!-- Navigation -->
         <nav class="hidden md:flex items-center gap-6">
             <div class="flex items-center gap-1.5">
-                <a href="/" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">首页</a>
-                <a href="/tools" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">工具箱</a>
-                <a href="/link" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">友链</a>
-                <a href="/tag" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">标签</a>
-                <a href="/category" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-white/5 transition-all">分类</a>
+                <a href="/" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">首页</a>
+                <a href="/tools" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">工具箱</a>
+                <a href="/link" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">友链</a>
+                <a href="/tag" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">标签</a>
+                <a href="/category" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">分类</a>
             </div>
 
             <div class="h-4 w-[1px] bg-border"></div>
@@ -185,7 +189,7 @@
             <div class="h-4 w-[1px] bg-border"></div>
 
             <!-- Theme Toggle -->
-            <button type="button" class="theme-toggle w-9 h-9 rounded-lg hover:bg-white/5 transition-colors border border-border/60 hover:border-border text-meta hover:text-main flex items-center justify-center"
+            <button type="button" class="theme-toggle w-9 h-9 rounded-lg hover:bg-hover-surface transition-colors border border-border/60 hover:border-border text-meta hover:text-main flex items-center justify-center"
                     title="切换主题" aria-label="切换主题">
                 <svg class="theme-icon-dark w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                 <svg class="theme-icon-light w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -194,11 +198,11 @@
             <!-- User -->
             <div class="relative" id="userMenuContainer">
                 <button type="button" id="userMenuBtn" aria-expanded="false" aria-haspopup="menu"
-                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors border border-border/60 hover:border-border text-body hover:text-main">
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-hover-surface transition-colors border border-border/60 hover:border-border text-body hover:text-main">
                     <span>账户</span>
                     <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
-                <div id="userDropdown" class="absolute right-0 top-full mt-2 w-48 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-2xl hidden p-1.5 z-50 overflow-hidden">
+                <div id="userDropdown" class="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-xl shadow-2xl hidden p-1.5 z-50 overflow-hidden">
                     <div id="userNotLoggedIn" class="space-y-0.5">
                         <a href="/user/login"
                            class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">登录</a>
@@ -223,13 +227,13 @@
     </div>
 
     <!-- Mobile Menu -->
-    <div id="mobileMenu" class="hidden md:hidden bg-bg/95 backdrop-blur-xl border-t border-border px-6 py-4 space-y-4 shadow-xl">
+    <div id="mobileMenu" class="hidden md:hidden bg-bg border-t border-border px-6 py-4 space-y-4 shadow-xl">
         <div class="flex flex-col gap-2">
-            <a href="/" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">首页</a>
-            <a href="/tools" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">工具箱</a>
-            <a href="/link" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">友链</a>
-            <a href="/tag" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">标签</a>
-            <a href="/category" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">分类</a>
+            <a href="/" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">首页</a>
+            <a href="/tools" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">工具箱</a>
+            <a href="/link" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">友链</a>
+            <a href="/tag" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">标签</a>
+            <a href="/category" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">分类</a>
         </div>
         <form action="/search" method="get" class="relative group pt-4 border-t border-border" data-shortcut-form="search">
             <label class="sr-only" for="mobileSearchInput">搜索文章</label>
@@ -239,19 +243,19 @@
         <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">
             <div class="flex items-center justify-between py-2">
                 <span class="text-sm font-medium">外观</span>
-                <button type="button" class="theme-toggle p-2 rounded-lg hover:bg-white/5 transition-colors border border-border text-meta hover:text-main"
+                <button type="button" class="theme-toggle p-2 rounded-lg hover:bg-hover-surface transition-colors border border-border text-meta hover:text-main"
                         title="切换主题" aria-label="切换主题">
                     <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                     <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </button>
             </div>
             <div data-mobile-user-logged-out class="flex flex-col gap-2">
-                <a href="/user/login" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">登录</a>
-                <a href="/user/register" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">注册</a>
+                <a href="/user/login" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">登录</a>
+                <a href="/user/register" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">注册</a>
             </div>
             <div data-mobile-user-logged-in class="hidden flex flex-col gap-2">
                 <span class="text-xs text-meta px-3">已登录为 <strong data-mobile-user-nickname class="text-main"></strong></span>
-                <a href="/user/center" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-white/5 transition-colors font-medium">个人中心</a>
+                <a href="/user/center" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">个人中心</a>
                 <a href="#" data-mobile-logout class="text-sm py-2 px-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors font-medium">退出登录</a>
             </div>
         </div>
@@ -343,7 +347,7 @@
 </footer>
 
 <!-- Progress Bar -->
-<div id="pjax-progress" class="fixed top-0 left-0 h-[2px] w-0 z-[9999] bg-accent shadow-[0_0_10px_rgba(var(--accent-rgb),0.75)] transition-all pointer-events-none"></div>
+<div id="pjax-progress" class="fixed top-0 left-0 h-[2px] w-full origin-left scale-x-0 z-[9999] bg-accent shadow-[0_0_10px_rgba(var(--accent-rgb),0.75)] pointer-events-none"></div>
 
 <!-- UI Components -->
     {#include system/ui.html /}
@@ -356,16 +360,16 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/main.js?v=code-headings-20261029" defer></script>
-<script src="/assets/js/drag-character-trail.js?v=drag-character-trail-20261011" defer></script>
+<script src="/assets/js/main.js?v=theme-audit-20261029" defer></script>
+<script src="/assets/js/drag-character-trail.js?v=theme-audit-20261029" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>
-<script src="/assets/js/article-images.js?v=article-image-placeholder-20261007" defer></script>
+<script src="/assets/js/article-images.js?v=theme-audit-20261029" defer></script>
 <script src="/assets/js/user.js?v=error-codes-20261020" defer></script>
 <script src="/assets/js/comment.js?v=error-codes-20261020" defer></script>
 <script src="/assets/js/ads.js?v=adsense-20261014" defer></script>
 <script src="/assets/js/link.js?v=error-codes-20261020" defer></script>
 <script src="/assets/js/tools.js?v=20261028-tools-v3" defer></script>
 <script src="/assets/js/post-premium.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/post-quote.js?v=error-codes-20261020" defer></script>
+<script src="/assets/js/post-quote.js?v=theme-audit-20261029" defer></script>
 </body>
 </html>

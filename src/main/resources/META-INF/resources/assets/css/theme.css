@@ -28,20 +28,29 @@
     /* Dark Theme (Default) - Linear / Modern Clean Palette */
     --bg: #090B10;
     --bg-rgb: 9, 11, 16;
+    --bg-channels: 9 11 16;
     --card-bg: #0F131C;
+    --card-bg-channels: 15 19 28;
     --panel-bg: var(--card-bg);
     --input-bg: #141924;
+    --input-bg-channels: 20 25 36;
     --border: rgba(255, 255, 255, 0.08);
+    --border-channels: 255 255 255;
+    --border-alpha: 0.08;
     --border-hover: rgba(255, 255, 255, 0.16);
     --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 6px 20px -4px rgba(0, 0, 0, 0.35);
     --card-hover-shadow: 0 12px 32px -6px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14);
     --text-main: #f3f4f6;
+    --text-main-channels: 243 244 246;
     --fg: var(--text-main);
     --text-body: #94a3b8;
+    --text-body-channels: 148 163 184;
     --text-meta: #64748b;
+    --text-meta-channels: 100 116 139;
     --text-muted: #64748b;
     --accent: #0ea5e9;
     --accent-rgb: 14, 165, 233;
+    --accent-channels: 14 165 233;
     --accent-dim: rgba(14, 165, 233, 0.14);
     --accent-foreground: #040810;
     --accent-line: rgba(14, 165, 233, 0.25);
@@ -60,12 +69,7 @@
     --image-placeholder-sheen: rgba(14, 165, 233, 0.4);
     --image-placeholder-border: rgba(14, 165, 233, 0.8);
     --image-placeholder-stripe: rgba(14, 165, 233, 0.12);
-
-    /* Spacing System */
-    --space-sm: 1rem;
-    --space-md: 2rem;
-    --space-lg: 4rem;
-    --space-xl: 6rem;
+    --hover-surface: rgba(255, 255, 255, 0.06);
 }
 
 /* Dynamic values are applied through data attributes and CSSOM, not HTML style attributes. */
@@ -207,24 +211,34 @@
     /* Light Theme Overrides - Clean Paper Aesthetic */
     --bg: #f8fafc;
     --bg-rgb: 248, 250, 252;
+    --bg-channels: 248 250 252;
     --card-bg: #ffffff;
+    --card-bg-channels: 255 255 255;
     --panel-bg: var(--card-bg);
     --input-bg: #f1f5f9;
+    --input-bg-channels: 241 245 249;
     --border: rgba(15, 23, 42, 0.08);
+    --border-channels: 15 23 42;
+    --border-alpha: 0.08;
     --border-hover: rgba(15, 23, 42, 0.16);
     --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 4px 16px -2px rgba(15, 23, 42, 0.04);
     --card-hover-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.12);
     --text-main: #0f172a;
+    --text-main-channels: 15 23 42;
     --fg: var(--text-main);
     --text-body: #334155;
+    --text-body-channels: 51 65 85;
     --text-meta: #64748b;
+    --text-meta-channels: 100 116 139;
     --text-muted: #64748b;
     --accent: #0284c7;
     --accent-rgb: 2, 132, 199;
+    --accent-channels: 2 132 199;
     --accent-dim: rgba(2, 132, 199, 0.1);
     --accent-foreground: #ffffff;
     --accent-line: rgba(2, 132, 199, 0.2);
     --card-hover: rgba(15, 23, 42, 0.015);
+    --hover-surface: rgba(15, 23, 42, 0.06);
     --placeholder: rgba(15, 23, 42, 0.35);
     --glass-bg: rgba(255, 255, 255, 0.85);
     --glass-border: rgba(15, 23, 42, 0.08);
@@ -249,11 +263,6 @@ html, body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
-}
-
-body {
-    line-height: 1.7;
-    letter-spacing: -0.011em;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -307,7 +316,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .card-static {
-    transition: none;
+    transition: border-color 0.2s ease,
+                background-color 0.2s ease,
+                box-shadow 0.2s ease;
     box-shadow: var(--card-shadow);
 }
 
@@ -343,7 +354,7 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: var(--radius-md);
     color: var(--text-main);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .link-placement-option:hover {
@@ -364,7 +375,9 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 0.875rem;
     font-weight: 700;
     letter-spacing: -0.01em;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                filter 0.2s ease;
     cursor: pointer;
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
     white-space: nowrap;
@@ -397,7 +410,11 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text-main);
     font-size: 0.8125rem;
     font-weight: 600;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                color 0.2s ease,
+                transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s ease;
     cursor: pointer;
 }
 
@@ -425,7 +442,7 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text-main);
     font-size: 0.8125rem;
     font-weight: 600;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
 }
 
 .btn-secondary:hover {
@@ -437,7 +454,7 @@ h1, h2, h3, h4, h5, h6 {
 .tag-pill {
     background: var(--input-bg);
     border: 1px solid var(--border);
-    color: var(--accent-dim);
+    color: var(--accent);
     font-family: var(--font-mono);
     font-size: 11px;
     padding: 2px 8px;
@@ -481,7 +498,7 @@ input[type="checkbox"] {
     cursor: pointer;
     position: relative;
     vertical-align: middle;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     outline: none;
 }
 
@@ -585,7 +602,7 @@ input::placeholder {
 
 .prose h2 {
     font-size: 1.5rem;
-    font-weight: 750;
+    font-weight: 700;
     line-height: 1.35;
     letter-spacing: -0.02em;
     margin-top: 2.25rem;
@@ -629,7 +646,7 @@ input::placeholder {
 
 .prose h4 {
     font-size: 1.1rem;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
     letter-spacing: -0.01em;
     margin-top: 1.5rem;
@@ -851,7 +868,7 @@ input::placeholder {
     background: transparent;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .code-block-copy-btn:hover {
@@ -937,7 +954,7 @@ input::placeholder {
     border-radius: 6px;
     font-family: var(--font-mono);
     font-size: 0.875em;
-    font-weight: 550;
+    font-weight: 600;
     word-break: break-word;
 }
 
@@ -996,7 +1013,6 @@ input::placeholder {
     padding-left: 1.5rem;
     border-left: 1px solid var(--border);
     margin-top: 1rem;
-    transition: all 0.3s ease;
 }
 
 @media (max-width: 768px) {
@@ -1025,7 +1041,7 @@ input::placeholder {
     color: var(--accent);
     font-size: 12px;
     font-weight: 700;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
     cursor: pointer;
     line-height: 1;
 }
@@ -1055,7 +1071,7 @@ input::placeholder {
     font-size: 11px;
     font-weight: 800;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .expand-replies-btn:hover {
@@ -1082,7 +1098,7 @@ input::placeholder {
     font-size: 14px;
     font-weight: 800;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
 }
 
 .btn-load-more:hover:not(:disabled) {
@@ -1107,6 +1123,7 @@ input::placeholder {
 body {
     color: var(--text-body);
     line-height: 1.8;
+    letter-spacing: -0.011em;
 }
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
@@ -1461,6 +1478,11 @@ mark {
     font-weight: 500;
 }
 
+.light mark {
+    background: rgba(250, 204, 21, 0.3);
+    color: #713f12;
+}
+
 kbd {
     background: var(--input-bg);
     border: 1px solid var(--border);
@@ -1567,7 +1589,11 @@ kbd {
     font-size: 11px;
     font-weight: 600;
     line-height: 18px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                color 0.2s ease,
+                transform 0.2s ease,
+                box-shadow 0.2s ease;
     cursor: pointer;
     user-select: none;
     text-decoration: none !important;
@@ -1701,4 +1727,61 @@ kbd {
 }
 @media (prefers-reduced-motion: reduce) {
     .article-reference-card { transition: none; }
+}
+
+/* Motion preferences and theme switching */
+@media (prefers-reduced-motion: reduce) {
+    html,
+    body {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+html.theme-transitioning,
+html.theme-transitioning * {
+    transition: background-color 0.25s ease,
+                border-color 0.25s ease,
+                color 0.25s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.theme-transitioning,
+    html.theme-transitioning * {
+        transition: none !important;
+    }
+}
+
+/* Inline feedback messages (comments, account, inventory). The comment form
+   already swapped these classes in JS but never had matching rules. */
+:where(#comment-feedback, #userPostFeedback, #inventoryFeedback) {
+    border-color: var(--border);
+}
+
+.comment-feedback-error {
+    border-color: rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.08);
+    color: #fca5a5;
+}
+
+.comment-feedback-success {
+    border-color: rgba(16, 185, 129, 0.45);
+    background: rgba(16, 185, 129, 0.08);
+    color: #6ee7b7;
+}
+
+.light .comment-feedback-error {
+    color: #b91c1c;
+}
+
+.light .comment-feedback-success {
+    color: #047857;
 }

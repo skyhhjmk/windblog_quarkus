@@ -624,7 +624,11 @@
     // 渲染纠错外侧卡片或 Mobile info 按钮
     function renderCorrectionInterface(spanElement, quoteId, userName, explanation, commentId) {
         const bodyContent = document.getElementById('post-body-content');
-        const isWideScreen = window.innerWidth > 1200;
+        // The tip card is absolutely positioned 290px into the gutter left of
+        // the article. A centred layout at 1280-1900px does not always have
+        // that much room, so both the viewport and the measured gutter must fit.
+        const articleLeft = bodyContent.getBoundingClientRect().left;
+        const isWideScreen = window.innerWidth > 1200 && articleLeft >= 300;
 
         if (isWideScreen) {
             // 宽屏模式：在左侧空白渲染争议提示卡片
@@ -880,9 +884,34 @@
         }, 100);
     }
 
-    // 监听 resize & scroll 事件以便重绘 SVG 折线
-    window.addEventListener('resize', drawCorrectionLines);
-    window.addEventListener('scroll', drawCorrectionLines);
+    // 折线使用文档坐标，滚动不会改变它们；只有布局变化（窗口尺寸、图片/字体加载）
+    // 才需要重绘，避免把整张 SVG 在每次滚动时拆掉重建。
+    let correctionRedrawQueued = false;
+    function scheduleCorrectionRedraw() {
+        if (correctionRedrawQueued) return;
+        correctionRedrawQueued = true;
+        window.requestAnimationFrame(function () {
+            correctionRedrawQueued = false;
+            drawCorrectionLines();
+        });
+    }
+
+    window.addEventListener('resize', scheduleCorrectionRedraw);
+    window.addEventListener('load', scheduleCorrectionRedraw);
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(scheduleCorrectionRedraw).catch(function () {});
+    }
+    if (typeof ResizeObserver === 'function') {
+        const correctionResizeObserver = new ResizeObserver(scheduleCorrectionRedraw);
+        ready(function () {
+            const bodyContent = document.getElementById('post-body-content');
+            if (bodyContent) correctionResizeObserver.observe(bodyContent);
+        });
+        document.addEventListener('pjax:complete', function () {
+            const bodyContent = document.getElementById('post-body-content');
+            if (bodyContent) correctionResizeObserver.observe(bodyContent);
+        });
+    }
 
     // 页面完全载入或 PJAX 无刷新跳转载入时触发初始化
     ready(function () {

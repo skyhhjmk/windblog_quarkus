@@ -160,6 +160,9 @@
         const themeToggles = document.querySelectorAll('.theme-toggle');
         const darkIcons = document.querySelectorAll('.theme-icon-dark');
         const lightIcons = document.querySelectorAll('.theme-icon-light');
+        const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        let themeTransitionTimer = null;
 
         function updateThemeUI() {
             const isLight = document.documentElement.classList.contains('light');
@@ -167,15 +170,32 @@
             lightIcons.forEach(icon => isLight ? icon.classList.remove('hidden') : icon.classList.add('hidden'));
             const colorSchemeMeta = document.getElementById('color-scheme-meta');
             if (colorSchemeMeta) colorSchemeMeta.setAttribute('content', isLight ? 'light' : 'dark');
+            if (themeColorMeta) {
+                const pageBackground = window.getComputedStyle(document.documentElement)
+                    .getPropertyValue('--bg').trim();
+                if (pageBackground) themeColorMeta.setAttribute('content', pageBackground);
+            }
+        }
+
+        function applyTheme(isLight) {
+            const root = document.documentElement;
+            if (!prefersReducedMotion.matches) {
+                root.classList.add('theme-transitioning');
+                window.clearTimeout(themeTransitionTimer);
+                themeTransitionTimer = window.setTimeout(() => {
+                    root.classList.remove('theme-transitioning');
+                }, 260);
+            }
+            root.classList.toggle('light', isLight);
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            updateThemeUI();
         }
 
         if (themeToggles.length > 0) {
             updateThemeUI();
             themeToggles.forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const isLight = document.documentElement.classList.toggle('light');
-                    localStorage.setItem('theme', isLight ? 'light' : 'dark');
-                    updateThemeUI();
+                    applyTheme(!document.documentElement.classList.contains('light'));
                 });
             });
         }
@@ -315,13 +335,16 @@
                 navigationStatus.hidden = false;
             }, 800);
             if (!bar) return;
+            // scaleX keeps the indicator on the compositor; animating width
+            // would force a layout pass for every frame of the bar.
+            bar.dataset.active = 'true';
             bar.style.transition = 'none';
-            bar.style.width = '0';
+            bar.style.transform = 'scaleX(0)';
             void bar.offsetWidth;
-            bar.style.transition = 'width .25s ease';
-            progressStartTimer = setTimeout(() => { bar.style.width = '60%'; }, 120);
+            bar.style.transition = 'transform .25s ease';
+            progressStartTimer = setTimeout(() => { bar.style.transform = 'scaleX(0.6)'; }, 120);
             progressTimer = setTimeout(() => {
-                bar.style.width = '85%';
+                bar.style.transform = 'scaleX(0.85)';
             }, 300);
         }
 
@@ -330,10 +353,13 @@
             navigationStatus.hidden = true;
             document.getElementById('pjax-container')?.removeAttribute('aria-busy');
             if (!bar) return;
-            if (bar.style.width !== '0px' && bar.style.width !== '0%') bar.style.width = '100%';
+            if (bar.dataset.active === 'true') {
+                bar.style.transform = 'scaleX(1)';
+            }
+            delete bar.dataset.active;
             progressResetTimer = setTimeout(() => {
                 bar.style.transition = 'none';
-                bar.style.width = '0';
+                bar.style.transform = 'scaleX(0)';
             }, 200);
         }
 
@@ -1158,7 +1184,10 @@
 
         function formatTimestamps(root = document) {
             const elements = root.querySelectorAll('.timestamp:not(.formatted)');
-            elements.forEach(el => {
+            const candidates = root.matches?.('.timestamp:not(.formatted)')
+                ? [root, ...elements]
+                : Array.from(elements);
+            candidates.forEach(el => {
                 try {
                     if (el.classList.contains('formatted')) return;
                     const raw = el.getAttribute('data-timestamp') || el.textContent;
@@ -1352,11 +1381,18 @@
             scheduleArticleLinkPreviewHide();
         });
 
+        let articleLinkPreviewScrollQueued = false;
         document.addEventListener('scroll', () => {
-            if (!articleLinkPreviewCurrentAnchor) {
+            if (!articleLinkPreviewCurrentAnchor || articleLinkPreviewScrollQueued) {
                 return;
             }
-            showArticleLinkPreview(articleLinkPreviewCurrentAnchor);
+            articleLinkPreviewScrollQueued = true;
+            window.requestAnimationFrame(() => {
+                articleLinkPreviewScrollQueued = false;
+                if (articleLinkPreviewCurrentAnchor) {
+                    showArticleLinkPreview(articleLinkPreviewCurrentAnchor);
+                }
+            });
         }, true);
 
         window.addEventListener('resize', () => {
@@ -1366,23 +1402,35 @@
             showArticleLinkPreview(articleLinkPreviewCurrentAnchor);
         });
 
-        // MutationObserver to handle dynamic content
+        // MutationObserver to handle dynamic content. Only the inserted
+        // subtrees are rescanned, and all insertions in one frame are batched,
+        // instead of re-querying the whole document per mutation.
+        let mutationRefreshQueued = false;
+        const pendingMutationRoots = new Set();
         const observer = new MutationObserver((mutations) => {
-            let hasAddedContent = false;
             mutations.forEach(mutation => {
-                if (mutation.addedNodes.length) {
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE && !node.classList?.contains('code-block-wrapper')) {
-                            hasAddedContent = true;
-                            break;
-                        }
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE && !node.classList?.contains('code-block-wrapper')) {
+                        pendingMutationRoots.add(node);
                     }
                 }
             });
-            if (hasAddedContent) {
-                formatTimestamps();
-                decorateCodeBlocks();
+            if (pendingMutationRoots.size === 0 || mutationRefreshQueued) {
+                return;
             }
+            mutationRefreshQueued = true;
+            window.requestAnimationFrame(() => {
+                mutationRefreshQueued = false;
+                const roots = Array.from(pendingMutationRoots);
+                pendingMutationRoots.clear();
+                roots.forEach(root => {
+                    if (!root.isConnected) {
+                        return;
+                    }
+                    formatTimestamps(root);
+                    decorateCodeBlocks(root);
+                });
+            });
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
@@ -1507,7 +1555,8 @@
 
         function decorateCodeBlocks(root = document) {
             if (!root || !root.querySelectorAll) return;
-            const preElements = root.querySelectorAll('.prose pre, .vditor-reset pre');
+            const matches = root.matches?.('.prose pre, .vditor-reset pre') ? [root] : [];
+            const preElements = matches.concat(Array.from(root.querySelectorAll('.prose pre, .vditor-reset pre')));
             preElements.forEach((pre) => {
                 if (pre.dataset.codeDecorated === 'true' || pre.closest('.code-block-wrapper')) {
                     return;

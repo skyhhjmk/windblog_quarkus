@@ -15,14 +15,15 @@
             theme: {
                 extend: {
                     colors: {
-                        bg: 'var(--bg)',
-                        card: 'var(--card-bg)',
-                        border: 'var(--border)',
+                        bg: 'rgb(var(--bg-channels) / <alpha-value>)',
+                        card: 'rgb(var(--card-bg-channels) / <alpha-value>)',
+                        'card-bg': 'rgb(var(--card-bg-channels) / <alpha-value>)',
+                        border: 'rgb(var(--border-channels) / calc(var(--border-alpha) * <alpha-value>))',
                         'border-hover': 'var(--border-hover)',
-                        accent: 'var(--accent)',
-                        main: 'var(--text-main)',
-                        body: 'var(--text-body)',
-                        meta: 'var(--text-meta)',
+                        accent: 'rgb(var(--accent-channels) / <alpha-value>)',
+                        main: 'rgb(var(--text-main-channels) / <alpha-value>)',
+                        body: 'rgb(var(--text-body-channels) / <alpha-value>)',
+                        meta: 'rgb(var(--text-meta-channels) / <alpha-value>)',
                     },
                     maxWidth: {
                         '1400': '1400px',
@@ -41,8 +42,8 @@
     </script>
 
     <!-- Theme & UI Styles -->
-    <link rel="stylesheet" href="/assets/css/theme.css"/>
-    <link rel="stylesheet" href="/assets/css/ui.css"/>
+    <link rel="stylesheet" href="/assets/css/theme.css?v=theme-audit-20261029"/>
+    <link rel="stylesheet" href="/assets/css/ui.css?v=theme-audit-20261029"/>
 
     <style nonce="{cspNonce}">
         :root {
@@ -147,7 +148,8 @@
             border-radius: 12px;
             font-weight: 600;
             text-decoration: none;
-            transition: all 0.2s;
+            transition: transform 0.2s ease, filter 0.2s ease,
+                        background-color 0.2s ease, border-color 0.2s ease;
             cursor: pointer;
             display: inline-block;
             border: none;

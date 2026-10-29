@@ -28,7 +28,7 @@
             <!-- 1. 内容权限与价格 (最优先) -->
             {#if postPrice > 0}
                 <section
-                        class="sidebar-widget bg-card/40 backdrop-blur-md border border-accent/20 rounded-xl p-6 transition-all duration-300">
+                        class="sidebar-widget bg-card border border-accent/20 rounded-xl p-6 transition-all duration-300">
                     <div class="flex items-center gap-3 mb-6">
                         <div class="w-1.5 h-6 bg-accent rounded-full shadow-[0_0_12px_rgba(6,182,212,0.5)]"></div>
                         <h3 class="text-sm font-bold tracking-wider text-main uppercase">内容权限</h3>
@@ -67,7 +67,7 @@
             <!-- 3. 附件信息 (如果有) -->
             {#if attachments && ! attachments.isEmpty}
                 <section
-                        class="sidebar-widget bg-card/40 backdrop-blur-md border border-border rounded-xl p-6 transition-all duration-300"
+                        class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300"
                         data-attachments-section="true">
                     <div class="flex items-center gap-3 mb-6">
                         <div class="w-1.5 h-6 bg-accent rounded-full"></div>
@@ -130,7 +130,7 @@
             <!-- 5. 关联商品 -->
             {#if relatedStoreItems && ! relatedStoreItems.isEmpty}
                 <section
-                        class="sidebar-widget bg-card/40 backdrop-blur-md border border-border rounded-xl p-6 transition-all duration-300">
+                        class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300">
                     <div class="flex items-center gap-3 mb-6">
                         <div class="w-1.5 h-6 bg-accent rounded-full"></div>
                         <h3 class="text-sm font-bold tracking-wider text-main uppercase">推荐商品</h3>
@@ -175,9 +175,9 @@
         <nav aria-label="面包屑" class="text-xs text-meta font-mono mb-6 flex items-center gap-1.5">
             <a href="/" class="hover:text-accent transition-colors">首页</a>
             {#if breadcrumbCategorySlug}
-            <span aria-hidden="true" class="text-border">/</span><a href="/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors">{postCategory}</a>
+            <span aria-hidden="true" class="text-meta/60">/</span><a href="/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors">{postCategory}</a>
             {/if}
-            <span aria-hidden="true" class="text-border">/</span><span class="text-main truncate max-w-xs">{postTitle}</span>
+            <span aria-hidden="true" class="text-meta/60">/</span><span class="text-main truncate max-w-xs">{postTitle}</span>
         </nav>
         <article class="space-y-8 md:space-y-12" data-article-transition-slug="{postSlug}">
             <header class="space-y-6 md:space-y-8 mb-8 md:mb-12">
@@ -291,7 +291,7 @@
                             <div class="flex flex-wrap gap-2 pt-1">
                                 <button type="button"
                                         id="copy-repost-attribution-button"
-                                        class="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white hover:opacity-90 transition-opacity">
+                                        class="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-[var(--accent-foreground)] hover:opacity-90 transition-opacity">
                                     复制转载说明
                                 </button>
                                 <button type="button"
@@ -312,7 +312,7 @@
 
 
             <!-- 付费内容安全加载：初始只显示预览内容 -->
-            <section class="prose dark:prose-invert max-w-none{#if postPrice > 0} post-paywall{/if}" id="post-content-section"
+            <section class="prose max-w-none{#if postPrice > 0} post-paywall{/if}" id="post-content-section"
                      data-post-ref="{postSlug}"
                      data-post-price="{postPrice}"
                      data-has-purchased="{hasPurchased}">

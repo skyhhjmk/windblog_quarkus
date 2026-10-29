@@ -14,17 +14,22 @@
     }
 
     function prepareImage(image) {
-        if (!image.getAttribute('src').trim() || !hasReservedDimensions(image)
-                || image.dataset.articleImagePrepared === 'true') {
+        if (!image.getAttribute('src').trim() || image.dataset.articleImagePrepared === 'true') {
             return;
         }
 
         image.dataset.articleImagePrepared = 'true';
+        // Lazy loading and async decoding do not need reserved dimensions, so
+        // every article image gets them. The shimmer needs a known box, so it
+        // stays limited to images rendered with width/height.
         if (!image.getAttribute('loading')) {
             image.setAttribute('loading', 'lazy');
         }
         if (!image.getAttribute('decoding')) {
             image.setAttribute('decoding', 'async');
+        }
+        if (!hasReservedDimensions(image)) {
+            return;
         }
         setImageState(image, 'loading');
         image.addEventListener('load', function () {
@@ -45,11 +50,11 @@
         if (!root) {
             return;
         }
-        if (root.matches && root.matches('.prose img[src][width][height]')) {
+        if (root.matches && root.matches('.prose img[src]')) {
             prepareImage(root);
         }
         if (root.querySelectorAll) {
-            root.querySelectorAll('.prose img[src][width][height]').forEach(prepareImage);
+            root.querySelectorAll('.prose img[src]').forEach(prepareImage);
         }
     }
 

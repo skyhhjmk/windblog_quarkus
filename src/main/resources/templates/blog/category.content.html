@@ -28,7 +28,7 @@
                 <div class="flex flex-wrap items-center gap-2 text-xs meta-mono">
                     <a href="/category" class="text-body hover:text-main transition-colors">根节点</a>
                     {#for node in breadcrumbs}
-                        <span class="text-border">/</span>
+                        <span class="text-meta/60">/</span>
                         <a href="{node.url}" class="text-accent/70 hover:text-accent transition-colors">{node.name.toUpperCase()}</a>
                     {/for}
                 </div>
@@ -74,14 +74,14 @@
                 {#if posts && posts.size > 0}
                     <div class="grid grid-cols-1 gap-6 md:gap-8">
                         {#for post in posts}
-                            <article class="group card p-6 sm:p-7 md:p-8 transition-all duration-300 relative rounded-2xl border border-border hover:border-accent/40 bg-card hover:shadow-xl" data-article-transition-slug="{post.slug}">
+                            <article class="group card p-6 sm:p-7 md:p-8 relative rounded-2xl border border-border bg-card" data-article-transition-slug="{post.slug}">
                                 <div class="flex flex-col gap-4">
                                     <!-- Meta Information -->
                                     <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono">
                                         {#for category in post.categories}
                                             <a class="text-accent font-semibold hover:underline" href="/category/{category.slug}">{category.name}</a>
                                         {/for}
-                                        <span class="text-border">•</span>
+                                        <span class="text-meta/60">•</span>
                                         <time class="timestamp text-meta" data-timestamp="{post.publishedAtText}">{post.publishedAtText}</time>
                                     </div>
 

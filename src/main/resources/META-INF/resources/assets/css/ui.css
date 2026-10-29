@@ -52,7 +52,7 @@
     gap: 1rem;
     transform: translateY(1rem) scale(0.95);
     opacity: 0;
-    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .toast.show {
@@ -144,6 +144,25 @@
 #appModal.show .modal-container {
     transform: scale(1) translateY(0);
     opacity: 1;
+}
+
+/* Header panels (mobile menu, account dropdown) share the same entrance
+   motion as toasts and modals instead of appearing instantly. Closing stays
+   immediate; only the opening frame is animated. */
+@keyframes windblog-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#mobileMenu:not(.hidden),
+#userDropdown:not(.hidden) {
+    animation: windblog-panel-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Button Loading State */
@@ -274,7 +293,11 @@
     overflow: visible;
     pointer-events: none;
     transform-origin: left top;
-    will-change: transform, width, height, font-size, line-height;
+    /* Only transform is composited; the layout properties still change per
+       frame, so contain keeps the reflow inside the clone instead of
+       promoting five properties to their own layer. */
+    will-change: transform;
+    contain: layout paint style;
     word-break: break-word;
 }
 

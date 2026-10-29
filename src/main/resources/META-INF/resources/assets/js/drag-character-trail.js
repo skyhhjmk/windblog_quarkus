@@ -9,33 +9,29 @@
     const lifetimeFrames = 70;
     const minimumPointDistance = 40;
     const maximumPoints = 60;
-    function resolveTrailColor() {
-        try {
-            const val = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-            if (val) return val;
-        } catch (_) {}
-        return '#0ea5e9';
-    }
+    // A full-viewport canvas at DPR 2 costs ~32 MiB of backing store; 1.5 is
+    // visually indistinguishable for 12px glyphs and a third of the memory.
+    const maximumDeviceScale = 1.5;
+    const idleReleaseDelay = 4000;
+
     if (!window.matchMedia) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-
-    if (reducedMotion.matches ||
-        window.matchMedia('(max-width: 767px), (hover: none), (pointer: coarse)').matches ||
-        document.getElementById(canvasId)) {
+    const coarsePointer = window.matchMedia('(max-width: 767px), (hover: none), (pointer: coarse)');
+    if (reducedMotion.matches || coarsePointer.matches || document.getElementById(canvasId)) {
         return;
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.id = canvasId;
-    canvas.setAttribute('aria-hidden', 'true');
-    document.body.insertBefore(canvas, document.body.firstChild);
-
-    const context = canvas.getContext('2d');
-    if (!context) {
-        canvas.remove();
-        return;
+    let accentColor = '#0ea5e9';
+    function refreshAccentColor() {
+        try {
+            const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+            if (value) accentColor = value;
+        } catch (_) {}
     }
+    refreshAccentColor();
 
+    let canvas = null;
+    let context = null;
     let deviceScale = 1;
     let width = 0;
     let height = 0;
@@ -44,20 +40,72 @@
     let cellCount = 0;
     let cellX = new Float32Array();
     let cellY = new Float32Array();
+    let cellFade = new Float32Array();
     let baseGlyph = new Uint8Array();
     const points = [];
     let previousX = -9000;
     let previousY = -9000;
     let frame = 0;
     let animationFrame = 0;
+    let idleTimer = 0;
     let animationRunning = false;
+    let resizeQueued = false;
+
+    function releaseCanvas() {
+        window.clearTimeout(idleTimer);
+        idleTimer = 0;
+        if (animationFrame) {
+            window.cancelAnimationFrame(animationFrame);
+        }
+        animationFrame = 0;
+        animationRunning = false;
+        points.length = 0;
+        if (canvas) {
+            // Freeing the backing store is what actually returns the memory;
+            // merely hiding a full-viewport canvas keeps it allocated.
+            canvas.width = 0;
+            canvas.height = 0;
+            canvas.remove();
+            canvas = null;
+        }
+        context = null;
+        width = 0;
+        height = 0;
+        cellCount = 0;
+    }
+
+    function scheduleIdleRelease() {
+        window.clearTimeout(idleTimer);
+        idleTimer = window.setTimeout(releaseCanvas, idleReleaseDelay);
+    }
+
+    function ensureCanvas() {
+        if (canvas && context) {
+            return true;
+        }
+        const element = document.createElement('canvas');
+        element.id = canvasId;
+        element.setAttribute('aria-hidden', 'true');
+        document.body.insertBefore(element, document.body.firstChild);
+        const ctx = element.getContext('2d');
+        if (!ctx) {
+            element.remove();
+            return false;
+        }
+        canvas = element;
+        context = ctx;
+        refreshAccentColor();
+        resize();
+        return width > 0 && height > 0;
+    }
 
     function resize() {
+        if (!canvas || !context) return;
         width = Math.round(window.innerWidth);
         height = Math.round(window.innerHeight);
         if (width === 0 || height === 0) return;
 
-        deviceScale = Math.max(1, window.devicePixelRatio || 1);
+        deviceScale = Math.max(1, Math.min(maximumDeviceScale, window.devicePixelRatio || 1));
         canvas.width = Math.round(width * deviceScale);
         canvas.height = Math.round(height * deviceScale);
         context.setTransform(deviceScale, 0, 0, deviceScale, 0, 0);
@@ -67,14 +115,32 @@
         cellCount = columns * rows;
         cellX = new Float32Array(cellCount);
         cellY = new Float32Array(cellCount);
+        cellFade = new Float32Array(cellCount);
         baseGlyph = new Uint8Array(cellCount);
 
+        const halfWidth = width * 0.32;
+        const halfHeight = height * 0.35;
         for (let row = 0; row < rows; row++) {
             for (let column = 0; column < columns; column++) {
                 const index = row * columns + column;
-                cellX[index] = column * cellSize + cellSize * 0.5;
-                cellY[index] = row * cellSize + cellSize * 0.5;
+                const x = column * cellSize + cellSize * 0.5;
+                const y = row * cellSize + cellSize * 0.5;
+                cellX[index] = x;
+                cellY[index] = y;
                 baseGlyph[index] = Math.random() * glyphs.length | 0;
+
+                const normalizedX = (x - width / 2) / halfWidth;
+                const normalizedY = (y - height / 2) / halfHeight;
+                const distance = Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                // Same falloff as the old CSS radial mask, baked into the alpha
+                // so the canvas needs no mask layer of its own.
+                if (distance <= 0.3) {
+                    cellFade[index] = 1;
+                } else if (distance <= 0.62) {
+                    cellFade[index] = 1 - 0.45 * ((distance - 0.3) / 0.32);
+                } else if (distance <= 0.92) {
+                    cellFade[index] = 0.55 * (1 - (distance - 0.62) / 0.3);
+                }
             }
         }
         points.length = 0;
@@ -82,12 +148,13 @@
     }
 
     function draw() {
-        if (width === 0 || height === 0) return;
+        if (!context || width === 0 || height === 0) return;
 
         context.clearRect(0, 0, width, height);
-        context.font = `${fontSize}px 'Apercu Mono Pro', 'JetBrains Mono', ui-monospace, monospace`;
+        context.font = `${fontSize}px 'JetBrains Mono', ui-monospace, monospace`;
         context.textAlign = 'center';
         context.textBaseline = 'middle';
+        context.fillStyle = accentColor;
 
         let minX = Infinity;
         let minY = Infinity;
@@ -100,6 +167,8 @@
             maxX = Math.max(maxX, point.x);
             maxY = Math.max(maxY, point.y);
         }
+        if (minX === Infinity) return;
+
         minX -= radius;
         minY -= radius;
         maxX += radius;
@@ -108,6 +177,8 @@
         const radiusSquared = radius * radius;
         const pointCount = points.length;
         for (let index = 0; index < cellCount; index++) {
+            const fade = cellFade[index];
+            if (fade <= 0) continue;
             const x = cellX[index];
             const y = cellY[index];
             if (x < minX || x > maxX || y < minY || y > maxY) continue;
@@ -129,6 +200,7 @@
                 if (influence > intensity) intensity = influence;
             }
 
+            intensity *= fade;
             if (intensity < 0.03) continue;
             const glyphIndex = intensity > 0.25
                 ? (baseGlyph[index] + ((frame * 0.06 + intensity * 2 | 0) & 32767)) % glyphs.length
@@ -137,7 +209,6 @@
             if (glyph === ' ') continue;
 
             context.globalAlpha = intensity > 0.25 ? intensity * 0.55 : intensity * 0.4;
-            context.fillStyle = resolveTrailColor();
             context.fillText(glyph, x, y);
         }
         context.globalAlpha = 1;
@@ -154,11 +225,14 @@
             animationFrame = window.requestAnimationFrame(animate);
         } else {
             animationRunning = false;
-            draw();
+            animationFrame = 0;
+            scheduleIdleRelease();
         }
     }
 
     function startAnimation() {
+        window.clearTimeout(idleTimer);
+        idleTimer = 0;
         if (animationRunning) return;
         animationRunning = true;
         animationFrame = window.requestAnimationFrame(animate);
@@ -170,13 +244,15 @@
         const y = event.clientY;
         const dx = x - previousX;
         const dy = y - previousY;
-        if (dx * dx + dy * dy > minimumPointDistance * minimumPointDistance) {
-            points.push({x, y, birth: frame});
-            if (points.length > maximumPoints) points.shift();
-            previousX = x;
-            previousY = y;
-            startAnimation();
+        if (dx * dx + dy * dy <= minimumPointDistance * minimumPointDistance) {
+            return;
         }
+        if (!ensureCanvas()) return;
+        points.push({x, y, birth: frame});
+        if (points.length > maximumPoints) points.shift();
+        previousX = x;
+        previousY = y;
+        startAnimation();
     }
 
     function resetPointerPath() {
@@ -184,27 +260,37 @@
         previousY = -9000;
     }
 
-    resize();
+    function queueResize() {
+        if (resizeQueued || !canvas) return;
+        resizeQueued = true;
+        window.requestAnimationFrame(() => {
+            resizeQueued = false;
+            if (canvas) resize();
+        });
+    }
+
     window.addEventListener('pointermove', handlePointerMove, {passive: true});
     window.addEventListener('pointerleave', resetPointerPath, {passive: true});
     window.addEventListener('blur', resetPointerPath, {passive: true});
+    window.addEventListener('resize', queueResize, {passive: true});
+
     reducedMotion.addEventListener('change', (event) => {
         if (!event.matches) return;
-        window.cancelAnimationFrame(animationFrame);
-        animationRunning = false;
-        points.length = 0;
+        releaseCanvas();
         resetPointerPath();
-        context.clearRect(0, 0, width, height);
     });
 
-    window.addEventListener('resize', resize, {passive: true});
+    // The accent is read from the theme once and refreshed only when it changes,
+    // instead of calling getComputedStyle for every glyph of every frame.
+    const themeObserver = new MutationObserver(refreshAccentColor);
+    themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
+    const colorScheme = window.matchMedia('(prefers-color-scheme: light)');
+    colorScheme.addEventListener?.('change', refreshAccentColor);
+
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-            window.cancelAnimationFrame(animationFrame);
-            animationRunning = false;
-            points.length = 0;
+            releaseCanvas();
             resetPointerPath();
-            context.clearRect(0, 0, width, height);
         }
     });
 })();

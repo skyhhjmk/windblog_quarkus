@@ -86,7 +86,7 @@
         {#if hits && hits.size > 0}
             <div class="grid grid-cols-1 gap-6 md:gap-8">
                 {#for hit in hits}
-                    <article class="group card p-6 sm:p-7 md:p-8 transition-all duration-300 relative rounded-2xl border border-border hover:border-accent/40 bg-card hover:shadow-xl" data-article-transition-slug="{hit.slug}">
+                    <article class="group card p-6 sm:p-7 md:p-8 relative rounded-2xl border border-border bg-card" data-article-transition-slug="{hit.slug}">
                         <div class="flex flex-col gap-4">
                             <!-- Meta Information -->
                             <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono">
@@ -95,7 +95,7 @@
                                         <span class="w-1.5 h-1.5 rounded-full bg-accent/70"></span>
                                         {hit.authorName}
                                     </span>
-                                    <span class="text-border">•</span>
+                                    <span class="text-meta/60">•</span>
                                 {/if}
                                 <time class="timestamp text-meta" data-timestamp="{hit.dateText}">{hit.dateText}</time>
                             </div>
