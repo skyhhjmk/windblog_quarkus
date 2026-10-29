@@ -1,5 +1,5 @@
 <div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
-     data-page-title="{pageTitle ?: '搜索'}"
+     data-page-title="{pageTitle ?: i18n.t('search.title')}"
      data-page-robots="{seoRobots}">
     <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / search</div>
     <div id="pjax-sidebar-html" class="hidden">
@@ -14,27 +14,27 @@
         <header class="space-y-8">
             <div class="space-y-2">
                 <div class="flex items-center gap-3">
-                    <span class="meta-mono text-accent">发现</span>
+                    <span class="meta-mono text-accent">{i18n.t('search.discover')}</span>
                     <span class="w-8 h-[1px] bg-accent/30"></span>
                 </div>
-                <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">搜索结果</h1>
+                <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">{i18n.t('search.results')}</h1>
                 {#if hasKeyword}
-                    <p class="text-lg text-gray-400">找到 {totalCount ?: 0} 个匹配项，关键词：<span
+                    <p class="text-lg text-gray-400">{i18n.format('search.found_count', totalCount ?: 0)}<span
                                 class="text-main font-semibold">"{searchKeyword ?: ''}"</span></p>
                     {#if edgeNode && !deepSearchRequested}
                         <p class="text-sm text-gray-500">
-                            当前为边缘节点本地搜索。没有想找的？
-                            <a href="{deepSearchUrl}" class="text-accent hover:text-main transition-colors">深度搜索</a>
+                            {i18n.t('search.local')}
+                            <a href="{deepSearchUrl}" class="text-accent hover:text-main transition-colors">{i18n.t('search.deep')}</a>
                         </p>
                     {/if}
                     {#if deepSearchRequested && usedElasticsearch}
-                        <p class="text-sm text-gray-500">已通过主节点 Elasticsearch 完成深度搜索。</p>
+                        <p class="text-sm text-gray-500">{i18n.t('search.deep_done')}</p>
                     {/if}
                     {#if deepSearchFailed}
-                        <p class="text-sm text-amber-400">深度搜索暂不可用，已显示边缘节点本地数据库搜索结果。</p>
+                        <p class="text-sm text-amber-400">{i18n.t('search.deep_unavailable')}</p>
                     {/if}
                 {#else}
-                    <p class="text-lg text-gray-400">输入关键词以发现相关内容。</p>
+                    <p class="text-lg text-gray-400">{i18n.t('search.hint')}</p>
                 {/if}
             </div>
 
@@ -43,7 +43,7 @@
                     <input type="text"
                            name="q"
                            value="{searchKeyword ?: ''}"
-                           placeholder="输入以搜索...（Ctrl+K）"
+                           placeholder="{i18n.t('search.placeholder')} (Ctrl+K)"
                            data-shortcut-target="search"
                            class="w-full pl-14 pr-4 py-4 bg-card border border-border rounded-lg text-xl text-main outline-none"/>
                     <svg class="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-600 group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -53,7 +53,7 @@
 
                 <div class="flex flex-wrap gap-5 md:gap-8 text-xs meta-mono border-t border-border pt-6 md:pt-8">
                     <div class="flex items-center gap-3">
-                        <span class="text-gray-600 uppercase">类型：</span>
+                        <span class="text-gray-600 uppercase">{i18n.t('search.type')}</span>
                         <div class="flex gap-4">
                             {#for link in typeLinks}
                                 <a href="{link.url}"
@@ -62,7 +62,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="text-gray-600 uppercase">排序：</span>
+                        <span class="text-gray-600 uppercase">{i18n.t('search.sort')}</span>
                         <div class="flex gap-4">
                             {#for link in sortLinks}
                                 <a href="{link.url}"
@@ -71,7 +71,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="text-gray-600 uppercase">日期：</span>
+                        <span class="text-gray-600 uppercase">{i18n.t('search.date')}</span>
                         <div class="flex gap-4">
                             {#for link in dateLinks}
                                 <a href="{link.url}"
@@ -127,7 +127,7 @@
                                                                                        rx="2"></rect><path
                                                             d="M2 14h2"></path><path d="M20 14h2"></path><path
                                                             d="M15 13v2"></path><path d="M9 13v2"></path></svg>
-                                            AI 摘要
+                                            {i18n.t('common.ai_summary')}
                                         </span>
                                     </div>
                                     <p class="text-xs sm:text-sm text-body line-clamp-2 leading-relaxed"
@@ -150,10 +150,10 @@
                             </p>
 
                             {#if hit.contentSnippets && hit.contentSnippets.size > 0}
-                                <div class="mt-1 p-3 rounded-xl bg-input-bg border border-border/60 space-y-1.5" aria-label="正文搜索匹配内容">
+                                <div class="mt-1 p-3 rounded-xl bg-input-bg border border-border/60 space-y-1.5" aria-label="{i18n.t('search.snippet_aria')}">
                                     <span class="text-[10px] font-mono uppercase tracking-wider text-accent font-semibold flex items-center gap-1.5">
                                         <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>
-                                        正文命中片段
+                                        {i18n.t('search.snippet')}
                                     </span>
                                     {#for snippet in hit.contentSnippets}
                                         <p class="text-xs leading-relaxed text-body line-clamp-2">
@@ -173,7 +173,7 @@
                             <div class="mt-2 pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/50">
                                 <div class="flex flex-wrap gap-2">
                                     {#for category in hit.categories}
-                                        <a href="/category/{category.slug}" class="badge-category relative z-10">
+                                        <a href="{languagePrefix}/category/{category.slug}" class="badge-category relative z-10">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                                                  stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
                                                  stroke-linejoin="round">
@@ -184,7 +184,7 @@
                                     {/for}
                                     {#if hit.tags}
                                         {#for tag in hit.tags}
-                                            <a href="/tag/{tag.slug}" class="badge-tag relative z-10">
+                                            <a href="{languagePrefix}/tag/{tag.slug}" class="badge-tag relative z-10">
                                                 #{tag.name}
                                             </a>
                                         {/for}
@@ -192,7 +192,7 @@
                                 </div>
 
                                 <a href="{hit.url}" class="flex items-center gap-1.5 text-xs font-semibold text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
-                                    <span>查看内容</span>
+                                    <span>{i18n.t('search.view')}</span>
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
@@ -206,8 +206,8 @@
             {#include blog/pagination.html /}
         {#else}
             <div class="card p-24 text-center border-dashed">
-                <p class="text-gray-500 italic mb-6">未找到符合您搜索条件的匹配项。</p>
-                <a href="/" class="btn-minimal">返回首页</a>
+                <p class="text-gray-500 italic mb-6">{i18n.t('search.empty')}</p>
+                <a href="{languagePrefix}/" class="btn-minimal">{i18n.t('search.back_home')}</a>
             </div>
         {/if}
     </section>

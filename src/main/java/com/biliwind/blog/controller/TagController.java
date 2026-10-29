@@ -294,7 +294,7 @@ public class TagController {
             url.append(hasQuery ? "&" : "?");
             url.append("page=").append(page);
         }
-        return url.toString();
+        return languageContext.localize(url.toString());
     }
 
     private String buildTagDetailUrl(String slug, int page) {
@@ -302,7 +302,7 @@ public class TagController {
         if (page > 1) {
             url.append("?page=").append(page);
         }
-        return url.toString();
+        return languageContext.localize(url.toString());
     }
 
     private List<PaginationPage> buildPaginationPages(int currentPage, int totalPages,

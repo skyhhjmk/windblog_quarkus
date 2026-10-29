@@ -23,6 +23,12 @@ public class AdminRegionController extends AdminBaseApiController {
     com.biliwind.blog.service.RegionRuleService regionRuleService;
 
     @Inject
+    com.biliwind.blog.service.LanguageSettingsService languageSettingsService;
+
+    @Inject
+    com.biliwind.blog.context.AdminRequestContext adminRequestContext;
+
+    @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     @Inject
@@ -31,6 +37,31 @@ public class AdminRegionController extends AdminBaseApiController {
     @GET
     public List<RegionRule> listRules() {
         return RegionRule.list("order by priority desc");
+    }
+
+    @GET
+    @Path("/languages")
+    public List<com.biliwind.blog.service.LanguageSettingsService.RegionLanguageSetting> listLanguages() {
+        return languageSettingsService.listSettings();
+    }
+
+    @PUT
+    @Path("/languages/{region}")
+    @Transactional
+    public com.biliwind.blog.service.LanguageSettingsService.RegionLanguageSetting updateLanguage(
+            @PathParam("region") String regionCode,
+            java.util.Map<String, String> body) {
+        com.biliwind.blog.model.BlogRegion region = java.util.Arrays.stream(
+                        com.biliwind.blog.model.BlogRegion.values())
+                .filter(candidate -> candidate.getCode().equalsIgnoreCase(regionCode))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("区域不存在"));
+        String language = body == null ? null : body.get("defaultLanguage");
+        if (language == null || language.isBlank()) {
+            throw new BadRequestException("defaultLanguage 不能为空");
+        }
+        return languageSettingsService.updateDefaultLanguage(
+                region, language, adminRequestContext.getUserId(), "region language update");
     }
 
     @POST

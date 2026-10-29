@@ -1,11 +1,11 @@
-<div id="pjax-content-root" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="首页{#if subPage && subPage > 1} - 页码 {subPage}{/if}">
+<div id="pjax-content-root" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{i18n.t('index.nav')}{#if subPage && subPage > 1} - {i18n.t('common.page')} {subPage}{/if}">
     <template id="pjax-head-metadata">
         {#if jsonLd.or(null)}
             <script type="application/ld+json" nonce="{cspNonce}" data-pjax-managed="true">{jsonLd.raw}</script>
         {/if}
     </template>
     <div id="pjax-nav-path" class="hidden">
-        {config:siteNavRoot} / 首页{#if subPage && subPage > 1} / page-{subPage}{/if}
+        {config:siteNavRoot} / {i18n.t('common.home')}{#if subPage && subPage > 1} / page-{subPage}{/if}
     </div>
     {#if pjaxRequest}
         <div id="pjax-sidebar-html" class="hidden">
@@ -23,12 +23,12 @@
             <div class="space-y-1">
                 <div class="flex items-center gap-2 text-xs font-mono text-accent">
                     <span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-                    <span>LATEST ARTICLES</span>
+                    <span>{i18n.t('index.badge')}</span>
                 </div>
-                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">最近文章</h1>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">{i18n.t('index.title')}</h1>
             </div>
             {#if subPage && subPage > 1}
-                <span class="text-xs font-mono px-2.5 py-1 rounded-md bg-card border border-border text-meta">第 {subPage} 页</span>
+                <span class="text-xs font-mono px-2.5 py-1 rounded-md bg-card border border-border text-meta">{i18n.format('index.page', subPage)}</span>
             {/if}
         </div>
 
@@ -51,7 +51,7 @@
                             <h2 class="text-xl sm:text-2xl font-bold text-main group-hover:text-accent transition-colors tracking-tight leading-snug"
                                 data-article-transition-part="title"
                                 data-article-transition-slug="{post.slug}">
-                                <a href="/post/{post.slug}" class="block after:absolute after:inset-0">
+                                <a href="{languagePrefix}/post/{post.slug}" class="block after:absolute after:inset-0">
                                     {post.title}
                                 </a>
                             </h2>
@@ -68,7 +68,7 @@
                                                                                        rx="2"></rect><path
                                                             d="M2 14h2"></path><path d="M20 14h2"></path><path
                                                             d="M15 13v2"></path><path d="M9 13v2"></path></svg>
-                                            AI 摘要
+                                            {i18n.t('common.ai_summary')}
                                         </span>
                                     </div>
                                     <p class="text-xs sm:text-sm text-body line-clamp-2 leading-relaxed"
@@ -90,7 +90,7 @@
                             <div class="mt-2 pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/50">
                                 <div class="flex flex-wrap gap-2">
                                     {#for category in post.categories}
-                                        <a href="/category/{category.slug}" class="badge-category relative z-10">
+                                        <a href="{languagePrefix}/category/{category.slug}" class="badge-category relative z-10">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                                                  stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
                                                  stroke-linejoin="round">
@@ -100,7 +100,7 @@
                                         </a>
                                     {/for}
                                     {#for tag in post.tags}
-                                        <a href="/tag/{tag.slug}" class="badge-tag relative z-10">
+                                        <a href="{languagePrefix}/tag/{tag.slug}" class="badge-tag relative z-10">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                                                  stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
                                                  stroke-linejoin="round">
@@ -114,8 +114,8 @@
                                     {/for}
                                 </div>
 
-                                <a href="/post/{post.slug}" class="flex items-center gap-1.5 text-xs font-semibold text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
-                                    <span>阅读全文</span>
+                                <a href="{languagePrefix}/post/{post.slug}" class="flex items-center gap-1.5 text-xs font-semibold text-meta group-hover:text-accent transition-all group-hover:translate-x-1 relative z-10">
+                                    <span>{i18n.t('common.read_more')}</span>
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
@@ -129,7 +129,7 @@
             {#include blog/pagination.html /}
         {#else}
             <div class="card p-12 text-center rounded-2xl border border-dashed border-border">
-                <p class="text-meta italic text-sm">未找到文章。</p>
+                <p class="text-meta italic text-sm">{i18n.t('index.empty')}</p>
             </div>
         {/if}
     </section>

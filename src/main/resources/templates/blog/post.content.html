@@ -1,5 +1,5 @@
 <div data-page-robots="{seoRobots}" id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
-     data-page-title="{pageTitle ?: postTitle ?: '文章信息'}"
+     data-page-title="{pageTitle ?: postTitle ?: i18n.t('post.page_title_default')}"
      data-page-description="{pageDescription ?: ''}"
      data-page-keywords="{pageKeywords ?: ''}"
      data-page-canonical="{canonicalUrl ?: ''}">
@@ -31,12 +31,12 @@
                         class="sidebar-widget bg-card border border-accent/20 rounded-xl p-6 transition-all duration-300">
                     <div class="flex items-center gap-3 mb-6">
                         <div class="w-1.5 h-6 bg-accent rounded-full shadow-[0_0_12px_rgba(6,182,212,0.5)]"></div>
-                        <h3 class="text-sm font-bold tracking-wider text-main uppercase">内容权限</h3>
+                        <h3 class="text-sm font-bold tracking-wider text-main uppercase">{i18n.t('post.content_access')}</h3>
                     </div>
                     <div class="sidebar-price-tag group !p-4 !bg-accent/[0.03]">
-                        <div class="sidebar-price-unit">解锁全文需支付</div>
+                        <div class="sidebar-price-unit">{i18n.t('post.unlock_requires')}</div>
                         <div class="sidebar-price-value">{postPrice}</div>
-                        <div class="sidebar-price-unit">积分</div>
+                        <div class="sidebar-price-unit">{i18n.t('post.points')}</div>
 
                         <div class="sidebar-status-badge mt-4">
                             {#if hasPurchased}
@@ -44,14 +44,14 @@
                                      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                                     <path d="M20 6L9 17l-5-5"></path>
                                 </svg>
-                                <span class="text-green-500 font-bold">已解锁全文</span>
+                                <span class="text-green-500 font-bold">{i18n.t('post.unlock_full')}</span>
                             {#else}
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24"
                                      fill="none" stroke="currentColor" stroke-width="3">
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                                 </svg>
-                                <span class="text-accent/80">等待解锁内容</span>
+                                <span class="text-accent/80">{i18n.t('post.unlock_waiting')}</span>
                             {/if}
                         </div>
                     </div>
@@ -71,7 +71,7 @@
                         data-attachments-section="true">
                     <div class="flex items-center gap-3 mb-6">
                         <div class="w-1.5 h-6 bg-accent rounded-full"></div>
-                        <h3 class="text-sm font-bold tracking-wider text-main uppercase">专属资源</h3>
+                        <h3 class="text-sm font-bold tracking-wider text-main uppercase">{i18n.t('post.attachments')}</h3>
                     </div>
                     {#if hasPurchased}
                         <div class="space-y-3">
@@ -90,7 +90,7 @@
                                         <p class="text-[10px] text-gray-500 font-mono opacity-80">{media.formattedSize}</p>
                                     </div>
                                     {#if hasPurchased && media.downloadUrl}
-                                        <a href="{media.downloadUrl}" download aria-label="下载附件" title="下载附件"
+                                        <a href="{media.downloadUrl}" download aria-label="{i18n.t('post.download')}" title="{i18n.t('post.download')}"
                                            class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -116,8 +116,8 @@
                                 </svg>
                             </div>
                             <div class="space-y-1">
-                                <p class="text-xs font-bold text-main">包含 {attachments.size} 个付费附件</p>
-                                <p class="text-[10px] text-gray-500">解锁文章后即可获取下载链接</p>
+                                <p class="text-xs font-bold text-main">{i18n.format('post.attachments_count', attachments.size)}</p>
+                                <p class="text-[10px] text-gray-500">{i18n.t('post.attachments_hint')}</p>
                             </div>
                         </div>
                     {/if}
@@ -133,7 +133,7 @@
                         class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300">
                     <div class="flex items-center gap-3 mb-6">
                         <div class="w-1.5 h-6 bg-accent rounded-full"></div>
-                        <h3 class="text-sm font-bold tracking-wider text-main uppercase">推荐商品</h3>
+                        <h3 class="text-sm font-bold tracking-wider text-main uppercase">{i18n.t('post.related_store')}</h3>
                     </div>
                     <div class="space-y-5">
                         {#for item in relatedStoreItems}
@@ -148,9 +148,9 @@
                                     {#if item.description}
                                         <p class="text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90">{item.description}</p>
                                     {/if}
-                                    <a href="/user/store"
+                                    <a href="{languagePrefix}/user/store"
                                        class="flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]">
-                                        进店详情
+                                        {i18n.t('post.store_detail')}
                                         <svg xmlns="http://www.w3.org/2000/svg" class="ml-2" width="14" height="14"
                                              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                             <line x1="7" y1="17" x2="17" y2="7"></line>
@@ -172,10 +172,10 @@
 
 
     <div class="card card-static p-6 sm:p-7 md:p-8 rounded-2xl border border-border bg-card shadow-sm">
-        <nav aria-label="面包屑" class="text-xs text-meta font-mono mb-6 flex items-center gap-1.5">
-            <a href="/" class="hover:text-accent transition-colors">首页</a>
+        <nav aria-label="{i18n.t('post.breadcrumb')}" class="text-xs text-meta font-mono mb-6 flex items-center gap-1.5">
+            <a href="{languagePrefix}/" class="hover:text-accent transition-colors">{i18n.t('common.home')}</a>
             {#if breadcrumbCategorySlug}
-            <span aria-hidden="true" class="text-meta/60">/</span><a href="/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors">{postCategory}</a>
+            <span aria-hidden="true" class="text-meta/60">/</span><a href="{languagePrefix}/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors">{postCategory}</a>
             {/if}
             <span aria-hidden="true" class="text-meta/60">/</span><span class="text-main truncate max-w-xs">{postTitle}</span>
         </nav>
@@ -184,7 +184,7 @@
                 <div class="space-y-4">
                     <div class="flex items-center gap-3">
                         {#for category in postCategories}
-                            <a href="/category/{category.slug}" class="badge-category">
+                            <a href="{languagePrefix}/category/{category.slug}" class="badge-category">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
                                      fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
                                      stroke-linejoin="round">
@@ -196,12 +196,12 @@
                     </div>
                     <h1 class="text-3xl sm:text-4xl md:text-5xl font-black text-main tracking-tight leading-[1.18]"
                         data-article-transition-part="title"
-                        data-article-transition-slug="{postSlug}">{postTitle ?: '文章信息'}</h1>
+                        data-article-transition-slug="{postSlug}">{postTitle ?: i18n.t('post.page_title_default')}</h1>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-4 sm:gap-8 py-4 sm:py-5 border-y border-border/50 text-xs font-mono">
                     <div class="post-meta-item">
-                        <span class="post-meta-label">作者</span>
+                        <span class="post-meta-label">{i18n.t('post.author')}</span>
                         <div class="flex items-center gap-2">
                             <img src="{authorAvatar}" alt="{authorName}"
                                  class="w-5 h-5 rounded-full ring-1 ring-border">
@@ -209,17 +209,17 @@
                         </div>
                     </div>
                     <div class="post-meta-item">
-                        <span class="post-meta-label">发布时间</span>
+                        <span class="post-meta-label">{i18n.t('post.published_at')}</span>
                         <time class="timestamp post-meta-value text-xs" data-timestamp="{publishedAt}">{publishedAt}</time>
                     </div>
                     <div class="post-meta-item">
-                        <span class="post-meta-label">资源状态</span>
+                        <span class="post-meta-label">{i18n.t('post.status')}</span>
                         <span class="post-meta-value text-xs flex items-center gap-1.5" data-purchase-status="true">
                             {#if postPrice > 0}
                                 <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-emerald-500' : 'bg-accent'}"></span>
-                                {hasPurchased ? '已解锁' : '付费专享'}
+                                {hasPurchased ? i18n.t('post.unlocked') : i18n.t('post.paid')}
                             {#else}
-                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 免费阅读
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> {i18n.t('post.free')}
                             {/if}
                         </span>
                     </div>
@@ -235,7 +235,7 @@
                                                                                               y="8" rx="2"></rect><path
                                             d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path
                                             d="M9 13v2"></path></svg>
-                                AI 摘要
+                                {i18n.t('common.ai_summary')}
                             </span>
                         </div>
                         <div class="text-sm sm:text-base text-body leading-relaxed italic"
@@ -248,7 +248,7 @@
 
                 {#if contentDeclarations && ! contentDeclarations.isEmpty}
                     <div class="rounded-lg border border-accent/30 bg-accent/[0.04] px-4 py-3 text-sm text-body"
-                         aria-label="内容声明">
+                         aria-label="{i18n.t('post.content_declarations')}">
                         {#for declaration in contentDeclarations}
                             {declaration}{#if declaration_hasNext} <span class="mx-2 text-accent/70">|</span>{/if}
                         {/for}
@@ -258,22 +258,22 @@
                     {#if repostPolicyRequiresApplication}
                         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                             <div>
-                                <p class="font-bold text-main">授权转载声明</p>
+                                <p class="font-bold text-main">{i18n.t('post.repost')}</p>
                                 <p class="mt-1 text-gray-500">{repostPolicySummary}</p>
-                                <p class="mt-1 text-gray-500 break-all">原文地址：<a href="{repostOriginalUrl}"
+                                <p class="mt-1 text-gray-500 break-all">{i18n.t('post.original_url')}<a href="{repostOriginalUrl}"
                                                                                      class="text-accent hover:underline">{repostOriginalUrl}</a></p>
                             </div>
                             <button type="button"
                                     id="request-repost-license-button"
                                     data-post-ref="{postSlug}"
                                     class="inline-flex items-center justify-center rounded-lg border border-accent/40 px-4 py-2 text-sm font-bold text-accent hover:bg-accent/10 transition-colors">
-                                我要转载
+                                {i18n.t('post.repost_request')}
                             </button>
                         </div>
                     {#else}
                         <div class="space-y-3">
                             <div>
-                                <p class="font-bold text-main">本文使用 {repostPolicyName} 协议，无须申请转载</p>
+                                <p class="font-bold text-main">{i18n.format('post.policy_no_apply', repostPolicyName)}</p>
                                 <p class="mt-1 text-gray-500">{repostPolicySummary}</p>
                             </div>
                             {#if repostPolicyConditions && ! repostPolicyConditions.isEmpty}
@@ -283,26 +283,26 @@
                                     {/for}
                                 </ul>
                             {/if}
-                            <p class="text-gray-500 break-all">原文地址：<a href="{repostOriginalUrl}"
+                            <p class="text-gray-500 break-all">{i18n.t('post.original_url')}<a href="{repostOriginalUrl}"
                                                                          class="text-accent hover:underline">{repostOriginalUrl}</a></p>
-                            <p class="text-gray-500 break-all">协议链接：<a href="{repostPolicyLicenseUrl}"
+                            <p class="text-gray-500 break-all">{i18n.t('post.license_url')}<a href="{repostPolicyLicenseUrl}"
                                                                          target="_blank" rel="noopener noreferrer"
                                                                          class="text-accent hover:underline">{repostPolicyLicenseUrl}</a></p>
                             <div class="flex flex-wrap gap-2 pt-1">
                                 <button type="button"
                                         id="copy-repost-attribution-button"
                                         class="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-bold text-[var(--accent-foreground)] hover:opacity-90 transition-opacity">
-                                    复制转载说明
+                                    {i18n.t('post.repost_copy')}
                                 </button>
                                 <button type="button"
                                         id="optional-repost-registration-button"
                                         data-post-ref="{postSlug}"
                                         class="inline-flex items-center justify-center rounded-lg border border-accent/40 px-4 py-2 text-sm font-bold text-accent hover:bg-accent/10 transition-colors">
-                                    自愿登记转载
+                                    {i18n.t('post.repost_register')}
                                 </button>
                             </div>
                             <template id="repost-copy-template">{repostDirectCopyText}</template>
-                            <p class="text-xs text-gray-500">自愿登记用于生成可选授权码和追踪短链，不是转载前置条件。</p>
+                            <p class="text-xs text-gray-500">{i18n.t('post.repost_registration_note')}</p>
                         </div>
                     {/if}
                 </div>
@@ -318,13 +318,13 @@
                      data-has-purchased="{hasPurchased}">
                 {#if postBody && ! postBody.isEmpty()}
                     {#if postBodyHtml}
-                    <div class="break-words" id="post-body-content">{postBody.raw}</div>
+                    <div class="break-words" id="post-body-content" lang="{contentLanguage}">{postBody.raw}</div>
                     {#else}
                     <pre class="whitespace-pre-wrap break-words bg-card border border-border p-6 rounded-lg font-mono text-sm"
-                         id="post-body-content">{postBody}</pre>
+                         id="post-body-content" lang="{contentLanguage}">{postBody}</pre>
                     {/if}
                 {#else}
-                    <p class="text-gray-500 italic">该语言下暂无内容。</p>
+                    <p class="text-gray-500 italic">{i18n.t('post.no_content_language')}</p>
                 {/if}
             </section>
 
@@ -335,7 +335,7 @@
 
             <div class="mt-12 pt-8 border-t border-border flex flex-wrap gap-3">
                 {#for tag in postTags}
-                    <a href="/tag/{tag.slug}" class="badge-tag">
+                    <a href="{languagePrefix}/tag/{tag.slug}" class="badge-tag">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <line x1="4" y1="9" x2="20" y2="9"></line>
@@ -355,15 +355,15 @@
         {#if config:toggle('enable_comment')}
             <section id="comment-section" class="space-y-12" data-post-slug="{postSlug}">
                 <div class="space-y-2">
-                    <h2 class="text-3xl font-bold text-main tracking-tight">评论</h2>
+                    <h2 class="text-3xl font-bold text-main tracking-tight">{i18n.t('post.comments')}</h2>
                     <div class="decorative-line w-16"></div>
                 </div>
 
                 <div class="card card-static p-8 space-y-8">
                     <div class="flex items-center justify-between py-6 border-b border-border/60">
                         <div class="space-y-1">
-                            <h2 class="text-2xl font-black text-main">参与讨论</h2>
-                            <p class="text-xs text-gray-500">请保持友善，共同维护良好的讨论环境。</p>
+                            <h2 class="text-2xl font-black text-main">{i18n.t('post.join_discussion')}</h2>
+                            <p class="text-xs text-gray-500">{i18n.t('post.comment_friendly')}</p>
                         </div>
                         <div id="comment-login-hint">
                             <!-- 登录状态信息将由 JS 动态注入 -->
@@ -376,38 +376,38 @@
                         <form id="comment-form" data-no-debounce="true" data-seeray-form="comment" class="space-y-6">
                             <div id="comment-replying"
                                  class="hidden card p-4 border-accent/30 bg-accent/[0.02] flex justify-between items-center">
-                                <span class="text-sm">正在回复 <span id="comment-replying-user"
+                                <span class="text-sm">{i18n.t('post.comment_reply_to')} <span id="comment-replying-user"
                                                                      class="font-bold text-main"></span></span>
                                 <button type="button" id="comment-cancel-reply"
-                                        class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">取消
+                                        class="text-xs meta-mono text-red-400 hover:text-red-300 transition-colors">{i18n.t('common.cancel')}
                                 </button>
                             </div>
 
                             <div id="comment-guest-fields" class="comment-identity-grid">
                                 <div class="comment-field">
-                                    <label for="comment-guest-name">昵称 <span class="comment-required">*</span></label>
-                                    <input type="text" id="comment-guest-name" name="guestName" maxlength="80" autocomplete="nickname" required placeholder="怎么称呼你？">
+                                    <label for="comment-guest-name">{i18n.t('post.comment_nickname')} <span class="comment-required">*</span></label>
+                                    <input type="text" id="comment-guest-name" name="guestName" maxlength="80" autocomplete="nickname" required placeholder="{i18n.t('post.comment_name')}">
                                 </div>
                                 <div class="comment-field">
-                                    <label for="comment-guest-email">邮箱 <span class="comment-required">*</span></label>
+                                    <label for="comment-guest-email">{i18n.t('post.comment_email_label')} <span class="comment-required">*</span></label>
                                     <input type="email" id="comment-guest-email" name="guestEmail" maxlength="255" autocomplete="email" required placeholder="you@example.com" aria-describedby="comment-email-note">
                                 </div>
                                 <div class="comment-field">
-                                    <label for="comment-guest-website">站点 <span class="comment-optional">选填</span></label>
-                                    <input type="url" id="comment-guest-website" name="guestWebsite" maxlength="2048" autocomplete="url" placeholder="https://你的站点">
+                                    <label for="comment-guest-website">{i18n.t('post.comment_website_label')} <span class="comment-optional">{i18n.t('post.comment_optional')}</span></label>
+                                    <input type="url" id="comment-guest-website" name="guestWebsite" maxlength="2048" autocomplete="url" placeholder="https://{i18n.t('post.comment_website_label')}">
                                 </div>
-                                <p id="comment-email-note" class="comment-field-note">邮箱不会公开展示。</p>
+                                <p id="comment-email-note" class="comment-field-note">{i18n.t('post.comment_email_hidden')}</p>
                                 <label for="comment-remember-info" class="comment-remember-info">
                                     <input type="checkbox" id="comment-remember-info" name="rememberGuestInfo">
-                                    <span>在此浏览器记住昵称、邮箱和站点</span>
+                                    <span>{i18n.t('post.comment_remember')}</span>
                                 </label>
                             </div>
                             <div class="comment-field comment-captcha-field">
-                                <label for="comment-captcha-answer">验证码 <span class="comment-required">*</span></label>
+                                <label for="comment-captcha-answer">{i18n.t('post.comment_captcha_label')} <span class="comment-required">*</span></label>
                                 <div class="comment-captcha-row">
-                                    <span id="comment-captcha-question" class="comment-captcha-question" role="status" aria-live="polite">正在加载...</span>
-                                    <input type="text" id="comment-captcha-answer" name="captchaAnswer" inputmode="numeric" pattern="[0-9]+" autocomplete="off" maxlength="3" required placeholder="计算结果">
-                                    <button type="button" id="comment-captcha-refresh" class="comment-captcha-refresh" aria-label="更换验证码"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>换一道题</span></button>
+                                    <span id="comment-captcha-question" class="comment-captcha-question" role="status" aria-live="polite">{i18n.t('post.comment_captcha_loading')}</span>
+                                    <input type="text" id="comment-captcha-answer" name="captchaAnswer" inputmode="numeric" pattern="[0-9]+" autocomplete="off" maxlength="3" required placeholder="{i18n.t('post.comment_captcha_placeholder')}">
+                                    <button type="button" id="comment-captcha-refresh" class="comment-captcha-refresh" aria-label="{i18n.t('post.comment_captcha_refresh')}"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>{i18n.t('post.comment_captcha')}</span></button>
                                 </div>
                             </div>
                             <input type="hidden" id="comment-parent-id" name="parentId" value="">
@@ -419,16 +419,16 @@
                                         required
                                         rows="5"
                                         maxlength="4000"
-                                        placeholder="分享你的想法..."
+                                        placeholder="{i18n.t('post.comment_placeholder')}..."
                                         class="w-full"></textarea>
                             </div>
 
                             <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                                 <p class="text-xs text-gray-500 max-w-md">
-                                    支持 Markdown 语法。
+                                    {i18n.t('post.markdown_hint')}
                                 </p>
                                 <button type="submit" id="comment-submit" disabled data-seeray-goal="comment_submit" class="btn-minimal min-w-[140px]">
-                                    <span class="btn-text">发表评论</span>
+                                    <span class="btn-text">{i18n.t('post.comment_submit')}</span>
                                     <span class="spinner hidden"></span>
                                 </button>
                             </div>
@@ -438,13 +438,13 @@
 
                 <div class="space-y-8">
                     <div class="flex items-center justify-between">
-                        <h3 class="comment-list-header">讨论列表</h3>
-                        <span id="comment-count" class="text-xs meta-mono text-gray-500">0 条评论</span>
+                        <h3 class="comment-list-header">{i18n.t('post.comment_list')}</h3>
+                        <span id="comment-count" class="text-xs meta-mono text-gray-500">0 {i18n.t('js.comments_unit')}</span>
                     </div>
                     <div id="comment-list" class="space-y-6"></div>
                     <div id="comment-load-more" class="load-more-container hidden">
                         <button type="button" id="btn-load-more" class="btn-load-more">
-                            <span>加载更多</span>
+                            <span>{i18n.t('post.load_more')}</span>
                             <span class="spinner hidden"></span>
                         </button>
                     </div>
@@ -453,17 +453,17 @@
         {/if}
     </div>
     {#if relatedArticles && !relatedArticles.isEmpty}
-    <aside aria-label="相关文章" class="mt-8 p-4">
-        <h2 class="text-lg font-bold">相关文章</h2>
+    <aside aria-label="{i18n.t('post.related_articles')}" class="mt-8 p-4">
+        <h2 class="text-lg font-bold">{i18n.t('post.related_articles')}</h2>
         <ul>{#for article in relatedArticles}<li><a href="{article.url}">{article.title}</a></li>{/for}</ul>
     </aside>
     {/if}
     {#if internalLinkGraphVisible}
-    <section data-internal-link-graph data-slug="{postSlug}" aria-label="内部链接图" class="mt-8 p-4 border border-border rounded-xl">
-        <h2 class="text-lg font-bold">内部链接图</h2>
-        <p data-graph-status role="status" class="text-sm text-gray-500 my-3">正在读取当前文章的直接引用关系…</p>
+    <section data-internal-link-graph data-slug="{postSlug}" aria-label="{i18n.t('post.internal_graph')}" class="mt-8 p-4 border border-border rounded-xl">
+        <h2 class="text-lg font-bold">{i18n.t('post.internal_graph')}</h2>
+        <p data-graph-status role="status" class="text-sm text-gray-500 my-3">{i18n.t('post.internal_graph_loading')}</p>
         <div data-graph-view style="max-height:420px;overflow:auto"></div>
-        <details class="mt-3"><summary class="cursor-pointer text-sm">查看关联文章列表</summary><ul data-graph-list class="space-y-2 mt-3"></ul></details>
+        <details class="mt-3"><summary class="cursor-pointer text-sm">{i18n.t('post.internal_graph_list')}</summary><ul data-graph-list class="space-y-2 mt-3"></ul></details>
     </section>
     {/if}
 </div>

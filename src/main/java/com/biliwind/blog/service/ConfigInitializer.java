@@ -164,6 +164,27 @@ public class ConfigInitializer {
 
         list.add(new SettingDefinition("site_footer", footerValue, "object", "基础设置", footerSchema, "网站页脚设置"));
 
+        // Region default language. The root value is the fallback; "regions"
+        // maps a region code to its default language. The global entry is the
+        // international default and is inherited by unconfigured regions.
+        ObjectNode languageSchema = mapper.createObjectNode();
+        languageSchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode languageFields = languageSchema.putArray("fields");
+        ObjectNode languageField = languageFields.addObject();
+        languageField.put("key", "default_language").put("label", "默认语言").put("widget", "select");
+        com.fasterxml.jackson.databind.node.ArrayNode languageOptions = languageField.putArray("options");
+        languageOptions.addObject().put("label", "简体中文").put("value", "zh-cn");
+        languageOptions.addObject().put("label", "English").put("value", "en-US");
+        ObjectNode languageValue = mapper.createObjectNode();
+        languageValue.put("default_language", "zh-cn");
+        ObjectNode languageRegions = languageValue.putObject("regions");
+        languageRegions.put("global", "en-US");
+        languageRegions.put("cn", "zh-cn");
+        languageRegions.put("hk", "zh-cn");
+        languageRegions.put("tw", "zh-cn");
+        list.add(new SettingDefinition("site_language", languageValue, "object", "基础设置",
+                languageSchema, "多区域默认语言（global 为国际站默认，未单独配置的区域继承 global）"));
+
         // Appearance
         ObjectNode appearanceSchema = mapper.createObjectNode();
         appearanceSchema.put("type", "object");

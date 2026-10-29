@@ -58,6 +58,128 @@ public final class LanguageHelper {
     }
 
     /**
+     * Resolves the best supported language from a full Accept-Language header,
+     * honouring q-values instead of blindly taking the first tag.
+     */
+    public static String resolveFromAcceptLanguage(String acceptLanguage) {
+        if (acceptLanguage == null || acceptLanguage.isBlank()) {
+            return null;
+        }
+        String bestLang = null;
+        double bestQuality = -1;
+        int bestIndex = Integer.MAX_VALUE;
+        String[] parts = acceptLanguage.split(",");
+        for (int index = 0; index < parts.length; index++) {
+            String part = parts[index].trim();
+            if (part.isEmpty()) {
+                continue;
+            }
+            String tag = part;
+            double quality = 1.0;
+            int semicolon = part.indexOf(';');
+            if (semicolon >= 0) {
+                tag = part.substring(0, semicolon).trim();
+                String params = part.substring(semicolon + 1);
+                for (String param : params.split(";")) {
+                    String trimmed = param.trim();
+                    if (trimmed.regionMatches(true, 0, "q=", 0, 2)) {
+                        try {
+                            quality = Double.parseDouble(trimmed.substring(2).trim());
+                        } catch (NumberFormatException ignored) {
+                            quality = 0;
+                        }
+                    }
+                }
+            }
+            if (tag.isEmpty() || "*".equals(tag)) {
+                continue;
+            }
+            String normalized = normalizeToSupportedLang(tag);
+            if (normalized == null) {
+                continue;
+            }
+            if (quality > bestQuality || (quality == bestQuality && index < bestIndex)) {
+                bestLang = normalized;
+                bestQuality = quality;
+                bestIndex = index;
+            }
+        }
+        return bestLang;
+    }
+
+    /**
+     * Returns the URL prefix for a language on a site whose region default is
+     * {@code defaultLang}: the default language stays unprefixed.
+     */
+    public static String prefixFor(String lang, String defaultLang) {
+        String normalized = normalizeToSupportedLang(lang);
+        String normalizedDefault = normalizeToSupportedLang(defaultLang);
+        if (normalized == null || normalized.equalsIgnoreCase(normalizedDefault)) {
+            return "";
+        }
+        return "/" + normalized;
+    }
+
+    /**
+     * Applies the language prefix to a site-root-relative path.
+     */
+    public static String localizedPath(String path, String lang, String defaultLang) {
+        String prefix = prefixFor(lang, defaultLang);
+        String normalizedPath = path == null || path.isBlank() ? "/" : path;
+        if (!normalizedPath.startsWith("/")) {
+            normalizedPath = "/" + normalizedPath;
+        }
+        if (prefix.isEmpty()) {
+            return normalizedPath;
+        }
+        return normalizedPath.equals("/") ? prefix + "/" : prefix + normalizedPath;
+    }
+
+    /**
+     * Removes a leading /zh-cn or /en-US (or short alias) from a path.
+     */
+    public static String stripLanguagePrefix(String path) {
+        if (path == null || path.isBlank()) {
+            return "/";
+        }
+        String normalizedPath = path.startsWith("/") ? path : "/" + path;
+        int secondSlash = normalizedPath.indexOf('/', 1);
+        String firstSegment = secondSlash < 0
+                ? normalizedPath.substring(1)
+                : normalizedPath.substring(1, secondSlash);
+        if (normalizeToSupportedLang(firstSegment) == null) {
+            return normalizedPath;
+        }
+        if (secondSlash < 0) {
+            return "/";
+        }
+        return normalizedPath.substring(secondSlash);
+    }
+
+    /**
+     * Returns the normalized language actually used for a localized map, or the
+     * default language when no entry matched.
+     */
+    public static String resolveLocalizedLanguage(Map<String, String> localized, String preferredLang) {
+        if (localized == null || localized.isEmpty()) {
+            return normalizeToSupportedLang(preferredLang);
+        }
+        for (String candidate : languageCandidates(preferredLang)) {
+            String value = localized.get(candidate);
+            if (value != null && !value.isBlank()) {
+                return normalizeToSupportedLang(candidate);
+            }
+        }
+        for (Map.Entry<String, String> entry : localized.entrySet()) {
+            if (entry.getValue() != null && !entry.getValue().isBlank()) {
+                String normalized = normalizeToSupportedLang(entry.getKey());
+                return normalized != null ? normalized : LanguageConstant.DEFAULT_LANG;
+            }
+        }
+        return LanguageConstant.DEFAULT_LANG;
+    }
+
+    /**
      * 从 localized map 中解析 localized value
      * @param localized  localized map
      * @param preferredLang preferred language

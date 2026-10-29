@@ -47,6 +47,11 @@ public class ConfigManager {
         LOG.info("ConfigManager 本地与 Redis 缓存已刷新。总键数: " + localCache.size());
     }
 
+    /** Reads only the local L1 cache; never touches Redis or the database. */
+    public JsonNode getLocal(String key) {
+        return localCache.get(key);
+    }
+
     public JsonNode get(String key) {
         // 1. 尝试本地缓存
         JsonNode local = localCache.get(key);

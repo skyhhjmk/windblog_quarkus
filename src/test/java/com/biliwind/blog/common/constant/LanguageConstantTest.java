@@ -48,7 +48,7 @@ class LanguageConstantTest {
 
     @Test
     void shouldHaveCorrectLangCookieKey() {
-        assertEquals("user_lang", LanguageConstant.COOKIE_LANG_KEY);
+        assertEquals("user_lang_v2", LanguageConstant.COOKIE_LANG_KEY);
     }
 
     @Test

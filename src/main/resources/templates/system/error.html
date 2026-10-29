@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{language ?: 'zh-CN'}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>系统异常 - WindBlog</title>
+    <title>{i18n.t('error.title')} - WindBlog</title>
 
     <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js"></script>
 
@@ -190,29 +190,29 @@
 
 <div class="error-container">
     <div class="error-icon">X</div>
-    <h1>抱歉，出错了</h1>
+    <h1>{i18n.t('error.heading')}</h1>
     <p class="message">{message}</p>
 
     {#if trackingId}
         <div class="tracking-box">
             <div class="tracking-item">
-                <span class="tracking-label">错误追踪号 (Tracking ID)</span>
+                <span class="tracking-label">{i18n.t('error.tracking_label')}</span>
                 <span class="tracking-value" id="trackingId">{trackingId}</span>
             </div>
             <div class="tracking-item">
-                <span class="tracking-label">错误追踪文本 (如有必要，请将此文本反馈给管理员)</span>
+                <span class="tracking-label">{i18n.t('error.tracking_text_label')}</span>
                 <span class="tracking-value tracking-text" id="trackingText">{trackingText}</span>
             </div>
             <button id="copyTrackingTextButton" class="btn btn-secondary copy-tracking-text-button">
-                复制追踪文本
+                {i18n.t('error.copy_tracking')}
             </button>
-            <p class="copy-hint">追踪文本已经过加密处理，仅管理员可查看其中包含的调试信息。</p>
+            <p class="copy-hint">{i18n.t('error.copy_hint')}</p>
         </div>
     {/if}
 
     <div class="actions">
-        <a href="/" class="btn btn-primary">返回首页</a>
-        <button id="reloadErrorButton" type="button" class="btn btn-secondary">重试一次</button>
+        <a href="{languagePrefix}/" class="btn btn-primary">{i18n.t('error.back_home')}</a>
+        <button id="reloadErrorButton" type="button" class="btn btn-secondary">{i18n.t('error.retry')}</button>
     </div>
 </div>
 
@@ -228,9 +228,9 @@
         document.body.removeChild(tempTextArea);
 
         if (window.showToast) {
-            window.showToast('追踪文本已复制到剪贴板', 'success');
+            window.showToast(window.wbT ? window.wbT('error.copied', '追踪文本已复制到剪贴板') : '追踪文本已复制到剪贴板', 'success');
         } else {
-            alert('追踪文本已复制到剪贴板');
+            alert(window.wbT ? window.wbT('error.copied', '追踪文本已复制到剪贴板') : '追踪文本已复制到剪贴板');
         }
     }
 

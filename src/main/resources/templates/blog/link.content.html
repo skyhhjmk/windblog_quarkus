@@ -1,4 +1,4 @@
-﻿<div id="pjax-content-root" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{pageTitle ?: '友情链接'}">
+﻿<div id="pjax-content-root" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{pageTitle ?: i18n.t('link.title')}">
 <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / links</div>
     <div id="pjax-sidebar-html" class="hidden">
         <div class="space-y-8">
@@ -12,18 +12,18 @@
         <header class="space-y-6 text-center">
             <div class="space-y-2 flex flex-col items-center">
                 <div class="flex items-center gap-3">
-                    <span class="meta-mono text-accent">网络</span>
+                    <span class="meta-mono text-accent">{i18n.t('link.network')}</span>
                     <span class="w-8 h-[1px] bg-accent/30"></span>
                 </div>
-                <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">{pageTitle ?: '友情链接'}</h1>
-                <p class="text-lg text-body">精选的优质资源和伙伴。</p>
+                <h1 class="text-5xl font-bold text-main tracking-tight leading-tight">{pageTitle ?: i18n.t('link.title')}</h1>
+                <p class="text-lg text-body">{i18n.t('link.subtitle')}</p>
             </div>
 
             <div class="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
                 <div class="flex items-center gap-3">
-                    <span class="text-xs meta-mono text-gray-600">筛选：</span>
+                    <span class="text-xs meta-mono text-gray-600">{i18n.t('link.filter')}</span>
                     <select id="linkGrepSelect" class="bg-card border border-border px-4 py-1.5 rounded-md text-sm text-main outline-none focus:border-accent transition-colors">
-                        <option value="All" {#if currentType == 'All' || ! currentType}selected{/if}>所有资源</option>
+                        <option value="All" {#if currentType == 'All' || ! currentType}selected{/if}>{i18n.t('link.all')}</option>
                         {#for type in linkTypes}
                             <option value="{type.name}"
                                     {#if currentType == type.name}selected{/if}>{type.description}</option>
@@ -33,10 +33,10 @@
                 <div class="flex items-center gap-3">
                     <button type="button" id="linkFilterApplyBtn"
                             class="btn-minimal px-6 py-1.5 bg-accent text-[var(--accent-foreground)] font-bold border-none rounded-md">
-                        应用筛选
+                        {i18n.t('link.apply_filter')}
                     </button>
-                    <a href="/link/apply" class="btn-minimal px-6 py-1.5" data-pjax>
-                        申请友链
+                    <a href="{languagePrefix}/link/apply" class="btn-minimal px-6 py-1.5" data-pjax>
+                        {i18n.t('link.apply')}
                     </a>
                 </div>
             </div>
@@ -46,7 +46,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 link-grid">
                 {#for link in links}
                     <div class="card p-6 flex flex-col group relative link-card cursor-pointer"
-                         tabindex="0" role="button" aria-label="打开友链资源详情"
+                         tabindex="0" role="button" aria-label="{i18n.t('link.open')}"
                          data-id="{link.id ?: 0}"
                          data-name="{link.name}"
                          data-url="{link.url}"
@@ -76,7 +76,7 @@
                         </div>
 
                         <p class="text-sm text-gray-400 line-clamp-3 mb-6 h-15">
-                            {link.description ?: '该资源暂无描述。'}
+                            {link.description ?: i18n.t('link.no_desc')}
                         </p>
 
                         <div class="mt-auto pt-4 border-t border-border flex items-center justify-between">
@@ -90,7 +90,7 @@
             </div>
         {#else}
             <div class="card p-24 text-center border-dashed">
-                <p class="text-gray-500 italic">该集合下暂无资源。</p>
+                <p class="text-gray-500 italic">{i18n.t('link.empty')}</p>
             </div>
         {/if}
     </section>

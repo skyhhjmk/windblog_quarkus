@@ -40,7 +40,29 @@ public class RegionRuleService {
      * @return 识别出的区域枚举
      */
     public BlogRegion resolveRegion(String host, List<String> languages) {
-        List<RuleView> rules = getRules();
+        return match(getRules(), host, languages, true);
+    }
+
+    /**
+     * Resolves a region from the already loaded rule snapshot. Safe to call on
+     * a Vert.x IO thread: it never triggers a database query.
+     */
+    public BlogRegion resolveRegionCached(String host, List<String> languages) {
+        RuleSnapshot current = snapshot;
+        if (current == null) {
+            return assignedNodeRegionLoaded && assignedNodeRegion != null
+                    ? assignedNodeRegion
+                    : BlogRegion.GLOBAL;
+        }
+        BlogRegion matched = match(current.rules(), host, languages, false);
+        if (matched == BlogRegion.GLOBAL && assignedNodeRegionLoaded && assignedNodeRegion != null) {
+            return assignedNodeRegion;
+        }
+        return matched;
+    }
+
+    private BlogRegion match(List<RuleView> rules, String host, List<String> languages,
+                             boolean allowNodeFallback) {
 
         String normalizedHost = normalizeHost(host);
         if (!normalizedHost.isBlank()) {
@@ -68,11 +90,22 @@ public class RegionRuleService {
             }
         }
 
-        BlogRegion nodeRegion = assignedNodeRegion();
-        if (nodeRegion != null) {
-            return nodeRegion;
+        if (allowNodeFallback) {
+            BlogRegion nodeRegion = assignedNodeRegion();
+            if (nodeRegion != null) {
+                return nodeRegion;
+            }
         }
         return BlogRegion.GLOBAL;
+    }
+
+    @jakarta.transaction.Transactional
+    void loadOnStart(@jakarta.enterprise.event.Observes io.quarkus.runtime.StartupEvent event) {
+        try {
+            getRules();
+        } catch (Exception ignored) {
+            // The first request will retry the load on a worker thread.
+        }
     }
 
     /**

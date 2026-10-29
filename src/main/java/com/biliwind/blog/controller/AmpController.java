@@ -30,11 +30,14 @@ public class AmpController {
     @Inject
     AmpPageService ampPageService;
 
+    @Inject
+    com.biliwind.blog.context.LanguageContext languageContext;
+
     @GET
     @Path("/amp/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
     public Response renderDefault(@PathParam("slug") String slug, Request request) {
-        return render(slug, null, request);
+        return render(slug, languageContext.getLang(), request);
     }
 
     @GET

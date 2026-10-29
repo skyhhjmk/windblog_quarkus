@@ -171,15 +171,15 @@
             popcard.innerHTML = `
                 <button type="button" class="post-quote-popbtn primary-accent" id="popbtn-quote">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                    引用评论
+                    ${window.wbT('js.quote_comment', '引用评论')}
                 </button>
                 <button type="button" class="post-quote-popbtn text-red-400 hover:text-red-300" id="popbtn-correct">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    纠错反馈
+                    ${window.wbT('js.correction_feedback', '纠错反馈')}
                 </button>
                 <button type="button" class="post-quote-popbtn" id="popbtn-copy">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                    复制内容
+                    ${window.wbT('js.copy_content', '复制内容')}
                 </button>
             `;
             document.body.appendChild(popcard);
@@ -188,13 +188,13 @@
             document.getElementById('popbtn-copy').onclick = function () {
                 if (activeSelection) {
                     navigator.clipboard.writeText(activeSelection.exact).then(function () {
-                        window.showToast("复制成功", "success");
+                        window.showToast(window.wbT('js.copy_success', '复制成功'), "success");
                     });
                     hidePopcard();
                 }
             };
 
-            // 引用评论事件
+            // ${window.wbT('js.quote_comment', '引用评论')}事件
             document.getElementById('popbtn-quote').onclick = function () {
                 if (activeSelection) {
                     setupQuotePreview(activeSelection);
@@ -202,7 +202,7 @@
                 }
             };
 
-            // 纠错反馈事件
+            // ${window.wbT('js.correction_feedback', '纠错反馈')}事件
             document.getElementById('popbtn-correct').onclick = function () {
                 if (activeSelection) {
                     showCorrectionModal(activeSelection);
@@ -315,7 +315,7 @@
 
         preview.innerHTML = `
             <div class="comment-quote-preview-text">
-                <span class="text-xs text-[var(--accent)] font-bold block mb-1">正在引用内容：</span>
+                <span class="text-xs text-[var(--accent)] font-bold block mb-1">${window.wbT('js.quoting', '正在引用内容：')}</span>
                 “${selection.exact}”
             </div>
             <button type="button" class="comment-quote-preview-close" id="btn-close-quote-preview">
@@ -364,10 +364,10 @@
             overlay.className = 'post-quote-modal-overlay';
             overlay.innerHTML = `
                 <div class="post-quote-modal">
-                    <div class="post-quote-modal-title">反馈文章内容争议/错误</div>
-                    <div class="post-quote-modal-label">被引用文字：</div>
+                    <div class="post-quote-modal-title">${window.wbT('js.correction_title', '反馈文章内容争议/错误')}</div>
+                    <div class="post-quote-modal-label">${window.wbT('js.quoted_text', '被引用文字：')}</div>
                     <div class="post-quote-modal-text-preview" id="correction-preview-text"></div>
-                    <div class="post-quote-modal-label">您的修改意见 / 纠错说明：</div>
+                    <div class="post-quote-modal-label">${window.wbT('js.correction_reason', '您的修改意见 / 纠错说明：')}</div>
                     <textarea class="post-quote-modal-textarea" id="correction-textarea" rows="4" placeholder="请详细写下这里存在的错误或修改建议..."></textarea>
                     <div class="post-quote-modal-actions">
                         <button type="button" class="post-quote-modal-btn cancel" id="correction-btn-cancel">取消</button>
@@ -390,7 +390,7 @@
         document.getElementById('correction-btn-submit').onclick = async function () {
             const explanation = textarea.value.trim();
             if (!explanation) {
-                window.showToast("请输入纠错说明", "error", 8000, "WB-UI-CORRECTION-REQUIRED-001");
+                window.showToast(window.wbT('js.correction_required', '请输入纠错说明'), "error", 8000, "WB-UI-CORRECTION-REQUIRED-001");
                 return;
             }
 
@@ -404,7 +404,7 @@
 
             const payload = {
                 postSlug: postSlug,
-                content: "[读者纠错反馈] 指出错误: “" + selection.exact + "” \n\n纠错理由: " + explanation,
+                content: "[读者${window.wbT('js.correction_feedback', '纠错反馈')}] 指出错误: “" + selection.exact + "” \n\n纠错理由: " + explanation,
                 quoteType: 'CORRECTION',
                 quoteText: selection.exact,
                 anchorDataJson: JSON.stringify({
@@ -431,11 +431,11 @@
                 const result = await response.json().catch(() => null);
 
                 if (!response.ok || !result || !result.success) {
-                    const msg = result && result.message ? result.message : "提交纠错失败";
+                    const msg = result && result.message ? result.message : window.wbT('js.correction_failed', '提交纠错失败');
                     throw new Error(msg);
                 }
 
-                window.showToast("纠错成功，已提交审核，感谢反馈！", "success");
+                window.showToast(window.wbT('js.correction_success', '纠错成功，已提交审核，感谢反馈！'), "success");
                 overlay.classList.remove('active');
 
                 // 如果页面上有评论模块，重新加载一下评论
@@ -457,7 +457,7 @@
                     window.getErrorCode?.(error.message, "WB-UI-CORRECTION-SUBMIT-001"));
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.textContent = "提交反馈";
+                submitBtn.textContent = window.wbT('js.submit_feedback', '提交反馈');
             }
         };
     }
@@ -582,7 +582,7 @@
                     span.className = quoteType === 'CORRECTION' ? 'post-correction-line' : 'post-quote-line';
                     span.dataset.quoteId = quoteId;
                     span.dataset.commentId = commentId;
-                    span.title = quoteType === 'CORRECTION' ? `争议内容（${userName}反馈：${content}）` : `引用评论（${userName}）`;
+                    span.title = quoteType === 'CORRECTION' ? `争议内容（${userName}反馈：${content}）` : `${window.wbT('js.quote_comment', '引用评论')}（${userName}）`;
 
                     try {
                         matchedRange.surroundContents(span);
@@ -691,7 +691,7 @@
                 e.stopPropagation();
                 window.showModal({
                     title: "正文内容争议反馈",
-                    message: `读者“${userName}”提交了对此处内容的纠错反馈：\n\n“${explanation}”\n\n您可以平滑滚动到评论区查看对此反馈的讨论。`,
+                    message: `读者“${userName}”提交了对此处内容的${window.wbT('js.correction_feedback', '纠错反馈')}：\n\n“${explanation}”\n\n您可以平滑滚动到评论区查看对此反馈的讨论。`,
                     showCancel: true
                 }).then(function (confirmed) {
                     if (confirmed) {

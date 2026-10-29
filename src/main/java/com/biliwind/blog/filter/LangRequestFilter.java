@@ -3,12 +3,15 @@ package com.biliwind.blog.filter;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.service.LanguageSettingsService;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.ext.Provider;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Provider
@@ -17,56 +20,123 @@ public class LangRequestFilter implements ContainerRequestFilter {
     @Inject
     Instance<LanguageContext> languageContextInstance;
 
+    @Inject
+    RegionContext regionContext;
+
+    @Inject
+    LanguageSettingsService languageSettingsService;
+
     public static final String LANG_ATTRIBUTE = "REQUEST_LANG";
+    public static final String LANG_EXPLICIT_ATTRIBUTE = "REQUEST_LANG_EXPLICIT";
+    private static final String LANG_HEADER = LanguageRouteFilter.LANG_HEADER;
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
-        String finalLang = null;
+        boolean explicit = false;
 
-        // 1) URL 路径语言前缀，例如 /en/post/hello
-        finalLang = LanguageHelper.resolveLangFromPath(requestContext.getUriInfo().getPath());
+        // 0) Language-prefixed URL handled by LanguageRouteFilter
+        String lang = LanguageHelper.normalizeToSupportedLang(
+                requestContext.getHeaders().getFirst(LANG_HEADER));
+        explicit = lang != null;
+
+        // 1) URL 路径语言前缀（直接调用过滤器时的兜底，例如测试）
+        if (lang == null) {
+            lang = LanguageHelper.resolveLangFromPath(requestContext.getUriInfo().getPath());
+            explicit = lang != null;
+        }
 
         // 2) query 参数 ?lang=...
-        List<String> langParams = requestContext.getUriInfo().getQueryParameters().get("lang");
-        if (finalLang == null && langParams != null && !langParams.isEmpty()) {
-            finalLang = LanguageHelper.normalizeToSupportedLang(langParams.getFirst());
-        }
-
-        // 3) Cookie
-        if (finalLang == null) {
-            String cookieStr = requestContext.getHeaders().getFirst(LanguageConstant.HEADER_COOKIE);
-            if (cookieStr != null && cookieStr.contains(LanguageConstant.COOKIE_LANG_KEY + "=")) {
-                String cookieLang = cookieStr.split(LanguageConstant.COOKIE_LANG_KEY + "=")[1]
-                        .split(";")[0]
-                        .trim();
-                finalLang = LanguageHelper.normalizeToSupportedLang(cookieLang);
+        if (lang == null) {
+            List<String> langParams = requestContext.getUriInfo().getQueryParameters().get("lang");
+            if (langParams != null && !langParams.isEmpty()) {
+                lang = LanguageHelper.normalizeToSupportedLang(langParams.getFirst());
+                explicit = lang != null;
             }
         }
 
-        // 4) Accept-Language
-        if (finalLang == null) {
-            String acceptLang = requestContext.getHeaders().getFirst(LanguageConstant.HEADER_ACCEPT_LANG);
-            if (acceptLang != null && !acceptLang.isBlank()) {
-                finalLang = LanguageHelper.normalizeToSupportedLang(acceptLang.split(",")[0].trim());
-            }
+        // 3) Cookie（只由用户显式切换写入）
+        if (lang == null) {
+            String cookieLang = readCookieLang(requestContext);
+            lang = LanguageHelper.normalizeToSupportedLang(cookieLang);
         }
 
-        if (finalLang == null || !LanguageConstant.SUPPORT_LANGS.contains(finalLang)) {
-            finalLang = LanguageConstant.DEFAULT_LANG;
+        String defaultLang = LanguageHelper.normalizeToSupportedLang(
+                requestContext.getHeaders().getFirst(LanguageRouteFilter.DEFAULT_LANG_HEADER));
+        if (defaultLang == null) {
+            // Cache-only read: request filters may run on an IO thread for
+            // non-blocking endpoints and must never hit the database here.
+            defaultLang = languageSettingsService.defaultLanguageCached(
+                    regionContext.getCurrentRegion());
+        }
+
+        // 4) 区域默认语言（.com/global = en-US, .cn = zh-cn）
+        if (lang == null) {
+            lang = defaultLang;
+        }
+
+        // 5) Accept-Language（按 q 值排序），仅在区域未配置默认语言时生效
+        if (lang == null) {
+            lang = LanguageHelper.resolveFromAcceptLanguage(
+                    requestContext.getHeaders().getFirst(LanguageConstant.HEADER_ACCEPT_LANG));
+        }
+
+        if (lang == null || !LanguageConstant.SUPPORT_LANGS.contains(lang)) {
+            lang = LanguageConstant.DEFAULT_LANG;
         }
 
         try {
             if (!languageContextInstance.isUnsatisfied()) {
                 LanguageContext languageContext = languageContextInstance.get();
-                languageContext.setLang(finalLang);
+                languageContext.setLang(lang);
+                languageContext.setDefaultLang(defaultLang);
+                languageContext.setExplicit(explicit);
+                languageContext.setPath(rawPath(requestContext));
+                languageContext.setQuery(cleanQuery(requestContext));
+                languageContext.setContentLanguage(lang);
+                languageContext.setResolved(true);
             }
         } catch (Exception e) {
             // 忽略异常
         }
-        requestContext.getHeaders().putSingle(LanguageConstant.HEADER_REQUEST_LANG, finalLang);
+        requestContext.getHeaders().putSingle(LanguageConstant.HEADER_REQUEST_LANG, lang);
+        requestContext.setProperty(LANG_ATTRIBUTE, lang);
+        requestContext.setProperty(LANG_EXPLICIT_ATTRIBUTE, explicit);
+    }
 
-        if (!finalLang.isEmpty()) {
-            requestContext.setProperty(LANG_ATTRIBUTE, finalLang);
+    private String readCookieLang(ContainerRequestContext requestContext) {
+        try {
+            var cookie = requestContext.getCookies().get(LanguageConstant.COOKIE_LANG_KEY);
+            return cookie == null ? null : cookie.getValue();
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private String rawPath(ContainerRequestContext requestContext) {
+        try {
+            String path = requestContext.getUriInfo().getRequestUri().getRawPath();
+            return path == null || path.isBlank() ? "/" : path;
+        } catch (Exception exception) {
+            return "/";
+        }
+    }
+
+    private String cleanQuery(ContainerRequestContext requestContext) {
+        try {
+            String rawQuery = requestContext.getUriInfo().getRequestUri().getRawQuery();
+            if (rawQuery == null || rawQuery.isBlank()) {
+                return "";
+            }
+            List<String> kept = new ArrayList<>();
+            for (String part : rawQuery.split("&")) {
+                if (part.isBlank() || part.toLowerCase(java.util.Locale.ROOT).startsWith("lang=")) {
+                    continue;
+                }
+                kept.add(part);
+            }
+            return String.join("&", kept);
+        } catch (Exception exception) {
+            return "";
         }
     }
 }

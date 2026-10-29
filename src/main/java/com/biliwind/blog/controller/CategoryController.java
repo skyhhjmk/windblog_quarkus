@@ -336,7 +336,7 @@ public class CategoryController {
             url.append(hasQuery ? "&" : "?");
             url.append("page=").append(page);
         }
-        return url.toString();
+        return languageContext.localize(url.toString());
     }
 
     private List<PaginationPage> buildPaginationPages(int currentPage, int totalPages,
@@ -354,7 +354,7 @@ public class CategoryController {
 
     private String buildCategoryDetailUrl(String slug, int page) {
         String url = "/category/" + urlEncode(slug);
-        return page > 1 ? url + "?page=" + page : url;
+        return languageContext.localize(page > 1 ? url + "?page=" + page : url);
     }
 
     private String urlEncode(String value) {

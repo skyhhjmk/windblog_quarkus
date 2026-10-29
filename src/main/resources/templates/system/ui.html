@@ -6,24 +6,24 @@
     <div class="modal-overlay absolute inset-0 bg-bg/20"></div>
     <div class="modal-container relative bg-card border border-border shadow-2xl max-w-md w-full overflow-hidden rounded-xl">
         <div class="p-8">
-            <h3 id="modalTitle" class="text-xl font-bold mb-3 tracking-tight">确认</h3>
+            <h3 id="modalTitle" class="text-xl font-bold mb-3 tracking-tight">{i18n.t('ui.confirm')}</h3>
             <div id="modalMessage" class="text-body text-sm mb-8 leading-relaxed"></div>
 
             <div id="modalPromptContainer" class="hidden mb-8">
                 <input type="text" id="modalPromptInput"
                        class="w-full px-4 py-2.5 bg-input-bg border border-border rounded-lg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
-                       placeholder="请输入..."/>
+                       placeholder="{i18n.t('ui.prompt_placeholder')}"/>
             </div>
 
             <div class="flex gap-3 justify-end">
                 <button type="button" id="modalCancel"
                         class="px-6 py-2.5 text-sm font-semibold text-meta hover:text-main hover:bg-hover-surface rounded-lg transition-all">
-                    取消
+                    {i18n.t('ui.cancel')}
                 </button>
                 <button type="button" id="modalOk"
                         data-shortcut="enter" aria-keyshortcuts="Enter"
                         class="px-8 py-2.5 bg-accent text-[var(--accent-foreground)] font-black rounded-lg text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-accent/20">
-                    确定（回车）
+                    {i18n.t('ui.ok')}
                 </button>
             </div>
         </div>

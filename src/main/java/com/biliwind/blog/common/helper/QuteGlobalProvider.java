@@ -4,7 +4,13 @@ import io.quarkus.arc.Arc;
 import io.quarkus.qute.TemplateGlobal;
 import io.vertx.core.http.HttpServerRequest;
 import jakarta.enterprise.context.ApplicationScoped;
+import com.biliwind.blog.common.constant.LanguageConstant;
+import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.i18n.I18n;
 import com.biliwind.blog.service.CanonicalUrlService;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Qute 模板全局变量提供者
@@ -50,6 +56,62 @@ public class QuteGlobalProvider {
     }
 
     @TemplateGlobal
+    public static I18n i18n() {
+        return Arc.container().instance(I18n.class).get();
+    }
+
+    @TemplateGlobal
+    public static String language() {
+        return languageContext().getLang();
+    }
+
+    @TemplateGlobal
+    public static String defaultLanguage() {
+        return languageContext().getDefaultLang();
+    }
+
+    @TemplateGlobal
+    public static String languagePrefix() {
+        LanguageContext context = languageContext();
+        return LanguageHelper.prefixFor(context.getLang(), context.getDefaultLang());
+    }
+
+    @TemplateGlobal
+    public static String currentPath() {
+        return languageContext().getPath();
+    }
+
+    @TemplateGlobal
+    public static String languageLabel() {
+        I18n i18n = i18n();
+        return i18n.t("language." + languageContext().getLang());
+    }
+
+    @TemplateGlobal
+    public static List<LanguageOption> languageOptions() {
+        LanguageContext context = languageContext();
+        I18n i18n = i18n();
+        String query = context.getQuery();
+        List<LanguageOption> options = new ArrayList<>();
+        for (String code : LanguageConstant.SUPPORTED_LANG_ORDER) {
+            String url = LanguageHelper.localizedPath(context.getPath(), code, context.getDefaultLang());
+            if (query != null && !query.isBlank()) {
+                url = url + "?" + query;
+            }
+            options.add(new LanguageOption(code, i18n.t("language." + code), url,
+                    code.equalsIgnoreCase(context.getLang())));
+        }
+        return options;
+    }
+
+    private static LanguageContext languageContext() {
+        return com.biliwind.blog.i18n.LanguageRequestResolver.current();
+    }
+
+    public record LanguageOption(String code, String label, String url, boolean active) {
+    }
+
+    @TemplateGlobal
     public static com.biliwind.blog.common.helper.MarkdownHelper MarkdownHelper() {
         return new com.biliwind.blog.common.helper.MarkdownHelper();
     }
@@ -63,11 +125,17 @@ public class QuteGlobalProvider {
     public static String defaultCanonicalUrl() {
         String baseUrl = canonicalBaseUrl();
         String requestPath = "/";
+        String language = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG;
+        String defaultLanguage = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG;
         try {
             HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
             if (request != null && request.path() != null && !request.path().isBlank()) {
                 requestPath = request.path();
             }
+            com.biliwind.blog.context.LanguageContext context =
+                    Arc.container().instance(com.biliwind.blog.context.LanguageContext.class).get();
+            language = context.getLang();
+            defaultLanguage = context.getDefaultLang();
         } catch (Exception exception) {
             requestPath = "/";
         }
@@ -75,7 +143,7 @@ public class QuteGlobalProvider {
         if (!requestPath.startsWith("/")) {
             requestPath = "/" + requestPath;
         }
-        return baseUrl + requestPath;
+        return baseUrl + LanguageHelper.localizedPath(requestPath, language, defaultLanguage);
     }
     @TemplateGlobal
     public static java.util.List<com.biliwind.blog.service.SeoPageService.Alternate> seoAlternates() {

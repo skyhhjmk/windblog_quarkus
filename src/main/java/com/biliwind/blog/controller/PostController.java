@@ -169,6 +169,8 @@ public class PostController {
             }
         }
 
+        String contentLanguage = LanguageHelper.resolveLocalizedLanguage(snapshot.previewContent(), resolvedLang);
+        languageContext.setContentLanguage(contentLanguage);
         String localizedTitle = LanguageHelper.resolveLocalizedValue(snapshot.title(), resolvedLang);
         String publicPreview = resolveSnapshotContent(snapshot, resolvedLang);
         Long requestUserId = resolveUserId(httpHeaders);
@@ -289,6 +291,7 @@ public class PostController {
 
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
+                .data("contentLanguage", contentLanguage)
                 .data("postSlug", slug)
                 .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())
                 .data("postTitle", displayTitle)
@@ -365,15 +368,15 @@ public class PostController {
 
     private String buildCanonicalUrl(String slug) {
         String language = languageContext.getLang();
-        String prefix = LanguageConstant.DEFAULT_LANG.equalsIgnoreCase(language) ? "" : "/" + language;
-        return canonicalUrlService.buildPath(prefix + "/post/" + slug);
+        String defaultLanguage = languageContext.getDefaultLang();
+        String path = LanguageHelper.localizedPath("/post/" + slug, language, defaultLanguage);
+        return canonicalUrlService.buildPath(path);
     }
 
     private String buildAmpUrl(String slug, String language) {
-        if (LanguageConstant.DEFAULT_LANG.equalsIgnoreCase(language)) {
-            return publicUrlService.buildPath("/amp/post/" + slug);
-        }
-        return publicUrlService.buildPath("/" + language + "/amp/post/" + slug);
+        String path = LanguageHelper.localizedPath("/amp/post/" + slug, language,
+                languageContext.getDefaultLang());
+        return publicUrlService.buildPath(path);
     }
 
     private String resolveSeoTitle(
@@ -458,7 +461,9 @@ public class PostController {
     private void resolveLanguage(String langCode) {
 
         if (langCode == null || langCode.isBlank()) {
-            languageContext.setLang(LanguageConstant.DEFAULT_LANG);
+            // No legacy route parameter: keep the language chosen by URL prefix,
+            // ?lang, cookie or the region default. The page language no longer
+            // depends on which article translations happen to exist.
             return;
         }
 

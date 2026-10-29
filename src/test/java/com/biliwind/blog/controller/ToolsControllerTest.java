@@ -16,6 +16,14 @@ class ToolsControllerTest {
                 .then()
                 .statusCode(200)
                 .contentType("text/html;charset=UTF-8")
+                .body(containsString("Developer toolbox"))
+                .body(containsString("Smart subnet calculator"));
+
+        given()
+                .when().get("/zh-cn/tools")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
                 .body(containsString("常用在线工具箱"))
                 .body(containsString("新一代智能子网掩码计算器"));
     }

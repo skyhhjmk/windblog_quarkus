@@ -191,7 +191,7 @@
                 `;
                 expandBtnHtml = `
                     <button type="button" class="expand-replies-btn" data-comment-id="${node.id}">
-                        展开 ${hidden.length} 条回复
+                        ${window.wbTf('js.expand_replies', hidden.length, '展开 {0} 条回复')}
                     </button>
                 `;
             } else {
@@ -273,13 +273,13 @@
             const response = await fetch(url);
             const result = await response.json();
             if (!response.ok || !result?.success) {
-                throw new Error(result?.message || '评论列表请求失败');
+                throw new Error(result?.message || window.wbT('js.comments_request_failed', '评论列表请求失败'));
             }
             const nodes = result && result.success && Array.isArray(result.data) ? result.data : [];
             const totalRoots = result.total || 0;
 
             if (!isAppend) {
-                count.textContent = totalRoots + ' ' + (window.i18n.comments_unit || '条讨论');
+                count.textContent = totalRoots + ' ' + (window.i18n.comments_unit || window.wbT('js.discussions', '条讨论'));
                 list.innerHTML = '';
             }
 
@@ -300,7 +300,7 @@
             }
         } catch (error) {
             if (!isAppend) {
-                count.textContent = '0 条讨论';
+                count.textContent = '0 ' + window.wbT('js.discussions', '条讨论');
                 const errorMessage = window.formatErrorMessage
                     ? window.formatErrorMessage(error.message || window.i18n.load_comments_failed || '加载评论失败。',
                         window.getErrorCode?.(error.message, 'WB-UI-COMMENT-LOAD-001'))
@@ -323,8 +323,8 @@
 
         if (hint) {
             hint.innerHTML = loggedIn
-                ? `<span class="text-xs font-bold text-gray-500">已登录为</span> <span class="text-xs font-black text-accent">${escapeHtml(profile.data.username)}</span>`
-                : `<span class="text-xs font-bold text-gray-400">访客模式</span>`;
+                ? `<span class="text-xs font-bold text-gray-500">${window.wbT('js.signed_in_as', '已登录为')}</span> <span class="text-xs font-black text-accent">${escapeHtml(profile.data.username)}</span>`
+                : `<span class="text-xs font-bold text-gray-400">${window.wbT('js.guest_mode', '访客模式')}</span>`;
         }
 
         const guestFields = root.querySelector('#comment-guest-fields');
@@ -341,7 +341,7 @@
         root.dataset.captchaVersion = String(version);
         root.dataset.captchaId = '';
         if (!question || !answer) return;
-        question.textContent = '正在加载...';
+        question.textContent = window.wbT('js.loading_short', '正在加载...');
         updateSubmitState(root);
         answer.value = '';
         try {
@@ -349,7 +349,7 @@
             const result = await response.json().catch(() => null);
             if (root.dataset.captchaVersion !== String(version)) return;
             if (!response.ok || !result?.success || !result.data?.id || !result.data?.question) {
-                const message = result?.message || `验证码服务返回 HTTP ${response.status}，未提供错误详情`;
+                const message = result?.message || window.wbTf('js.http_error', response.status, '验证码服务返回 HTTP {0}，未提供错误详情');
                 const failure = new Error(message);
                 failure.errorCode = result?.errorCode || response.headers.get('X-WindBlog-Error-Code');
                 throw failure;
@@ -360,10 +360,10 @@
         } catch (error) {
             if (root.dataset.captchaVersion === String(version)) {
                 const fallbackMessage = error.name === 'TimeoutError'
-                    ? '验证码加载超时，请重试'
+                    ? window.wbT('js.captcha_timeout', '验证码加载超时，请重试')
                     : error.message === 'Failed to fetch'
-                        ? '网络连接失败，未能加载验证码'
-                        : '验证码加载失败，请重试';
+                        ? window.wbT('js.captcha_network', '网络连接失败，未能加载验证码')
+                        : window.wbT('js.captcha_loading_failed', '验证码加载失败，请重试');
                 const message = error.message && error.message !== 'Failed to fetch'
                     && error.name !== 'TimeoutError' ? error.message : fallbackMessage;
                 const errorCode = error.errorCode
@@ -397,7 +397,7 @@
 
             if (root.dataset.commentSubmitting === 'true') return;
             if (!root.dataset.captchaId) {
-                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error', 'WB-UI-COMMENT-CAPTCHA-001');
+                setFeedback(root, window.wbT('js.captcha_required', '请先加载验证码，点击换一道题重试。'), 'error', 'WB-UI-COMMENT-CAPTCHA-001');
                 return;
             }
 
@@ -411,7 +411,7 @@
 
             if (!form.reportValidity()) return;
             if (!root.dataset.captchaId) {
-                setFeedback(root, '请先加载验证码，点击换一道题重试。', 'error', 'WB-UI-COMMENT-CAPTCHA-001');
+                setFeedback(root, window.wbT('js.captcha_required', '请先加载验证码，点击换一道题重试。'), 'error', 'WB-UI-COMMENT-CAPTCHA-001');
                 return;
             }
 
@@ -474,7 +474,7 @@
                 const detail = error.message === 'Failed to fetch'
                     ? '网络连接失败，浏览器未能连接到服务器'
                     : (error.message || '网络请求失败，未能收到服务器响应');
-                const message = detail.startsWith('评论提交失败') ? detail : `评论提交失败：${detail}`;
+                const message = detail.startsWith('评论提交失败') ? detail : window.wbTf('js.submit_failed_detail', detail, '评论提交失败：{0}');
                 const errorCode = error.errorCode || window.getErrorCode?.(message, 'WB-UI-COMMENT-SUBMIT-001');
                 window.showToast(message, 'error', 8000, errorCode);
                 setFeedback(root, message, 'error', errorCode);
@@ -517,11 +517,11 @@
         const isHidden = container.classList.contains('hidden');
         if (isHidden) {
             container.classList.remove('hidden');
-            btn.textContent = '收起回复';
+            btn.textContent = window.wbT('js.collapse_replies', '收起回复');
         } else {
             container.classList.add('hidden');
             const count = container.querySelectorAll('.comment-item').length;
-            btn.textContent = `展开 ${count} 条回复`;
+            btn.textContent = window.wbTf('js.expand_replies', count, '展开 {0} 条回复');
         }
     };
 

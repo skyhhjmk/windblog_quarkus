@@ -27,6 +27,9 @@ public class FeedService {
     RegionContext regionContext;
 
     @Inject
+    LanguageSettingsService languageSettingsService;
+
+    @Inject
     CanonicalUrlService canonicalUrlService;
 
     private static final DateTimeFormatter RFC_822_FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
@@ -71,10 +74,11 @@ public class FeedService {
         List<PostSitemapUrlView> urls = new ArrayList<>();
         if (!config.getBoolean("seo", "index_enabled", true)) return urls;
         for (var post : posts) {
-            for (String lang : com.biliwind.blog.common.constant.LanguageConstant.SUPPORT_LANGS.stream().sorted().toList()) {
+            String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
+            for (String lang : com.biliwind.blog.common.constant.LanguageConstant.SUPPORTED_LANG_ORDER) {
                 if (!hasLanguage(post.publishedRevision.title, lang) || !hasLanguage(post.publishedRevision.contentMarkdown, lang)) continue;
-                String prefix = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG.equalsIgnoreCase(lang) ? "" : "/" + lang;
-                String loc = getBaseUrl() + prefix + "/post/" + encodeSlug(post.slug);
+                String postPath = LanguageHelper.localizedPath("/post/" + encodeSlug(post.slug), lang, regionDefault);
+                String loc = getBaseUrl() + postPath;
                 List<String> images = List.of();
                 if (postAccessService.getPostPrice(post) == 0) {
                     String content = LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
@@ -84,7 +88,7 @@ public class FeedService {
                     images = StructuredDataService.imageUrls(sanitizer.sanitize(html), loc);
                 }
                 urls.add(new PostSitemapUrlView(loc, formatLastModified(post.updatedAt, post.createdAt), images,
-                        seoPageService.alternates(prefix + "/post/" + encodeSlug(post.slug))));
+                        seoPageService.alternates(postPath)));
             }
         }
         return urls;

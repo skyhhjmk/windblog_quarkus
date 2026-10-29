@@ -4,28 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
     <script nonce="{cspNonce}">
-        window.i18n = {
-            reply: "回复",
-            loading_comments: "正在加载评论...",
-            no_comments_yet: "暂无评论。来发表第一条评论吧。",
-            load_comments_failed: "加载评论失败。",
-            signed_in_as: "已登录为",
-            login_required: "提交评论前请先登录。",
-            submit_comment: "提交评论",
-            content_required: "评论内容不能为空。",
-            login_before_submit: "请先登录后再提交评论。",
-            submit_failed: "提交评论失败。",
-            comment_submitted: "评论已提交，正在等待审核。",
-            login_required_btn: "请先登录",
-            comments_unit: "条评论",
-            logout_title: "退出登录",
-            logout_confirm: "确定要退出登录吗？",
-            login_success: "登录成功",
-            login_failed: "登录失败",
-            network_error: "网络错误，请稍后重试",
-            register_success: "注册成功",
-            register_failed: "注册失败",
-            password_mismatch: "两次输入的密码不一致"
+        window.i18n = {i18n.jsJson.raw};
+        window.wbT = function (key, fallback) {
+            var value = window.i18n && window.i18n[key];
+            return value === undefined || value === null
+                ? (fallback === undefined ? key : fallback)
+                : value;
+        };
+        window.wbTf = function (key, value, fallback) {
+            return window.wbT(key, fallback).replace('%s', value);
         };
     </script>
     <title>{#insert title}{pageTitle ?: config:siteTitle}{/insert}</title>
@@ -153,7 +140,7 @@
 <header class="sticky top-0 z-50 bg-bg/85 backdrop-blur-md border-b border-border transition-colors">
     <div class="max-w-1400 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <!-- Logo / Brand -->
-        <a href="/" class="flex items-center gap-3 group" data-article-return-link>
+        <a href="{languagePrefix}/" class="flex items-center gap-3 group" data-article-return-link>
             <div class="w-8 h-8 bg-accent text-[var(--accent-foreground)] rounded-lg flex items-center justify-center font-black text-base shadow-sm group-hover:scale-105 group-hover:shadow-[0_0_12px_rgba(var(--accent-rgb),0.35)] transition-all duration-300">
                 <span class="brand-initial">{config:siteTitleInitial}</span>
             </div>
@@ -163,21 +150,21 @@
         <!-- Navigation -->
         <nav class="hidden md:flex items-center gap-6">
             <div class="flex items-center gap-1.5">
-                <a href="/" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">首页</a>
-                <a href="/tools" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">工具箱</a>
-                <a href="/link" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">友链</a>
-                <a href="/tag" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">标签</a>
-                <a href="/category" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">分类</a>
+                <a href="{languagePrefix}/" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">{i18n.t('common.home')}</a>
+                <a href="{languagePrefix}/tools" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">{i18n.t('common.tools')}</a>
+                <a href="{languagePrefix}/link" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">{i18n.t('common.links')}</a>
+                <a href="{languagePrefix}/tag" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">{i18n.t('common.tags')}</a>
+                <a href="{languagePrefix}/category" class="px-3 py-1.5 rounded-lg text-sm font-medium text-body hover:text-main hover:bg-hover-surface transition-all">{i18n.t('common.categories')}</a>
             </div>
 
             <div class="h-4 w-[1px] bg-border"></div>
 
             <!-- Search -->
-            <form action="/search" method="get" class="relative group" data-shortcut-form="search">
+            <form action="{languagePrefix}/search" method="get" class="relative group" data-shortcut-form="search">
                 <input
                         type="text"
                         name="q"
-                        placeholder="搜索文章..."
+                        placeholder="{i18n.t('common.search_placeholder')}"
                         data-shortcut-target="search"
                         class="pl-9 pr-14 py-1.5 text-xs w-52 bg-input-bg border border-border rounded-lg text-main placeholder:text-meta/70 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/40 transition-all"/>
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-meta group-focus-within:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,9 +175,28 @@
 
             <div class="h-4 w-[1px] bg-border"></div>
 
+            <!-- Language -->
+            <div class="relative" id="languageMenuContainer">
+                <button type="button" id="languageMenuBtn" aria-expanded="false" aria-haspopup="menu"
+                        title="{i18n.t('language.switch')}" aria-label="{i18n.t('language.switch')}"
+                        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-hover-surface transition-colors border border-border/60 hover:border-border text-body hover:text-main">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c2.5-2.4 4-5.6 4-9s-1.5-6.6-4-9c-2.5 2.4-4 5.6-4 9s1.5 6.6 4 9zM3.6 9h16.8M3.6 15h16.8"/>
+                    </svg>
+                    <span>{languageLabel}</span>
+                </button>
+                <div id="languageMenu" class="absolute right-0 top-full mt-2 w-40 bg-card border border-border rounded-xl shadow-2xl hidden p-1.5 z-50 overflow-hidden">
+                    {#for option in languageOptions}
+                    <a href="{option.url}" hreflang="{option.code}" lang="{option.code}"
+                       class="block px-3 py-2 text-xs font-medium rounded-lg transition-colors {#if option.active}bg-accent/10 text-accent{#else}text-body hover:bg-hover-surface hover:text-main{/if}"
+                       {#if option.active}aria-current="true"{/if}>{option.label}</a>
+                    {/for}
+                </div>
+            </div>
+
             <!-- Theme Toggle -->
             <button type="button" class="theme-toggle w-9 h-9 rounded-lg hover:bg-hover-surface transition-colors border border-border/60 hover:border-border text-meta hover:text-main flex items-center justify-center"
-                    title="切换主题" aria-label="切换主题">
+                    title="{i18n.t('common.theme_toggle')}" aria-label="{i18n.t('common.theme_toggle')}">
                 <svg class="theme-icon-dark w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                 <svg class="theme-icon-light w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </button>
@@ -199,29 +205,29 @@
             <div class="relative" id="userMenuContainer">
                 <button type="button" id="userMenuBtn" aria-expanded="false" aria-haspopup="menu"
                         class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-hover-surface transition-colors border border-border/60 hover:border-border text-body hover:text-main">
-                    <span>账户</span>
+                    <span>{i18n.t('common.account')}</span>
                     <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
                 <div id="userDropdown" class="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-xl shadow-2xl hidden p-1.5 z-50 overflow-hidden">
                     <div id="userNotLoggedIn" class="space-y-0.5">
-                        <a href="/user/login"
-                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">登录</a>
-                        <a href="/user/register"
-                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">注册</a>
+                        <a href="{languagePrefix}/user/login"
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">{i18n.t('common.login')}</a>
+                        <a href="{languagePrefix}/user/register"
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">{i18n.t('common.register')}</a>
                     </div>
                     <div id="userLoggedIn" class="hidden space-y-0.5">
                         <div class="px-3 py-1.5 text-[11px] font-semibold text-meta uppercase tracking-wider border-b border-border/50 mb-1" id="userNickname">User</div>
-                        <a href="/user/center"
-                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">个人中心</a>
+                        <a href="{languagePrefix}/user/center"
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-accent/10 hover:text-accent transition-colors">{i18n.t('common.profile')}</a>
                         <a href="#" id="logoutLink"
-                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors">退出登录</a>
+                           class="block px-3 py-2 text-xs font-medium rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors">{i18n.t('common.logout')}</a>
                     </div>
                 </div>
             </div>
         </nav>
 
         <!-- Mobile Toggle -->
-        <button type="button" id="mobileMenuBtn" aria-expanded="false" aria-controls="mobileMenu" aria-label="打开菜单" class="md:hidden p-2 text-meta hover:text-main">
+        <button type="button" id="mobileMenuBtn" aria-expanded="false" aria-controls="mobileMenu" aria-label="{i18n.t('common.open_menu')}" class="md:hidden p-2 text-meta hover:text-main">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
         </button>
     </div>
@@ -229,34 +235,44 @@
     <!-- Mobile Menu -->
     <div id="mobileMenu" class="hidden md:hidden bg-bg border-t border-border px-6 py-4 space-y-4 shadow-xl">
         <div class="flex flex-col gap-2">
-            <a href="/" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">首页</a>
-            <a href="/tools" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">工具箱</a>
-            <a href="/link" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">友链</a>
-            <a href="/tag" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">标签</a>
-            <a href="/category" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">分类</a>
+            <a href="{languagePrefix}/" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.home')}</a>
+            <a href="{languagePrefix}/tools" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.tools')}</a>
+            <a href="{languagePrefix}/link" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.links')}</a>
+            <a href="{languagePrefix}/tag" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.tags')}</a>
+            <a href="{languagePrefix}/category" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.categories')}</a>
         </div>
-        <form action="/search" method="get" class="relative group pt-4 border-t border-border" data-shortcut-form="search">
-            <label class="sr-only" for="mobileSearchInput">搜索文章</label>
-            <input id="mobileSearchInput" type="search" name="q" placeholder="搜索文章...（Ctrl+K）" data-shortcut-target="search"
+        <form action="{languagePrefix}/search" method="get" class="relative group pt-4 border-t border-border" data-shortcut-form="search">
+            <label class="sr-only" for="mobileSearchInput">{i18n.t('common.search')}</label>
+            <input id="mobileSearchInput" type="search" name="q" placeholder="{i18n.t('common.search_placeholder')} (Ctrl+K)" data-shortcut-target="search"
                    class="w-full pl-4 pr-4 py-2 text-sm bg-card border border-border rounded-lg text-main placeholder:text-meta" />
         </form>
         <div class="pt-4 border-t border-border flex flex-col gap-3" id="mobileUserAuth">
             <div class="flex items-center justify-between py-2">
-                <span class="text-sm font-medium">外观</span>
+                <span class="text-sm font-medium">{i18n.t('common.appearance')}</span>
                 <button type="button" class="theme-toggle p-2 rounded-lg hover:bg-hover-surface transition-colors border border-border text-meta hover:text-main"
-                        title="切换主题" aria-label="切换主题">
+                        title="{i18n.t('common.theme_toggle')}" aria-label="{i18n.t('common.theme_toggle')}">
                     <svg class="theme-icon-dark w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                     <svg class="theme-icon-light w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </button>
             </div>
+            <div class="flex items-center justify-between border-t border-border py-2">
+                <span class="text-sm font-medium">{i18n.t('common.language')}</span>
+                <div class="flex gap-2">
+                    {#for option in languageOptions}
+                    <a href="{option.url}" hreflang="{option.code}" lang="{option.code}"
+                       class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors {#if option.active}bg-accent/10 text-accent border-accent/30{#else}text-body border-border hover:text-main hover:bg-hover-surface{/if}"
+                       {#if option.active}aria-current="true"{/if}>{option.label}</a>
+                    {/for}
+                </div>
+            </div>
             <div data-mobile-user-logged-out class="flex flex-col gap-2">
-                <a href="/user/login" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">登录</a>
-                <a href="/user/register" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">注册</a>
+                <a href="{languagePrefix}/user/login" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.login')}</a>
+                <a href="{languagePrefix}/user/register" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.register')}</a>
             </div>
             <div data-mobile-user-logged-in class="hidden flex flex-col gap-2">
-                <span class="text-xs text-meta px-3">已登录为 <strong data-mobile-user-nickname class="text-main"></strong></span>
-                <a href="/user/center" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">个人中心</a>
-                <a href="#" data-mobile-logout class="text-sm py-2 px-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors font-medium">退出登录</a>
+                <span class="text-xs text-meta px-3">{i18n.t('js.signed_in_as')} <strong data-mobile-user-nickname class="text-main"></strong></span>
+                <a href="{languagePrefix}/user/center" class="text-sm py-2 px-3 rounded-lg text-body hover:text-main hover:bg-hover-surface transition-colors font-medium">{i18n.t('common.profile')}</a>
+                <a href="#" data-mobile-logout class="text-sm py-2 px-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors font-medium">{i18n.t('common.logout')}</a>
             </div>
         </div>
     </div>
@@ -264,7 +280,7 @@
 
 <!-- Main Content -->
 <main data-wb-ads-config="{config:adsenseConfig}" class="flex-grow max-w-1400 mx-auto w-full px-4 py-8 md:px-6 md:py-12">
-    <nav aria-label="面包屑" class="mb-8 text-xs text-meta font-mono flex items-center">
+    <nav aria-label="{i18n.t('common.breadcrumb')}" class="mb-8 text-xs text-meta font-mono flex items-center">
         <span id="nav-path-text" class="px-2.5 py-1 rounded-md bg-card/60 border border-border/60 text-meta">{#insert navPath}{config:siteNavRoot}{/insert}</span>
     </nav>
     <div class="flex flex-col md:flex-row gap-8 md:gap-14">
@@ -318,13 +334,13 @@
         <div class="flex gap-6 items-center">
             <a href="https://github.com/skyhhjmk/windblog_quarkus" target="_blank" rel="noopener noreferrer"
                class="meta-mono hover:text-accent transition-colors">GitHub</a>
-            <a href="/feed" target="_blank" rel="noopener noreferrer" class="meta-mono hover:text-accent transition-colors">RSS 订阅</a>
-            <a href="/sitemap.xml" target="_blank" rel="noopener noreferrer" class="meta-mono hover:text-accent transition-colors">站点地图</a>
+            <a href="/feed" target="_blank" rel="noopener noreferrer" class="meta-mono hover:text-accent transition-colors">{i18n.t('footer.rss')}</a>
+            <a href="/sitemap.xml" target="_blank" rel="noopener noreferrer" class="meta-mono hover:text-accent transition-colors">{i18n.t('common.sitemap')}</a>
             {#if config:analyticsTrackingPrivacyPreferencesEnabled}
                 <details class="relative">
-                    <summary class="meta-mono cursor-pointer hover:text-accent transition-colors">隐私偏好</summary>
+                    <summary class="meta-mono cursor-pointer hover:text-accent transition-colors">{i18n.t('common.privacy_preferences')}</summary>
                     <div class="absolute right-0 bottom-full mb-3 z-50 w-[min(420px,calc(100vw-2rem))] rounded-lg border border-border bg-card p-2 shadow-2xl">
-                        <iframe data-seeray-privacy src="{config:analyticsTrackingPrivacyPreferencesUrl}" title="隐私偏好" class="w-full h-64 rounded border-0"></iframe>
+                        <iframe data-seeray-privacy src="{config:analyticsTrackingPrivacyPreferencesUrl}" title="{i18n.t('common.privacy_preferences')}" class="w-full h-64 rounded border-0"></iframe>
                     </div>
                 </details>
             {/if}
@@ -332,7 +348,7 @@
     </div>
     {#if config:siteDomains}
         <div class="max-w-1400 mx-auto px-6 mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
-            <span class="meta-mono text-meta">站点列表</span>
+            <span class="meta-mono text-meta">{i18n.t('common.site_list')}</span>
             {#for site in config:siteDomains}
                 <a href="{site.url}" target="_blank" rel="noopener noreferrer"
                    class="meta-mono hover:text-accent transition-colors">{site.label}</a>
@@ -360,16 +376,16 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/main.js?v=theme-audit-20261029" defer></script>
+<script src="/assets/js/main.js?v=i18n-20261029" defer></script>
 <script src="/assets/js/drag-character-trail.js?v=theme-audit-20261029" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>
 <script src="/assets/js/article-images.js?v=theme-audit-20261029" defer></script>
 <script src="/assets/js/user.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/comment.js?v=error-codes-20261020" defer></script>
+<script src="/assets/js/comment.js?v=i18n-20261029" defer></script>
 <script src="/assets/js/ads.js?v=adsense-20261014" defer></script>
 <script src="/assets/js/link.js?v=error-codes-20261020" defer></script>
 <script src="/assets/js/tools.js?v=20261028-tools-v3" defer></script>
-<script src="/assets/js/post-premium.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/post-quote.js?v=theme-audit-20261029" defer></script>
+<script src="/assets/js/post-premium.js?v=i18n-20261029" defer></script>
+<script src="/assets/js/post-quote.js?v=i18n-20261029" defer></script>
 </body>
 </html>

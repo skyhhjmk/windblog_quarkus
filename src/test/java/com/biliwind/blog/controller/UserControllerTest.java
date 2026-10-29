@@ -60,6 +60,13 @@ class UserControllerTest {
                 .get("/user/reset-password")
                 .then()
                 .statusCode(200)
+                .body(containsString("Invalid or expired link"));
+
+        given()
+                .when()
+                .get("/zh-cn/user/reset-password")
+                .then()
+                .statusCode(200)
                 .body(containsString("链接无效或已过期"));
     }
 

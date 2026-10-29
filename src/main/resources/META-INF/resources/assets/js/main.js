@@ -123,7 +123,7 @@
             if (!mobileBtn || !mobileMenu) return;
             mobileMenu.classList.add('hidden');
             mobileBtn.setAttribute('aria-expanded', 'false');
-            mobileBtn.setAttribute('aria-label', '打开菜单');
+            mobileBtn.setAttribute('aria-label', window.wbT('js.open_menu', '打开菜单'));
             if (restoreFocus) {
                 mobileBtn.focus({preventScroll: true});
             }
@@ -132,7 +132,7 @@
             mobileBtn.addEventListener('click', () => {
                 const isOpen = mobileMenu.classList.toggle('hidden') === false;
                 mobileBtn.setAttribute('aria-expanded', isOpen.toString());
-                mobileBtn.setAttribute('aria-label', isOpen ? '关闭菜单' : '打开菜单');
+                mobileBtn.setAttribute('aria-label', isOpen ? window.wbT('js.close_menu', '关闭菜单') : window.wbT('js.open_menu', '打开菜单'));
             });
 
             mobileMenu.addEventListener('click', (event) => {
@@ -197,6 +197,29 @@
                 btn.addEventListener('click', () => {
                     applyTheme(!document.documentElement.classList.contains('light'));
                 });
+            });
+        }
+
+        const languageMenuBtn = document.getElementById('languageMenuBtn');
+        const languageMenu = document.getElementById('languageMenu');
+        const languageMenuContainer = document.getElementById('languageMenuContainer');
+        if (languageMenuBtn && languageMenu && languageMenuContainer) {
+            languageMenuBtn.addEventListener('click', () => {
+                const isHidden = languageMenu.classList.toggle('hidden');
+                languageMenuBtn.setAttribute('aria-expanded', (!isHidden).toString());
+            });
+            document.addEventListener('click', (e) => {
+                if (!languageMenuContainer.contains(e.target) && !languageMenu.classList.contains('hidden')) {
+                    languageMenu.classList.add('hidden');
+                    languageMenuBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !languageMenu.classList.contains('hidden')) {
+                    languageMenu.classList.add('hidden');
+                    languageMenuBtn.setAttribute('aria-expanded', 'false');
+                    languageMenuBtn.focus();
+                }
             });
         }
 
@@ -314,8 +337,8 @@
 
         function fallbackToFullPage(url) {
             navigationStatus.textContent = window.formatErrorMessage
-                ? window.formatErrorMessage('页面局部加载失败，正在重新加载页面', 'WB-UI-NAVIGATION-001')
-                : '页面局部加载失败，正在重新加载页面';
+                ? window.formatErrorMessage(window.wbT('js.page_load_failed', '页面局部加载失败，正在重新加载页面'), 'WB-UI-NAVIGATION-001')
+                : window.wbT('js.page_load_failed', '页面局部加载失败，正在重新加载页面');
             navigationStatus.hidden = false;
             // A document navigation uses normal HTML, without the PJAX headers.
             // Reload explicitly for popstate failures and same-address navigation.
@@ -331,7 +354,7 @@
             navigationStatus.hidden = true;
             document.getElementById('pjax-container')?.setAttribute('aria-busy', 'true');
             slowRequestTimer = setTimeout(() => {
-                navigationStatus.textContent = '正在加载…';
+                navigationStatus.textContent = window.wbT('js.loading', '正在加载…');
                 navigationStatus.hidden = false;
             }, 800);
             if (!bar) return;
@@ -1205,7 +1228,7 @@
                         return;
                     }
 
-                    const formatted = new Intl.DateTimeFormat('zh-CN', {
+                    const formatted = new Intl.DateTimeFormat(document.documentElement.lang || 'zh-CN', {
                         year: 'numeric',
                         month: '2-digit',
                         day: '2-digit',
@@ -1258,7 +1281,7 @@
             articleLinkPreviewCurrentAnchor = anchor;
 
             const card = ensureArticleLinkPreviewCard();
-            const title = anchor.dataset.linkName || anchor.textContent || '文章外链';
+            const title = anchor.dataset.linkName || anchor.textContent || window.wbT('js.article_link', '文章外链');
             const url = anchor.dataset.linkUrl || anchor.getAttribute('href') || '';
             const description = anchor.dataset.linkDescription || '';
             const icon = anchor.dataset.linkIcon || '';
@@ -1270,7 +1293,7 @@
 
             titleNode.textContent = title;
             urlNode.textContent = url;
-            descriptionNode.textContent = description || '已接入站内文章外链管理。';
+            descriptionNode.textContent = description || window.wbT('js.link_preview_default', '已接入站内文章外链管理。');
 
             if (icon) {
                 iconNode.src = icon;
@@ -1602,14 +1625,14 @@
                 const copyBtn = document.createElement('button');
                 copyBtn.type = 'button';
                 copyBtn.className = 'code-block-copy-btn';
-                copyBtn.setAttribute('aria-label', '复制代码');
-                copyBtn.setAttribute('title', '复制代码');
+                copyBtn.setAttribute('aria-label', window.wbT('js.copy_code', '复制代码'));
+                copyBtn.setAttribute('title', window.wbT('js.copy_code', '复制代码'));
                 copyBtn.innerHTML = `
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                     </svg>
-                    <span class="code-copy-text">复制</span>
+                    <span class="code-copy-text">${window.wbT('js.copy', '复制')}</span>
                 `;
 
                 let copyTimer = null;
@@ -1644,7 +1667,7 @@
                             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
-                            <span class="code-copy-text">已复制</span>
+                            <span class="code-copy-text">${window.wbT('js.copied', '已复制')}</span>
                         `;
                         clearTimeout(copyTimer);
                         copyTimer = setTimeout(() => {
@@ -1654,7 +1677,7 @@
                                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                 </svg>
-                                <span class="code-copy-text">复制</span>
+                                <span class="code-copy-text">${window.wbT('js.copy', '复制')}</span>
                             `;
                         }, 2000);
                     }
@@ -1677,11 +1700,10 @@
                     button.dataset.shortcut = button.dataset.shortcut || 'enter';
                     button.setAttribute('aria-keyshortcuts', SHORTCUTS.submit);
                     if (button.querySelector('[data-shortcut-hint]')) return;
-                    if (button.textContent.includes('回车')) return;
-                    const hint = document.createElement('span');
+                                        const hint = document.createElement('span');
                     hint.dataset.shortcutHint = 'enter';
                     hint.className = 'ml-1 text-xs opacity-70';
-                    hint.textContent = '（回车）';
+                    hint.textContent = window.wbT('js.enter_hint', '（回车）');
                     button.appendChild(hint);
                 });
         }
@@ -1730,10 +1752,10 @@
 
         function buildPaginationPageUrl(form, requestedPage, totalPages) {
             const pagination = form.closest('.windblog-pagination');
-            const firstPageLink = pagination?.querySelector('a[aria-label="第一页"]');
+            const firstPageLink = pagination?.querySelector('[data-pagination-nav="first"]');
             if (requestedPage === 1 && firstPageLink) return firstPageLink.href;
 
-            const lastPageLink = pagination?.querySelector('a[aria-label="最后一页"]');
+            const lastPageLink = pagination?.querySelector('[data-pagination-nav="last"]');
             if (!lastPageLink) return '';
 
             const url = new URL(lastPageLink.href, window.location.href);
@@ -1858,7 +1880,7 @@
                 const suggestId = `search-suggestions-${++searchSuggestionCounter}`;
                 suggestWrap.id = suggestId;
                 suggestWrap.setAttribute('role', 'listbox');
-                suggestWrap.setAttribute('aria-label', '搜索建议');
+                suggestWrap.setAttribute('aria-label', window.wbT('js.search_suggestions', '搜索建议'));
                 suggestWrap.className = 'search-suggestions absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl hidden z-[60] overflow-hidden';
                 searchInput.setAttribute('aria-controls', suggestId);
                 form.appendChild(suggestWrap);

@@ -1,26 +1,26 @@
 <div class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg group">
     <div class="flex items-center gap-2.5 mb-5 pb-3 border-b border-border/50">
         <div class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"></div>
-        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">站点统计</h3>
+        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">{i18n.t('sidebar.stats')}</h3>
     </div>
 
     {#let stats = sidebar:stats}
         <div class="grid grid-cols-2 gap-3.5">
             <div class="p-3 rounded-xl bg-input-bg/60 border border-border/40 flex flex-col gap-0.5">
                 <span class="text-xl font-extrabold text-main font-mono">{stats.posts}</span>
-                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">文章总数</span>
+                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">{i18n.t('sidebar.articles')}</span>
             </div>
             <div class="p-3 rounded-xl bg-input-bg/60 border border-border/40 flex flex-col gap-0.5">
                 <span class="text-xl font-extrabold text-main font-mono">{stats.comments}</span>
-                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">累计评论</span>
+                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">{i18n.t('sidebar.comments')}</span>
             </div>
             <div class="p-3 rounded-xl bg-input-bg/60 border border-border/40 flex flex-col gap-0.5">
                 <span class="text-xl font-extrabold text-main font-mono">{stats.categories}</span>
-                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">全部分类</span>
+                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">{i18n.t('sidebar.all_categories')}</span>
             </div>
             <div class="p-3 rounded-xl bg-input-bg/60 border border-border/40 flex flex-col gap-0.5">
                 <span class="text-xl font-extrabold text-main font-mono">{stats.tags}</span>
-                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">标签云集</span>
+                <span class="text-[10px] uppercase tracking-wider text-meta font-medium">{i18n.t('sidebar.tags_count')}</span>
             </div>
         </div>
     {/let}

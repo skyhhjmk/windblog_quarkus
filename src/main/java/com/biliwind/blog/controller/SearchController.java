@@ -753,7 +753,7 @@ public class SearchController {
                     post.title(),
                     post.summary(),
                     post.aiSummary(),
-                    "/post/" + post.slug(),
+                    languageContext.localize("/post/" + post.slug()),
                     post.slug(),
                     publishedAt,
                     publishedAt != null ? formatDate(publishedAt) : "unknown",
@@ -909,7 +909,7 @@ public class SearchController {
                 title,
                 summary,
                 LanguageHelper.resolveLocalizedValue(post.aiSummary, lang),
-                "/post/" + post.slug,
+                languageContext.localize("/post/" + post.slug),
                 post.slug,
                 displayDate,
                 formatDate(displayDate),
@@ -1140,7 +1140,7 @@ public class SearchController {
         if (page != null && page > 1) {
             url.append("&page=").append(page);
         }
-        return url.toString();
+        return languageContext.localize(url.toString());
     }
 
     private List<PaginationPage> buildPaginationPages(int currentPage, int totalPages,

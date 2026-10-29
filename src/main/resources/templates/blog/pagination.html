@@ -1,19 +1,19 @@
-<nav class="windblog-pagination" aria-label="分页">
-    <div class="windblog-pagination-arrows" aria-label="翻页">
+<nav class="windblog-pagination" aria-label="{i18n.t('pagination.label')}">
+    <div class="windblog-pagination-arrows" aria-label="{i18n.t('pagination.turn')}">
         {#if hasPrevPage}
-            <a class="windblog-pagination-arrow" href="{firstPageUrl}" aria-label="第一页">
+            <a class="windblog-pagination-arrow" href="{firstPageUrl}" data-pagination-nav="first" aria-label="{i18n.t('pagination.first')}">
                 <span aria-hidden="true">«</span>
             </a>
-            <a class="windblog-pagination-arrow" href="{prevPageUrl}" aria-label="上一页">
+            <a class="windblog-pagination-arrow" href="{prevPageUrl}" aria-label="{i18n.t('pagination.prev')}">
                 <span aria-hidden="true">‹</span>
             </a>
         {#else}
             <button type="button" class="windblog-pagination-arrow is-disabled"
-                    data-pagination-boundary="previous" aria-disabled="true" aria-label="已是第一页">
+                    data-pagination-boundary="previous" aria-disabled="true" aria-label="{i18n.t('pagination.at_first')}">
                 <span aria-hidden="true">«</span>
             </button>
             <button type="button" class="windblog-pagination-arrow is-disabled"
-                    data-pagination-boundary="previous" aria-disabled="true" aria-label="没有上一页">
+                    data-pagination-boundary="previous" aria-disabled="true" aria-label="{i18n.t('pagination.no_prev')}">
                 <span aria-hidden="true">‹</span>
             </button>
         {/if}
@@ -22,12 +22,12 @@
     <form class="windblog-pagination-form" data-pagination-form novalidate>
         <div class="windblog-pagination-title">
             <span class="windblog-pagination-fixed" aria-hidden="true">Wi</span>
-            <span class="windblog-pagination-n-pages" aria-label="页码">
+            <span class="windblog-pagination-n-pages" aria-label="{i18n.t('pagination.page_label')}">
                 {#for pageLink in paginationPages}
                     <a class="windblog-pagination-n-page windblog-pagination-page{#if pageLink.current} is-current{/if}"
                        href="{pageLink.url}"
                        data-page="{pageLink.number}"
-                       aria-label="第 {pageLink.number} 页"
+                       aria-label="{i18n.format('pagination.page_n', pageLink.number)}"
                        {#if pageLink.current}aria-current="page"{/if}>
                         <span class="windblog-pagination-n-letter" aria-hidden="true">n</span>
                         <span class="windblog-pagination-page-number" aria-hidden="true">{pageLink.number}</span>
@@ -36,40 +36,40 @@
             </span>
             <span class="windblog-pagination-fixed" aria-hidden="true">d-BL</span>
             <label class="windblog-pagination-page-input">
-                <span class="sr-only">当前页</span>
+                <span class="sr-only">{i18n.t('pagination.current')}</span>
                 <input type="number"
                        name="page"
                        placeholder="{currentPage ?: 1}"
                        min="1"
                        max="{totalPages ?: 1}"
                        inputmode="numeric"
-                       aria-label="当前页，共 {totalPages ?: 1} 页">
+                       aria-label="{i18n.format('pagination.current_total', totalPages ?: 1)}">
             </label>
-            <button class="windblog-pagination-go" type="submit" aria-label="跳转到页码">
+            <button class="windblog-pagination-go" type="submit" aria-label="{i18n.t('pagination.jump')}">
                 <span class="windblog-pagination-go-label" aria-hidden="true">G<span class="windblog-pagination-go-extra">o&nbsp;&gt;</span></span>
             </button>
         </div>
 
         <div class="windblog-pagination-status" aria-live="polite">
-            第 {currentPage ?: 1} / {totalPages ?: 1} 页
+            {i18n.format('pagination.page_of', currentPage ?: 1, totalPages ?: 1)}
         </div>
     </form>
 
-    <div class="windblog-pagination-arrows" aria-label="翻页">
+    <div class="windblog-pagination-arrows" aria-label="{i18n.t('pagination.turn')}">
         {#if hasNextPage}
-            <a class="windblog-pagination-arrow" href="{nextPageUrl}" aria-label="下一页">
+            <a class="windblog-pagination-arrow" href="{nextPageUrl}" aria-label="{i18n.t('pagination.next')}">
                 <span aria-hidden="true">›</span>
             </a>
-            <a class="windblog-pagination-arrow" href="{lastPageUrl}" aria-label="最后一页">
+            <a class="windblog-pagination-arrow" href="{lastPageUrl}" data-pagination-nav="last" aria-label="{i18n.t('pagination.last')}">
                 <span aria-hidden="true">»</span>
             </a>
         {#else}
             <button type="button" class="windblog-pagination-arrow is-disabled"
-                    data-pagination-boundary="next" aria-disabled="true" aria-label="没有下一页">
+                    data-pagination-boundary="next" aria-disabled="true" aria-label="{i18n.t('pagination.no_next')}">
                 <span aria-hidden="true">›</span>
             </button>
             <button type="button" class="windblog-pagination-arrow is-disabled"
-                    data-pagination-boundary="next" aria-disabled="true" aria-label="已是最后一页">
+                    data-pagination-boundary="next" aria-disabled="true" aria-label="{i18n.t('pagination.at_last')}">
                 <span aria-hidden="true">»</span>
             </button>
         {/if}

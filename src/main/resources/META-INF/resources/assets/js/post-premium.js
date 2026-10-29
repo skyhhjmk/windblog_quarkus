@@ -70,7 +70,7 @@
                 await window.alert('验证失败，请稍后重试');
             } finally {
                 if (window.setLoading && submitButton) {
-                    window.setLoading(submitButton, false, {text: '解锁内容'});
+                    window.setLoading(submitButton, false, {text: window.wbT('js.unlock_content', '解锁内容')});
                 }
             }
         });
@@ -254,12 +254,14 @@
 
     // Purchase article or block
     async function buyCurrentPost(postRef, price, button, blockId) {
-        const confirmMsg = blockId ? '确认解锁该内容区块吗？' : '确认使用 ' + price + ' 积分购买并解锁这篇文章吗？';
+        const confirmMsg = blockId
+            ? window.wbT('js.unlock_confirm', '确认解锁该内容区块吗？')
+            : window.wbTf('js.unlock_purchase_price', price, '确认使用 {0} 积分购买并解锁这篇文章吗？');
         const confirmed = await window.confirm(confirmMsg);
         if (!confirmed) return;
 
         if (window.setLoading && button) {
-            window.setLoading(button, true, {text: '正在解锁...'});
+            window.setLoading(button, true, {text: window.wbT('js.unlocking', '正在解锁...')});
         }
 
         try {
@@ -278,7 +280,7 @@
 
             const result = await response.json();
             if (result.success) {
-                window.showToast('解锁成功！', 'success');
+                window.showToast(window.wbT('js.unlock_success', '解锁成功！'), 'success');
                 // Success: load content after a short delay
                 setTimeout(() => loadFullPostContent(blockId), 500);
             } else {
@@ -828,7 +830,7 @@
                     <div class="card-desc">您在侧边栏关闭了此内容的自动显示</div>
                 </div>
             </div>
-            <button type="button" class="btn-expand">点击展开</button>
+            <button type="button" class="btn-expand">${window.wbT('js.click_to_expand', '点击展开')}</button>
         `;
         
         card.addEventListener('click', () => {
@@ -850,7 +852,7 @@
                 <polyline points="6 9 12 15 18 9"></polyline>
                 <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            点击展开折叠的 [${lvlName}] 详细文本
+            ${window.wbTf('js.click_to_collapse', lvlName, '点击展开折叠的 [{0}] 详细文本')}
         `;
         
         line.addEventListener('click', () => {

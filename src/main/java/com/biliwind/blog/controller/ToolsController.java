@@ -102,7 +102,19 @@ public class ToolsController {
             String url,
             String tag,
             String tagColor
-    ) {}
+    ) {
+        public String nameKey() {
+            return "tool." + id + ".name";
+        }
+
+        public String descriptionKey() {
+            return "tool." + id + ".desc";
+        }
+
+        public String tagKey() {
+            return "tool." + id + ".tag";
+        }
+    }
 
     private static final List<ToolItem> ALL_TOOLS = List.of(
             new ToolItem(

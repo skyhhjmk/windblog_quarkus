@@ -1,6 +1,7 @@
 package com.biliwind.blog.common.constant;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -26,6 +27,10 @@ public class LanguageConstant {
      * 支持的语言集合
      */
     public static final Set<String> SUPPORT_LANGS = new HashSet<>();
+    /**
+     * Stable display order for language switchers and alternates.
+     */
+    public static final List<String> SUPPORTED_LANG_ORDER = List.of(LANG_ZH_CN, LANG_EN_US);
     static {
         SUPPORT_LANGS.add(LANG_ZH_CN);
         SUPPORT_LANGS.add(LANG_EN_US);
@@ -38,7 +43,7 @@ public class LanguageConstant {
     /**
      * 存储语言的Cookie键名
      */
-    public static final String COOKIE_LANG_KEY = "user_lang";
+    public static final String COOKIE_LANG_KEY = "user_lang_v2";
     /**
      * 透传语言的自定义请求头
      */
