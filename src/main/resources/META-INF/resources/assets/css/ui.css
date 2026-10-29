@@ -301,19 +301,84 @@ button:disabled {
 
 .vditor-reset h1,
 .vditor-reset h2,
-.vditor-reset h3 {
+.vditor-reset h3,
+.vditor-reset h4,
+.vditor-reset h5,
+.vditor-reset h6 {
     color: var(--text-main) !important;
-    border-bottom: none !important;
+}
+
+.vditor-reset h1 {
+    border-bottom: 2px solid var(--border) !important;
+    padding-bottom: 0.625rem !important;
+    position: relative !important;
+}
+
+.vditor-reset h1::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    width: 3.5rem;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+}
+
+.vditor-reset h2 {
+    border-bottom: 1.5px solid var(--border) !important;
+    padding-bottom: 0.5rem !important;
+    position: relative !important;
+}
+
+.vditor-reset h2::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -1.5px;
+    width: 2.5rem;
+    height: 1.5px;
+    background: var(--accent);
+    border-radius: 1.5px;
+}
+
+.vditor-reset h3 {
+    border-bottom: 1px solid var(--border) !important;
+    padding-bottom: 0.4rem !important;
+    position: relative !important;
+}
+
+.vditor-reset h3::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    width: 1.75rem;
+    height: 1.5px;
+    background: var(--accent);
+    border-radius: 1px;
 }
 
 .vditor-reset code {
-    background: var(--input-bg) !important;
+    background: color-mix(in srgb, var(--accent) 8%, var(--input-bg)) !important;
     color: var(--accent) !important;
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border)) !important;
+    padding: 0.15rem 0.42rem !important;
+    border-radius: 6px !important;
 }
 
 .vditor-reset pre {
-    background: var(--card-bg) !important;
+    background: #0d1117 !important;
     border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.28) !important;
+}
+
+.vditor-reset pre code {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    color: #e2e8f0 !important;
 }
 .pjax-status {
     position: fixed;

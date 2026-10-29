@@ -1368,11 +1368,21 @@
 
         // MutationObserver to handle dynamic content
         const observer = new MutationObserver((mutations) => {
+            let hasAddedContent = false;
             mutations.forEach(mutation => {
                 if (mutation.addedNodes.length) {
-                    formatTimestamps();
+                    for (const node of mutation.addedNodes) {
+                        if (node.nodeType === Node.ELEMENT_NODE && !node.classList?.contains('code-block-wrapper')) {
+                            hasAddedContent = true;
+                            break;
+                        }
+                    }
                 }
             });
+            if (hasAddedContent) {
+                formatTimestamps();
+                decorateCodeBlocks();
+            }
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
@@ -1437,6 +1447,7 @@
 
         document.addEventListener('page:ready', () => {
             formatTimestamps();
+            decorateCodeBlocks();
             injectSidebar();
             decorateShortcutButtons();
             bindPaginationForms();
@@ -1492,6 +1503,123 @@
             searchInput.focus({preventScroll: true});
             searchInput.select?.();
             return true;
+        }
+
+        function decorateCodeBlocks(root = document) {
+            if (!root || !root.querySelectorAll) return;
+            const preElements = root.querySelectorAll('.prose pre, .vditor-reset pre');
+            preElements.forEach((pre) => {
+                if (pre.dataset.codeDecorated === 'true' || pre.closest('.code-block-wrapper')) {
+                    return;
+                }
+                pre.dataset.codeDecorated = 'true';
+
+                const code = pre.querySelector('code');
+                let lang = '';
+                if (code) {
+                    const classList = Array.from(code.classList);
+                    for (const cls of classList) {
+                        const m = cls.match(/^(?:language|lang)-([a-zA-Z0-9_+#.-]+)$/i);
+                        if (m) {
+                            lang = m[1].toUpperCase();
+                            break;
+                        }
+                    }
+                }
+                if (!lang && pre.dataset.lang) {
+                    lang = pre.dataset.lang.toUpperCase();
+                }
+                if (!lang) {
+                    lang = 'CODE';
+                }
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'code-block-wrapper';
+
+                const header = document.createElement('div');
+                header.className = 'code-block-header';
+
+                const left = document.createElement('div');
+                left.className = 'code-block-left';
+                left.innerHTML = `
+                    <div class="code-block-dots" aria-hidden="true">
+                        <span class="code-dot code-dot-red"></span>
+                        <span class="code-dot code-dot-yellow"></span>
+                        <span class="code-dot code-dot-green"></span>
+                    </div>
+                    <span class="code-block-lang">${lang}</span>
+                `;
+
+                const copyBtn = document.createElement('button');
+                copyBtn.type = 'button';
+                copyBtn.className = 'code-block-copy-btn';
+                copyBtn.setAttribute('aria-label', '复制代码');
+                copyBtn.setAttribute('title', '复制代码');
+                copyBtn.innerHTML = `
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span class="code-copy-text">复制</span>
+                `;
+
+                let copyTimer = null;
+                copyBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const text = (code ? code.innerText : pre.innerText).replace(/\n$/, '');
+                    let success = false;
+                    try {
+                        if (navigator.clipboard && window.isSecureContext) {
+                            await navigator.clipboard.writeText(text);
+                            success = true;
+                        } else {
+                            const textarea = document.createElement('textarea');
+                            textarea.value = text;
+                            textarea.style.position = 'fixed';
+                            textarea.style.left = '-9999px';
+                            textarea.style.top = '0';
+                            document.body.appendChild(textarea);
+                            textarea.focus();
+                            textarea.select();
+                            success = document.execCommand('copy');
+                            document.body.removeChild(textarea);
+                        }
+                    } catch (err) {
+                        console.error('Failed to copy code: ', err);
+                    }
+
+                    if (success) {
+                        copyBtn.classList.add('is-copied');
+                        copyBtn.innerHTML = `
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span class="code-copy-text">已复制</span>
+                        `;
+                        clearTimeout(copyTimer);
+                        copyTimer = setTimeout(() => {
+                            copyBtn.classList.remove('is-copied');
+                            copyBtn.innerHTML = `
+                                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                                <span class="code-copy-text">复制</span>
+                            `;
+                        }, 2000);
+                    }
+                });
+
+                header.appendChild(left);
+                header.appendChild(copyBtn);
+
+                if (pre.parentNode) {
+                    pre.parentNode.insertBefore(wrapper, pre);
+                    wrapper.appendChild(header);
+                    wrapper.appendChild(pre);
+                }
+            });
         }
 
         function decorateShortcutButtons() {
