@@ -26,6 +26,8 @@
 
 Admin 首页中的 Grafana iframe 通过 `58080/observability/grafana/` 转发。edge 只存在于本地 Compose：它将首次 iframe 请求的短时 JWT 转为本机 HTTP Cookie，并以 `X-JWT-Assertion` 转发给 Grafana；它不是 Kubernetes 工作负载。
 
+生产 Compose 没有 edge nginx，由 APISIX 承担同样的 JWT 转换和转发，见 `docs/observability-gateway.md`。
+
 脚本只从宿主机 Codex 登录目录复制 `auth.json` 到隔离测试目录，并按镜像实际运行 UID 设置权限；原始登录目录不会挂载进容器，凭证也不会写入镜像或提交到 Git。启用 app-server 后，Codex Creator 会在容器启动时校验登录状态。
 
 本地启动器还会在测试数据目录生成并复用 `mcp-bearer-token`，供 app-server 和 MCP 端点共同认证；不会将令牌写入 Git。
