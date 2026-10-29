@@ -39,6 +39,16 @@ class LanguageHelperTest {
     }
 
     @Test
+    void shouldMatchLanguageKeysCaseInsensitively() {
+        Map<String, String> localized = new LinkedHashMap<>();
+        localized.put("zh-cn", "中文标题");
+        localized.put("en-us", "English Title");
+
+        assertEquals("English Title", LanguageHelper.resolveLocalizedValue(localized, "en-US"));
+        assertEquals("中文标题", LanguageHelper.resolveLocalizedValue(localized, "zh-CN"));
+    }
+
+    @Test
     void shouldHonourAcceptLanguageQualityValues() {
         assertEquals(LanguageConstant.LANG_EN_US,
                 LanguageHelper.resolveFromAcceptLanguage("fr-FR,en-US;q=0.9,zh-CN;q=0.4"));

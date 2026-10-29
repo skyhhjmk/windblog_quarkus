@@ -191,7 +191,7 @@ public final class LanguageHelper {
         }
 
         for (String candidate : languageCandidates(preferredLang)) {
-            String value = localized.get(candidate);
+            String value = lookupIgnoreCase(localized, candidate);
             if (value != null && !value.isBlank()) {
                 return value;
             }
@@ -209,6 +209,27 @@ public final class LanguageHelper {
     public String resolveLocalizedValue(Object localized, String preferredLang) {
         if (localized instanceof Map) {
             return resolveLocalizedValue((Map<String, String>) localized, preferredLang);
+        }
+        return null;
+    }
+
+    /**
+     * Language keys in existing content are a mix of {@code en-US}, {@code en-us}
+     * and short aliases. Always resolve them case-insensitively so a translation
+     * saved under either spelling is served by the public renderer.
+     */
+    public static String lookupIgnoreCase(Map<String, String> localized, String language) {
+        if (localized == null || language == null) {
+            return null;
+        }
+        String direct = localized.get(language);
+        if (direct != null) {
+            return direct;
+        }
+        for (Map.Entry<String, String> entry : localized.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(language)) {
+                return entry.getValue();
+            }
         }
         return null;
     }

@@ -86,7 +86,7 @@ public class AiPollingService {
     }
 
     public CompletionStage<AiResult> translate(AiProviderConfig groupConfig, String sourceLanguage,
-            String targetLanguage, Map<String, String> fields) {
+            String targetLanguage, Map<String, String> fields, String promptTemplate) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm algorithm = extractAlgorithm(groupConfig);
         if (nodes.isEmpty()) {
@@ -101,7 +101,24 @@ public class AiPollingService {
                 break;
             }
         }
-        return tryNodesForTranslate(nodes, startIndex, 0, sourceLanguage, targetLanguage, fields);
+        return tryNodesForTranslate(nodes, startIndex, 0, sourceLanguage, targetLanguage, fields, promptTemplate);
+    }
+
+    public CompletionStage<AiResult> complete(AiProviderConfig groupConfig, String systemPrompt, String prompt) {
+        List<NodeInfo> nodes = extractNodes(groupConfig);
+        AiPollingAlgorithm algorithm = extractAlgorithm(groupConfig);
+        if (nodes.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中配置的节点列表为空"));
+        }
+        NodeInfo selected = pickNext(nodes, algorithm, groupConfig.id);
+        int startIndex = 0;
+        for (int i = 0; i < nodes.size(); i++) {
+            if (nodes.get(i).id().equals(selected.id())) {
+                startIndex = i;
+                break;
+            }
+        }
+        return tryNodesForComplete(nodes, startIndex, 0, systemPrompt, prompt);
     }
 
     public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String prompt, String content) {
@@ -189,7 +206,7 @@ public class AiPollingService {
     }
 
     private CompletionStage<AiResult> tryNodesForTranslate(List<NodeInfo> nodes, int startIndex, int retryCount,
-            String sourceLanguage, String targetLanguage, Map<String, String> fields) {
+            String sourceLanguage, String targetLanguage, Map<String, String> fields, String promptTemplate) {
         if (nodes.isEmpty() || retryCount >= nodes.size()) {
             return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点调用翻译失败"));
         }
@@ -198,16 +215,39 @@ public class AiPollingService {
         NodeInfo selected = nodes.get(currentIndex);
         AiProviderConfig config = configService.getById(selected.id()).orElse(null);
         if (config == null || !config.enabled || config.type != AiConfigType.PROVIDER) {
-            return tryNodesForTranslate(nodes, startIndex, retryCount + 1, sourceLanguage, targetLanguage, fields);
+            return tryNodesForTranslate(nodes, startIndex, retryCount + 1, sourceLanguage, targetLanguage, fields,
+                    promptTemplate);
         }
 
-        return aiManager.executeTranslate(config, sourceLanguage, targetLanguage, fields)
+        return aiManager.executeTranslate(config, sourceLanguage, targetLanguage, fields, promptTemplate)
                 .handle((result, error) -> {
                     if (error != null) {
                         log.warn("轮询节点 {} 翻译失败: {}", config.name,
                                 SensitiveMessageSanitizer.sanitize(error.getMessage()));
                         return tryNodesForTranslate(nodes, startIndex, retryCount + 1,
-                                sourceLanguage, targetLanguage, fields);
+                                sourceLanguage, targetLanguage, fields, promptTemplate);
+                    }
+                    return CompletableFuture.completedStage(result);
+                }).thenCompose(stage -> stage);
+    }
+
+    private CompletionStage<AiResult> tryNodesForComplete(List<NodeInfo> nodes, int startIndex, int retryCount,
+            String systemPrompt, String prompt) {
+        if (nodes.isEmpty() || retryCount >= nodes.size()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点写作调用失败"));
+        }
+        int currentIndex = (startIndex + retryCount) % nodes.size();
+        NodeInfo selected = nodes.get(currentIndex);
+        AiProviderConfig config = configService.getById(selected.id()).orElse(null);
+        if (config == null || !config.enabled || config.type != AiConfigType.PROVIDER) {
+            return tryNodesForComplete(nodes, startIndex, retryCount + 1, systemPrompt, prompt);
+        }
+        return aiManager.executeComplete(config, systemPrompt, prompt)
+                .handle((result, error) -> {
+                    if (error != null) {
+                        log.warn("轮询节点 {} 写作调用失败: {}", config.name,
+                                SensitiveMessageSanitizer.sanitize(error.getMessage()));
+                        return tryNodesForComplete(nodes, startIndex, retryCount + 1, systemPrompt, prompt);
                     }
                     return CompletableFuture.completedStage(result);
                 }).thenCompose(stage -> stage);

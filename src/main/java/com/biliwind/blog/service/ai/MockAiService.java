@@ -30,7 +30,7 @@ public class MockAiService implements AiService {
 
     @Override
     public CompletionStage<AiResult> translate(com.biliwind.blog.model.AiProviderConfig config,
-            String sourceLanguage, String targetLanguage, Map<String, String> fields) {
+            String sourceLanguage, String targetLanguage, Map<String, String> fields, String promptTemplate) {
         AiResult result = new AiResult();
         for (Map.Entry<String, String> entry : fields.entrySet()) {
             result.contents.put(entry.getKey(), "AI Translation (" + targetLanguage + "): " + entry.getValue());

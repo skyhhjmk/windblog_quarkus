@@ -110,14 +110,15 @@ public class ChatGlmAiService implements AiService {
 
     @Override
     public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
-            String targetLanguage, Map<String, String> fields) {
+            String targetLanguage, Map<String, String> fields, String promptTemplate) {
         if (!isConfigReady(config)) {
             return CompletableFuture.failedFuture(new IllegalStateException("ChatGLM 配置未就绪"));
         }
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String prompt = buildTranslationPrompt(sourceLanguage, targetLanguage, fields);
+                String prompt = TranslationPrompt.build(promptTemplate, sourceLanguage, targetLanguage,
+                        fields, objectMapper);
                 ModelData data = complete(config, List.of(userMessage(prompt)), false, true);
                 JsonNode translated = objectMapper.readTree(extractText(data));
 
@@ -462,19 +463,6 @@ public class ChatGlmAiService implements AiService {
         if (usage != null) {
             result.addUsage(usage.getPromptTokens(), usage.getCompletionTokens(), usage.getTotalTokens());
         }
-    }
-
-    private String buildTranslationPrompt(String sourceLanguage, String targetLanguage,
-            Map<String, String> fields) throws Exception {
-        Map<String, Object> input = new HashMap<>();
-        input.put("sourceLanguage", sourceLanguage);
-        input.put("targetLanguage", targetLanguage);
-        input.put("fields", fields);
-        return "你是专业技术文章译者。请将以下 JSON 中 fields 的自然语言从 "
-                + sourceLanguage + " 翻译为 " + targetLanguage
-                + "，只返回包含全部原字段名的 JSON 对象。保留 Markdown、代码块、HTML、链接和图片 URL，"
-                + "不要翻译代码、URL、属性值或标记，不要添加解释。\n"
-                + objectMapper.writeValueAsString(input);
     }
 
     private String buildPrompt(String language, String text) {

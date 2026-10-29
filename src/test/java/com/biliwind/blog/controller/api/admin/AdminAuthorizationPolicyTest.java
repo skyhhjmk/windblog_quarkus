@@ -37,6 +37,16 @@ class AdminAuthorizationPolicyTest {
         assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/dead-letters/1"));
         assertTrue(AdminAuthorizationPolicy.decide("GET", "/api/admin/media").action().equals("media.read"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/posts/1/publish").action().equals("post.publish"));
+        assertEquals("post.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/translations").action());
+        assertEquals("post.write", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/translations/1/translate").action());
+        assertEquals("post", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/translations").resource());
+        assertEquals("ai.write", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/ai/complete").action());
+        assertEquals("ai.write", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/ai/topics/discover").action());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/queues/1/publish").action().equals("queue.publish"));
         assertEquals("media.download_original",
                 AdminAuthorizationPolicy.decide("POST", "/api/admin/media/7/original-download-ticket").action());

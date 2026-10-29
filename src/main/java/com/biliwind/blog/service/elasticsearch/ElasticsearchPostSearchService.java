@@ -282,6 +282,11 @@ public class ElasticsearchPostSearchService {
                           "analyzer": "windblog_index_analyzer",
                           "search_analyzer": "windblog_search_analyzer"
                     },
+                    "translations": {
+                      "type": "text",
+                          "analyzer": "windblog_index_analyzer",
+                          "search_analyzer": "windblog_search_analyzer"
+                    },
                         "aiSummary": {
                           "type": "text",
                               "analyzer": "windblog_index_analyzer",
@@ -330,8 +335,8 @@ public class ElasticsearchPostSearchService {
                 }
               },
               "priority": 200,
-                  "version": 2,
-                  "_meta": { "description": "Template for windblog posts index with IK Chinese tokenizer" }
+                  "version": 3,
+                  "_meta": { "description": "Template for windblog posts index with IK Chinese tokenizer and translated fields" }
                 }
                 """.formatted(
                 ILM_POLICY_NAME,
@@ -652,6 +657,32 @@ public class ElasticsearchPostSearchService {
     }
 
     /**
+     * Concatenates every available language version into one search-only field
+     * so a translated article is discoverable from either language. The display
+     * fields (title/content) keep the site default language.
+     */
+    private String translationSearchText(Post post) {
+        StringBuilder text = new StringBuilder();
+        appendLocalized(text, post.title);
+        appendLocalized(text, post.summary);
+        if (post.publishedRevision != null) {
+            appendLocalized(text, post.publishedRevision.contentMarkdown);
+        }
+        return text.toString().trim();
+    }
+
+    private void appendLocalized(StringBuilder buffer, Map<String, String> values) {
+        if (values == null) {
+            return;
+        }
+        for (String value : values.values()) {
+            if (value != null && !value.isBlank()) {
+                buffer.append(value).append('\n');
+            }
+        }
+    }
+
+    /**
      * Index article to Elasticsearch
      */
     @jakarta.transaction.Transactional
@@ -766,6 +797,7 @@ public class ElasticsearchPostSearchService {
         } else {
             document.put("tags", List.of());
         }
+        document.put("translations", translationSearchText(post));
 
         // 填充搜索建议字段 (Completion Suggester)
         List<String> suggestions = new ArrayList<>();
@@ -941,7 +973,7 @@ public class ElasticsearchPostSearchService {
                             {
                               "multi_match": {
                                 "query": "%s",
-                                "fields": ["title^3", "content", "summary", "seoTitle^2", "seoDescription", "tags"],
+                                "fields": ["title^3", "content", "summary", "translations^2", "seoTitle^2", "seoDescription", "tags"],
                                 "type": "best_fields"
                               }
                             }
