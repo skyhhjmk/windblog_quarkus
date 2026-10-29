@@ -33,6 +33,9 @@ public class AiManager {
     @Inject
     AiSelectionService selectionService;
 
+    @Inject
+    AiRateLimiter rateLimiter;
+
     private AiService findService(AiProviderConfig config) {
         if (config == null) return null;
         for (AiService service : providers) {
@@ -131,6 +134,8 @@ public class AiManager {
 
     public CompletionStage<AiResult> executeTranslate(AiProviderConfig config, String sourceLanguage,
             String targetLanguage, Map<String, String> fields, String promptTemplate) {
+        CompletionStage<AiResult> limited = rateLimited(config);
+        if (limited != null) return limited;
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
             return pollingService.get().translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
         }
@@ -186,6 +191,8 @@ public class AiManager {
     }
 
     public CompletionStage<AiResult> executeComplete(AiProviderConfig config, String systemPrompt, String prompt) {
+        CompletionStage<AiResult> limited = rateLimited(config);
+        if (limited != null) return limited;
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
             return pollingService.get().complete(config, systemPrompt, prompt);
         }
@@ -195,6 +202,16 @@ public class AiManager {
                     new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
         }
         return service.complete(config, systemPrompt, prompt);
+    }
+
+    private CompletionStage<AiResult> rateLimited(AiProviderConfig config) {
+        AiRateLimiter.Result result = rateLimiter.tryAcquire(config);
+        if (result.allowed()) {
+            return null;
+        }
+        return CompletableFuture.failedFuture(new AiRateLimitException(
+                config == null || config.name == null ? "unknown" : config.name,
+                result.retryAfterSeconds()));
     }
 
     private String configuredTranslationPrompt() {
@@ -210,6 +227,8 @@ public class AiManager {
     }
 
     public CompletionStage<AiResult> executeSummarize(AiProviderConfig config, Map<String, String> content) {
+        CompletionStage<AiResult> limited = rateLimited(config);
+        if (limited != null) return limited;
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
             return pollingService.get().summarize(config, content);
         } else {
@@ -221,6 +240,8 @@ public class AiManager {
     }
 
     public CompletionStage<AiResult> executeModerate(AiProviderConfig config, String prompt, String content) {
+        CompletionStage<AiResult> limited = rateLimited(config);
+        if (limited != null) return limited;
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
             return pollingService.get().moderate(config, prompt, content);
         } else {

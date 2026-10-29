@@ -15,6 +15,7 @@ public class AdminAiProviderDtos {
             boolean enabled,
             String endpoint,
             String model,
+            Integer rateLimitPerMinute,
             String apiKey,
             String config,
             OffsetDateTime updatedAt
@@ -31,6 +32,7 @@ public class AdminAiProviderDtos {
                     config.enabled,
                     config.endpoint,
                     config.model,
+                    config.rateLimitPerMinute,
                     maskedApiKey,
                     AiProviderConfigSanitizer.maskConfig(config.config),
                     config.updatedAt
@@ -46,6 +48,7 @@ public class AdminAiProviderDtos {
             String endpoint,
             String apiKey,
             String model,
+            Integer rateLimitPerMinute,
             String config
     ) {
     }

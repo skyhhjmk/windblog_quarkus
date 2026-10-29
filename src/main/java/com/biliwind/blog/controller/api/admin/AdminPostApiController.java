@@ -377,14 +377,12 @@ public class AdminPostApiController {
 
     @POST
     @Path("/{id}/translation")
-    @Transactional
     @Blocking
     @Operation(summary = "使用 AI 翻译文章内容")
     @APIResponse(responseCode = "200", description = "翻译成功")
     @APIResponse(responseCode = "400", description = "翻译参数或 AI 配置无效")
     @APIResponse(responseCode = "404", description = "文章不存在")
     public PostTranslationResponse translate(@PathParam("id") Long id, PostTranslationRequest request) {
-        Post post = mustFindPost(id);
         if (request == null) {
             throw badRequest("翻译请求不能为空");
         }
@@ -401,6 +399,10 @@ public class AdminPostApiController {
             throw badRequest("文章正文不能为空");
         }
 
+        Long revisionId = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() -> {
+            Post post = mustFindPost(id);
+            return post.currentRevision == null ? null : post.currentRevision.id;
+        });
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("title", request.title());
         fields.put("summary", request.summary() == null ? "" : request.summary());
@@ -414,10 +416,9 @@ public class AdminPostApiController {
             String translatedTitle = requiredTranslation(result, "title");
             String translatedSummary = requiredTranslation(result, "summary");
             String translatedContent = requiredTranslation(result, "contentMarkdown");
-            auditService.log("post", post.id, "ai_translation", null,
+            auditService.log("post", id, "ai_translation", null,
                     Map.of("sourceLanguage", sourceLanguage, "targetLanguage", targetLanguage));
-            postAiMetadataService.record(post.id, post.currentRevision == null ? null : post.currentRevision.id,
-                    "translate", result, "DRAFT");
+            postAiMetadataService.record(id, revisionId, "translate", result, "DRAFT");
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
                     translatedTitle, translatedSummary, translatedContent);
         } catch (java.util.concurrent.CompletionException exception) {
@@ -428,7 +429,6 @@ public class AdminPostApiController {
 
     @POST
     @Path("/translate")
-    @Transactional
     @Blocking
     @Operation(summary = "直接使用 AI 翻译文章文本内容")
     @APIResponse(responseCode = "200", description = "翻译成功")

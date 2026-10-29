@@ -59,6 +59,13 @@ public class AiProviderConfigService {
         if (update.model() != null) {
             config.model = update.model().trim();
         }
+        if (update.rateLimitPerMinute() != null) {
+            if (update.rateLimitPerMinute() < 0) {
+                throw new IllegalArgumentException("每分钟请求上限不能为负数");
+            }
+            config.rateLimitPerMinute = update.rateLimitPerMinute() == 0
+                    ? null : update.rateLimitPerMinute();
+        }
         if (update.config() != null) {
             String c = update.config().trim();
             if (c.isEmpty()) {
@@ -88,6 +95,7 @@ public class AiProviderConfigService {
             String endpoint,
             String apiKey,
             String model,
+            Integer rateLimitPerMinute,
             String config
     ) {
     }

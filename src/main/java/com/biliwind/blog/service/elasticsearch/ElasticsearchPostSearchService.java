@@ -11,6 +11,10 @@ import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.service.edge.NodeRoleService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -936,6 +940,118 @@ public class ElasticsearchPostSearchService {
                 || indexName.matches("windblog-posts-[0-9]{6,}"))) {
             throw new IllegalArgumentException("Invalid article index target");
         }
+    }
+
+    /**
+     * Finds semantically related published articles using more_like_this, with
+     * a fuzzy multi_match fallback. The article map caches the returned IDs.
+     */
+    public List<RelatedPost> findRelatedPosts(Long postId, String language, int limit) throws Exception {
+        if (!connectionManager.isAvailable()) {
+            throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
+        }
+        int safeLimit = Math.max(1, Math.min(limit, 20));
+        Post post = Post.find("id = ?1 and status = ?2 and deletedAt is null and visibility = 0 "
+                        + "and publishedRevision is not null",
+                postId, PostStatus.PUBLISHED).firstResult();
+        if (post == null || post.publishedRevision == null) {
+            return List.of();
+        }
+        String title = LanguageHelper.resolveLocalizedValue(post.title, language);
+        String summary = LanguageHelper.resolveLocalizedValue(post.summary, language);
+        String content = LanguageHelper.resolveLocalizedValue(
+                post.publishedRevision.contentMarkdown, language);
+        content = SearchContentHelper.toSearchableText(content, post.renderType);
+        if (content != null && content.length() > 5000) {
+            content = content.substring(0, 5000);
+        }
+        List<String> tags = getPostTags(postId);
+        if ((title == null || title.isBlank()) && (content == null || content.isBlank())) {
+            return List.of();
+        }
+
+        ObjectNode likeDoc = objectMapper.createObjectNode();
+        if (title != null) likeDoc.put("title", title);
+        if (summary != null) likeDoc.put("summary", summary);
+        if (content != null) likeDoc.put("content", content);
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("size", safeLimit);
+        body.putArray("_source").add("id").add("slug").add("title");
+        ObjectNode query = body.putObject("query");
+        ObjectNode bool = query.putObject("bool");
+        ArrayNode must = bool.putArray("must");
+        ObjectNode mltWrapper = must.addObject();
+        ObjectNode mlt = mltWrapper.putObject("more_like_this");
+        mlt.putArray("fields").add("title").add("summary").add("content").add("translations");
+        mlt.putArray("like").addObject().set("doc", likeDoc);
+        mlt.put("min_term_freq", 1);
+        mlt.put("min_doc_freq", 1);
+        mlt.put("max_query_terms", 50);
+        mlt.put("minimum_should_match", "25%");
+        addRelatedFilters(bool, postId);
+        body.putArray("sort").addObject().putObject("_score").put("order", "desc");
+
+        List<RelatedPost> result = sendRelatedQuery(body);
+        if (result.isEmpty()) {
+            ObjectNode fallback = objectMapper.createObjectNode();
+            fallback.put("size", safeLimit);
+            fallback.putArray("_source").add("id").add("slug").add("title");
+            ObjectNode fallbackBool = fallback.putObject("query").putObject("bool");
+            String likeText = ((title == null ? "" : title) + " "
+                    + (summary == null ? "" : summary) + " "
+                    + (content == null ? "" : content) + " "
+                    + String.join(" ", tags)).trim();
+            ObjectNode multi = fallbackBool.putArray("must").addObject()
+                    .putObject("multi_match");
+            multi.put("query", likeText.length() > 6000 ? likeText.substring(0, 6000) : likeText);
+            multi.putArray("fields").add("title^3").add("summary").add("content")
+                    .add("translations").add("tags^2");
+            multi.put("fuzziness", "AUTO");
+            multi.put("operator", "or");
+            multi.put("minimum_should_match", "30%");
+            addRelatedFilters(fallbackBool, postId);
+            fallback.putArray("sort").addObject().putObject("_score").put("order", "desc");
+            result = sendRelatedQuery(fallback);
+        }
+        return result;
+    }
+
+    private void addRelatedFilters(ObjectNode bool, Long postId) {
+        ArrayNode filter = bool.putArray("filter");
+        filter.addObject().putObject("term").put("status", "PUBLISHED");
+        filter.addObject().putObject("term").put("visibility", "PUBLIC");
+        bool.putArray("must_not").addObject().putObject("term").put("id", postId);
+    }
+
+    private List<RelatedPost> sendRelatedQuery(ObjectNode body) throws Exception {
+        var request = HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_search"))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                .header("Content-Type", "application/json")
+                .build();
+        var response = connectionManager.sendRequest(request);
+        if (response.statusCode() >= 400) {
+            log.warnf("Related article query failed: %d - %s", response.statusCode(),
+                    SensitiveMessageSanitizer.sanitize(response.body()));
+            return List.of();
+        }
+        JsonNode root = objectMapper.readTree(response.body());
+        JsonNode hits = root.path("hits").path("hits");
+        List<RelatedPost> result = new ArrayList<>();
+        for (JsonNode hit : hits) {
+            JsonNode source = hit.path("_source");
+            Long id = source.path("id").canConvertToLong() ? source.path("id").asLong() : null;
+            String slug = source.path("slug").asText("");
+            if (id == null || slug.isBlank()) continue;
+            result.add(new RelatedPost(id, slug, source.path("title").asText(""),
+                    hit.path("_score").asDouble(0)));
+        }
+        return result;
+    }
+
+    @RegisterForReflection
+    public record RelatedPost(Long id, String slug, String title, double score) {
     }
 
     /**

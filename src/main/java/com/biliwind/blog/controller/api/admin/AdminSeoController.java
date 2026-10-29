@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.controller.api.admin.dto.AdminArticleMapDtos.ArticleMap;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.*;
 import jakarta.inject.Inject;
@@ -15,6 +16,7 @@ import java.util.*;
 public class AdminSeoController {
     @Inject SeoManagementService seo;
     @Inject InternalLinkGraphService linkGraph;
+    @Inject ArticleMapService articleMap;
     @Inject SeoAuditService audit;
     @Inject GoogleSearchConsoleService gsc;
     @Inject EntityManager em;
@@ -76,6 +78,15 @@ public class AdminSeoController {
             @QueryParam("maxNodes") @DefaultValue("150") int maxNodes) {
         return jakarta.ws.rs.core.Response.ok(linkGraph.adminGraph(id, language(language), depth, maxNodes))
                 .header("Cache-Control", "no-store").build();
+    }
+
+    @GET @Path("/posts/{id}/article-map")
+    public ArticleMap articleMap(@PathParam("id") Long id,
+                                 @QueryParam("language") @DefaultValue("zh-cn") String language,
+                                 @QueryParam("depth") @DefaultValue("2") int depth,
+                                 @QueryParam("maxNodes") @DefaultValue("80") int maxNodes,
+                                 @QueryParam("relatedPerNode") @DefaultValue("4") int relatedPerNode) {
+        return articleMap.build(id, language(language), depth, maxNodes, relatedPerNode);
     }
 
     @GET @Path("/posts/{id}/audit")

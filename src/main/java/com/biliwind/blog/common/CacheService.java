@@ -260,6 +260,7 @@ public class CacheService {
         public static final String POST_META_PREFIX = "post:meta:v4:";
         public static final String MEDIA_META_PREFIX = "media:meta:v2:";
         public static final String SEARCH_CACHE_PREFIX = "search:v1:";
+        public static final String ARTICLE_MAP_RELATED_PREFIX = "article-map:related:v1:";
         
         public static final String ALL_CATEGORIES = "categories:all";
         public static final String ALL_TAGS = "tags:all";
@@ -297,6 +298,10 @@ public class CacheService {
 
         public static String searchResults(String queryHash) {
             return SEARCH_CACHE_PREFIX + queryHash;
+        }
+
+        public static String articleMapRelated(Long postId, String language, int limit) {
+            return ARTICLE_MAP_RELATED_PREFIX + postId + ":" + language + ":" + limit;
         }
     }
 }

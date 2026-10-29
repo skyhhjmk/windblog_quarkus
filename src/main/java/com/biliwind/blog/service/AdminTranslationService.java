@@ -127,9 +127,33 @@ public class AdminTranslationService {
         return new TranslationPage(items, total, safePage, safePageSize, target);
     }
 
-    @Transactional
+    /**
+     * Synchronous compatibility facade. The AI call deliberately happens
+     * outside any database transaction so a slow provider cannot trigger the
+     * JTA transaction reaper. New admin UI code uses the queued task API.
+     */
     public TranslatePostResult translatePost(Long postId, String targetLanguage,
                                              String sourceLanguage, boolean overwrite) {
+        return translatePost(postId, targetLanguage, sourceLanguage, overwrite, null);
+    }
+
+    public TranslatePostResult translatePost(Long postId, String targetLanguage,
+                                             String sourceLanguage, boolean overwrite,
+                                             Long operatorId) {
+        PreparedTranslation prepared = io.quarkus.narayana.jta.QuarkusTransaction
+                .requiringNew()
+                .call(() -> prepareTranslation(postId, targetLanguage, sourceLanguage, overwrite));
+        if (prepared.skipped()) {
+            return prepared.skippedResult();
+        }
+        TranslatedFields translated = translatePrepared(prepared);
+        return io.quarkus.narayana.jta.QuarkusTransaction
+                .requiringNew()
+                .call(() -> saveTranslation(prepared, translated, operatorId));
+    }
+
+    private PreparedTranslation prepareTranslation(Long postId, String targetLanguage,
+                                                   String sourceLanguage, boolean overwrite) {
         Post post = postId == null ? null : Post.find("id = ?1 and deletedAt is null", postId).firstResult();
         if (post == null) {
             throw new NotFoundException("文章不存在");
@@ -143,8 +167,13 @@ public class AdminTranslationService {
                 targetLanguage == null || targetLanguage.isBlank() ? defaultTargetLanguage() : targetLanguage,
                 "targetLanguage"));
         boolean alreadyTranslated = hasTranslation(post, target);
+        boolean published = post.status == PostStatus.PUBLISHED
+                && sameRevision(post.publishedRevision, revision);
         if (alreadyTranslated && !overwrite) {
-            return skipped(post, target, revision, "该文章已存在目标语言译本");
+            return new PreparedTranslation(post.id, post.slug, null, target,
+                    revision.id, revision.revisionNumber, post.version, true,
+                    "该文章已存在目标语言译本", published,
+                    null, null, null);
         }
 
         String source = resolveSourceLanguage(post, target, sourceLanguage);
@@ -162,41 +191,62 @@ public class AdminTranslationService {
         if (target.equalsIgnoreCase(source)) {
             throw new BadRequestException("源语言和目标语言不能相同");
         }
+        return new PreparedTranslation(post.id, post.slug, source, target,
+                revision.id, revision.revisionNumber, post.version, false, null, published,
+                sourceTitle, sourceSummary == null ? "" : sourceSummary, sourceContent);
+    }
 
+    private TranslatedFields translatePrepared(PreparedTranslation prepared) {
         Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("title", sourceTitle);
-        fields.put("summary", sourceSummary == null ? "" : sourceSummary);
-        fields.put("contentMarkdown", sourceContent);
+        fields.put("title", prepared.sourceTitle());
+        fields.put("summary", prepared.sourceSummary());
+        fields.put("contentMarkdown", prepared.sourceContent());
 
-        AiResult aiResult = requestTranslation(source, target, fields);
+        AiResult aiResult = requestTranslation(prepared.sourceLanguage(), prepared.targetLanguage(), fields);
         String translatedTitle = required(aiResult, "title");
         String translatedSummary = optional(aiResult, "summary");
         String translatedContent = required(aiResult, "contentMarkdown");
 
-        List<String> issues = MarkdownTranslationGuard.verify(sourceContent, translatedContent);
+        List<String> issues = MarkdownTranslationGuard.verify(prepared.sourceContent(), translatedContent);
         if (!issues.isEmpty()) {
-            aiResult = requestTranslation(source, target, fields, issues);
+            aiResult = requestTranslation(prepared.sourceLanguage(), prepared.targetLanguage(), fields, issues);
             translatedTitle = required(aiResult, "title");
             translatedSummary = optional(aiResult, "summary");
             translatedContent = required(aiResult, "contentMarkdown");
-            issues = MarkdownTranslationGuard.verify(sourceContent, translatedContent);
+            issues = MarkdownTranslationGuard.verify(prepared.sourceContent(), translatedContent);
             if (!issues.isEmpty()) {
                 throw new BadRequestException("AI 译文未保持原文 Markdown 结构: " + String.join("；", issues));
             }
         }
+        return new TranslatedFields(translatedTitle, translatedSummary, translatedContent, aiResult);
+    }
 
-        String targetKey = targetKeyForWrite(post, revision, target);
+    private TranslatePostResult saveTranslation(PreparedTranslation prepared,
+                                                TranslatedFields translated, Long operatorId) {
+        Post post = Post.find("id = ?1 and deletedAt is null", prepared.postId()).firstResult();
+        if (post == null) {
+            throw new NotFoundException("文章不存在");
+        }
+        PostRevision revision = post.currentRevision;
+        if (revision == null || revision.id == null
+                || !revision.id.equals(prepared.revisionId())
+                || post.version == null || !post.version.equals(prepared.postVersion())) {
+            throw new com.biliwind.blog.common.exception.ConflictException(
+                    "文章在翻译期间已被修改，请重试");
+        }
+
+        String targetKey = targetKeyForWrite(post, revision, prepared.targetLanguage());
         Map<String, String> nextTitle = new LinkedHashMap<>(post.title == null ? Map.of() : post.title);
-        nextTitle.put(targetKey, translatedTitle);
+        nextTitle.put(targetKey, translated.title());
         Map<String, String> nextSummary = new LinkedHashMap<>(post.summary == null ? Map.of() : post.summary);
-        if (!translatedSummary.isBlank()) {
-            nextSummary.put(targetKey, translatedSummary);
+        if (!translated.summary().isBlank()) {
+            nextSummary.put(targetKey, translated.summary());
         }
         Map<String, String> nextContent = new LinkedHashMap<>(revision.contentMarkdown);
-        nextContent.put(targetKey, translatedContent);
+        nextContent.put(targetKey, translated.contentMarkdown());
         nextContent = PostHelper.injectBlockIds(nextContent);
 
-        User operator = currentOperator();
+        User operator = currentOperator(operatorId);
         PostRevision nextRevision = new PostRevision();
         nextRevision.post = post;
         nextRevision.title = nextTitle;
@@ -220,15 +270,33 @@ public class AdminTranslationService {
         mediaService.syncPostReferences(post, nextContent);
         articleExternalLinkService.syncMarkdownLinks(post, nextContent);
         auditService.log("post", post.id, "ai_translation_saved", null,
-                Map.of("sourceLanguage", source, "targetLanguage", target,
-                        "revisionNumber", nextRevision.revisionNumber, "published", publishNow));
-        postAiMetadataService.record(post.id, nextRevision.id, "translate", aiResult,
+                Map.of("sourceLanguage", prepared.sourceLanguage(),
+                        "targetLanguage", prepared.targetLanguage(),
+                        "revisionNumber", nextRevision.revisionNumber, "published", publishNow),
+                null, operator.id);
+        postAiMetadataService.record(post.id, nextRevision.id, "translate", translated.aiResult(),
                 publishNow ? "PUBLISHED" : "DRAFT");
         esSyncEvent.fire(new PostSyncedEvent(post.id));
 
-        return new TranslatePostResult(post.id, post.slug, source, target, true, false,
-                publishNow, nextRevision.revisionNumber, "翻译完成",
-                translatedTitle, translatedSummary, translatedContent);
+        return new TranslatePostResult(post.id, post.slug, prepared.sourceLanguage(),
+                prepared.targetLanguage(), true, false, publishNow,
+                nextRevision.revisionNumber, "翻译完成",
+                translated.title(), translated.summary(), translated.contentMarkdown());
+    }
+
+    private record PreparedTranslation(Long postId, String slug, String sourceLanguage,
+                                       String targetLanguage, Long revisionId, int revisionNumber,
+                                       Integer postVersion,
+                                       boolean skipped, String skipMessage, boolean published,
+                                       String sourceTitle, String sourceSummary, String sourceContent) {
+        TranslatePostResult skippedResult() {
+            return new TranslatePostResult(postId, slug, null, targetLanguage, false, true,
+                    published, revisionNumber, skipMessage, null, null, null);
+        }
+    }
+
+    private record TranslatedFields(String title, String summary, String contentMarkdown,
+                                    AiResult aiResult) {
     }
 
     private AiResult requestTranslation(String source, String target, Map<String, String> fields) {
@@ -250,15 +318,11 @@ public class AdminTranslationService {
             return result;
         } catch (CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            if (cause instanceof com.biliwind.blog.service.ai.AiRateLimitException rateLimit) {
+                throw rateLimit;
+            }
             throw new BadRequestException("AI 翻译失败: " + safeMessage(cause));
         }
-    }
-
-    private TranslatePostResult skipped(Post post, String target, PostRevision revision, String message) {
-        return new TranslatePostResult(post.id, post.slug, null, target, false, true,
-                post.status == PostStatus.PUBLISHED,
-                revision == null ? null : revision.revisionNumber, message,
-                null, null, null);
     }
 
     private TranslationItem toItem(Post post, String target) {
@@ -409,8 +473,8 @@ public class AdminTranslationService {
         return latest == null ? 1 : latest.revisionNumber + 1;
     }
 
-    private User currentOperator() {
-        Long userId = adminRequestContext.getUserId();
+    private User currentOperator(Long operatorId) {
+        Long userId = operatorId != null ? operatorId : adminRequestContext.getUserId();
         User user = userId == null ? null
                 : User.find("id = ?1 and status = 1 and deletedAt is null", userId).firstResult();
         if (user == null) {
