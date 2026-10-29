@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{language ?: 'zh-CN'}">
+<html lang="{language ?: 'zh-CN'}" data-default-language="{defaultLanguage ?: 'zh-cn'}">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
@@ -187,7 +187,7 @@
                 </button>
                 <div id="languageMenu" class="absolute right-0 top-full mt-2 w-40 bg-card border border-border rounded-xl shadow-2xl hidden p-1.5 z-50 overflow-hidden">
                     {#for option in languageOptions}
-                    <a href="{option.url}" hreflang="{option.code}" lang="{option.code}"
+                    <a href="{option.url}" hreflang="{option.code}" lang="{option.code}" data-language-switch="{option.code}"
                        class="block px-3 py-2 text-xs font-medium rounded-lg transition-colors {#if option.active}bg-accent/10 text-accent{#else}text-body hover:bg-hover-surface hover:text-main{/if}"
                        {#if option.active}aria-current="true"{/if}>{option.label}</a>
                     {/for}
@@ -259,7 +259,7 @@
                 <span class="text-sm font-medium">{i18n.t('common.language')}</span>
                 <div class="flex gap-2">
                     {#for option in languageOptions}
-                    <a href="{option.url}" hreflang="{option.code}" lang="{option.code}"
+                    <a href="{option.url}" hreflang="{option.code}" lang="{option.code}" data-language-switch="{option.code}"
                        class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors {#if option.active}bg-accent/10 text-accent border-accent/30{#else}text-body border-border hover:text-main hover:bg-hover-surface{/if}"
                        {#if option.active}aria-current="true"{/if}>{option.label}</a>
                     {/for}
@@ -376,7 +376,7 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/main.js?v=i18n-20261029" defer></script>
+<script src="/assets/js/main.js?v=lang-switch-20261029" defer></script>
 <script src="/assets/js/drag-character-trail.js?v=theme-audit-20261029" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>
 <script src="/assets/js/article-images.js?v=theme-audit-20261029" defer></script>

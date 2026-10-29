@@ -15,7 +15,7 @@ class LanguageRoutingTest {
                 .header("Accept-Language", "zh-CN,zh;q=0.9")
                 .when().get("/")
                 .then().statusCode(200)
-                .body(containsString("<html lang=\"en-US\">"))
+                .body(containsString("<html lang=\"en-US\""))
                 .body(containsString("Latest articles"));
     }
 
@@ -24,7 +24,7 @@ class LanguageRoutingTest {
         given()
                 .when().get("/zh-cn/")
                 .then().statusCode(200)
-                .body(containsString("<html lang=\"zh-cn\">"))
+                .body(containsString("<html lang=\"zh-cn\""))
                 .body(containsString("最近文章"));
     }
 
@@ -42,7 +42,7 @@ class LanguageRoutingTest {
         given()
                 .when().get("/?lang=zh-cn")
                 .then().statusCode(200)
-                .body(containsString("<html lang=\"zh-cn\">"))
+                .body(containsString("<html lang=\"zh-cn\""))
                 .cookie("user_lang_v2", "zh-cn");
     }
 
@@ -57,7 +57,14 @@ class LanguageRoutingTest {
         given()
                 .when().get("/zh-cn/tag")
                 .then().statusCode(200)
-                .body(containsString("href=\"/tag\""))
-                .body(containsString("href=\"/zh-cn/tag\""));
+                .body(containsString("href=\"/tag?lang=en-US\""))
+                .body(containsString("href=\"/zh-cn/tag\""))
+                .body(containsString("data-language-switch=\"en-US\""));
+
+        given()
+                .when().get("/tag")
+                .then().statusCode(200)
+                .body(containsString("href=\"/zh-cn/tag\""))
+                .body(containsString("data-language-switch=\"zh-cn\""));
     }
 }

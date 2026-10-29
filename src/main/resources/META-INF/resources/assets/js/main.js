@@ -430,7 +430,42 @@
             window.history.replaceState(nextState, '', window.location.href);
         }
 
+        function switchLanguage(targetLang) {
+            const root = document.documentElement;
+            const defaultLang = (root.dataset.defaultLanguage || 'zh-cn').toLowerCase();
+            const currentLang = (root.lang || '').toLowerCase();
+            const target = String(targetLang || '').trim();
+            if (!target) return;
+
+            const targetIsDefault = target.toLowerCase() === defaultLang;
+            const targetIsCurrent = currentLang === target.toLowerCase();
+            let path = window.location.pathname || '/';
+            path = path.replace(/^\/(zh-cn|en-us)(?=\/|$)/i, '');
+            if (!path.startsWith('/')) path = '/' + path;
+            if (!path) path = '/';
+
+            const targetPath = targetIsDefault
+                ? path
+                : (path === '/' ? '/' + target + '/' : '/' + target + path);
+            const params = new URLSearchParams(window.location.search);
+            params.delete('lang');
+            // Switching back to the region default uses the unprefixed URL, so
+            // make the choice explicit; otherwise the existing user_lang_v2
+            // cookie would keep the previous language.
+            if (targetIsDefault && !targetIsCurrent) {
+                params.set('lang', target);
+            }
+            const query = params.toString();
+            const hash = window.location.hash || '';
+            // Full document navigation on purpose: the header, window.i18n and
+            // server-rendered content must all be rebuilt in the new language.
+            window.location.assign(targetPath + (query ? '?' + query : '') + hash);
+        }
+
         function canUsePjax(anchor) {
+            if (anchor.matches('[data-language-switch]')) {
+                return false;
+            }
             if (!anchor) return false;
             if (anchor.dataset.noPjax === 'true') return false;
             if (anchor.target && anchor.target !== '_self') return false;
@@ -1476,6 +1511,14 @@
             if (event.defaultPrevented) return;
             if (event.button !== 0) return;
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+            const languageLink = event.target.closest?.('[data-language-switch]');
+            if (languageLink) {
+                event.preventDefault();
+                event.stopPropagation();
+                switchLanguage(languageLink.dataset.languageSwitch);
+                return;
+            }
 
             const anchor = event.target.closest('a');
             const isArticleReturnNavigation = anchor &&

@@ -95,11 +95,22 @@ public class QuteGlobalProvider {
         List<LanguageOption> options = new ArrayList<>();
         for (String code : LanguageConstant.SUPPORTED_LANG_ORDER) {
             String url = LanguageHelper.localizedPath(context.getPath(), code, context.getDefaultLang());
-            if (query != null && !query.isBlank()) {
-                url = url + "?" + query;
+            String targetQuery = query == null ? "" : query;
+            boolean targetIsDefault = code.equalsIgnoreCase(context.getDefaultLang());
+            boolean targetIsCurrent = code.equalsIgnoreCase(context.getLang());
+            // The unprefixed URL is only "explicit" for SEO, not for language
+            // selection: an existing user_lang_v2 cookie would win. Add ?lang
+            // when switching from another language back to the region default.
+            if (targetIsDefault && !targetIsCurrent) {
+                targetQuery = targetQuery.isBlank()
+                        ? "lang=" + code
+                        : targetQuery + "&lang=" + code;
+            }
+            if (!targetQuery.isBlank()) {
+                url = url + "?" + targetQuery;
             }
             options.add(new LanguageOption(code, i18n.t("language." + code), url,
-                    code.equalsIgnoreCase(context.getLang())));
+                    targetIsCurrent));
         }
         return options;
     }
