@@ -543,6 +543,11 @@ services:
     mem_limit: 1g
     networks:
       - app-network
+    ports:
+      # The Compose stack has no edge nginx, so the public gateway (APISIX in
+      # production) forwards /observability/grafana/ to this host port. The
+      # default keeps Grafana on loopback only.
+      - "${GRAFANA_HOST_BIND_IP:-127.0.0.1}:${GRAFANA_HOST_PORT:-13000}:3000"
     environment:
       GF_SERVER_ROOT_URL: ${WINDBLOG_SITE_PUBLIC_URL:-https://your-domain.example}/observability/grafana/
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"

@@ -1,0 +1,28 @@
+{
+  "name": "windblog-grafana",
+  "desc": "Same-origin Grafana embed for the WindBlog admin. The short-lived auth_token query parameter is converted to the X-JWT-Assertion header and to an HttpOnly cookie so the iframe keeps working after the first request.",
+  "hosts": ["geekcorelab.cn", "www.geekcorelab.cn", "geekcorelab.com", "www.geekcorelab.com"],
+  "uri": "/observability/grafana/*",
+  "priority": 100,
+  "enable_websocket": true,
+  "upstream": {
+    "type": "roundrobin",
+    "scheme": "http",
+    "pass_host": "pass",
+    "nodes": {"10.0.0.100:13000": 1}
+  },
+  "plugins": {
+    "proxy-rewrite": {
+      "headers": {
+        "set": {"X-Forwarded-Proto": "https"},
+        "remove": ["X-JWT-Assertion"]
+      }
+    },
+    "serverless-pre-function": {
+      "phase": "access",
+      "functions": [
+        "local core = require(\"apisix.core\")\nreturn function(conf, ctx)\n    local token = ngx.var.arg_auth_token\n    local cookie = ngx.var.cookie_windblog_grafana_jwt\n    if token and token:match(\"^[%w%._%-]+$\") then\n        core.request.set_header(ctx, \"X-JWT-Assertion\", token)\n        ngx.header[\"Set-Cookie\"] = \"windblog_grafana_jwt=\" .. token .. \"; Path=/observability/grafana/; Max-Age=900; Secure; HttpOnly; SameSite=Lax\"\n    elseif cookie and cookie:match(\"^[%w%._%-]+$\") then\n        core.request.set_header(ctx, \"X-JWT-Assertion\", cookie)\n    end\nend"
+      ]
+    }
+  }
+}
