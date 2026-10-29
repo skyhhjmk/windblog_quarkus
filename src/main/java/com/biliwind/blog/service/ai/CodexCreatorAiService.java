@@ -29,9 +29,44 @@ public class CodexCreatorAiService implements AiService {
 
     @Override
     public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
-                                               String targetLanguage, Map<String, String> fields) {
-        return callDetailed(config, "translate", Map.of("sourceLanguage", sourceLanguage,
-                "targetLanguage", targetLanguage, "fields", fields)).thenApply(this::contentResultWithProvenance);
+                                               String targetLanguage, Map<String, String> fields,
+                                               String promptTemplate) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("sourceLanguage", sourceLanguage);
+        input.put("targetLanguage", targetLanguage);
+        input.put("fields", fields);
+        input.put("instruction", "Return only a JSON object whose keys are exactly the input field names "
+                + "and whose values are translated strings. Preserve Markdown structure, code, HTML, URLs, "
+                + "image URLs, data-block-id and shortcodes byte-for-byte.");
+        return callDetailed(config, "translate", input).thenApply(this::contentResultWithProvenance);
+    }
+
+    @Override
+    public CompletionStage<AiResult> complete(AiProviderConfig config, String systemPrompt, String prompt) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            input.put("systemPrompt", systemPrompt);
+        }
+        input.put("prompt", prompt == null ? "" : prompt);
+        return callDetailed(config, "assistant", input).thenApply(inference -> {
+            AiResult result = contentResult(inference.output());
+            applyProvenance(result, inference);
+            String text = result.contents.get("text");
+            if (text == null) {
+                text = result.contents.getOrDefault("default", "");
+            }
+            if (text == null || text.isBlank()) {
+                text = result.contents.values().stream()
+                        .filter(value -> value != null && !value.isBlank())
+                        .findFirst().orElse("");
+            }
+            if (text.isBlank()) {
+                throw new IllegalStateException("Codex Creator 未返回写作结果");
+            }
+            result.contents.clear();
+            result.contents.put("text", text);
+            return result;
+        });
     }
 
     @Override

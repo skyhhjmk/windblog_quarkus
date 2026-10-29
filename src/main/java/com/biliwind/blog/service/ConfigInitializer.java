@@ -306,13 +306,27 @@ public class ConfigInitializer {
 
         list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "功能设置", aiAuditSchema, "AI 评论审核设置"));
 
+        ObjectNode aiTranslationSchema = mapper.createObjectNode();
+        aiTranslationSchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode aiTranslationFields = aiTranslationSchema.putArray("fields");
+        aiTranslationFields.addObject().put("key", "prompt").put("label", "AI 翻译提示词")
+                .put("widget", "textarea").put("required", true);
+        aiTranslationFields.addObject().put("key", "defaultTargetLanguage").put("label", "默认目标语言")
+                .put("widget", "input").put("hint", "例如 en-US；翻译管理页会以此作为默认目标语言。");
+        ObjectNode aiTranslationValue = mapper.createObjectNode();
+        aiTranslationValue.put("prompt", com.biliwind.blog.service.ai.TranslationPrompt.DEFAULT_PROMPT);
+        aiTranslationValue.put("defaultTargetLanguage", "en-US");
+        list.add(new SettingDefinition("ai_translation", aiTranslationValue, "object", "功能设置",
+                aiTranslationSchema, "文章翻译提示词与默认目标语言。提示词会用于所有支持翻译的 AI 提供商和轮询组。"));
+
         ObjectNode aiOperationConfigSchema = mapper.createObjectNode();
         aiOperationConfigSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode aiOperationConfigFields = aiOperationConfigSchema.putArray("fields");
         for (String[] operation : new String[][] {
                 {"moderate", "评论审核 AI 配置"},
                 {"summarize", "AI 摘要配置"},
-                {"translate", "AI 翻译配置"}
+                {"translate", "AI 翻译配置"},
+                {"assistant", "写作助手 AI 配置"}
         }) {
             ObjectNode field = aiOperationConfigFields.addObject();
             field.put("key", operation[0]);
@@ -325,6 +339,7 @@ public class ConfigInitializer {
         aiOperationConfigValue.put("moderate", "");
         aiOperationConfigValue.put("summarize", "");
         aiOperationConfigValue.put("translate", "");
+        aiOperationConfigValue.put("assistant", "");
         list.add(new SettingDefinition("ai_operation_configs", aiOperationConfigValue, "object", "功能设置",
                 aiOperationConfigSchema, "分别指定 AI 评论审核、摘要和翻译使用的提供商或轮询组。"));
 

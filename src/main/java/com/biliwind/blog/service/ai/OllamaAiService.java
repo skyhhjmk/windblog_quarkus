@@ -76,19 +76,13 @@ public class OllamaAiService implements AiService {
 
     @Override
     public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
-            String targetLanguage, Map<String, String> fields) {
+            String targetLanguage, Map<String, String> fields, String promptTemplate) {
         if (!isConfigReady(config)) {
             return CompletableFuture.failedFuture(new RuntimeException("Ollama 配置不可用"));
         }
         try {
-            Map<String, Object> input = new HashMap<>();
-            input.put("sourceLanguage", sourceLanguage);
-            input.put("targetLanguage", targetLanguage);
-            input.put("fields", fields);
-            String prompt = "Translate the natural language values in this JSON from " + sourceLanguage
-                    + " to " + targetLanguage + ". Return only a JSON object with the same field names."
-                    + " Preserve Markdown, code, HTML, URLs, image URLs and block IDs; do not translate markup or code.\n"
-                    + objectMapper.writeValueAsString(input);
+            String prompt = TranslationPrompt.build(promptTemplate, sourceLanguage, targetLanguage,
+                    fields, objectMapper);
             Map<String, Object> payload = new HashMap<>();
             payload.put("model", chooseModel(config, "llama3"));
             payload.put("prompt", prompt);

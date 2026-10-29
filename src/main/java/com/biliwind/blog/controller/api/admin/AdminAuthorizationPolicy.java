@@ -180,7 +180,7 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/media")) {
             return "media";
         }
-        if (path.startsWith("/api/admin/posts")) {
+        if (path.startsWith("/api/admin/posts") || path.startsWith("/api/admin/translations")) {
             return "post";
         }
         if (path.startsWith("/api/admin/settings")) {

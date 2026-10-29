@@ -102,6 +102,11 @@ public class AiManager {
 
     public CompletionStage<AiResult> translate(String sourceLanguage, String targetLanguage,
             Map<String, String> fields) {
+        return translate(sourceLanguage, targetLanguage, fields, null);
+    }
+
+    public CompletionStage<AiResult> translate(String sourceLanguage, String targetLanguage,
+            Map<String, String> fields, String promptTemplate) {
         List<AiProviderConfig> allConfigs = configService.listAll();
         List<AiProviderConfig> configs = new ArrayList<>(allConfigs);
 
@@ -113,18 +118,21 @@ public class AiManager {
         if (selected == null) {
             return CompletableFuture.failedFuture(new RuntimeException("没有允许翻译操作的 AI 配置"));
         }
+        String effectivePrompt = promptTemplate == null || promptTemplate.isBlank()
+                ? configuredTranslationPrompt() : promptTemplate;
 
-        return executeTranslate(selected, sourceLanguage, targetLanguage, fields).exceptionallyCompose(error -> {
-            AiProviderConfig fallback = selectionService.fallback("translate", configs, selected);
-            return fallback == null ? CompletableFuture.failedFuture(error)
-                    : executeTranslate(fallback, sourceLanguage, targetLanguage, fields);
-        });
+        return executeTranslate(selected, sourceLanguage, targetLanguage, fields, effectivePrompt)
+                .exceptionallyCompose(error -> {
+                    AiProviderConfig fallback = selectionService.fallback("translate", configs, selected);
+                    return fallback == null ? CompletableFuture.failedFuture(error)
+                            : executeTranslate(fallback, sourceLanguage, targetLanguage, fields, effectivePrompt);
+                });
     }
 
     public CompletionStage<AiResult> executeTranslate(AiProviderConfig config, String sourceLanguage,
-            String targetLanguage, Map<String, String> fields) {
+            String targetLanguage, Map<String, String> fields, String promptTemplate) {
         if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-            return pollingService.get().translate(config, sourceLanguage, targetLanguage, fields);
+            return pollingService.get().translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
         }
 
         AiService service = findService(config);
@@ -132,7 +140,73 @@ public class AiManager {
             return CompletableFuture.failedFuture(
                     new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
         }
-        return service.translate(config, sourceLanguage, targetLanguage, fields);
+        return service.translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
+    }
+
+    /**
+     * Free-form completion for admin writing tools. The provider can be chosen
+     * explicitly (including a polling group) or resolved by the configured
+     * assistant/writing operation.
+     */
+    public CompletionStage<AiResult> complete(Long providerId, String systemPrompt, String prompt) {
+        List<AiProviderConfig> configs = new ArrayList<>(configService.listAll());
+        if (configs.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("当前没有任何已启用的 AI 配置"));
+        }
+        AiProviderConfig selected = null;
+        if (providerId != null) {
+            selected = configs.stream()
+                    .filter(config -> config.id != null && config.id.equals(providerId) && config.enabled)
+                    .findFirst().orElse(null);
+            if (selected == null) {
+                return CompletableFuture.failedFuture(new RuntimeException("指定的 AI 配置不存在或已禁用"));
+            }
+        } else {
+            selected = selectionService.select("assistant", configs);
+            if (selected == null) {
+                selected = selectionService.select("writing", configs);
+            }
+            if (selected == null) {
+                selected = configs.stream().filter(config -> config.enabled).findFirst().orElse(null);
+            }
+        }
+        if (selected == null) {
+            return CompletableFuture.failedFuture(new RuntimeException("没有可用的 AI 配置"));
+        }
+        final AiProviderConfig primary = selected;
+        log.info("[AI] 开始写作调用，使用配置={}, provider={}", primary.name, primary.provider);
+        return executeComplete(primary, systemPrompt, prompt).exceptionallyCompose(error -> {
+            AiProviderConfig fallback = selectionService.fallback("assistant", configs, primary);
+            if (fallback == null) {
+                fallback = selectionService.fallback("writing", configs, primary);
+            }
+            return fallback == null ? CompletableFuture.failedFuture(error)
+                    : executeComplete(fallback, systemPrompt, prompt);
+        });
+    }
+
+    public CompletionStage<AiResult> executeComplete(AiProviderConfig config, String systemPrompt, String prompt) {
+        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+            return pollingService.get().complete(config, systemPrompt, prompt);
+        }
+        AiService service = findService(config);
+        if (service == null) {
+            return CompletableFuture.failedFuture(
+                    new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+        }
+        return service.complete(config, systemPrompt, prompt);
+    }
+
+    private String configuredTranslationPrompt() {
+        com.biliwind.blog.model.SystemSetting setting =
+                com.biliwind.blog.model.SystemSetting.findByKey("ai_translation");
+        if (setting != null && setting.configValue != null) {
+            String prompt = setting.configValue.path("prompt").asText("");
+            if (!prompt.isBlank()) {
+                return prompt;
+            }
+        }
+        return TranslationPrompt.DEFAULT_PROMPT;
     }
 
     public CompletionStage<AiResult> executeSummarize(AiProviderConfig config, Map<String, String> content) {
