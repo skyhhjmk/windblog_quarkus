@@ -146,4 +146,6 @@
     <include file="db/migration/145-add-seo-management.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/146-add-internal-link-graph-setting.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/147-fail-stuck-ai-comment-audits.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/148-create-translation-tasks.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/149-add-ai-provider-rate-limit.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

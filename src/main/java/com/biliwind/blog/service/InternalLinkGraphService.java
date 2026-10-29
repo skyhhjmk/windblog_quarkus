@@ -46,6 +46,11 @@ public class InternalLinkGraphService {
 
     public Graph adminGraph(Long id, String language, int depth, int maxNodes) {
         if (!enabled()) throw new NotFoundException();
+        return adminGraphUnchecked(id, language, depth, maxNodes);
+    }
+
+    /** Same admin traversal without the public internal-link-graph feature flag. */
+    public Graph adminGraphUnchecked(Long id, String language, int depth, int maxNodes) {
         if (depth < 1 || depth > 8 || maxNodes < 2 || maxNodes > 300)
             throw new BadRequestException("递归深度须为 1–8，节点上限须为 2–300");
         Post root = Post.find("id = ?1 and status = ?2 and deletedAt is null and visibility = 0 and publishedRevision is not null",

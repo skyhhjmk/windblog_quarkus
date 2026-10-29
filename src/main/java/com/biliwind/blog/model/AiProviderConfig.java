@@ -37,6 +37,10 @@ public class AiProviderConfig extends PanacheEntityBase {
     @Column(length = 128)
     public String model;
 
+    /** 每分钟最多请求次数；null 或 0 表示不限制。 */
+    @Column(name = "rate_limit_per_minute")
+    public Integer rateLimitPerMinute;
+
     @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     public String config;

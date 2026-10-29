@@ -2,11 +2,14 @@ package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.exception.BadRequestException;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.BatchTranslateRequest;
-import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.BatchTranslateResult;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslatePostRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslatePostResult;
+import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.SubmitTranslationTasksRequest;
+import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslationBatchView;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslationPage;
+import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslationTaskView;
 import com.biliwind.blog.service.AdminTranslationService;
+import com.biliwind.blog.service.TranslationTaskService;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -22,10 +25,6 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
 
 /**
  * Translation management: a WordPress-like overview of which articles already
@@ -38,10 +37,11 @@ import java.util.Set;
 @SecurityRequirement(name = "adminBearerAuth")
 public class AdminTranslationController {
 
-    private static final int MAX_BATCH_SIZE = 20;
-
     @Inject
     AdminTranslationService translationService;
+
+    @Inject
+    TranslationTaskService taskService;
 
     @GET
     @Operation(summary = "分页查询文章译本状态")
@@ -53,6 +53,31 @@ public class AdminTranslationController {
             @QueryParam("translationStatus") String translationStatus,
             @QueryParam("targetLanguage") String targetLanguage) {
         return translationService.list(status, keyword, translationStatus, targetLanguage, page, pageSize);
+    }
+
+    @POST
+    @Path("/tasks")
+    @Operation(summary = "异步提交翻译任务，由后台队列执行")
+    public TranslationBatchView submitTasks(SubmitTranslationTasksRequest request) {
+        if (request == null || request.postIds() == null || request.postIds().isEmpty()) {
+            throw new BadRequestException("请选择需要翻译的文章");
+        }
+        return taskService.submit(request.postIds(), request.targetLanguage(),
+                request.sourceLanguage(), Boolean.TRUE.equals(request.overwrite()));
+    }
+
+    @GET
+    @Path("/tasks")
+    @Operation(summary = "查询翻译任务批次进度")
+    public TranslationBatchView taskBatch(@QueryParam("batchId") String batchId) {
+        return taskService.batchView(batchId);
+    }
+
+    @GET
+    @Path("/tasks/{taskId}")
+    @Operation(summary = "查询单个翻译任务")
+    public TranslationTaskView task(@PathParam("taskId") Long taskId) {
+        return taskService.view(taskId);
     }
 
     @POST
@@ -72,49 +97,12 @@ public class AdminTranslationController {
     @POST
     @Path("/batch-translate")
     @Blocking
-    @Operation(summary = "批量翻译所选文章")
-    public BatchTranslateResult batchTranslate(BatchTranslateRequest request) {
+    @Operation(summary = "批量提交异步翻译任务")
+    public TranslationBatchView batchTranslate(BatchTranslateRequest request) {
         if (request == null || request.postIds() == null || request.postIds().isEmpty()) {
             throw new BadRequestException("请选择需要翻译的文章");
         }
-        Set<Long> uniqueIds = new LinkedHashSet<>();
-        for (Long id : request.postIds()) {
-            if (id != null && id > 0) {
-                uniqueIds.add(id);
-            }
-        }
-        if (uniqueIds.isEmpty()) {
-            throw new BadRequestException("请选择需要翻译的文章");
-        }
-        if (uniqueIds.size() > MAX_BATCH_SIZE) {
-            throw new BadRequestException("单次最多翻译 " + MAX_BATCH_SIZE + " 篇文章");
-        }
-        String target = request.targetLanguage();
-        boolean overwrite = Boolean.TRUE.equals(request.overwrite());
-        List<TranslatePostResult> results = new ArrayList<>();
-        List<String> errors = new ArrayList<>();
-        int translated = 0;
-        int skipped = 0;
-        for (Long id : uniqueIds) {
-            try {
-                TranslatePostResult result = translationService.translatePost(id, target,
-                        request.sourceLanguage(), overwrite);
-                results.add(result);
-                if (result.skipped()) {
-                    skipped++;
-                } else {
-                    translated++;
-                }
-            } catch (RuntimeException exception) {
-                errors.add("文章 #" + id + ": " + message(exception));
-            }
-        }
-        return new BatchTranslateResult(uniqueIds.size(), translated, skipped,
-                errors.size(), results, errors);
-    }
-
-    private String message(RuntimeException exception) {
-        String value = exception.getMessage();
-        return value == null || value.isBlank() ? exception.getClass().getSimpleName() : value;
+        return taskService.submit(request.postIds(), request.targetLanguage(),
+                request.sourceLanguage(), Boolean.TRUE.equals(request.overwrite()));
     }
 }

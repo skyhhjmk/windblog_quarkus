@@ -45,7 +45,8 @@ public class AdminAiProviderController {
         AiProviderConfigDto dto = AiProviderConfigDto.of(
                 configService.upsert(null, new AiProviderConfigService.ConfigUpdate(
                         request.type(), request.name(), request.provider(), request.enabled(),
-                        request.endpoint(), request.apiKey(), request.model(), request.config()
+                        request.endpoint(), request.apiKey(), request.model(),
+                        request.rateLimitPerMinute(), request.config()
                 ))
         );
         auditService.log("ai_provider", dto.id(), "create", null, java.util.Map.of("name", dto.name()));
@@ -60,7 +61,8 @@ public class AdminAiProviderController {
         AiProviderConfigDto dto = AiProviderConfigDto.of(
                 configService.upsert(id, new AiProviderConfigService.ConfigUpdate(
                         request.type(), request.name(), request.provider(), request.enabled(),
-                        request.endpoint(), request.apiKey(), request.model(), request.config()
+                        request.endpoint(), request.apiKey(), request.model(),
+                        request.rateLimitPerMinute(), request.config()
                 ))
         );
         auditService.log("ai_provider", id, "update", null, java.util.Map.of("name", dto.name()));

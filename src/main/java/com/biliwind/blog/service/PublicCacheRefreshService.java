@@ -71,6 +71,8 @@ public class PublicCacheRefreshService {
                 cacheService.delete(CacheService.Keys.postMeta(post.slug));
             }
             refreshListCaches();
+            // Fuzzy article-map relations are derived from indexed content.
+            cacheService.deletePattern(CacheService.Keys.ARTICLE_MAP_RELATED_PREFIX + "*");
         } catch (Exception e) {
             LOG.warnf("刷新文章缓存失败: postId=%d, error=%s", postId, e.getMessage());
         }

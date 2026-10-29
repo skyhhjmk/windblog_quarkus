@@ -60,6 +60,41 @@ public final class AdminTranslationDtos {
             Boolean overwrite) {
     }
 
+    public record SubmitTranslationTasksRequest(
+            List<Long> postIds,
+            String targetLanguage,
+            String sourceLanguage,
+            Boolean overwrite) {
+    }
+
+    public record TranslationTaskView(
+            Long id,
+            Long postId,
+            String targetLanguage,
+            String sourceLanguage,
+            boolean overwrite,
+            String status,
+            String message,
+            Integer revisionNumber,
+            boolean published,
+            int attempts,
+            String batchId,
+            OffsetDateTime createdAt,
+            OffsetDateTime startedAt,
+            OffsetDateTime finishedAt) {
+    }
+
+    public record TranslationBatchView(
+            String batchId,
+            List<TranslationTaskView> tasks,
+            int total,
+            int queued,
+            int running,
+            int succeeded,
+            int skipped,
+            int failed) {
+    }
+
     public record BatchTranslateResult(
             int requested,
             int translated,
