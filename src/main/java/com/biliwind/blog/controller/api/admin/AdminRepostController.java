@@ -180,11 +180,13 @@ public class AdminRepostController {
         stats.put("tokens", AffiliateToken.count());
         stats.put("activeTokens", AffiliateToken.count("status = 1"));
         stats.put("clickEvents", RedirectClickEvent.count());
+        stats.put("referralEvents", RepostReferralEvent.count());
         stats.put("suspiciousReposts", SuspiciousRepost.count());
         stats.put("affiliateLinks", AffiliateLink.count());
         stats.put("activeAffiliateLinks", AffiliateLink.count("status = 1"));
         stats.put("blockedDomains", BlockedDomain.count("status = 1"));
         stats.put("riskDevices", RiskDevice.count("status = 1"));
+        stats.put("bannedUsers", User.count("repostBanned = true"));
         return stats;
     }
 
@@ -239,6 +241,91 @@ public class AdminRepostController {
             items.add(toRiskDeviceItem(device));
         }
         return pageResponse(items, total, page, pageSize);
+    }
+
+    @GET
+    @Path("/referrals")
+    @Transactional
+    @Operation(summary = "转载原文地址访问追踪")
+    public Map<String, Object> listReferralEvents(@QueryParam("page") @DefaultValue("1") int page,
+                                                  @QueryParam("pageSize") @DefaultValue("20") int pageSize) {
+        List<RepostReferralEvent> events = RepostReferralEvent.find("order by viewedAt desc")
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = RepostReferralEvent.count();
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (RepostReferralEvent event : events) {
+            items.add(toReferralItem(event));
+        }
+        return pageResponse(items, total, page, pageSize);
+    }
+
+    @GET
+    @Path("/users")
+    @Transactional
+    @Operation(summary = "用户转载权限列表")
+    public Map<String, Object> listRepostUsers(@QueryParam("page") @DefaultValue("1") int page,
+                                               @QueryParam("pageSize") @DefaultValue("20") int pageSize,
+                                               @QueryParam("keyword") String keyword,
+                                               @QueryParam("banned") Boolean banned) {
+        StringBuilder filter = new StringBuilder("1 = 1");
+        List<Object> parameters = new ArrayList<>();
+        if (banned != null) {
+            parameters.add(banned);
+            filter.append(" and repostBanned = ?").append(parameters.size());
+        }
+        String normalizedKeyword = normalizeKeyword(keyword);
+        if (normalizedKeyword != null) {
+            parameters.add("%" + normalizedKeyword + "%");
+            int index = parameters.size();
+            filter.append(" and (lower(username) like ?").append(index)
+                    .append(" or lower(email) like ?").append(index).append(")");
+        }
+        List<User> users = User.find(filter + " order by createdAt desc", parameters.toArray())
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = User.count(filter.toString(), parameters.toArray());
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (User user : users) {
+            items.add(toRepostUserItem(user));
+        }
+        return pageResponse(items, total, page, pageSize);
+    }
+
+    @POST
+    @Path("/users/{id}/ban")
+    @Transactional
+    @Operation(summary = "禁止用户申请转载并撤销现有授权")
+    public Response banRepostUser(@PathParam("id") Long id, BanUserRequest request) {
+        User user = User.findById(id);
+        if (user == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity(message("用户不存在")).build();
+        }
+        user.repostBanned = true;
+        user.repostBanReason = request == null || request.reason == null || request.reason.isBlank()
+                ? null : request.reason.trim();
+        user.repostBannedAt = java.time.OffsetDateTime.now();
+        List<RepostLicense> activeLicenses = RepostLicense.find(
+                "viewerUser.id = ?1 and status = 1", id).list();
+        for (RepostLicense license : activeLicenses) {
+            license.status = 2;
+            license.revokedAt = java.time.OffsetDateTime.now();
+            dataSyncEvent.fire(new DataSyncEvent("REPOST_LICENSE", license.id, "UPSERT"));
+        }
+        return Response.ok(toRepostUserItem(user)).build();
+    }
+
+    @POST
+    @Path("/users/{id}/unban")
+    @Transactional
+    @Operation(summary = "恢复用户转载权限")
+    public Response unbanRepostUser(@PathParam("id") Long id) {
+        User user = User.findById(id);
+        if (user == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity(message("用户不存在")).build();
+        }
+        user.repostBanned = false;
+        user.repostBanReason = null;
+        user.repostBannedAt = null;
+        return Response.ok(toRepostUserItem(user)).build();
     }
 
     @POST
@@ -436,6 +523,38 @@ public class AdminRepostController {
         item.put("status", license.status);
         item.put("revokedAt", license.revokedAt);
         item.put("createdAt", license.createdAt);
+        item.put("originalClicks", RepostReferralEvent.count("repostLicense.id = ?1", license.id));
+        item.put("goClicks", RedirectClickEvent.count("repostLicense.id = ?1", license.id));
+        return item;
+    }
+
+    private Map<String, Object> toReferralItem(RepostReferralEvent event) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", event.id);
+        item.put("licenseCode", event.licenseCode);
+        item.put("postId", resolveId(event.article));
+        item.put("postTitle", postTitle(event.article));
+        item.put("refererUrl", event.refererUrl);
+        item.put("refererDomain", event.refererDomain);
+        item.put("refererCategory", event.refererCategory);
+        item.put("sourceNodeId", event.sourceNodeId);
+        item.put("viewedAt", event.viewedAt);
+        return item;
+    }
+
+    private Map<String, Object> toRepostUserItem(User user) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", user.id);
+        item.put("username", user.username);
+        item.put("email", user.email);
+        item.put("nickname", user.nickname);
+        item.put("status", user.status);
+        item.put("repostBanned", user.repostBanned);
+        item.put("repostBanReason", user.repostBanReason);
+        item.put("repostBannedAt", user.repostBannedAt);
+        item.put("createdAt", user.createdAt);
+        item.put("licenseCount", RepostLicense.count("viewerUser.id = ?1", user.id));
+        item.put("activeLicenseCount", RepostLicense.count("viewerUser.id = ?1 and status = 1", user.id));
         return item;
     }
 
@@ -610,5 +729,9 @@ public class AdminRepostController {
 
     public static class StatusRequest {
         public Integer status;
+    }
+
+    public static class BanUserRequest {
+        public String reason;
     }
 }

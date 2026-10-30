@@ -148,6 +148,11 @@
                         language: document.documentElement.lang || ''
                     })
                 });
+                if (response.status === 401) {
+                    const currentPath = window.location.pathname + window.location.search;
+                    window.location.href = '/user/login?redirect=' + encodeURIComponent(currentPath);
+                    return;
+                }
                 const responseText = await response.text();
                 let result = {};
                 try {

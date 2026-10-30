@@ -134,6 +134,9 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/repost/") && path.endsWith("/revoke")) {
             return "POST".equals(method);
         }
+        if (path.startsWith("/api/admin/repost/users/") && path.endsWith("/ban")) {
+            return "POST".equals(method);
+        }
         return path.equals("/api/admin/system/decrypt-error")
                 || path.equals("/api/admin/system/sync-cluster-keys");
     }

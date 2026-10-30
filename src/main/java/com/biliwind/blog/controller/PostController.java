@@ -15,6 +15,7 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
+import org.jboss.logging.Logger;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
@@ -26,6 +27,8 @@ import java.util.Optional;
 @Path("/")
 @io.smallrye.common.annotation.Blocking
 public class PostController {
+
+    private static final Logger LOG = Logger.getLogger(PostController.class);
 
     private static final Map<String, String> CONTENT_DECLARATION_LABELS = Map.of(
             "EXPLICIT_AND_EMBEDDED_ADVERTISING", "包含显式广告和植入式广告",
@@ -87,6 +90,9 @@ public class PostController {
     RepostPolicyCatalog repostPolicyCatalog;
 
     @Inject
+    com.biliwind.blog.service.repost.RepostReferralTrackingService repostReferralTrackingService;
+
+    @Inject
     com.biliwind.blog.service.link.ArticleExternalLinkService articleExternalLinkService;
 
     @Inject
@@ -101,9 +107,10 @@ public class PostController {
     @PasswordProtected
     public Response post(@PathParam("slug") String slug,
                          @QueryParam("levels") List<Short> levels,
+                         @QueryParam("wb_repost") String repostCode,
                          @Context HttpHeaders httpHeaders,
                          @Context Request request) {
-        return render(slug, null, levels, httpHeaders, request);
+        return render(slug, null, levels, repostCode, httpHeaders, request);
     }
 
     @GET
@@ -113,14 +120,16 @@ public class PostController {
     public Response postWithLang(@PathParam("langCode") String langCode,
                                  @PathParam("slug") String slug,
                                  @QueryParam("levels") List<Short> levels,
+                                 @QueryParam("wb_repost") String repostCode,
                                  @Context HttpHeaders httpHeaders,
                                  @Context Request request) {
-        return render(slug, langCode, levels, httpHeaders, request);
+        return render(slug, langCode, levels, repostCode, httpHeaders, request);
     }
 
     private Response render(String slug,
                             String langCode,
                             List<Short> levels,
+                            String repostCode,
                             HttpHeaders httpHeaders,
                             Request request) {
 
@@ -130,6 +139,7 @@ public class PostController {
 
         String currentRegion = regionContext.getCurrentRegion().getCode();
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+        boolean trackedReferral = repostCode != null && !repostCode.isBlank();
 
         Optional<com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot> snapshotResult =
                 publicCacheRefreshService.findPublishedSnapshot(slug, currentRegion);
@@ -138,6 +148,14 @@ public class PostController {
         }
         com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot =
                 snapshotResult.get();
+
+        if (trackedReferral) {
+            try {
+                repostReferralTrackingService.record(repostCode, httpHeaders);
+            } catch (Exception exception) {
+                LOG.debugf(exception, "Failed to record repost referral for code %s", repostCode);
+            }
+        }
 
         String resolvedLang = languageContext.getLang();
 
@@ -158,7 +176,7 @@ public class PostController {
         boolean protectedPage = snapshot.visibility() == 2;
 
         // 评估客户端提供的 If-None-Match 首部
-        if (!protectedPage) {
+        if (!protectedPage && !trackedReferral) {
             Response.ResponseBuilder responseBuilder = request.evaluatePreconditions(etag);
             if (responseBuilder != null) {
                 CacheControl cacheControl = new CacheControl();
@@ -337,7 +355,7 @@ public class PostController {
 
         Response.ResponseBuilder responseBuilder = Response.ok(templateInstance)
                 .header("Vary", "Accept-Language, Cookie");
-        if (protectedPage) {
+        if (protectedPage || trackedReferral) {
             responseBuilder.header("Cache-Control", "no-store")
                     .header("Pragma", "no-cache")
                     .header("Expires", "0");

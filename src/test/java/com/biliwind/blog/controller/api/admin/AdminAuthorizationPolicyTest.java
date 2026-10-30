@@ -128,6 +128,14 @@ class AdminAuthorizationPolicyTest {
                 "GET", "/api/admin/repost/policies").action());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp(
                 "POST", "/api/admin/repost/tokens/7/revoke"));
+        assertEquals("repost.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/repost/users").action());
+        assertEquals("repost.write", AdminAuthorizationPolicy.decide(
+                "POST", "/api/admin/repost/users/7/ban").action());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp(
+                "POST", "/api/admin/repost/users/7/ban"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey(
+                "POST", "/api/admin/repost/users/7/ban"));
     }
 
     @Test

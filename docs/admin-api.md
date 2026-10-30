@@ -45,6 +45,7 @@
 - `GET /api/admin/repost/tokens`: go 短链 token 分页列表，支持 `status`、`tokenType`、`keyword`
 - `POST /api/admin/repost/tokens/{id}/revoke`: 撤销短链（高风险，需要 step-up 与幂等键）
 - `GET /api/admin/repost/click-events`: 点击证据链分页列表
+- `GET /api/admin/repost/referrals`: 转载原文地址 GET 访问追踪列表
 - `GET /api/admin/repost/suspicious`: 可疑转载聚合列表
 - `GET /api/admin/repost/blocked-domains`: 封禁域名列表
 - `POST /api/admin/repost/blocked-domains`: 封禁域名
@@ -52,8 +53,13 @@
 - `GET /api/admin/repost/risk-devices`: 风险设备列表
 - `POST /api/admin/repost/risk-devices`: 封禁风险设备
 - `POST /api/admin/repost/risk-devices/{id}/unblock`: 解除风险设备封禁
+- `GET /api/admin/repost/users`: 用户转载权限列表，支持 `keyword`、`banned`
+- `POST /api/admin/repost/users/{id}/ban`: 封禁用户转载权限并撤销其有效授权（高风险，需要 step-up 与幂等键）
+- `POST /api/admin/repost/users/{id}/unban`: 恢复用户转载申请权限
 
 商业链接是文章登记的 affiliate 或赞助目标链接；正文中匹配的链接会被改写为 `/r/` go 短链用于统计点击。转载授权生成的商业链接是绑定授权记录的 go 短链：读者点击后先记录来源与授权状态，再进入原文。转载页必须保留该链接。
+
+转载复制内容中的“原文链接”会附加 `wb_repost=<授权码>` 查询参数。读者通过该地址访问文章时，服务端会写入 `repost_referral_events` 转化记录；后台的“原文转化”列表和每条授权的原文访问次数即来自这些记录。用户可在用户中心“转载管理”中查看、修改转载地址、复制转载说明或撤销自己的授权。
 
 ## 示例
 

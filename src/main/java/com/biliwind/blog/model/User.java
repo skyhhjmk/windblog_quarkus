@@ -108,6 +108,18 @@ public class User extends PanacheEntityBase {
     @Column(name = "backpack_capacity", nullable = false)
     public Integer backpackCapacity = 36;
 
+    /** 是否禁止申请或登记新的转载授权 */
+    @Column(name = "repost_banned", nullable = false)
+    public boolean repostBanned;
+
+    /** 转载权限封禁原因 */
+    @Column(name = "repost_ban_reason", columnDefinition = "text")
+    public String repostBanReason;
+
+    /** 转载权限封禁时间 */
+    @Column(name = "repost_banned_at")
+    public OffsetDateTime repostBannedAt;
+
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp

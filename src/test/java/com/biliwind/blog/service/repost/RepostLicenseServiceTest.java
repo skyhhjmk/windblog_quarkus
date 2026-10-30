@@ -22,8 +22,10 @@ class RepostLicenseServiceTest {
         assertTrue(copy.markdown.contains("本文已获得 WindBlog 转载授权。授权码：RPL-TEST"));
         assertTrue(copy.markdown.contains("商业链接：http://go.example.test/r/token-required"));
         assertTrue(copy.markdown.contains("商业链接说明："));
+        assertTrue(copy.markdown.contains("wb_repost=RPL-TEST"));
         assertTrue(copy.html.contains("授权码：RPL-TEST"));
         assertTrue(copy.html.contains("repost-commercial-note"));
+        assertTrue(copy.originalUrl.contains("wb_repost=RPL-TEST"));
     }
 
     @Test
@@ -44,7 +46,7 @@ class RepostLicenseServiceTest {
         assertTrue(copy.markdown.contains("# Demo article"));
         assertTrue(copy.markdown.contains("Commercial link: http://go.example.test/r/token-required"));
         assertTrue(copy.markdown.contains("About the commercial link:"));
-        assertTrue(copy.plainText.contains("Original URL: http://example.test/post/demo"));
+        assertTrue(copy.plainText.contains("Original URL: http://example.test/post/demo?wb_repost=RPL-TEST"));
     }
 
     @Test

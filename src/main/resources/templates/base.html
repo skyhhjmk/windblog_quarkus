@@ -7,6 +7,11 @@
         window.i18n = {i18n.jsJson.raw};
         window.wbT = function (key, fallback) {
             var value = window.i18n && window.i18n[key];
+            // The server strips the "js." namespace when building window.i18n,
+            // while call sites use the full message key.
+            if ((value === undefined || value === null) && typeof key === 'string' && key.indexOf('js.') === 0) {
+                value = window.i18n && window.i18n[key.substring(3)];
+            }
             return value === undefined || value === null
                 ? (fallback === undefined ? key : fallback)
                 : value;
@@ -382,12 +387,12 @@
 <script src="/assets/js/ruler-hud.js?v=ruler-hud-20261030-v3" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>
 <script src="/assets/js/article-images.js?v=cover-crop-20261030" defer></script>
-<script src="/assets/js/user.js?v=error-codes-20261020" defer></script>
+<script src="/assets/js/user.js?v=repost-20261030" defer></script>
 <script src="/assets/js/comment.js?v=i18n-20261029" defer></script>
 <script src="/assets/js/ads.js?v=adsense-20261014" defer></script>
 <script src="/assets/js/link.js?v=error-codes-20261020" defer></script>
 <script src="/assets/js/tools.js?v=20261028-tools-v3" defer></script>
-<script src="/assets/js/post-premium.js?v=i18n-20261030" defer></script>
+<script src="/assets/js/post-premium.js?v=repost-20261030" defer></script>
 <script src="/assets/js/post-quote.js?v=i18n-20261029" defer></script>
 </body>
 </html>

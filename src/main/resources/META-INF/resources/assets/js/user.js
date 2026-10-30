@@ -243,6 +243,297 @@
         };
     }
 
+    function bindRepostLicenses() {
+        const list = document.getElementById('repostLicenseList');
+        if (!list || list.dataset.bound === 'true') return;
+        list.dataset.bound = 'true';
+        const notice = document.getElementById('repostBanNotice');
+        const feedback = document.getElementById('repostLicenseFeedback');
+        const refresh = document.getElementById('repostLicenseRefresh');
+        const lang = document.documentElement.lang || '';
+        const label = (key, fallback) => window.wbT('js.' + key, fallback);
+        const colon = /^en/i.test(lang) ? ': ' : '：';
+        let busy = false;
+
+        const showFeedback = (message, error = false) => {
+            if (!feedback) return;
+            feedback.textContent = message || '';
+            feedback.classList.toggle('hidden', !message);
+            feedback.classList.toggle('border-red-500/40', error);
+            feedback.classList.toggle('text-red-400', error);
+            feedback.classList.toggle('border-green-500/40', !error);
+            feedback.classList.toggle('text-green-400', !error);
+        };
+
+        const redirectToLogin = () => {
+            const target = window.location.pathname + window.location.search;
+            window.location.href = '/user/login?redirect=' + encodeURIComponent(target);
+        };
+
+        const makeField = (name, value) => {
+            if (value === null || value === undefined || value === '') return null;
+            const row = document.createElement('p');
+            row.className = 'break-all text-gray-500';
+            const key = document.createElement('span');
+            key.className = 'text-gray-400';
+            key.textContent = name + colon;
+            row.appendChild(key);
+            row.appendChild(document.createTextNode(String(value)));
+            return row;
+        };
+
+        const makeButton = (text, className, handler) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = className;
+            button.textContent = text;
+            button.addEventListener('click', handler);
+            return button;
+        };
+
+        const copyText = async (text) => {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            const copied = document.execCommand('copy');
+            textarea.remove();
+            if (!copied) throw new Error('clipboard copy failed');
+        };
+
+        const copyAttribution = async (item) => {
+            if (busy) return;
+            busy = true;
+            try {
+                const response = await fetch(
+                    '/api/user/repost/licenses/' + encodeURIComponent(item.id) +
+                    '/copy?lang=' + encodeURIComponent(lang),
+                    {headers: {'Accept': 'application/json'}, credentials: 'same-origin'}
+                );
+                if (response.status === 401) {
+                    redirectToLogin();
+                    return;
+                }
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || label('user_repost_copy_failed', '获取转载说明失败'));
+                }
+                const markdown = result.data?.markdown || result.data?.copy?.markdown || '';
+                if (!markdown) throw new Error(label('user_repost_copy_failed', '获取转载说明失败'));
+                await window.showModal({
+                    title: label('user_repost_copy_title', '转载说明'),
+                    message: markdown,
+                    showCancel: false
+                });
+                try {
+                    await copyText(markdown);
+                    showFeedback(label('user_repost_copied', '转载说明已复制'));
+                } catch (copyError) {
+                    showFeedback(label('user_repost_copy_manual', '复制失败，请手动复制上面的转载说明'), true);
+                }
+            } catch (error) {
+                showFeedback(error.message || label('user_repost_copy_failed', '获取转载说明失败'), true);
+            } finally {
+                busy = false;
+            }
+        };
+
+        const editLicense = async (item) => {
+            const nextUrl = await window.showModal({
+                title: label('user_repost_edit', '修改转载地址'),
+                message: label('user_repost_edit_prompt', '请输入新的转载页面 URL'),
+                type: 'prompt',
+                defaultValue: item.targetUrl || 'https://',
+                showCancel: true
+            });
+            if (typeof nextUrl !== 'string' || !nextUrl.trim() || nextUrl.trim() === item.targetUrl) return;
+            if (busy) return;
+            busy = true;
+            try {
+                const response = await fetch('/api/user/repost/licenses/' + encodeURIComponent(item.id), {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-XSRF-TOKEN': window.getCsrfToken()
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({targetUrl: nextUrl.trim(), language: lang})
+                });
+                if (response.status === 401) {
+                    redirectToLogin();
+                    return;
+                }
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || label('user_repost_edit_failed', '修改失败'));
+                }
+                showFeedback(label('user_repost_edit_success', '转载地址已更新'));
+                await load();
+            } catch (error) {
+                showFeedback(error.message || label('user_repost_edit_failed', '修改失败'), true);
+            } finally {
+                busy = false;
+            }
+        };
+
+        const revokeLicense = async (item) => {
+            if (busy) return;
+            const confirmed = await window.showModal({
+                title: label('user_repost_revoke', '撤销授权'),
+                message: label('user_repost_revoke_confirm', '确定撤销该转载授权吗？撤销后相关链接将失效。'),
+                showCancel: true
+            });
+            if (!confirmed) return;
+            busy = true;
+            try {
+                const response = await fetch(
+                    '/api/user/repost/licenses/' + encodeURIComponent(item.id) +
+                    '/revoke?lang=' + encodeURIComponent(lang),
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-XSRF-TOKEN': window.getCsrfToken()
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({})
+                    }
+                );
+                if (response.status === 401) {
+                    redirectToLogin();
+                    return;
+                }
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || label('user_repost_revoke_failed', '撤销失败'));
+                }
+                showFeedback(label('user_repost_revoke_success', '已撤销授权'));
+                await load();
+            } catch (error) {
+                showFeedback(error.message || label('user_repost_revoke_failed', '撤销失败'), true);
+            } finally {
+                busy = false;
+            }
+        };
+
+        const renderItem = (item) => {
+            const card = document.createElement('div');
+            card.className = 'space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg)]/40 p-4';
+
+            const head = document.createElement('div');
+            head.className = 'flex flex-wrap items-center gap-2';
+            const link = document.createElement('a');
+            link.href = '/post/' + encodeURIComponent(item.postSlug || '');
+            link.className = 'font-bold text-main hover:underline';
+            link.textContent = item.postTitle || item.postSlug || label('user_repost_no_article', '文章已不可用');
+            head.appendChild(link);
+
+            const status = document.createElement('span');
+            status.className = item.status === 1
+                ? 'rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-xs text-green-400'
+                : 'rounded-full border border-gray-500/40 bg-gray-500/10 px-2 py-0.5 text-xs text-gray-400';
+            status.textContent = item.status === 1
+                ? label('user_repost_active', '有效')
+                : label('user_repost_revoked', '已撤销');
+            head.appendChild(status);
+            card.appendChild(head);
+
+            const code = document.createElement('p');
+            code.className = 'font-mono text-xs text-gray-400';
+            code.textContent = label('user_repost_code', '授权码') + colon + (item.code || '');
+            card.appendChild(code);
+
+            [
+                makeField(label('user_repost_target', '转载页面'), item.targetUrl),
+                makeField(label('user_repost_domain', '授权域名'), item.allowedDomain),
+                makeField(label('user_repost_created', '创建时间'), item.createdAt ? new Date(item.createdAt).toLocaleString() : ''),
+                makeField(label('user_repost_original_visits', '原文访问'), item.originalClicks ?? 0),
+                makeField(label('user_repost_go_clicks', '商业链接点击'), item.goClicks ?? 0)
+            ].forEach(node => { if (node) card.appendChild(node); });
+
+            const actions = document.createElement('div');
+            actions.className = 'flex flex-wrap gap-2 pt-1';
+            if (item.status === 1) {
+                actions.appendChild(makeButton(
+                    label('user_repost_edit', '修改转载地址'),
+                    'rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs hover:border-[var(--accent)]',
+                    () => editLicense(item)
+                ));
+                actions.appendChild(makeButton(
+                    label('user_repost_copy', '查看/复制转载说明'),
+                    'rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-bold text-[var(--accent-foreground)]',
+                    () => copyAttribution(item)
+                ));
+                actions.appendChild(makeButton(
+                    label('user_repost_revoke', '撤销授权'),
+                    'rounded-lg border border-red-500/40 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10',
+                    () => revokeLicense(item)
+                ));
+            }
+            if (actions.children.length > 0) card.appendChild(actions);
+            return card;
+        };
+
+        const render = (data) => {
+            list.replaceChildren();
+            if (notice) {
+                if (data.repostBanned) {
+                    notice.textContent = label('user_repost_banned_notice', '当前账号已被限制转载权限。') +
+                        (data.repostBanReason ? ' ' + data.repostBanReason : '');
+                    notice.classList.remove('hidden');
+                } else {
+                    notice.classList.add('hidden');
+                }
+            }
+            const items = Array.isArray(data.items) ? data.items : [];
+            if (items.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'text-gray-500';
+                empty.textContent = label('user_repost_empty', '暂无转载授权');
+                list.appendChild(empty);
+                return;
+            }
+            items.forEach(item => list.appendChild(renderItem(item)));
+        };
+
+        const load = async () => {
+            list.textContent = label('user_repost_loading', '正在加载转载授权…');
+            try {
+                const response = await fetch(
+                    '/api/user/repost/licenses?page=1&pageSize=100&lang=' + encodeURIComponent(lang),
+                    {headers: {'Accept': 'application/json'}, credentials: 'same-origin'}
+                );
+                if (response.status === 401) {
+                    redirectToLogin();
+                    return;
+                }
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || label('user_repost_load_failed', '转载授权加载失败'));
+                }
+                render(result.data || {});
+            } catch (error) {
+                list.textContent = '';
+                showFeedback(error.message || label('user_repost_load_failed', '转载授权加载失败'), true);
+            }
+        };
+
+        if (refresh && refresh.dataset.bound !== 'true') {
+            refresh.dataset.bound = 'true';
+            refresh.addEventListener('click', load);
+        }
+        load();
+    }
+
     function bindUserTabs() {
         const tabs = Array.from(document.querySelectorAll('[data-user-tab]'));
         const panels = Array.from(document.querySelectorAll('[data-user-tab-panel]'));
@@ -994,6 +1285,7 @@
         bindUserWallet();
         bindBackpackItems();
         bindInventoryBoard();
+        bindRepostLicenses();
         bindUserTabs();
         bindSubscriptions();
         bindAccountSettings();

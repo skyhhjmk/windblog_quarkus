@@ -13,9 +13,12 @@ import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.NotFoundException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Base64;
@@ -83,6 +86,9 @@ public class RepostLicenseService {
         User user = User.findById(userId);
         if (user == null) {
             throw new BadRequestException("用户不存在");
+        }
+        if (user.repostBanned) {
+            throw new ForbiddenException("当前账号已被限制转载权限");
         }
 
         RepostLicense license = new RepostLicense();
@@ -154,7 +160,7 @@ public class RepostLicenseService {
     public CopyContent buildCopyContent(RepostLicense license, String rawToken, String language) {
         boolean english = RepostPolicyCatalog.isEnglish(language);
         String title = resolvePostTitle(license.article, language);
-        String originalUrl = buildPostUrl(license.article);
+        String originalUrl = buildTrackedPostUrl(license.article, license.code);
         String goUrl = buildGoUrl(rawToken);
         RepostPolicyCatalog.Policy policy = repostPolicyCatalog.resolve(license.article);
 
@@ -314,6 +320,20 @@ public class RepostLicenseService {
             baseUrl = publicUrlService == null ? "http://localhost:8080" : publicUrlService.getBaseUrl();
         }
         return baseUrl + "/post/" + slug;
+    }
+
+    /**
+     * The original URL in a repost attribution block carries a GET tracking
+     * parameter. The public article handler records the visit before rendering.
+     */
+    public String buildTrackedPostUrl(Post post, String licenseCode) {
+        String originalUrl = buildPostUrl(post);
+        if (licenseCode == null || licenseCode.isBlank()) {
+            return originalUrl;
+        }
+        String separator = originalUrl.contains("?") ? "&" : "?";
+        return originalUrl + separator + "wb_repost="
+                + URLEncoder.encode(licenseCode.trim(), StandardCharsets.UTF_8);
     }
 
     public String buildGoUrl(String rawToken) {
