@@ -31,17 +31,17 @@
         detachZone: 210,
         stagger: 0.15,
         arc: 26,
-        jumpDur: 0.95,
+        jumpDur: 0.36,
         snapDelay: 400,
-        snapDur: 0.58,
+        snapDur: 0.42,
         introDur: 0.75,
         introStagger: 0.007,
         velRadius: 180,
         velMax: 0.65,
-        zoomInDelay: 140,
-        zoomOutDelay: 140,
-        zoomLerp: 10,
-        dragLerp: 0.22
+        zoomInDelay: 80,
+        zoomOutDelay: 120,
+        zoomLerp: 14,
+        dragLerp: 0.55
     };
 
     const LOOK = {
@@ -420,6 +420,18 @@
     // Custom Smooth Scroll Engine (does not interfere with PJAX instant scroll)
     let scrollAnim = null;
 
+    function setInstantScroll(y) {
+        const htmlEl = document.documentElement;
+        const prevInline = htmlEl.style.scrollBehavior;
+        htmlEl.style.scrollBehavior = 'auto';
+        window.scrollTo(0, y);
+        if (prevInline) {
+            htmlEl.style.scrollBehavior = prevInline;
+        } else {
+            htmlEl.style.removeProperty('scroll-behavior');
+        }
+    }
+
     function cancelSmoothScroll() {
         if (scrollAnim) {
             const cb = scrollAnim.onComplete;
@@ -441,15 +453,24 @@
             return;
         }
 
+        const now = performance.now();
         scrollAnim = {
             useVirtual: useVirtual,
             from: fromY,
             to: clampedTarget,
-            startTime: performance.now(),
-            durationMs: Math.max(180, durationSec * 1000),
+            startTime: now - 8,
+            durationMs: Math.max(120, durationSec * 1000),
             easing: easingFn || easeOutExpo,
             onComplete: onComplete
         };
+        // Immediately step 1 frame synchronously so click/jump has zero perceived input latency
+        const firstT = scrollAnim.easing(clamp01(8 / scrollAnim.durationMs));
+        const firstVal = fromY + (clampedTarget - fromY) * firstT;
+        if (useVirtual) {
+            state.virtualScroll = firstVal;
+        } else {
+            setInstantScroll(firstVal);
+        }
         requestTick();
     }
 
@@ -599,12 +620,15 @@
 
             if (state.dragging) {
                 state.dragMoved = Math.max(state.dragMoved, Math.abs(e.clientY - state.dragStartY));
+                if (state.dragMoved > 3) {
+                    cancelSmoothScroll();
+                }
                 const maxScroll = Math.max(0, state.docH - state.vh);
                 if (maxScroll >= 60) {
                     const targetY = ratio * maxScroll;
                     const currentY = window.scrollY || 0;
                     const nextY = currentY + (targetY - currentY) * MOTION.dragLerp;
-                    window.scrollTo(0, nextY);
+                    setInstantScroll(nextY);
                 } else {
                     state.virtualScroll = ratio * 600;
                 }
@@ -619,11 +643,34 @@
             state.dragStartY = e.clientY;
             state.dragMoved = 0;
             state.dragging = true;
-            state.armed = true;
+            state.armed = false;
+            state.jumping = true;
             try {
                 railEl.setPointerCapture(e.pointerId);
             } catch (_) {}
-            requestTick();
+
+            // Jump immediately on pointerdown instead of waiting for pointerup/click
+            const map = rulerMap(state.vh, LAYOUT.edgePad, state.navH);
+            const clampedY = Math.max(map.base, Math.min(map.base + map.span, e.clientY));
+            const ratio = clamp01((clampedY - map.base) / map.span);
+            const maxScroll = Math.max(0, state.docH - state.vh);
+            state.ghostActive = true;
+            state.ghostY = clampedY;
+
+            if (maxScroll >= 60) {
+                const targetY = ratio * maxScroll;
+                const dist = Math.abs(targetY - (window.scrollY || 0));
+                const dur = MOTION.jumpDur * (0.38 + 0.62 * Math.min(1, dist / (2.5 * state.vh)));
+                startSmoothScroll(targetY, dur, easeOutExpo, () => {
+                    state.jumping = false;
+                    requestTick();
+                });
+            } else {
+                startSmoothScroll(ratio * 600, 0.3, easeOutExpo, () => {
+                    state.jumping = false;
+                    requestTick();
+                });
+            }
         });
 
         const endDrag = (e) => {
@@ -644,30 +691,6 @@
 
         railEl.addEventListener('pointerup', endDrag);
         railEl.addEventListener('pointercancel', endDrag);
-
-        railEl.addEventListener('click', (e) => {
-            if (state.dragMoved > 5) return;
-            const map = rulerMap(state.vh, LAYOUT.edgePad, state.navH);
-            const ratio = clamp01((e.clientY - map.base) / map.span);
-            const maxScroll = Math.max(0, state.docH - state.vh);
-            state.armed = false;
-            state.jumping = true;
-
-            if (maxScroll >= 60) {
-                const targetY = ratio * maxScroll;
-                const dist = Math.abs(targetY - (window.scrollY || 0));
-                const dur = MOTION.jumpDur * (0.4 + 0.6 * Math.min(1, dist / (2.5 * state.vh)));
-                startSmoothScroll(targetY, dur, easeOutExpo, () => {
-                    state.jumping = false;
-                    requestTick();
-                });
-            } else {
-                startSmoothScroll(ratio * 600, 0.55, easeOutExpo, () => {
-                    state.jumping = false;
-                    requestTick();
-                });
-            }
-        });
     }
 
     // Build ticks on the rail for current document height
@@ -709,7 +732,16 @@
             }
 
             ticksTrackEl.appendChild(rowEl);
-            tickData.push({ pct: rPct, docY: docY, major: isMajor, alpha: alpha });
+            tickData.push({
+                pct: rPct,
+                docY: docY,
+                major: isMajor,
+                alpha: alpha,
+                lastRowTf: '',
+                lastLineTf: 'scaleX(0)',
+                lastLineOp: '0',
+                lastLabelOp: isMajor ? String(LOOK.labelAlpha) : ''
+            });
             tickRowEls.push(rowEl);
             tickLineEls.push(lineEl);
             tickLabelEls.push(labelEl);
@@ -779,7 +811,8 @@
                 }
             });
 
-            hit.addEventListener('click', (e) => {
+            const handleSectionTrigger = (e) => {
+                if (e.type === 'pointerdown' && e.button !== 0) return;
                 e.preventDefault();
                 e.stopPropagation();
                 flashUntil[idx] = performance.now() + 380;
@@ -799,7 +832,7 @@
                         targetY = Math.max(0, Math.min(maxScroll, targetY));
                     }
                     const dist = Math.abs(targetY - (window.scrollY || 0));
-                    const dur = MOTION.jumpDur * (0.45 + 0.55 * Math.min(1, dist / (2.2 * state.vh)));
+                    const dur = MOTION.jumpDur * (0.42 + 0.58 * Math.min(1, dist / (2.2 * state.vh)));
                     startSmoothScroll(targetY, dur, easeOutExpo, () => {
                         state.jumping = false;
                         pulseTargetElement(sec);
@@ -807,29 +840,47 @@
                     });
                 } else {
                     const targetVirt = idx === 0 ? 0 : (sec.normTrigger || (idx / Math.max(1, sections.length - 1)) * 560);
-                    startSmoothScroll(targetVirt, 0.55, easeOutExpo, () => {
+                    startSmoothScroll(targetVirt, 0.3, easeOutExpo, () => {
                         state.jumping = false;
                         pulseTargetElement(sec);
                         requestTick();
                     });
                 }
                 requestTick();
+            };
+
+            hit.addEventListener('pointerdown', handleSectionTrigger);
+            hit.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Keyboard Enter/Space activation triggers click with detail === 0
+                if (e.detail === 0) {
+                    handleSectionTrigger(e);
+                }
             });
 
             hudEl.appendChild(hit);
 
             const letters = [];
+            const letterCache = [];
             for (let c = 0; c < sec.chars.length; c++) {
                 const chSpan = document.createElement('span');
                 chSpan.className = 'wb-ruler-char';
                 chSpan.setAttribute('aria-hidden', 'true');
                 chSpan.style.fontSize = LAYOUT.headingPx + 'px';
+                chSpan.style.opacity = '1';
                 chSpan.textContent = sec.chars[c];
                 hudEl.appendChild(chSpan);
                 letters.push(chSpan);
+                letterCache.push({ tf: '', color: '' });
             }
 
-            sectionNodes.push({ hit: hit, letters: letters });
+            sectionNodes.push({
+                hit: hit,
+                letters: letters,
+                letterCache: letterCache,
+                hitBox: { l: '', t: '', w: '', h: '', pe: '' }
+            });
         });
     }
 
@@ -922,7 +973,7 @@
             if (scrollAnim.useVirtual) {
                 state.virtualScroll = nextVal;
             } else {
-                window.scrollTo(0, nextVal);
+                setInstantScroll(nextVal);
             }
             if (rawT >= 1) {
                 const cb = scrollAnim.onComplete;
@@ -1163,8 +1214,12 @@
                     alpha += (mapPos.alpha - alpha) * zoomEased;
                 }
 
-                spanEl.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) translate(-50%, -50%) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-                spanEl.style.opacity = '1';
+                const tfStr = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) translate(-50%, -50%) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+                const lc = node.letterCache[cIdx];
+                if (lc.tf !== tfStr) {
+                    lc.tf = tfStr;
+                    spanEl.style.transform = tfStr;
+                }
 
                 const effAlpha = alpha + (1 - alpha) * hoverW;
                 let baseColor = effAlpha >= 0.99
@@ -1172,9 +1227,13 @@
                     : `color-mix(in srgb, var(--text-main) ${(clamp01(effAlpha) * 100).toFixed(1)}%, var(--bg))`;
 
                 const accentMix = Math.max(flashW * 0.85, hoverW * 0.55);
-                spanEl.style.color = accentMix > 0.01
+                const colorStr = accentMix > 0.01
                     ? `color-mix(in srgb, var(--accent) ${(accentMix * 100).toFixed(0)}%, ${baseColor})`
                     : baseColor;
+                if (lc.color !== colorStr) {
+                    lc.color = colorStr;
+                    spanEl.style.color = colorStr;
+                }
 
                 if ( alpha > maxAlpha ) maxAlpha = alpha;
 
@@ -1201,11 +1260,17 @@
             }
 
             if (node.hit && Number.isFinite(minX)) {
-                node.hit.style.left = (minX - 4).toFixed(1) + 'px';
-                node.hit.style.top = (minY - 3).toFixed(1) + 'px';
-                node.hit.style.width = Math.max(16, maxX - minX + 8).toFixed(1) + 'px';
-                node.hit.style.height = Math.max(14, maxY - minY + 6).toFixed(1) + 'px';
-                node.hit.style.pointerEvents = maxAlpha > 0.05 ? 'auto' : 'none';
+                const lStr = (minX - 4).toFixed(1) + 'px';
+                const tStr = (minY - 3).toFixed(1) + 'px';
+                const wStr = Math.max(16, maxX - minX + 8).toFixed(1) + 'px';
+                const hStr = Math.max(14, maxY - minY + 6).toFixed(1) + 'px';
+                const peStr = maxAlpha > 0.05 ? 'auto' : 'none';
+                const hb = node.hitBox;
+                if (hb.l !== lStr) { hb.l = lStr; node.hit.style.left = lStr; }
+                if (hb.t !== tStr) { hb.t = tStr; node.hit.style.top = tStr; }
+                if (hb.w !== wStr) { hb.w = wStr; node.hit.style.width = wStr; }
+                if (hb.h !== hStr) { hb.h = hStr; node.hit.style.height = hStr; }
+                if (hb.pe !== peStr) { hb.pe = peStr; node.hit.style.pointerEvents = peStr; }
             }
         }
 
@@ -1313,9 +1378,13 @@
             const zoomedScreenY = map.base + (tk.pct / 100) * map.span;
 
             if (shouldWriteZoom && tickRowEls[i]) {
-                tickRowEls[i].style.transform = zoomEased > 0
+                const rowTf = zoomEased > 0
                     ? `translate3d(0, ${(zoomEased * (zoomedScreenY - unzoomedScreenY)).toFixed(2)}px, 0)`
                     : '';
+                if (tk.lastRowTf !== rowTf) {
+                    tk.lastRowTf = rowTf;
+                    tickRowEls[i].style.transform = rowTf;
+                }
             }
 
             // Proximity yield for major tick % labels when a vertical word rides past
@@ -1337,8 +1406,11 @@
                         }
                     }
                 }
-                const labelOp = LOOK.labelAlpha * (1 - (1 - yieldFactor) * (1 - zoomEased));
-                labelEl.style.opacity = labelOp.toFixed(3);
+                const labelOp = (LOOK.labelAlpha * (1 - (1 - yieldFactor) * (1 - zoomEased))).toFixed(3);
+                if (tk.lastLabelOp !== labelOp) {
+                    tk.lastLabelOp = labelOp;
+                    labelEl.style.opacity = labelOp;
+                }
             }
 
             const lineEl = tickLineEls[i];
@@ -1357,14 +1429,24 @@
             }
 
             const distFromNeedleDoc = Math.abs(tk.docY - docFocusY);
+            let lineTf;
+            let lineOp;
             if (distFromNeedleDoc < MOTION.velRadius && MOTION.velRadius > 0 && velFactor > 0.01) {
                 const falloff = 1 - distFromNeedleDoc / MOTION.velRadius;
                 const stretch = velFactor * falloff * falloff;
-                lineEl.style.transform = `scaleX(${(introScale * (1 + MOTION.velMax * stretch)).toFixed(3)})`;
-                lineEl.style.opacity = (introOp * Math.min(1, tk.alpha + 0.55 * stretch)).toFixed(3);
+                lineTf = `scaleX(${(introScale * (1 + MOTION.velMax * stretch)).toFixed(3)})`;
+                lineOp = (introOp * Math.min(1, tk.alpha + 0.55 * stretch)).toFixed(3);
             } else {
-                lineEl.style.transform = `scaleX(${introScale.toFixed(3)})`;
-                lineEl.style.opacity = (introOp * tk.alpha).toFixed(3);
+                lineTf = `scaleX(${introScale.toFixed(3)})`;
+                lineOp = (introOp * tk.alpha).toFixed(3);
+            }
+            if (tk.lastLineTf !== lineTf) {
+                tk.lastLineTf = lineTf;
+                lineEl.style.transform = lineTf;
+            }
+            if (tk.lastLineOp !== lineOp) {
+                tk.lastLineOp = lineOp;
+                lineEl.style.opacity = lineOp;
             }
         }
 

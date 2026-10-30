@@ -115,7 +115,7 @@
                                 </a>
                             </h2>
 
-                            <!-- AI Summary (Optional) -->
+                            <!-- AI Summary (Priority) or Fallback Summary -->
                             {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
                                 <div class="my-1 p-3.5 rounded-xl bg-accent/[0.04] border border-accent/15 space-y-1.5">
                                     <div class="flex items-center gap-2">
@@ -136,18 +136,17 @@
                                         {hit.aiSummary}
                                     </p>
                                 </div>
+                            {#else if hit.summarySegments && ! hit.summarySegments.isEmpty}
+                                <p class="text-sm leading-relaxed text-body line-clamp-3 font-normal">
+                                    {#for segment in hit.summarySegments}
+                                        {#if segment.highlighted}
+                                            <mark class="rounded bg-amber-400/20 px-1 py-0.5 font-semibold text-amber-200">{segment.text}</mark>
+                                        {#else}
+                                            {segment.text}
+                                        {/if}
+                                    {/for}
+                                </p>
                             {/if}
-
-                            <!-- Summary -->
-                            <p class="text-sm leading-relaxed text-body line-clamp-3 font-normal">
-                                {#for segment in hit.summarySegments}
-                                    {#if segment.highlighted}
-                                        <mark class="rounded bg-amber-400/20 px-1 py-0.5 font-semibold text-amber-200">{segment.text}</mark>
-                                    {#else}
-                                        {segment.text}
-                                    {/if}
-                                {/for}
-                            </p>
 
                             {#if hit.contentSnippets && hit.contentSnippets.size > 0}
                                 <div class="mt-1 p-3 rounded-xl bg-input-bg border border-border/60 space-y-1.5" aria-label="{i18n.t('search.snippet_aria')}">

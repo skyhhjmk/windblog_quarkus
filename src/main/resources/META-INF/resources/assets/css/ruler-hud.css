@@ -92,7 +92,6 @@ html[data-ruler="static"] {
     left: 0;
     right: 0;
     height: 0;
-    will-change: transform;
 }
 
 .wb-ruler-tick-line {
@@ -103,7 +102,6 @@ html[data-ruler="static"] {
     display: block;
     background-color: var(--text-main);
     transform-origin: right center;
-    will-change: transform, opacity;
 }
 
 .wb-ruler-tick-label {
@@ -118,7 +116,6 @@ html[data-ruler="static"] {
     color: var(--text-main);
     line-height: 1;
     white-space: nowrap;
-    will-change: opacity;
 }
 
 /* Zoomed Viewport Bracket */
@@ -340,7 +337,7 @@ html[data-ruler="static"] {
     color: var(--text-main);
     opacity: 0;
     pointer-events: none;
-    will-change: transform, opacity, color;
+    will-change: transform;
     text-shadow: 0 0 4px var(--bg), 0 0 10px var(--bg);
 }
 

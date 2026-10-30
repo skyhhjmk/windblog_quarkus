@@ -63,7 +63,7 @@
                                     </a>
                                 </h2>
 
-                                <!-- AI Summary (Optional) -->
+                                <!-- AI Summary (Priority) or Fallback Summary -->
                                 {#if post.aiSummaryStatus != 2 && post.aiSummary && ! post.aiSummary.isEmpty}
                                     <div class="my-1 p-3.5 rounded-xl bg-accent/[0.04] border border-accent/15 space-y-1.5">
                                         <div class="flex items-center gap-2">
@@ -84,10 +84,7 @@
                                             {LanguageHelper.resolveLocalizedValue(post.aiSummary, language)}
                                         </p>
                                     </div>
-                                {/if}
-
-                                <!-- Summary -->
-                                {#if post.summary}
+                                {#else if post.summary}
                                     <p class="text-sm leading-relaxed text-body line-clamp-3 font-normal">
                                         {post.summary}
                                     </p>
