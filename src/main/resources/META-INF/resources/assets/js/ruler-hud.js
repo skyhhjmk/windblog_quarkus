@@ -155,6 +155,63 @@
         return result;
     }
 
+    function getReadLine(vh, navH) {
+        const flipLineY = (LAYOUT.thresholdPct / 100) * (vh || window.innerHeight || 1);
+        return Math.max((navH || 64) + 44, Math.round(flipLineY + 24));
+    }
+
+    function updateSectionTriggers(targetSections, currentScrollY) {
+        const list = targetSections || sections;
+        if (!list || list.length === 0) return;
+        const scrollY = typeof currentScrollY === 'number' ? currentScrollY : (window.scrollY || 0);
+        const docH = Math.max(
+            document.documentElement.scrollHeight,
+            document.body.scrollHeight,
+            window.innerHeight
+        );
+        const vh = window.innerHeight || 1;
+        const navH = state.navH || getNavHeight();
+        const maxScroll = Math.max(0, docH - vh);
+        const readLine = getReadLine(vh, navH);
+
+        for (let i = 0; i < list.length; i++) {
+            const sec = list[i];
+            const liveEl = (sec.el && sec.el.isConnected) ? sec.el : document.getElementById(sec.id);
+            if (liveEl) {
+                sec.el = liveEl;
+                const rect = liveEl.getBoundingClientRect();
+                sec.anchor = Math.max(0, rect.top + scrollY);
+                sec.bottom = Math.max(sec.anchor + 24, rect.bottom + scrollY);
+            }
+            sec.rawTrigger = i === 0 ? 0 : Math.max(0, sec.anchor - readLine);
+            sec.triggerScroll = sec.rawTrigger;
+        }
+
+        if (list.length > 1 && maxScroll >= 60) {
+            const minStep = Math.min(44, Math.max(16, maxScroll / Math.max(3, list.length * 2)));
+            // Forward pass: only nudge if two adjacent DOM anchors are closer than minStep
+            for (let i = 1; i < list.length; i++) {
+                const minAllowed = i === 1
+                    ? Math.min(24, maxScroll * 0.04)
+                    : list[i - 1].triggerScroll + minStep;
+                if (list[i].triggerScroll < minAllowed) {
+                    list[i].triggerScroll = minAllowed;
+                }
+            }
+            // Backward pass ONLY if trailing section(s) sit below maxScroll (unreachable without clamping)
+            const maxReachable = Math.max(minStep, maxScroll - 8);
+            if (list[list.length - 1].triggerScroll > maxReachable) {
+                list[list.length - 1].triggerScroll = maxReachable;
+                for (let i = list.length - 2; i >= 1; i--) {
+                    const limit = Math.max(minStep, list[i + 1].triggerScroll - minStep);
+                    if (list[i].triggerScroll > limit) {
+                        list[i].triggerScroll = limit;
+                    }
+                }
+            }
+        }
+    }
+
     // Collect target section elements and compute their truncated labels & anchors
     function collectSections(pageMode) {
         const root = document.getElementById('pjax-content-root') || document.querySelector('main') || document.body;
@@ -261,16 +318,15 @@
         }
 
         const scrollY = window.scrollY || 0;
-        const docH = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
-        const vh = window.innerHeight || 1;
-        const maxScroll = Math.max(0, docH - vh);
         const navH = getNavHeight();
-        const readLine = navH + 84;
+        const vh = window.innerHeight || 1;
+        const readLine = getReadLine(vh, navH);
 
-        const sections = rawItems.map((item, idx) => {
+        const collected = rawItems.map((item, idx) => {
             const rect = item.el.getBoundingClientRect();
             const anchor = Math.max(0, rect.top + scrollY);
             const bottom = Math.max(anchor + 24, rect.bottom + scrollY);
+            const rawTrigger = idx === 0 ? 0 : Math.max(0, anchor - readLine);
             return {
                 id: item.id,
                 el: item.el,
@@ -280,33 +336,14 @@
                 index: idx,
                 anchor: anchor,
                 bottom: bottom,
-                triggerScroll: Math.max(0, anchor - readLine)
+                rawTrigger: rawTrigger,
+                triggerScroll: rawTrigger
             };
         });
 
-        // Compute normalized triggerScroll values so every section 1..M-1 can smoothly
-        // detach from bottom queue, ride the rail, and flip into the top stack within [0, maxScroll]
-        if (sections.length > 1) {
-            const effMaxScroll = Math.max(maxScroll, 600);
-            const minStart = Math.min(effMaxScroll * 0.16, 150);
-            const maxEnd = Math.max(minStart + 80, effMaxScroll - 24);
+        updateSectionTriggers(collected, scrollY);
 
-            const firstRaw = sections[1].triggerScroll;
-            const lastRaw = sections[sections.length - 1].triggerScroll;
-            const rawSpan = Math.max(1, lastRaw - firstRaw);
-
-            for (let i = 1; i < sections.length; i++) {
-                const ratio = sections.length === 2
-                    ? 0.65
-                    : (i - 1) / (sections.length - 2);
-                const naturalRatio = clamp01((sections[i].triggerScroll - firstRaw) / rawSpan);
-                // Blend natural DOM distribution with even spacing so closely-packed cards never collide
-                const blended = 0.55 * naturalRatio + 0.45 * ratio;
-                sections[i].normTrigger = minStart + blended * (maxEnd - minStart);
-            }
-        }
-
-        return sections;
+        return collected;
     }
 
     // Measure normalized per-character advance widths offscreen
@@ -823,13 +860,8 @@
                 if (maxScroll >= 60) {
                     let targetY = 0;
                     if (idx > 0) {
-                        const liveEl = document.getElementById(sec.id) || sec.el;
-                        const domTarget = liveEl
-                            ? liveEl.getBoundingClientRect().top + (window.scrollY || 0) - state.navH - 20
-                            : sec.anchor - state.navH - 20;
-                        // Ensure clicking a section reaches at least its flip completion scroll point
-                        targetY = Math.max(domTarget, sec.normTrigger || 0);
-                        targetY = Math.max(0, Math.min(maxScroll, targetY));
+                        updateSectionTriggers(sections, window.scrollY || 0);
+                        targetY = Math.max(0, Math.min(maxScroll, sec.triggerScroll || 0));
                     }
                     const dist = Math.abs(targetY - (window.scrollY || 0));
                     const dur = MOTION.jumpDur * (0.42 + 0.58 * Math.min(1, dist / (2.2 * state.vh)));
@@ -839,7 +871,7 @@
                         requestTick();
                     });
                 } else {
-                    const targetVirt = idx === 0 ? 0 : (sec.normTrigger || (idx / Math.max(1, sections.length - 1)) * 560);
+                    const targetVirt = idx === 0 ? 0 : ((idx / Math.max(1, sections.length - 1)) * 560);
                     startSmoothScroll(targetVirt, 0.3, easeOutExpo, () => {
                         state.jumping = false;
                         pulseTargetElement(sec);
@@ -994,6 +1026,12 @@
         const scrollY = useVirtual ? state.virtualScroll : (window.scrollY || 0);
         const progress = clamp01(scrollY / effMaxScroll);
 
+        // Periodically re-sync section DOM anchors so lazy-loaded images or dynamic blocks never desync triggers
+        if (!useVirtual && !state.jumping && now - (state.lastAnchorSync || 0) > 250) {
+            state.lastAnchorSync = now;
+            updateSectionTriggers(sections, scrollY);
+        }
+
         // Velocity tracking with exponential smoothing
         const instVel = (scrollY - state.lastY) / Math.max(0.004, dt);
         state.lastY = scrollY;
@@ -1032,9 +1070,7 @@
             ? Math.min(LAYOUT.queueSlot, Math.max(13, maxStackSpan / (sections.length - 1)))
             : LAYOUT.queueSlot;
 
-        const railTravelSpan = Math.max(260, (bottomBaseY + MOTION.detachZone) - flipLineY);
-        const firstTrigger = sections.length > 1 ? Math.max(110, sections[1].normTrigger || 160) : 200;
-        const travelScale = Math.max(1.2, (railTravelSpan * 0.86) / firstTrigger);
+        const spanToQueue = Math.max(240, (bottomBaseY + MOTION.detachZone * 0.65) - flipLineY);
 
         const secStates = sections.map((sec, idx) => {
             const m = labelMetrics[sec.label];
@@ -1045,8 +1081,13 @@
             let triggerY = 0;
 
             if (idx > 0) {
-                triggerY = sec.normTrigger || (idx / Math.max(1, sections.length - 1)) * effMaxScroll;
-                v = flipLineY + (triggerY - scrollY) * travelScale;
+                triggerY = useVirtual
+                    ? ((idx / Math.max(1, sections.length - 1)) * effMaxScroll)
+                    : (sec.triggerScroll || 0);
+                const secScale = triggerY < spanToQueue
+                    ? (spanToQueue / Math.max(60, triggerY))
+                    : 1;
+                v = flipLineY + (triggerY - scrollY) * secScale;
                 flipP = clamp01((flipLineY + MOTION.flipZone - v) / MOTION.flipZone);
                 detachP = 0;
             }
