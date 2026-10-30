@@ -1,0 +1,359 @@
+/* ==========================================================
+   WindBlog ArtCraft-Inspired Ruler Scroll Indicator & HUD
+   ========================================================== */
+
+html[data-ruler="on"],
+html[data-ruler="static"] {
+    --ruler-rail: 56px;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+    html[data-ruler="on"] {
+        scrollbar-width: none;
+    }
+
+    html[data-ruler="on"]::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+        display: none;
+    }
+
+    html[data-ruler="on"] main,
+    html[data-ruler="static"] main {
+        padding-right: calc(1.5rem + var(--ruler-rail, 56px));
+    }
+}
+
+.wb-ruler-root {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+@media (max-width: 1023px), (hover: none), (pointer: coarse) {
+    .wb-ruler-root {
+        display: none !important;
+    }
+}
+
+/* Right Edge Tick Rail */
+.wb-ruler-rail {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: var(--ruler-rail, 56px);
+    z-index: 40;
+    cursor: crosshair;
+    overflow: hidden;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+.wb-ruler-rail-frost {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: color-mix(in srgb, var(--bg) 58%, transparent);
+    mask-image: linear-gradient(
+        to left,
+        rgba(0, 0, 0, 1) 38%,
+        rgba(0, 0, 0, 0.82) 52%,
+        rgba(0, 0, 0, 0.45) 70%,
+        rgba(0, 0, 0, 0.14) 86%,
+        transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+        to left,
+        rgba(0, 0, 0, 1) 38%,
+        rgba(0, 0, 0, 0.82) 52%,
+        rgba(0, 0, 0, 0.45) 70%,
+        rgba(0, 0, 0, 0.14) 86%,
+        transparent 100%
+    );
+}
+
+.wb-ruler-ticks-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.wb-ruler-tick-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    will-change: transform;
+}
+
+.wb-ruler-tick-line {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 1px;
+    display: block;
+    background-color: var(--text-main);
+    transform-origin: right center;
+    will-change: transform, opacity;
+}
+
+.wb-ruler-tick-label {
+    position: absolute;
+    right: 24px;
+    top: 0;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--text-main);
+    line-height: 1;
+    white-space: nowrap;
+    will-change: opacity;
+}
+
+/* Zoomed Viewport Bracket */
+.wb-ruler-bracket {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+    will-change: transform, height, opacity;
+}
+
+.wb-ruler-bracket-fill {
+    position: absolute;
+    inset: 0;
+    background-color: var(--accent);
+    opacity: 0.12;
+}
+
+.wb-ruler-bracket-edge-top,
+.wb-ruler-bracket-edge-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    display: block;
+    background-color: var(--accent);
+    opacity: 0.55;
+}
+
+.wb-ruler-bracket-edge-top {
+    top: 0;
+}
+
+.wb-ruler-bracket-edge-bottom {
+    bottom: 0;
+}
+
+/* Needle & Slot-Machine Digits Readout */
+.wb-ruler-needle {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 0;
+    pointer-events: none;
+    will-change: transform, opacity;
+}
+
+.wb-ruler-needle-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1.5px;
+    display: block;
+    background-color: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+}
+
+.wb-ruler-readout {
+    position: absolute;
+    right: 3px;
+    top: 4px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    text-shadow: 0 0 6px var(--bg), 0 0 12px var(--bg);
+    transition: top 0.18s ease;
+}
+
+.wb-ruler-digits {
+    height: 1em;
+    line-height: 1;
+    display: inline-flex;
+    overflow: hidden;
+}
+
+.wb-ruler-digit-col {
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.2, 1);
+    will-change: transform;
+}
+
+.wb-ruler-digit-col > span {
+    height: 1em;
+    line-height: 1;
+    display: block;
+    text-align: center;
+}
+
+.wb-ruler-readout-pct {
+    margin-left: 1.5px;
+}
+
+/* Hover Ghost Line */
+.wb-ruler-ghost-wrap {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: var(--ruler-rail, 56px);
+    height: 0;
+    opacity: 0;
+    z-index: 40;
+    pointer-events: none;
+    will-change: transform, opacity;
+}
+
+.wb-ruler-ghost-line {
+    position: absolute;
+    right: 0;
+    top: -1px;
+    width: 100%;
+    height: 2px;
+    display: block;
+    background-color: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+}
+
+/* Contrast Frosted Pools for Top Stack and Bottom Queue */
+.wb-ruler-pools {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    pointer-events: none;
+}
+
+.wb-ruler-pool-top,
+.wb-ruler-pool-bottom {
+    position: absolute;
+    right: 0;
+    opacity: 0;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: color-mix(in srgb, var(--bg) 80%, transparent);
+    transition: opacity 0.2s ease;
+    will-change: opacity;
+}
+
+.wb-ruler-pool-top {
+    top: 0;
+    mask-image: radial-gradient(
+        100% 100% at 100% 0%,
+        rgba(0, 0, 0, 1) 36%,
+        rgba(0, 0, 0, 0.8) 55%,
+        rgba(0, 0, 0, 0.45) 72%,
+        rgba(0, 0, 0, 0.16) 86%,
+        transparent 98%
+    );
+    -webkit-mask-image: radial-gradient(
+        100% 100% at 100% 0%,
+        rgba(0, 0, 0, 1) 36%,
+        rgba(0, 0, 0, 0.8) 55%,
+        rgba(0, 0, 0, 0.45) 72%,
+        rgba(0, 0, 0, 0.16) 86%,
+        transparent 98%
+    );
+}
+
+.wb-ruler-pool-bottom {
+    bottom: 0;
+    mask-image: radial-gradient(
+        100% 100% at 100% 100%,
+        rgba(0, 0, 0, 1) 36%,
+        rgba(0, 0, 0, 0.8) 55%,
+        rgba(0, 0, 0, 0.45) 72%,
+        rgba(0, 0, 0, 0.16) 86%,
+        transparent 98%
+    );
+    -webkit-mask-image: radial-gradient(
+        100% 100% at 100% 100%,
+        rgba(0, 0, 0, 1) 36%,
+        rgba(0, 0, 0, 0.8) 55%,
+        rgba(0, 0, 0, 0.45) 72%,
+        rgba(0, 0, 0, 0.16) 86%,
+        transparent 98%
+    );
+}
+
+/* Section Letters & Interactive Hit Targets */
+.wb-ruler-hud {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.wb-ruler-hit {
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+    border-radius: 4px;
+    outline: none;
+}
+
+.wb-ruler-hit:focus-visible {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.wb-ruler-char {
+    position: absolute;
+    top: 0;
+    left: 0;
+    white-space: pre;
+    font-family: var(--font-sans);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--text-main);
+    opacity: 0;
+    pointer-events: none;
+    will-change: transform, opacity, color;
+    text-shadow: 0 0 4px var(--bg), 0 0 10px var(--bg);
+}
+
+/* Target highlight flash when jumping to a section */
+@keyframes wb-ruler-target-flash {
+    0% {
+        box-shadow: 0 0 0 2px var(--accent), 0 0 20px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent, 0 0 0 transparent;
+    }
+}
+
+.wb-ruler-section-pulse {
+    animation: wb-ruler-target-flash 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+}
