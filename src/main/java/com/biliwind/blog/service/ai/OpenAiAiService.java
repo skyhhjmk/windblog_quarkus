@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.net.URI;
@@ -29,7 +30,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class OpenAiAiService implements AiService {
 
     private static final Logger LOG = Logger.getLogger(OpenAiAiService.class);
-    private static final Duration TIMEOUT = Duration.ofSeconds(60);
+
+    @Inject
+    @ConfigProperty(name = "windblog.ai.timeout", defaultValue = "300S")
+    Duration timeout;
 
     // 代理选择器及 HttpClient 实例转交由 AiHttpClientHelper 统一维护与缓存
 
@@ -87,7 +91,7 @@ public class OpenAiAiService implements AiService {
             String bodyJson = objectMapper.writeValueAsString(payload);
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(resolveUri(config))
-                    .timeout(TIMEOUT)
+                    .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
             attachApiKeyHeader(builder, config);
@@ -126,6 +130,7 @@ public class OpenAiAiService implements AiService {
 
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(uri)
+                    .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
 
@@ -228,6 +233,7 @@ public class OpenAiAiService implements AiService {
 
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(uri)
+                    .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
 
@@ -306,6 +312,7 @@ public class OpenAiAiService implements AiService {
                 String bodyJson = objectMapper.writeValueAsString(payload);
                 HttpRequest.Builder builder = HttpRequest.newBuilder()
                         .uri(uri)
+                        .timeout(timeout)
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
                 attachApiKeyHeader(builder, config);
@@ -433,6 +440,7 @@ public class OpenAiAiService implements AiService {
 
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
+                    .timeout(Duration.ofSeconds(30))
                     .header("Accept", "application/json")
                     .GET();
 

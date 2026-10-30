@@ -1,5 +1,6 @@
 package com.biliwind.blog.service.ai;
 
+import org.apache.hc.client5.http.async.methods.SimpleHttpRequest;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -9,6 +10,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -16,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -110,5 +113,25 @@ class AiHttpClientHelperTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> AiHttpClientHelper.consumeStreamingResponseBudget(byteCounter, "x"));
+    }
+
+    @Test
+    void shouldProvideDefaultAiTimeoutOfAtLeastFiveMinutes() {
+        Duration timeout = AiHttpClientHelper.getAiTimeout();
+        assertNotNull(timeout);
+        assertTrue(timeout.toSeconds() >= 300, "AI 超时应当至少为 300 秒以防慢请求超时报错");
+    }
+
+    @Test
+    void shouldPropagateRequestTimeoutToApacheRequestConfig() {
+        HttpRequest requestWithTimeout = HttpRequest.newBuilder()
+                .uri(URI.create("https://example.com/api"))
+                .timeout(Duration.ofSeconds(180))
+                .GET()
+                .build();
+        SimpleHttpRequest apacheRequest = AiPinnedHttpClient.toApacheRequest(requestWithTimeout);
+        assertNotNull(apacheRequest.getConfig());
+        assertNotNull(apacheRequest.getConfig().getResponseTimeout());
+        assertEquals(180_000L, apacheRequest.getConfig().getResponseTimeout().toMilliseconds());
     }
 }

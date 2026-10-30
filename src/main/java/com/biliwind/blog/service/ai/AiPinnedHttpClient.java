@@ -71,13 +71,14 @@ final class AiPinnedHttpClient {
 
     static AiPinnedHttpClient direct() {
         PinnedDnsResolver resolver = new PinnedDnsResolver();
+        long responseTimeoutMillis = AiHttpClientHelper.getAiTimeout().toMillis();
         CloseableHttpAsyncClient client = HttpAsyncClients.custom()
                 .setConnectionManager(PoolingAsyncClientConnectionManagerBuilder.create()
                         .setDnsResolver(resolver)
                         .build())
                 .setDefaultRequestConfig(RequestConfig.custom()
                         .setConnectTimeout(Timeout.ofSeconds(60))
-                        .setResponseTimeout(Timeout.ofSeconds(60))
+                        .setResponseTimeout(Timeout.ofMilliseconds(responseTimeoutMillis))
                         .build())
                 .disableRedirectHandling()
                 .disableAutomaticRetries()
@@ -140,8 +141,13 @@ final class AiPinnedHttpClient {
         }
     }
 
-    private static SimpleHttpRequest toApacheRequest(HttpRequest request) {
+    static SimpleHttpRequest toApacheRequest(HttpRequest request) {
         SimpleHttpRequest apacheRequest = SimpleHttpRequest.create(request.method(), request.uri());
+        if (request.timeout().isPresent()) {
+            apacheRequest.setConfig(RequestConfig.custom()
+                    .setResponseTimeout(Timeout.ofMilliseconds(request.timeout().get().toMillis()))
+                    .build());
+        }
         for (Map.Entry<String, List<String>> entry : request.headers().map().entrySet()) {
             if ("host".equalsIgnoreCase(entry.getKey())
                     || "content-length".equalsIgnoreCase(entry.getKey())

@@ -14,10 +14,12 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @ApplicationScoped
 public class AiTaskConsumer {
@@ -25,7 +27,11 @@ public class AiTaskConsumer {
     private static final Logger log = LoggerFactory.getLogger(AiTaskConsumer.class);
     private static final String MQ_TAG = "[MQ]";
     private static final int DEFAULT_MAX_RETRIES = 3;
-    private static final long TASK_TIMEOUT_SECONDS = 60;
+    private static final Duration DEFAULT_TASK_TIMEOUT = Duration.ofSeconds(300);
+
+    @Inject
+    @ConfigProperty(name = "windblog.ai.task.timeout", defaultValue = "300S")
+    Duration taskTimeout;
 
     @Inject
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
@@ -44,6 +50,10 @@ public class AiTaskConsumer {
     @PostConstruct
     void init() {
         log.info("{} AI Task Consumer 初始化完成", MQ_TAG);
+    }
+
+    private long taskTimeoutSeconds() {
+        return taskTimeout == null ? DEFAULT_TASK_TIMEOUT.toSeconds() : Math.max(10, taskTimeout.toSeconds());
     }
 
     private int getMaxRetries() {
@@ -104,7 +114,7 @@ public class AiTaskConsumer {
             // 阻塞等待 AI 结果（在 @Blocking 工作线程上安全）
             AiResult aiResult = aiManager.summarize(task.content())
                     .toCompletableFuture()
-                    .get(TASK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    .get(taskTimeoutSeconds(), TimeUnit.SECONDS);
 
             long endTime = System.currentTimeMillis();
             long durationMs = endTime - startTime;
@@ -155,7 +165,7 @@ public class AiTaskConsumer {
             // 阻塞等待 AI 结果
             AiResult aiResult = aiManager.moderate(task.content())
                     .toCompletableFuture()
-                    .get(TASK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    .get(taskTimeoutSeconds(), TimeUnit.SECONDS);
 
             long endTime = System.currentTimeMillis();
             long durationMs = endTime - startTime;

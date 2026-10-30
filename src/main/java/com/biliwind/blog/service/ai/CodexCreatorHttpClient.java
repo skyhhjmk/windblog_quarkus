@@ -41,7 +41,7 @@ public class CodexCreatorHttpClient {
     @ConfigProperty(name = "windblog.ai.codex-creator.shared-secret", defaultValue = "")
     Optional<String> configuredSecret;
 
-    @ConfigProperty(name = "windblog.ai.codex-creator.timeout", defaultValue = "120S")
+    @ConfigProperty(name = "windblog.ai.codex-creator.timeout", defaultValue = "300S")
     Duration timeout;
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();

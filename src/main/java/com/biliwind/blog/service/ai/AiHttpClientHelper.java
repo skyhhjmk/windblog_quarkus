@@ -4,6 +4,7 @@ import com.biliwind.blog.model.AiProviderConfig;
 import com.biliwind.blog.service.security.ExternalHttpEndpointPolicy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,9 +32,20 @@ public class AiHttpClientHelper {
 
     private static final Logger log = LoggerFactory.getLogger(AiHttpClientHelper.class);
 
-    // 设置 60 秒连接超时
-    private static final Duration TIMEOUT = Duration.ofSeconds(60);
+    // 设置连接超时与默认 AI 响应超时（默认 300 秒，避免长文翻译等慢请求超时）
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration DEFAULT_AI_TIMEOUT = Duration.ofSeconds(300);
     private static final int MAX_NON_STREAM_RESPONSE_BYTES = 8 * 1024 * 1024;
+
+    public static Duration getAiTimeout() {
+        try {
+            return ConfigProvider.getConfig()
+                    .getOptionalValue("windblog.ai.timeout", Duration.class)
+                    .orElse(DEFAULT_AI_TIMEOUT);
+        } catch (Exception e) {
+            return DEFAULT_AI_TIMEOUT;
+        }
+    }
 
     // 直连客户端在每次请求前固定已验证的 DNS 地址。
     private static volatile AiPinnedHttpClient defaultClient;
@@ -96,7 +108,7 @@ public class AiHttpClientHelper {
             }
 
             HttpClient.Builder builder = HttpClient.newBuilder()
-                    .connectTimeout(TIMEOUT)
+                    .connectTimeout(CONNECT_TIMEOUT)
                     .followRedirects(HttpClient.Redirect.NEVER);
 
             if ("HTTP".equalsIgnoreCase(proxyType)) {

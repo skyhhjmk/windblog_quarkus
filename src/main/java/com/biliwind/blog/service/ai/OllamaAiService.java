@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +31,9 @@ public class OllamaAiService implements AiService {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaAiService.class);
 
-    private static final Duration TIMEOUT = Duration.ofSeconds(60);
+    @Inject
+    @ConfigProperty(name = "windblog.ai.timeout", defaultValue = "300S")
+    Duration timeout;
 
     // 代理选择器及 HttpClient 实例转交由 AiHttpClientHelper 统一维护与缓存
 
@@ -91,7 +94,7 @@ public class OllamaAiService implements AiService {
             String bodyJson = objectMapper.writeValueAsString(payload);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(resolveUri(config, "/api/generate"))
-                    .timeout(TIMEOUT)
+                    .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
                     .build();
@@ -138,7 +141,7 @@ public class OllamaAiService implements AiService {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
-                    .timeout(TIMEOUT)
+                    .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
                     .build();
@@ -243,6 +246,7 @@ public class OllamaAiService implements AiService {
             String bodyJson = objectMapper.writeValueAsString(payload);
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(uri)
+                    .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
                     .build();
@@ -300,6 +304,7 @@ public class OllamaAiService implements AiService {
                 String bodyJson = objectMapper.writeValueAsString(payload);
                 HttpRequest req = HttpRequest.newBuilder()
                         .uri(uri)
+                        .timeout(timeout)
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
                         .build();
@@ -373,7 +378,7 @@ public class OllamaAiService implements AiService {
             URI uri = resolveUri(config, "/api/tags");
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
-                    .timeout(TIMEOUT)
+                    .timeout(timeout)
                     .header("Accept", "application/json")
                     .GET()
                     .build();
