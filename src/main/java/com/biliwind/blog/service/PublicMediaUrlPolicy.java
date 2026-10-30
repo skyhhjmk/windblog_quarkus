@@ -24,6 +24,14 @@ public final class PublicMediaUrlPolicy {
         }
     }
 
+    /**
+     * Exposes the same host policy used while sanitizing rendered articles so
+     * list previews never pick an image the article renderer would discard.
+     */
+    public static boolean isAllowedImageSource(String source) {
+        return isAllowed(source, allowedHosts());
+    }
+
     private static boolean isAllowed(String source, Set<String> allowedHosts) {
         if (source.isBlank() || (source.startsWith("/") && !source.startsWith("//"))) {
             return true;

@@ -2,6 +2,7 @@ package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
@@ -143,8 +144,11 @@ public class TagController {
 
         List<Post> posts = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
         java.util.Map<Long, List<TagItem>> tagsByPost = loadTagsByPost(posts, lang);
+        java.util.Map<Long, String> featuredImages = PostCoverImageHelper.findFeaturedImageUrls(
+                posts.stream().map(post -> post.id).toList());
         List<TagPostItem> postItems = posts.stream()
-                .map(post -> toTagPostItem(post, lang, tagsByPost.getOrDefault(post.id, List.of())))
+                .map(post -> toTagPostItem(post, lang, tagsByPost.getOrDefault(post.id, List.of()),
+                        featuredImages.get(post.id)))
                 .toList();
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
@@ -204,7 +208,8 @@ public class TagController {
         return postCounts;
     }
 
-    private TagPostItem toTagPostItem(Post post, String lang, List<TagItem> tags) {
+    private TagPostItem toTagPostItem(Post post, String lang, List<TagItem> tags,
+                                      String featuredImageUrl) {
         String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
 
@@ -225,8 +230,9 @@ public class TagController {
             categories = List.of(new CategoryItem(
                     LanguageHelper.resolveLocalizedValue(post.category.name, lang), post.category.slug));
         }
-        return new TagPostItem(post.slug, title, summary, formatDate(date), 
-                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", categories, tags);
+        return new TagPostItem(post.slug, title, summary, formatDate(date),
+                post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", categories, tags,
+                PostCoverImageHelper.resolveCoverImage(post, lang, featuredImageUrl));
     }
 
     @TemplateData
@@ -339,6 +345,6 @@ public class TagController {
     }
 
     @TemplateData
-    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags) {
+    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags, String coverImageUrl) {
     }
 }

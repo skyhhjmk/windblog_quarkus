@@ -245,7 +245,7 @@ public class IndexController {
             result.add(new IndexPostItem(
                     snapshot.slug(), title, summary, snapshot.aiSummary(), aiSummaryStatusValue,
                     snapshot.publishedAt(), snapshot.createdAt(), categoryName, categorySlug,
-                    categories, snapshot.authorName(), tags));
+                    categories, snapshot.authorName(), tags, snapshot.coverImageUrl()));
         }
         return result;
     }
@@ -269,7 +269,8 @@ public class IndexController {
             String categorySlug,
             List<CategoryItem> categories,
             String authorName,
-            List<TagItem> tags
+            List<TagItem> tags,
+            String coverImageUrl
     ) {
     }
 

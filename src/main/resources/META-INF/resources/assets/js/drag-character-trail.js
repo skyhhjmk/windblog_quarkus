@@ -40,7 +40,6 @@
     let cellCount = 0;
     let cellX = new Float32Array();
     let cellY = new Float32Array();
-    let cellFade = new Float32Array();
     let baseGlyph = new Uint8Array();
     const points = [];
     let previousX = -9000;
@@ -115,32 +114,14 @@
         cellCount = columns * rows;
         cellX = new Float32Array(cellCount);
         cellY = new Float32Array(cellCount);
-        cellFade = new Float32Array(cellCount);
         baseGlyph = new Uint8Array(cellCount);
 
-        const halfWidth = width * 0.32;
-        const halfHeight = height * 0.35;
         for (let row = 0; row < rows; row++) {
             for (let column = 0; column < columns; column++) {
                 const index = row * columns + column;
-                const x = column * cellSize + cellSize * 0.5;
-                const y = row * cellSize + cellSize * 0.5;
-                cellX[index] = x;
-                cellY[index] = y;
+                cellX[index] = column * cellSize + cellSize * 0.5;
+                cellY[index] = row * cellSize + cellSize * 0.5;
                 baseGlyph[index] = Math.random() * glyphs.length | 0;
-
-                const normalizedX = (x - width / 2) / halfWidth;
-                const normalizedY = (y - height / 2) / halfHeight;
-                const distance = Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
-                // Same falloff as the old CSS radial mask, baked into the alpha
-                // so the canvas needs no mask layer of its own.
-                if (distance <= 0.3) {
-                    cellFade[index] = 1;
-                } else if (distance <= 0.62) {
-                    cellFade[index] = 1 - 0.45 * ((distance - 0.3) / 0.32);
-                } else if (distance <= 0.92) {
-                    cellFade[index] = 0.55 * (1 - (distance - 0.62) / 0.3);
-                }
             }
         }
         points.length = 0;
@@ -177,8 +158,6 @@
         const radiusSquared = radius * radius;
         const pointCount = points.length;
         for (let index = 0; index < cellCount; index++) {
-            const fade = cellFade[index];
-            if (fade <= 0) continue;
             const x = cellX[index];
             const y = cellY[index];
             if (x < minX || x > maxX || y < minY || y > maxY) continue;
@@ -200,7 +179,6 @@
                 if (influence > intensity) intensity = influence;
             }
 
-            intensity *= fade;
             if (intensity < 0.03) continue;
             const glyphIndex = intensity > 0.25
                 ? (baseGlyph[index] + ((frame * 0.06 + intensity * 2 | 0) & 32767)) % glyphs.length
