@@ -46,6 +46,38 @@
         }
     }
 
+    function updateCoverCropAlignment(image) {
+        if (!image || !(image.naturalWidth > 0 && image.naturalHeight > 0)) {
+            return;
+        }
+        var aspect = image.naturalHeight / image.naturalWidth;
+        if (aspect >= 1.15) {
+            image.classList.add('is-tall-crop');
+        } else {
+            image.classList.remove('is-tall-crop');
+        }
+    }
+
+    function prepareCoverImage(image) {
+        if (!image || !image.getAttribute('src') || !image.getAttribute('src').trim()
+                || image.dataset.coverImagePrepared === 'true') {
+            return;
+        }
+        image.dataset.coverImagePrepared = 'true';
+        if (!image.getAttribute('loading')) {
+            image.setAttribute('loading', 'lazy');
+        }
+        if (!image.getAttribute('decoding')) {
+            image.setAttribute('decoding', 'async');
+        }
+        image.addEventListener('load', function () {
+            updateCoverCropAlignment(image);
+        }, { once: true });
+        if (image.complete && image.naturalWidth > 0) {
+            updateCoverCropAlignment(image);
+        }
+    }
+
     function prepareImages(root) {
         if (!root) {
             return;
@@ -53,8 +85,12 @@
         if (root.matches && root.matches('.prose img[src]')) {
             prepareImage(root);
         }
+        if (root.matches && root.matches('.post-list-cover-img[src]')) {
+            prepareCoverImage(root);
+        }
         if (root.querySelectorAll) {
             root.querySelectorAll('.prose img[src]').forEach(prepareImage);
+            root.querySelectorAll('.post-list-cover-img[src]').forEach(prepareCoverImage);
         }
     }
 
