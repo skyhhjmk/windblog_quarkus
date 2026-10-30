@@ -1,6 +1,7 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.CacheService;
+import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostMedia;
@@ -122,8 +123,10 @@ public class PublicCacheRefreshService {
                                                            String language, String regionCode) {
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, Math.min(50, pageSize));
+        // The cover-image projection changed; a versioned suffix avoids serving
+        // pre-upgrade snapshots (which deserialize with a null cover) for 30 minutes.
         String cacheKey = CacheService.Keys.indexPage(safePage,
-                safeLanguage(language) + ":" + safeRegion(regionCode) + ":size:" + safePageSize);
+                safeLanguage(language) + ":" + safeRegion(regionCode) + ":size:" + safePageSize + ":cover-v1");
         Optional<PublicIndexPageSnapshot> cached = cacheService.get(cacheKey, PublicIndexPageSnapshot.class);
         if (cached.isPresent()) {
             return cached.get();
@@ -141,7 +144,7 @@ public class PublicCacheRefreshService {
                 parameters);
         long totalPostsCount = query.count();
         List<Post> posts = query.page(Page.of(safePage - 1, safePageSize)).list();
-        List<PublicPostListSnapshot> postItems = toPublicPostListSnapshots(posts);
+        List<PublicPostListSnapshot> postItems = toPublicPostListSnapshots(posts, language);
         long totalPages = totalPostsCount == 0
                 ? 1
                 : (long) Math.ceil((double) totalPostsCount / safePageSize);
@@ -178,7 +181,7 @@ public class PublicCacheRefreshService {
                         + "order by publishedAt desc nulls last, createdAt desc, id desc",
                 parameters);
         List<PublicPostListSnapshot> result = toPublicPostListSnapshots(
-                query.page(Page.ofSize(safeLimit)).list());
+                query.page(Page.ofSize(safeLimit)).list(), safeLang);
         cacheService.set(cacheKey, result, Duration.ofMinutes(30));
         return result;
     }
@@ -335,7 +338,7 @@ public class PublicCacheRefreshService {
                 resolveRelatedStoreItems(post.extraInfo));
     }
 
-    private List<PublicPostListSnapshot> toPublicPostListSnapshots(List<Post> posts) {
+    private List<PublicPostListSnapshot> toPublicPostListSnapshots(List<Post> posts, String language) {
         if (posts.isEmpty()) {
             return List.of();
         }
@@ -353,6 +356,7 @@ public class PublicCacheRefreshService {
                     .add(new PublicTagSnapshot(copyMap(postTag.tag.name), postTag.tag.slug));
         }
 
+        Map<Long, String> featuredImages = PostCoverImageHelper.findFeaturedImageUrls(postIds);
         List<PublicPostListSnapshot> result = new ArrayList<>();
         for (Post post : posts) {
             Map<String, String> categoryName = post.category == null
@@ -378,7 +382,8 @@ public class PublicCacheRefreshService {
                     categories,
                     resolveAuthorName(post),
                     tagsByPost.getOrDefault(post.id, List.of()),
-                    copyList(post.visibilityRegions)));
+                    copyList(post.visibilityRegions),
+                    PostCoverImageHelper.resolveCoverImage(post, language, featuredImages.get(post.id))));
         }
         return result;
     }
@@ -558,7 +563,8 @@ public class PublicCacheRefreshService {
             List<PublicCategorySnapshot> categories,
             String authorName,
             List<PublicTagSnapshot> tags,
-            List<String> visibilityRegions) {
+            List<String> visibilityRegions,
+            String coverImageUrl) {
     }
 
     @RegisterForReflection
