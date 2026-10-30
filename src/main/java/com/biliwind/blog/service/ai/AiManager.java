@@ -57,11 +57,12 @@ public class AiManager {
         AiProviderConfig best = selectionService.select("summarize", configs);
         if (best == null) return CompletableFuture.failedFuture(new RuntimeException("没有允许摘要操作的 AI 配置"));
         
+        // 降级配置必须在调用线程上解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        AiProviderConfig fallback = selectionService.fallback("summarize", configs, best);
+
         log.info("[AI] 开始生成摘要，接管配置={}", best.name);
-        return executeSummarize(best, content).exceptionallyCompose(error -> {
-            AiProviderConfig fallback = selectionService.fallback("summarize", configs, best);
-            return fallback == null ? CompletableFuture.failedFuture(error) : executeSummarize(fallback, content);
-        });
+        return executeSummarize(best, content).exceptionallyCompose(error ->
+                fallback == null ? CompletableFuture.failedFuture(error) : executeSummarize(fallback, content));
     }
 
     public CompletionStage<AiResult> moderate(String content) {
@@ -84,13 +85,13 @@ public class AiManager {
             prompt = setting.configValue.get("prompt").asText();
         }
         final String effectivePrompt = prompt;
+        // 降级配置必须在调用线程上解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        AiProviderConfig fallback = selectionService.fallback("moderate", configs, best);
 
         log.info("[AI] 开始审核内容，使用配置={}, provider={}", best.name, best.provider);
-        return executeModerate(best, effectivePrompt, content).thenApply(this::validateModerationResult).exceptionallyCompose(error -> {
-            AiProviderConfig fallback = selectionService.fallback("moderate", configs, best);
-            return fallback == null ? CompletableFuture.failedFuture(error)
-                    : executeModerate(fallback, effectivePrompt, content).thenApply(this::validateModerationResult);
-        });
+        return executeModerate(best, effectivePrompt, content).thenApply(this::validateModerationResult)
+                .exceptionallyCompose(error -> fallback == null ? CompletableFuture.failedFuture(error)
+                        : executeModerate(fallback, effectivePrompt, content).thenApply(this::validateModerationResult));
     }
 
     private AiResult validateModerationResult(AiResult result) {
@@ -123,13 +124,12 @@ public class AiManager {
         }
         String effectivePrompt = promptTemplate == null || promptTemplate.isBlank()
                 ? configuredTranslationPrompt() : promptTemplate;
+        // 降级配置必须在调用线程上解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        AiProviderConfig fallback = selectionService.fallback("translate", configs, selected);
 
         return executeTranslate(selected, sourceLanguage, targetLanguage, fields, effectivePrompt)
-                .exceptionallyCompose(error -> {
-                    AiProviderConfig fallback = selectionService.fallback("translate", configs, selected);
-                    return fallback == null ? CompletableFuture.failedFuture(error)
-                            : executeTranslate(fallback, sourceLanguage, targetLanguage, fields, effectivePrompt);
-                });
+                .exceptionallyCompose(error -> fallback == null ? CompletableFuture.failedFuture(error)
+                        : executeTranslate(fallback, sourceLanguage, targetLanguage, fields, effectivePrompt));
     }
 
     public CompletionStage<AiResult> executeTranslate(AiProviderConfig config, String sourceLanguage,
@@ -179,15 +179,16 @@ public class AiManager {
             return CompletableFuture.failedFuture(new RuntimeException("没有可用的 AI 配置"));
         }
         final AiProviderConfig primary = selected;
+        // 降级配置必须在调用线程上解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        AiProviderConfig fallback = selectionService.fallback("assistant", configs, primary);
+        if (fallback == null) {
+            fallback = selectionService.fallback("writing", configs, primary);
+        }
+        final AiProviderConfig fallbackConfig = fallback;
         log.info("[AI] 开始写作调用，使用配置={}, provider={}", primary.name, primary.provider);
-        return executeComplete(primary, systemPrompt, prompt).exceptionallyCompose(error -> {
-            AiProviderConfig fallback = selectionService.fallback("assistant", configs, primary);
-            if (fallback == null) {
-                fallback = selectionService.fallback("writing", configs, primary);
-            }
-            return fallback == null ? CompletableFuture.failedFuture(error)
-                    : executeComplete(fallback, systemPrompt, prompt);
-        });
+        return executeComplete(primary, systemPrompt, prompt).exceptionallyCompose(error ->
+                fallbackConfig == null ? CompletableFuture.failedFuture(error)
+                        : executeComplete(fallbackConfig, systemPrompt, prompt));
     }
 
     public CompletionStage<AiResult> executeComplete(AiProviderConfig config, String systemPrompt, String prompt) {

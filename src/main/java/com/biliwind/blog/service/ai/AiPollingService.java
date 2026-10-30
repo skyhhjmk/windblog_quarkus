@@ -74,15 +74,13 @@ public class AiPollingService {
         }
 
         NodeInfo selected = pickNext(nodes, alg, groupConfig.id);
-        int startIdx = 0;
-        for (int i = 0; i < nodes.size(); i++) {
-            if (nodes.get(i).id().equals(selected.id())) {
-                startIdx = i;
-                break;
-            }
+        // 节点配置必须在调用线程上一次性解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        List<AiProviderConfig> providers = resolveProviders(nodes);
+        if (providers.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中没有可用的节点配置"));
         }
 
-        return tryNodesForSummarize(nodes, startIdx, 0, content);
+        return tryNodesForSummarize(providers, startIndex(providers, selected), 0, content);
     }
 
     public CompletionStage<AiResult> translate(AiProviderConfig groupConfig, String sourceLanguage,
@@ -94,14 +92,13 @@ public class AiPollingService {
         }
 
         NodeInfo selected = pickNext(nodes, algorithm, groupConfig.id);
-        int startIndex = 0;
-        for (int i = 0; i < nodes.size(); i++) {
-            if (nodes.get(i).id().equals(selected.id())) {
-                startIndex = i;
-                break;
-            }
+        // 节点配置必须在调用线程上一次性解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        List<AiProviderConfig> providers = resolveProviders(nodes);
+        if (providers.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中没有可用的节点配置"));
         }
-        return tryNodesForTranslate(nodes, startIndex, 0, sourceLanguage, targetLanguage, fields, promptTemplate);
+        return tryNodesForTranslate(providers, startIndex(providers, selected), 0,
+                sourceLanguage, targetLanguage, fields, promptTemplate);
     }
 
     public CompletionStage<AiResult> complete(AiProviderConfig groupConfig, String systemPrompt, String prompt) {
@@ -111,14 +108,12 @@ public class AiPollingService {
             return CompletableFuture.failedFuture(new RuntimeException("轮询组中配置的节点列表为空"));
         }
         NodeInfo selected = pickNext(nodes, algorithm, groupConfig.id);
-        int startIndex = 0;
-        for (int i = 0; i < nodes.size(); i++) {
-            if (nodes.get(i).id().equals(selected.id())) {
-                startIndex = i;
-                break;
-            }
+        // 节点配置必须在调用线程上一次性解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        List<AiProviderConfig> providers = resolveProviders(nodes);
+        if (providers.isEmpty()) {
+            return CompletableFuture.failedFuture(new RuntimeException("轮询组中没有可用的节点配置"));
         }
-        return tryNodesForComplete(nodes, startIndex, 0, systemPrompt, prompt);
+        return tryNodesForComplete(providers, startIndex(providers, selected), 0, systemPrompt, prompt);
     }
 
     public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String prompt, String content) {
@@ -129,15 +124,41 @@ public class AiPollingService {
         }
 
         NodeInfo selected = pickNext(nodes, alg, groupConfig.id);
-        int startIdx = 0;
-        for (int i = 0; i < nodes.size(); i++) {
-            if (nodes.get(i).id().equals(selected.id())) {
-                startIdx = i;
-                break;
-            }
+        // 节点配置必须在调用线程上一次性解析：异步回调线程没有事务/请求上下文，不能访问数据库。
+        List<AiProviderConfig> providers = resolveProviders(nodes);
+        if (providers.isEmpty()) {
+            return CompletableFuture.failedFuture(new IllegalStateException("轮询组中没有可用的审核节点配置"));
         }
 
-        return tryNodesForModerate(nodes, startIdx, 0, prompt, content);
+        return tryNodesForModerate(providers, startIndex(providers, selected), 0, prompt, content);
+    }
+
+    /**
+     * 在当前线程（有事务或请求上下文）按轮询组顺序解析出可用节点。
+     * 不能让异步回调线程再查询数据库，否则会抛出
+     * "Cannot use the EntityManager/Session because neither a transaction nor a CDI request context is active"。
+     */
+    private List<AiProviderConfig> resolveProviders(List<NodeInfo> nodes) {
+        List<AiProviderConfig> providers = new ArrayList<>(nodes.size());
+        for (NodeInfo node : nodes) {
+            AiProviderConfig config = configService.getById(node.id()).orElse(null);
+            if (config != null && config.enabled && config.type == AiConfigType.PROVIDER) {
+                providers.add(config);
+            }
+        }
+        return providers;
+    }
+
+    private static int startIndex(List<AiProviderConfig> providers, NodeInfo selected) {
+        if (selected == null) {
+            return 0;
+        }
+        for (int i = 0; i < providers.size(); i++) {
+            if (selected.id().equals(providers.get(i).id)) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig groupConfig, com.biliwind.blog.controller.api.admin.dto.AiTestRequest req) {
@@ -182,95 +203,74 @@ public class AiPollingService {
         }
     }
 
-    private CompletionStage<AiResult> tryNodesForSummarize(List<NodeInfo> nodes, int startIdx, int retryCount, Map<String, String> content) {
-        if (nodes.isEmpty() || retryCount >= nodes.size()) {
+    private CompletionStage<AiResult> tryNodesForSummarize(List<AiProviderConfig> providers, int startIdx,
+            int retryCount, Map<String, String> content) {
+        if (providers.isEmpty() || retryCount >= providers.size()) {
             return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点调用失败或无节点"));
         }
 
-        int currentIdx = (startIdx + retryCount) % nodes.size();
-        NodeInfo selected = nodes.get(currentIdx);
-        AiProviderConfig cfg = configService.getById(selected.id()).orElse(null);
-        if (cfg == null || !cfg.enabled || cfg.type != AiConfigType.PROVIDER) {
-            return tryNodesForSummarize(nodes, startIdx, retryCount + 1, content);
-        }
-
+        AiProviderConfig cfg = providers.get((startIdx + retryCount) % providers.size());
         return aiManager.executeSummarize(cfg, content)
                 .handle((res, ex) -> {
                     if (ex != null) {
                         log.warn("轮询节点 {} 失败: {}", cfg.name,
                                 SensitiveMessageSanitizer.sanitize(ex.getMessage()));
-                        return tryNodesForSummarize(nodes, startIdx, retryCount + 1, content);
+                        return tryNodesForSummarize(providers, startIdx, retryCount + 1, content);
                     }
                     return CompletableFuture.completedStage(res);
                 }).thenCompose(s -> s);
     }
 
-    private CompletionStage<AiResult> tryNodesForTranslate(List<NodeInfo> nodes, int startIndex, int retryCount,
-            String sourceLanguage, String targetLanguage, Map<String, String> fields, String promptTemplate) {
-        if (nodes.isEmpty() || retryCount >= nodes.size()) {
+    private CompletionStage<AiResult> tryNodesForTranslate(List<AiProviderConfig> providers, int startIndex,
+            int retryCount, String sourceLanguage, String targetLanguage, Map<String, String> fields,
+            String promptTemplate) {
+        if (providers.isEmpty() || retryCount >= providers.size()) {
             return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点调用翻译失败"));
         }
 
-        int currentIndex = (startIndex + retryCount) % nodes.size();
-        NodeInfo selected = nodes.get(currentIndex);
-        AiProviderConfig config = configService.getById(selected.id()).orElse(null);
-        if (config == null || !config.enabled || config.type != AiConfigType.PROVIDER) {
-            return tryNodesForTranslate(nodes, startIndex, retryCount + 1, sourceLanguage, targetLanguage, fields,
-                    promptTemplate);
-        }
-
+        AiProviderConfig config = providers.get((startIndex + retryCount) % providers.size());
         return aiManager.executeTranslate(config, sourceLanguage, targetLanguage, fields, promptTemplate)
                 .handle((result, error) -> {
                     if (error != null) {
                         log.warn("轮询节点 {} 翻译失败: {}", config.name,
                                 SensitiveMessageSanitizer.sanitize(error.getMessage()));
-                        return tryNodesForTranslate(nodes, startIndex, retryCount + 1,
+                        return tryNodesForTranslate(providers, startIndex, retryCount + 1,
                                 sourceLanguage, targetLanguage, fields, promptTemplate);
                     }
                     return CompletableFuture.completedStage(result);
                 }).thenCompose(stage -> stage);
     }
 
-    private CompletionStage<AiResult> tryNodesForComplete(List<NodeInfo> nodes, int startIndex, int retryCount,
-            String systemPrompt, String prompt) {
-        if (nodes.isEmpty() || retryCount >= nodes.size()) {
+    private CompletionStage<AiResult> tryNodesForComplete(List<AiProviderConfig> providers, int startIndex,
+            int retryCount, String systemPrompt, String prompt) {
+        if (providers.isEmpty() || retryCount >= providers.size()) {
             return CompletableFuture.failedFuture(new RuntimeException("轮询组中所有节点写作调用失败"));
         }
-        int currentIndex = (startIndex + retryCount) % nodes.size();
-        NodeInfo selected = nodes.get(currentIndex);
-        AiProviderConfig config = configService.getById(selected.id()).orElse(null);
-        if (config == null || !config.enabled || config.type != AiConfigType.PROVIDER) {
-            return tryNodesForComplete(nodes, startIndex, retryCount + 1, systemPrompt, prompt);
-        }
+        AiProviderConfig config = providers.get((startIndex + retryCount) % providers.size());
         return aiManager.executeComplete(config, systemPrompt, prompt)
                 .handle((result, error) -> {
                     if (error != null) {
                         log.warn("轮询节点 {} 写作调用失败: {}", config.name,
                                 SensitiveMessageSanitizer.sanitize(error.getMessage()));
-                        return tryNodesForComplete(nodes, startIndex, retryCount + 1, systemPrompt, prompt);
+                        return tryNodesForComplete(providers, startIndex, retryCount + 1, systemPrompt, prompt);
                     }
                     return CompletableFuture.completedStage(result);
                 }).thenCompose(stage -> stage);
     }
 
-    private CompletionStage<AiResult> tryNodesForModerate(List<NodeInfo> nodes, int startIdx, int retryCount, String prompt, String content) {
-        if (nodes.isEmpty() || retryCount >= nodes.size()) {
+    private CompletionStage<AiResult> tryNodesForModerate(List<AiProviderConfig> providers, int startIdx,
+            int retryCount, String prompt, String content) {
+        if (providers.isEmpty() || retryCount >= providers.size()) {
             return CompletableFuture.failedFuture(new IllegalStateException("轮询组中所有节点调用审核失败"));
         }
 
-        int currentIdx = (startIdx + retryCount) % nodes.size();
-        NodeInfo selected = nodes.get(currentIdx);
-        AiProviderConfig cfg = configService.getById(selected.id()).orElse(null);
-        if (cfg == null || !cfg.enabled || cfg.type != AiConfigType.PROVIDER) {
-            return tryNodesForModerate(nodes, startIdx, retryCount + 1, prompt, content);
-        }
-
+        AiProviderConfig cfg = providers.get((startIdx + retryCount) % providers.size());
         return aiManager.executeModerate(cfg, prompt, content)
                 .handle((res, ex) -> {
                     if (ex != null) {
                         log.warn("轮询节点 {} 审核失败: {}", cfg.name,
                                 SensitiveMessageSanitizer.sanitize(ex.getMessage()));
-                        return tryNodesForModerate(nodes, startIdx, retryCount + 1, prompt, content);
+                        return tryNodesForModerate(providers, startIdx, retryCount + 1, prompt, content);
                     }
                     return CompletableFuture.completedStage(res);
                 }).thenCompose(s -> s);
