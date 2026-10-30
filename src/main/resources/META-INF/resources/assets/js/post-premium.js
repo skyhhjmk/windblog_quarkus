@@ -111,20 +111,26 @@
 
             const optionalRegistration = button.id === 'optional-repost-registration-button';
             if (optionalRegistration) {
-                const confirmed = await window.confirm(
-                    '这是自愿登记，不是转载前置条件。是否生成可选的授权码和追踪短链？');
+                const confirmed = await window.confirm(window.wbT(
+                    'js.repost_optional_confirm',
+                    '这是自愿登记，不是转载前置条件。是否生成可选的授权码和追踪短链？'));
                 if (!confirmed) {
                     return;
                 }
             }
 
-            const targetUrl = await window.prompt('请输入转载页面 URL', 'https://');
+            const targetUrl = await window.prompt(
+                window.wbT('js.repost_target_prompt', '请输入转载页面 URL'), 'https://');
             if (!targetUrl) {
                 return;
             }
 
             if (window.setLoading) {
-                window.setLoading(button, true, {text: optionalRegistration ? '登记中' : '申请中'});
+                window.setLoading(button, true, {
+                    text: optionalRegistration
+                        ? window.wbT('js.repost_registering', '登记中')
+                        : window.wbT('js.repost_requesting', '申请中')
+                });
             }
 
             try {
@@ -138,7 +144,8 @@
                     credentials: 'same-origin',
                     body: JSON.stringify({
                         postSlug: button.dataset.postRef,
-                        targetUrl: targetUrl
+                        targetUrl: targetUrl,
+                        language: document.documentElement.lang || ''
                     })
                 });
                 const responseText = await response.text();
@@ -149,22 +156,30 @@
                     result = {};
                 }
                 if (!response.ok || !result.success) {
-                    const message = result.message || (optionalRegistration ? '登记失败' : '申请失败');
+                    const message = result.message || (optionalRegistration
+                        ? window.wbT('js.repost_register_failed', '登记失败')
+                        : window.wbT('js.repost_apply_failed', '申请失败'));
                     await window.alert(message);
                     return;
                 }
 
                 await window.showModal({
-                    title: optionalRegistration ? '自愿登记已生成' : '转载授权已生成',
+                    title: optionalRegistration
+                        ? window.wbT('js.repost_title_optional_generated', '自愿登记已生成')
+                        : window.wbT('js.repost_title_generated', '转载授权已生成'),
                     message: result.data.copy.markdown,
                     showCancel: false
                 });
             } catch (error) {
-                await window.alert(optionalRegistration ? '登记失败，请稍后重试' : '申请失败，请稍后重试');
+                await window.alert(optionalRegistration
+                    ? window.wbT('js.repost_register_failed', '登记失败，请稍后重试')
+                    : window.wbT('js.repost_apply_failed', '申请失败，请稍后重试'));
             } finally {
                 if (window.setLoading) {
                     window.setLoading(button, false, {
-                        text: optionalRegistration ? '自愿登记转载' : '我要转载'
+                        text: optionalRegistration
+                            ? window.wbT('js.repost_register_button', '自愿登记转载')
+                            : window.wbT('js.repost_request_button', '我要转载')
                     });
                 }
                 button.disabled = false;
@@ -193,21 +208,27 @@
                 ? template.content.textContent.trim()
                 : '';
             if (!copyText) {
-                await window.alert('转载说明暂不可用，请刷新页面后重试');
+                await window.alert(window.wbT(
+                    'js.repost_copy_unavailable', '转载说明暂不可用，请刷新页面后重试'));
                 return;
             }
 
             if (window.setLoading) {
-                window.setLoading(button, true, {text: '复制中'});
+                window.setLoading(button, true, {
+                    text: window.wbT('js.repost_copying', '复制中')
+                });
             }
             try {
                 await copyRepostText(copyText);
-                window.showToast('转载说明已复制', 'success');
+                window.showToast(window.wbT('js.repost_copied', '转载说明已复制'), 'success');
             } catch (error) {
-                await window.alert('复制失败，请手动复制页面中的转载信息');
+                await window.alert(window.wbT(
+                    'js.repost_copy_failed', '复制失败，请手动复制页面中的转载信息'));
             } finally {
                 if (window.setLoading) {
-                    window.setLoading(button, false, {text: '复制转载说明'});
+                    window.setLoading(button, false, {
+                        text: window.wbT('js.repost_copy_button', '复制转载说明')
+                    });
                 }
             }
         });

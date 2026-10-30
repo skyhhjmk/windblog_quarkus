@@ -1,10 +1,12 @@
 package com.biliwind.blog.service.repost;
 
+import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.model.Post;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.BadRequestException;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
@@ -153,8 +155,29 @@ public class RepostPolicyCatalog {
     }
 
     public String buildDirectCopyText(Policy policy, String title, String originalUrl) {
+        return buildDirectCopyText(policy, title, originalUrl, LanguageConstant.DEFAULT_LANG);
+    }
+
+    public String buildDirectCopyText(Policy policy, String title, String originalUrl, String language) {
         Objects.requireNonNull(policy, "policy");
+        boolean english = isEnglish(language);
         StringBuilder text = new StringBuilder();
+        if (english) {
+            text.append("This article is licensed under ").append(policy.nameEn())
+                    .append("; no application is required.\n");
+            text.append("Reposting conditions:\n");
+            for (String condition : policy.conditionsEn()) {
+                text.append("- ").append(condition).append("\n");
+            }
+            text.append("\n");
+            if (title != null && !title.isBlank()) {
+                text.append("Original title: ").append(title.trim()).append("\n");
+            }
+            text.append("Original URL: ").append(originalUrl).append("\n");
+            text.append("License URL: ").append(policy.licenseUrl()).append("\n");
+            text.append("\nAttribution: This article is reposted from the original URL above under the terms of that license.");
+            return text.toString();
+        }
         text.append("本文使用 ").append(policy.name()).append(" 协议，无须申请转载。\n");
         text.append("转载条件：\n");
         for (String condition : policy.conditions()) {
@@ -170,6 +193,10 @@ public class RepostPolicyCatalog {
         return text.toString();
     }
 
+    public static boolean isEnglish(String language) {
+        return language != null && language.trim().toLowerCase(Locale.ROOT).startsWith("en");
+    }
+
     public record Policy(
             String code,
             String name,
@@ -180,5 +207,17 @@ public class RepostPolicyCatalog {
             String summaryEn,
             List<String> conditions,
             List<String> conditionsEn) {
+
+        public String nameFor(String language) {
+            return isEnglish(language) ? nameEn : name;
+        }
+
+        public String summaryFor(String language) {
+            return isEnglish(language) ? summaryEn : summary;
+        }
+
+        public List<String> conditionsFor(String language) {
+            return isEnglish(language) ? conditionsEn : conditions;
+        }
     }
 }

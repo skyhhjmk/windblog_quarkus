@@ -287,7 +287,7 @@ public class PostController {
         String repostOriginalUrl = repostLicenseService.buildPostUrl(slug);
         String repostDirectCopyText = repostPolicy.requiresApplication()
                 ? ""
-                : repostPolicyCatalog.buildDirectCopyText(repostPolicy, displayTitle, repostOriginalUrl);
+                : repostPolicyCatalog.buildDirectCopyText(repostPolicy, displayTitle, repostOriginalUrl, resolvedLang);
 
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
@@ -321,10 +321,10 @@ public class PostController {
                 .data("relatedStoreItems", snapshot.relatedStoreItems())
                 .data("relatedArticles", seoAuditService.related(com.biliwind.blog.model.Post.findById(snapshot.postId()), resolvedLang))
                 .data("repostPolicyCode", repostPolicy.code())
-                .data("repostPolicyName", repostPolicy.name())
-                .data("repostPolicySummary", repostPolicy.summary())
+                .data("repostPolicyName", repostPolicy.nameFor(resolvedLang))
+                .data("repostPolicySummary", repostPolicy.summaryFor(resolvedLang))
                 .data("repostPolicyRequiresApplication", repostPolicy.requiresApplication())
-                .data("repostPolicyConditions", repostPolicy.conditions())
+                .data("repostPolicyConditions", repostPolicy.conditionsFor(resolvedLang))
                 .data("repostPolicyLicenseUrl", repostPolicy.licenseUrl())
                 .data("repostDirectCopyText", repostDirectCopyText)
                 .data("repostOriginalUrl", repostOriginalUrl)

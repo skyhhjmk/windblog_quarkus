@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.repost;
 
 import com.biliwind.blog.model.*;
+import com.biliwind.blog.service.PublicUrlService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -41,6 +42,9 @@ public class GoRedirectService {
     RepostDetectionService repostDetectionService;
 
     @Inject
+    PublicUrlService publicUrlService;
+
+    @Inject
     com.biliwind.blog.service.security.SecurityRateLimitService securityRateLimitService;
 
     @Inject
@@ -60,14 +64,7 @@ public class GoRedirectService {
             throw new WebApplicationException(Response.Status.GONE);
         }
 
-        AffiliateLink affiliateLink = affiliateToken.affiliateLink;
-        if (affiliateLink == null) {
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
-        }
-
-        if (affiliateLink.status != 1) {
-            throw new WebApplicationException(Response.Status.GONE);
-        }
+        String targetUrl = resolveRedirectTarget(affiliateToken);
 
         String refererUrl = resolveHeader(httpHeaders, "Referer");
         String refererDomain = repostDomainService.normalizeDomainFromUrl(refererUrl);
@@ -105,10 +102,41 @@ public class GoRedirectService {
             repostDetectionService.recordSuspiciousExternalClick(affiliateToken, clickEvent, riskScore);
         }
 
-        Response.ResponseBuilder responseBuilder = buildRedirectResponse(affiliateLink.targetUrl);
+        Response.ResponseBuilder responseBuilder = buildRedirectResponse(targetUrl);
         responseBuilder.header("X-Robots-Tag", "noindex, nofollow");
         responseBuilder.header("Cache-Control", "no-store");
         return responseBuilder.build();
+    }
+
+    /**
+     * First-party tokens target a registered commercial link. Repost-license
+     * tokens without a bound link fall back to the article's public page, so a
+     * reposted page can keep a working, attributable link back to the source.
+     */
+    private String resolveRedirectTarget(AffiliateToken affiliateToken) {
+        AffiliateLink affiliateLink = affiliateToken.affiliateLink;
+        if (affiliateLink != null) {
+            if (affiliateLink.status != 1) {
+                throw new WebApplicationException(Response.Status.GONE);
+            }
+            if (affiliateLink.targetUrl == null || affiliateLink.targetUrl.isBlank()) {
+                throw new WebApplicationException(Response.Status.NOT_FOUND);
+            }
+            return affiliateLink.targetUrl;
+        }
+
+        RepostLicense repostLicense = affiliateToken.repostLicense;
+        if (repostLicense == null) {
+            throw new WebApplicationException(Response.Status.NOT_FOUND);
+        }
+        if (repostLicense.status != 1) {
+            throw new WebApplicationException(Response.Status.GONE);
+        }
+        Post article = repostLicense.article;
+        if (article == null || article.slug == null || article.slug.isBlank()) {
+            throw new WebApplicationException(Response.Status.NOT_FOUND);
+        }
+        return publicUrlService.buildPath("/post/" + article.slug);
     }
 
     public String classifyReferer(AffiliateToken affiliateToken, String refererDomain) {

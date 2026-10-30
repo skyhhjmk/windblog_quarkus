@@ -33,6 +33,28 @@
 - `GET /api/admin/base/ping`: 连通性检查
 - `GET /api/admin/base/overview`: 概览统计
 
+### 4) 转载管理接口
+- `GET /api/admin/repost/policies`: 文章转载协议目录
+- `GET /api/admin/repost/stats`: 转载、短链、点击与风控统计
+- `GET /api/admin/repost/licenses`: 转载授权分页列表，支持 `status`、`keyword`
+- `POST /api/admin/repost/licenses/{id}/revoke`: 撤销转载授权（高风险，需要 step-up 与幂等键）
+- `POST /api/admin/repost/licenses/{id}/check`: 检查转载页是否保留授权码、原文地址与 go 链接
+- `GET /api/admin/repost/affiliate-links`: 商业链接分页列表
+- `POST /api/admin/repost/affiliate-links`: 登记商业或 affiliate 目标链接
+- `POST /api/admin/repost/affiliate-links/{id}/status`: 启用或停用商业链接（`status` 为 1/2）
+- `GET /api/admin/repost/tokens`: go 短链 token 分页列表，支持 `status`、`tokenType`、`keyword`
+- `POST /api/admin/repost/tokens/{id}/revoke`: 撤销短链（高风险，需要 step-up 与幂等键）
+- `GET /api/admin/repost/click-events`: 点击证据链分页列表
+- `GET /api/admin/repost/suspicious`: 可疑转载聚合列表
+- `GET /api/admin/repost/blocked-domains`: 封禁域名列表
+- `POST /api/admin/repost/blocked-domains`: 封禁域名
+- `POST /api/admin/repost/blocked-domains/{id}/unblock`: 解除域名封禁
+- `GET /api/admin/repost/risk-devices`: 风险设备列表
+- `POST /api/admin/repost/risk-devices`: 封禁风险设备
+- `POST /api/admin/repost/risk-devices/{id}/unblock`: 解除风险设备封禁
+
+商业链接是文章登记的 affiliate 或赞助目标链接；正文中匹配的链接会被改写为 `/r/` go 短链用于统计点击。转载授权生成的商业链接是绑定授权记录的 go 短链：读者点击后先记录来源与授权状态，再进入原文。转载页必须保留该链接。
+
 ## 示例
 
 ### 登录

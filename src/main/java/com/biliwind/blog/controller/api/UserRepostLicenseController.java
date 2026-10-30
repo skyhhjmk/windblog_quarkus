@@ -1,5 +1,7 @@
 package com.biliwind.blog.controller.api;
 
+import com.biliwind.blog.common.constant.LanguageConstant;
+import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.security.UserTokenVerifier;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.RepostLicense;
@@ -39,42 +41,49 @@ public class UserRepostLicenseController {
     @POST
     @Operation(summary = "申请或自愿登记转载")
     public Response createLicense(LicenseCreateRequest request, @Context HttpHeaders httpHeaders) {
+        String language = resolveLanguage(request == null ? null : request.language, httpHeaders);
         Long userId = resolveUserId(httpHeaders);
         if (userId == null) {
-            return unauthorized();
+            return unauthorized(language);
         }
 
         Long postId = resolvePostId(request);
         if (postId == null) {
             return Response.status(Response.Status.NOT_FOUND)
-                    .entity(Map.of("success", false, "message", "文章不存在"))
+                    .entity(Map.of("success", false, "message",
+                            localized(language, "文章不存在", "Article not found")))
                     .build();
         }
         Post post = Post.findById(postId);
         if (post != null && !postAccessService.hasUnlockedAllPaidContent(post, userId)) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("success", false, "message", "必须解锁全部文章付费区块才能转载"))
+                    .entity(Map.of("success", false, "message", localized(language,
+                            "必须解锁全部文章付费区块才能转载",
+                            "Unlock all paid sections of this article before reposting")))
                     .build();
         }
         RepostLicenseService.LicenseCreationResult result =
-                repostLicenseService.createLicense(postId, userId, request.targetUrl);
+                repostLicenseService.createLicense(postId, userId, request.targetUrl, language);
 
         Map<String, Object> body = new HashMap<>();
         body.put("success", true);
-        body.put("data", buildLicenseResponse(result.license, result.copyContent));
+        body.put("data", buildLicenseResponse(result.license, result.copyContent, language));
         return Response.ok(body).build();
     }
 
     @GET
     @Path("/{id}/copy")
     @Operation(summary = "获取转载复制内容")
-    public Response getCopyContent(@PathParam("id") Long id, @Context HttpHeaders httpHeaders) {
+    public Response getCopyContent(@PathParam("id") Long id,
+                                   @QueryParam("lang") String requestedLanguage,
+                                   @Context HttpHeaders httpHeaders) {
+        String language = resolveLanguage(requestedLanguage, httpHeaders);
         Long userId = resolveUserId(httpHeaders);
         if (userId == null) {
-            return unauthorized();
+            return unauthorized(language);
         }
-
-        RepostLicenseService.CopyContent copyContent = repostLicenseService.createFreshCopyContent(id, userId);
+        RepostLicenseService.CopyContent copyContent =
+                repostLicenseService.createFreshCopyContent(id, userId, language);
         Map<String, Object> data = buildCopyContentResponse(copyContent);
         Map<String, Object> body = new HashMap<>();
         body.put("success", true);
@@ -82,7 +91,9 @@ public class UserRepostLicenseController {
         return Response.ok(body).build();
     }
 
-    private Map<String, Object> buildLicenseResponse(RepostLicense license, RepostLicenseService.CopyContent copyContent) {
+    private Map<String, Object> buildLicenseResponse(RepostLicense license,
+                                                     RepostLicenseService.CopyContent copyContent,
+                                                     String language) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", license.id);
         data.put("code", license.code);
@@ -92,7 +103,9 @@ public class UserRepostLicenseController {
         data.put("status", license.status);
         RepostPolicyCatalog.Policy policy = repostPolicyCatalog.resolve(license.article);
         data.put("repostPolicyCode", policy.code());
-        data.put("repostPolicyName", policy.name());
+        data.put("repostPolicyName", policy.nameFor(language));
+        data.put("repostPolicySummary", policy.summaryFor(language));
+        data.put("repostPolicyConditions", policy.conditionsFor(language));
         data.put("requiresApplication", policy.requiresApplication());
         data.put("copy", buildCopyContentResponse(copyContent));
         return data;
@@ -124,11 +137,25 @@ public class UserRepostLicenseController {
         return verifiedToken.uid();
     }
 
-    private Response unauthorized() {
+    private Response unauthorized(String language) {
         Map<String, Object> body = new HashMap<>();
         body.put("success", false);
-        body.put("message", "未登录或登录已过期");
+        body.put("message", localized(language, "未登录或登录已过期", "Not signed in or the session has expired"));
         return Response.status(Response.Status.UNAUTHORIZED).entity(body).build();
+    }
+
+    private String localized(String language, String chinese, String english) {
+        return RepostPolicyCatalog.isEnglish(language) ? english : chinese;
+    }
+
+    private String resolveLanguage(String requestedLanguage, HttpHeaders httpHeaders) {
+        String normalized = LanguageHelper.normalizeToSupportedLang(requestedLanguage);
+        if (normalized != null) {
+            return normalized;
+        }
+        String fromHeader = LanguageHelper.resolveFromAcceptLanguage(
+                httpHeaders == null ? null : httpHeaders.getHeaderString("Accept-Language"));
+        return fromHeader == null ? LanguageConstant.DEFAULT_LANG : fromHeader;
     }
 
     private Long resolvePostId(LicenseCreateRequest request) {
@@ -148,5 +175,7 @@ public class UserRepostLicenseController {
         public Long postId;
         public String postSlug;
         public String targetUrl;
+        /** UI language of the public page that generated the copy. */
+        public String language;
     }
 }

@@ -75,4 +75,18 @@ class RepostPolicyCatalogTest {
         assertFalse(copy.contains("RPL-"));
         assertFalse(copy.contains("/r/"));
     }
+
+    @Test
+    void shouldBuildEnglishDirectCopyText() {
+        RepostPolicyCatalog.Policy policy = catalog.resolve(RepostPolicyCatalog.CC_BY_SA_4_0, null);
+        String copy = catalog.buildDirectCopyText(policy, "Demo article", "https://example.com/post/demo", "en-US");
+
+        assertTrue(copy.contains("This article is licensed under CC BY-SA 4.0; no application is required."));
+        assertTrue(copy.contains("Sharing, adaptation, and commercial use are allowed"));
+        assertTrue(copy.contains("Adaptations must use the same license"));
+        assertTrue(copy.contains("Original URL: https://example.com/post/demo"));
+        assertTrue(copy.contains(policy.licenseUrl()));
+        assertEquals("Request authorization before reposting and retain the authorization code, original URL, and go/affiliate links.",
+                catalog.require(null).summaryEn());
+    }
 }

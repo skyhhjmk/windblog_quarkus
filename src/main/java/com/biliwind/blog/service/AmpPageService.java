@@ -92,9 +92,10 @@ public class AmpPageService {
                 rendered.imageCount(),
                 rendered.removedElementCount(),
                 snapshot.renderType(),
-                repostPolicy.name(),
+                repostPolicy.nameFor(language),
+                repostPolicy.summaryFor(language),
                 repostPolicy.requiresApplication(),
-                repostPolicy.conditions(),
+                repostPolicy.conditionsFor(language),
                 repostPolicy.licenseUrl(),
                 canonicalUrl,
                 structuredDataService.article(snapshot, title, summary, canonicalUrl, language, rendered.html())));
@@ -183,6 +184,7 @@ public class AmpPageService {
             int removedElementCount,
             PostRenderType renderType,
             String repostPolicyName,
+            String repostPolicySummary,
             boolean repostPolicyRequiresApplication,
             List<String> repostPolicyConditions,
             String repostPolicyLicenseUrl,
@@ -199,7 +201,7 @@ public class AmpPageService {
                 OffsetDateTime lastUpdated) {
             return new AmpPost(false, "受保护或付费文章不生成可缓存 AMP 页面", slug, language, title,
                     summary, "", canonicalUrl, ampUrl, lastUpdated, 0, 0, null,
-                    null, false, List.of(), null, null, null);
+                    null, null, false, List.of(), null, null, null);
         }
     }
 }

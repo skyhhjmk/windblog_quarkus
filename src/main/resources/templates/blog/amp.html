@@ -51,11 +51,11 @@
     </header>
     <article>{postBody.raw}</article>
     <section class="repost-notice">
-        <h2>文章转载协议</h2>
+        <h2>{#if language.startsWith('en')}Article repost policy{#else}文章转载协议{/if}</h2>
         {#if repostPolicyRequiresApplication}
-            <p>转载需先申请授权，并保留授权码、原文地址和文中 go/affiliate 链接。</p>
+            <p>{repostPolicySummary}</p>
         {#else}
-            <p>本文使用 {repostPolicyName} 协议，无须申请转载。</p>
+            <p>{#if language.startsWith('en')}This article is licensed under {repostPolicyName}; no application is required.{#else}本文使用 {repostPolicyName} 协议，无须申请转载。{/if}</p>
         {/if}
         {#if repostPolicyConditions && ! repostPolicyConditions.isEmpty}
             <ul>
@@ -64,12 +64,12 @@
                 {/for}
             </ul>
         {/if}
-        <p>原文地址：<a href="{repostOriginalUrl}">{repostOriginalUrl}</a></p>
+        <p>{#if language.startsWith('en')}Original URL: {#else}原文地址：{/if}<a href="{repostOriginalUrl}">{repostOriginalUrl}</a></p>
         {#if repostPolicyLicenseUrl}
-            <p>协议链接：<a href="{repostPolicyLicenseUrl}">{repostPolicyLicenseUrl}</a></p>
+            <p>{#if language.startsWith('en')}License URL: {#else}协议链接：{/if}<a href="{repostPolicyLicenseUrl}">{repostPolicyLicenseUrl}</a></p>
         {/if}
     </section>
-    <footer>这是 WindBlog 的轻量 AMP 页面 · <a href="{canonicalUrl}">返回标准页面</a></footer>
+    <footer>{#if language.startsWith('en')}A lightweight AMP page from WindBlog · <a href="{canonicalUrl}">Open the standard page</a>{#else}这是 WindBlog 的轻量 AMP 页面 · <a href="{canonicalUrl}">返回标准页面</a>{/if}</footer>
 </main>
 </body>
 </html>

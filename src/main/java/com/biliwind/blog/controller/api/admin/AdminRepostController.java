@@ -1,5 +1,7 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.common.constant.LanguageConstant;
+import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.security.SafeExternalHttpService;
@@ -64,11 +66,29 @@ public class AdminRepostController {
 
     @GET
     @Path("/licenses")
+    @Transactional
     @Operation(summary = "转载授权列表")
     public Map<String, Object> listLicenses(@QueryParam("page") @DefaultValue("1") int page,
-                                            @QueryParam("pageSize") @DefaultValue("20") int pageSize) {
-        List<RepostLicense> licenses = RepostLicense.find("order by createdAt desc").page(Page.of(page - 1, pageSize)).list();
-        long total = RepostLicense.count();
+                                            @QueryParam("pageSize") @DefaultValue("20") int pageSize,
+                                            @QueryParam("status") Integer status,
+                                            @QueryParam("keyword") String keyword) {
+        StringBuilder filter = new StringBuilder("1 = 1");
+        List<Object> parameters = new ArrayList<>();
+        if (status != null) {
+            parameters.add(status);
+            filter.append(" and status = ?").append(parameters.size());
+        }
+        String normalizedKeyword = normalizeKeyword(keyword);
+        if (normalizedKeyword != null) {
+            parameters.add("%" + normalizedKeyword + "%");
+            int index = parameters.size();
+            filter.append(" and (lower(code) like ?").append(index)
+                    .append(" or lower(allowedDomain) like ?").append(index)
+                    .append(" or lower(targetUrl) like ?").append(index).append(")");
+        }
+        List<RepostLicense> licenses = RepostLicense.find(filter + " order by createdAt desc", parameters.toArray())
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = RepostLicense.count(filter.toString(), parameters.toArray());
         List<Map<String, Object>> items = new ArrayList<>();
         for (RepostLicense license : licenses) {
             items.add(toLicenseItem(license));
@@ -78,11 +98,33 @@ public class AdminRepostController {
 
     @GET
     @Path("/tokens")
+    @Transactional
     @Operation(summary = "短链 token 列表")
     public Map<String, Object> listTokens(@QueryParam("page") @DefaultValue("1") int page,
-                                          @QueryParam("pageSize") @DefaultValue("20") int pageSize) {
-        List<AffiliateToken> tokens = AffiliateToken.find("order by createdAt desc").page(Page.of(page - 1, pageSize)).list();
-        long total = AffiliateToken.count();
+                                          @QueryParam("pageSize") @DefaultValue("20") int pageSize,
+                                          @QueryParam("status") Integer status,
+                                          @QueryParam("tokenType") String tokenType,
+                                          @QueryParam("keyword") String keyword) {
+        StringBuilder filter = new StringBuilder("1 = 1");
+        List<Object> parameters = new ArrayList<>();
+        if (status != null) {
+            parameters.add(status);
+            filter.append(" and status = ?").append(parameters.size());
+        }
+        if (tokenType != null && !tokenType.isBlank()) {
+            parameters.add(tokenType.trim());
+            filter.append(" and tokenType = ?").append(parameters.size());
+        }
+        String normalizedKeyword = normalizeKeyword(keyword);
+        if (normalizedKeyword != null) {
+            parameters.add("%" + normalizedKeyword + "%");
+            int index = parameters.size();
+            filter.append(" and (lower(shortDisplay) like ?").append(index)
+                    .append(" or lower(allowedDomain) like ?").append(index).append(")");
+        }
+        List<AffiliateToken> tokens = AffiliateToken.find(filter + " order by createdAt desc", parameters.toArray())
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = AffiliateToken.count(filter.toString(), parameters.toArray());
         List<Map<String, Object>> items = new ArrayList<>();
         for (AffiliateToken token : tokens) {
             items.add(toTokenItem(token));
@@ -92,11 +134,20 @@ public class AdminRepostController {
 
     @GET
     @Path("/click-events")
+    @Transactional
     @Operation(summary = "点击证据链")
     public Map<String, Object> listClickEvents(@QueryParam("page") @DefaultValue("1") int page,
-                                               @QueryParam("pageSize") @DefaultValue("20") int pageSize) {
-        List<RedirectClickEvent> events = RedirectClickEvent.find("order by clickedAt desc").page(Page.of(page - 1, pageSize)).list();
-        long total = RedirectClickEvent.count();
+                                               @QueryParam("pageSize") @DefaultValue("20") int pageSize,
+                                               @QueryParam("refererCategory") String refererCategory) {
+        StringBuilder filter = new StringBuilder("1 = 1");
+        List<Object> parameters = new ArrayList<>();
+        if (refererCategory != null && !refererCategory.isBlank()) {
+            parameters.add(refererCategory.trim());
+            filter.append(" and refererCategory = ?").append(parameters.size());
+        }
+        List<RedirectClickEvent> events = RedirectClickEvent.find(filter + " order by clickedAt desc", parameters.toArray())
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = RedirectClickEvent.count(filter.toString(), parameters.toArray());
         List<Map<String, Object>> items = new ArrayList<>();
         for (RedirectClickEvent event : events) {
             items.add(toClickEventItem(event));
@@ -106,6 +157,7 @@ public class AdminRepostController {
 
     @GET
     @Path("/suspicious")
+    @Transactional
     @Operation(summary = "可疑转载列表")
     public Map<String, Object> listSuspiciousReposts(@QueryParam("page") @DefaultValue("1") int page,
                                                      @QueryParam("pageSize") @DefaultValue("20") int pageSize) {
@@ -114,6 +166,77 @@ public class AdminRepostController {
         List<Map<String, Object>> items = new ArrayList<>();
         for (SuspiciousRepost suspiciousRepost : reposts) {
             items.add(toSuspiciousItem(suspiciousRepost));
+        }
+        return pageResponse(items, total, page, pageSize);
+    }
+
+    @GET
+    @Path("/stats")
+    @Operation(summary = "转载与短链统计")
+    public Map<String, Object> stats() {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("licenses", RepostLicense.count());
+        stats.put("activeLicenses", RepostLicense.count("status = 1"));
+        stats.put("tokens", AffiliateToken.count());
+        stats.put("activeTokens", AffiliateToken.count("status = 1"));
+        stats.put("clickEvents", RedirectClickEvent.count());
+        stats.put("suspiciousReposts", SuspiciousRepost.count());
+        stats.put("affiliateLinks", AffiliateLink.count());
+        stats.put("activeAffiliateLinks", AffiliateLink.count("status = 1"));
+        stats.put("blockedDomains", BlockedDomain.count("status = 1"));
+        stats.put("riskDevices", RiskDevice.count("status = 1"));
+        return stats;
+    }
+
+    @GET
+    @Path("/affiliate-links")
+    @Transactional
+    @Operation(summary = "商业链接列表")
+    public Map<String, Object> listAffiliateLinks(@QueryParam("page") @DefaultValue("1") int page,
+                                                  @QueryParam("pageSize") @DefaultValue("20") int pageSize,
+                                                  @QueryParam("status") Integer status) {
+        StringBuilder filter = new StringBuilder("1 = 1");
+        List<Object> parameters = new ArrayList<>();
+        if (status != null) {
+            parameters.add(status);
+            filter.append(" and status = ?").append(parameters.size());
+        }
+        List<AffiliateLink> links = AffiliateLink.find(filter + " order by createdAt desc", parameters.toArray())
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = AffiliateLink.count(filter.toString(), parameters.toArray());
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (AffiliateLink link : links) {
+            items.add(toAffiliateLinkItem(link));
+        }
+        return pageResponse(items, total, page, pageSize);
+    }
+
+    @GET
+    @Path("/blocked-domains")
+    @Operation(summary = "封禁域名列表")
+    public Map<String, Object> listBlockedDomains(@QueryParam("page") @DefaultValue("1") int page,
+                                                  @QueryParam("pageSize") @DefaultValue("20") int pageSize) {
+        List<BlockedDomain> domains = BlockedDomain.find("order by createdAt desc")
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = BlockedDomain.count();
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (BlockedDomain domain : domains) {
+            items.add(toBlockedDomainItem(domain));
+        }
+        return pageResponse(items, total, page, pageSize);
+    }
+
+    @GET
+    @Path("/risk-devices")
+    @Operation(summary = "风险设备列表")
+    public Map<String, Object> listRiskDevices(@QueryParam("page") @DefaultValue("1") int page,
+                                               @QueryParam("pageSize") @DefaultValue("20") int pageSize) {
+        List<RiskDevice> devices = RiskDevice.find("order by createdAt desc")
+                .page(Page.of(Math.max(page, 1) - 1, pageSize)).list();
+        long total = RiskDevice.count();
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (RiskDevice device : devices) {
+            items.add(toRiskDeviceItem(device));
         }
         return pageResponse(items, total, page, pageSize);
     }
@@ -182,6 +305,12 @@ public class AdminRepostController {
     @Transactional
     @Operation(summary = "创建商业链接")
     public Response createAffiliateLink(AffiliateLinkRequest request) {
+        if (request == null || request.name == null || request.name.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(message("name 不能为空")).build();
+        }
+        if (request.targetUrl == null || request.targetUrl.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(message("targetUrl 不能为空")).build();
+        }
         String targetDomain = repostDomainService.normalizeDomainFromUrl(request.targetUrl);
         if (targetDomain == null || targetDomain.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST).entity(message("targetUrl 无法识别域名")).build();
@@ -196,6 +325,51 @@ public class AdminRepostController {
         affiliateLink.persist();
         dataSyncEvent.fire(new DataSyncEvent("AFFILIATE_LINK", affiliateLink.id, "UPSERT"));
         return Response.ok(toAffiliateLinkItem(affiliateLink)).build();
+    }
+
+    @POST
+    @Path("/affiliate-links/{id}/status")
+    @Transactional
+    @Operation(summary = "启用或停用商业链接")
+    public Response updateAffiliateLinkStatus(@PathParam("id") Long id, StatusRequest request) {
+        AffiliateLink affiliateLink = AffiliateLink.findById(id);
+        if (affiliateLink == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity(message("商业链接不存在")).build();
+        }
+        if (request == null || request.status == null || (request.status != 1 && request.status != 2)) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(message("status 必须为 1 或 2")).build();
+        }
+        affiliateLink.status = request.status.shortValue();
+        dataSyncEvent.fire(new DataSyncEvent("AFFILIATE_LINK", affiliateLink.id, "UPSERT"));
+        return Response.ok(toAffiliateLinkItem(affiliateLink)).build();
+    }
+
+    @POST
+    @Path("/blocked-domains/{id}/unblock")
+    @Transactional
+    @Operation(summary = "解除域名封禁")
+    public Response unblockDomain(@PathParam("id") Long id) {
+        BlockedDomain blockedDomain = BlockedDomain.findById(id);
+        if (blockedDomain == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity(message("封禁记录不存在")).build();
+        }
+        blockedDomain.status = 2;
+        dataSyncEvent.fire(new DataSyncEvent("BLOCKED_DOMAIN", blockedDomain.id, "UPSERT"));
+        return Response.ok(toBlockedDomainItem(blockedDomain)).build();
+    }
+
+    @POST
+    @Path("/risk-devices/{id}/unblock")
+    @Transactional
+    @Operation(summary = "解除风险设备封禁")
+    public Response unblockDevice(@PathParam("id") Long id) {
+        RiskDevice riskDevice = RiskDevice.findById(id);
+        if (riskDevice == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity(message("风险设备记录不存在")).build();
+        }
+        riskDevice.status = 2;
+        dataSyncEvent.fire(new DataSyncEvent("RISK_DEVICE", riskDevice.id, "UPSERT"));
+        return Response.ok(toRiskDeviceItem(riskDevice)).build();
     }
 
     @POST
@@ -253,10 +427,14 @@ public class AdminRepostController {
         item.put("id", license.id);
         item.put("code", license.code);
         item.put("postId", resolveId(license.article));
+        item.put("postSlug", license.article == null ? null : license.article.slug);
+        item.put("postTitle", postTitle(license.article));
         item.put("viewerUserId", resolveId(license.viewerUser));
+        item.put("userName", userName(license.viewerUser));
         item.put("allowedDomain", license.allowedDomain);
         item.put("targetUrl", license.targetUrl);
         item.put("status", license.status);
+        item.put("revokedAt", license.revokedAt);
         item.put("createdAt", license.createdAt);
         return item;
     }
@@ -268,9 +446,15 @@ public class AdminRepostController {
         item.put("tokenType", token.tokenType);
         item.put("status", token.status);
         item.put("postId", resolveId(token.article));
+        item.put("postSlug", token.article == null ? null : token.article.slug);
+        item.put("postTitle", postTitle(token.article));
         item.put("affiliateLinkId", resolveId(token.affiliateLink));
+        item.put("affiliateLinkName", token.affiliateLink == null ? null : token.affiliateLink.name);
+        item.put("affiliateTargetUrl", token.affiliateLink == null ? null : token.affiliateLink.targetUrl);
         item.put("repostLicenseId", resolveId(token.repostLicense));
+        item.put("repostLicenseCode", token.repostLicense == null ? null : token.repostLicense.code);
         item.put("allowedDomain", token.allowedDomain);
+        item.put("revokedAt", token.revokedAt);
         item.put("createdAt", token.createdAt);
         return item;
     }
@@ -280,6 +464,9 @@ public class AdminRepostController {
         item.put("id", event.id);
         item.put("eventKey", event.eventKey);
         item.put("tokenId", resolveId(event.affiliateToken));
+        item.put("tokenShortDisplay", event.affiliateToken == null ? null : event.affiliateToken.shortDisplay);
+        item.put("repostLicenseId", resolveId(event.repostLicense));
+        item.put("repostLicenseCode", event.repostLicense == null ? null : event.repostLicense.code);
         item.put("refererDomain", event.refererDomain);
         item.put("refererCategory", event.refererCategory);
         item.put("deviceRiskId", event.deviceRiskId);
@@ -294,7 +481,10 @@ public class AdminRepostController {
         item.put("id", suspiciousRepost.id);
         item.put("tokenId", resolveId(suspiciousRepost.affiliateToken));
         item.put("postId", resolveId(suspiciousRepost.article));
+        item.put("postSlug", suspiciousRepost.article == null ? null : suspiciousRepost.article.slug);
+        item.put("postTitle", postTitle(suspiciousRepost.article));
         item.put("domain", suspiciousRepost.suspiciousDomain);
+        item.put("latestRefererUrl", suspiciousRepost.latestRefererUrl);
         item.put("clickCount", suspiciousRepost.clickCount);
         item.put("riskScore", suspiciousRepost.riskScore);
         item.put("firstSeenAt", suspiciousRepost.firstSeenAt);
@@ -309,6 +499,7 @@ public class AdminRepostController {
         item.put("domainName", blockedDomain.domainName);
         item.put("reason", blockedDomain.reason);
         item.put("status", blockedDomain.status);
+        item.put("createdAt", blockedDomain.createdAt);
         return item;
     }
 
@@ -318,6 +509,7 @@ public class AdminRepostController {
         item.put("deviceRiskId", riskDevice.deviceRiskId);
         item.put("reason", riskDevice.reason);
         item.put("status", riskDevice.status);
+        item.put("createdAt", riskDevice.createdAt);
         return item;
     }
 
@@ -327,8 +519,36 @@ public class AdminRepostController {
         item.put("name", affiliateLink.name);
         item.put("targetUrl", affiliateLink.targetUrl);
         item.put("targetDomain", affiliateLink.targetDomain);
+        item.put("note", affiliateLink.note);
         item.put("status", affiliateLink.status);
+        item.put("createdAt", affiliateLink.createdAt);
+        item.put("updatedAt", affiliateLink.updatedAt);
         return item;
+    }
+
+    private String postTitle(com.biliwind.blog.model.Post post) {
+        if (post == null) {
+            return null;
+        }
+        String title = LanguageHelper.resolveLocalizedValue(post.title, LanguageConstant.DEFAULT_LANG);
+        return title == null || title.isBlank() ? post.slug : title;
+    }
+
+    private String userName(com.biliwind.blog.model.User user) {
+        if (user == null) {
+            return null;
+        }
+        if (user.username != null && !user.username.isBlank()) {
+            return user.username;
+        }
+        return user.nickname;
+    }
+
+    private String normalizeKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+        return keyword.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private Long resolveId(Object entity) {
@@ -386,5 +606,9 @@ public class AdminRepostController {
         public String name;
         public String targetUrl;
         public String note;
+    }
+
+    public static class StatusRequest {
+        public Integer status;
     }
 }

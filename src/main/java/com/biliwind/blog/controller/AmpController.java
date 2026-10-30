@@ -76,6 +76,7 @@ public class AmpController {
                 .data("publishedAt", post.lastUpdated())
                 .data("imageCount", post.imageCount())
                 .data("repostPolicyName", post.repostPolicyName())
+                .data("repostPolicySummary", post.repostPolicySummary())
                 .data("repostPolicyRequiresApplication", post.repostPolicyRequiresApplication())
                 .data("repostPolicyConditions", post.repostPolicyConditions())
                 .data("repostPolicyLicenseUrl", post.repostPolicyLicenseUrl())
