@@ -52,7 +52,15 @@ public class ElasticsearchPostSearchService {
     private static final String POST_INDEX_TEMPLATE = "windblog-posts-template";
     private static final String POST_INDEX_PATTERN = "windblog-posts-*";
     private static final String POST_INDEX_ALIAS = "windblog-posts";
+    private static final String POST_INDEX_META_INDEX = "windblog-post-meta";
     private static final String ILM_POLICY_NAME = "windblog-posts-policy";
+
+    /**
+     * Bump whenever the article mapping or the indexed document shape changes.
+     * The scheduled feedback service rebuilds the alias target when the stored
+     * marker does not match, because this index is a disposable search cache.
+     */
+    public static final int POST_INDEX_VERSION = 4;
     @Inject
     ElasticsearchConnectionManager connectionManager;
     @Inject
@@ -339,7 +347,7 @@ public class ElasticsearchPostSearchService {
                 }
               },
               "priority": 200,
-                  "version": 3,
+                  "version": %d,
                   "_meta": { "description": "Template for windblog posts index with IK Chinese tokenizer and translated fields" }
                 }
                 """.formatted(
@@ -349,7 +357,8 @@ public class ElasticsearchPostSearchService {
                 indexAnalyzerFiltersJson,
                 searchTokenizer,
                 searchAnalyzerFiltersJson,
-                synonymFilterJson
+                synonymFilterJson,
+                POST_INDEX_VERSION
         );
 
         var request = HttpRequest.newBuilder()
@@ -616,6 +625,20 @@ public class ElasticsearchPostSearchService {
         return aliasRoot.path(indexName).path("aliases").has(POST_INDEX_ALIAS);
     }
 
+    /** Removes superseded generations after a successful alias promotion. */
+    public void deleteSupersededPostIndexGenerations(String keepIndex) {
+        try {
+            for (String indexName : getPostIndexNames()) {
+                if (!indexName.equals(keepIndex)) {
+                    deleteIndexGeneration(indexName);
+                }
+            }
+        } catch (Exception exception) {
+            log.warnf("Could not clean superseded article index generations: %s",
+                    SensitiveMessageSanitizer.sanitize(exception.getMessage()));
+        }
+    }
+
     public void deleteIndexGeneration(String indexName) {
         try {
             HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
@@ -860,6 +883,71 @@ public class ElasticsearchPostSearchService {
             throw new IllegalStateException("Article index deletion failed: " + response.statusCode() + " - "
                     + SensitiveMessageSanitizer.sanitize(response.body()));
         }
+    }
+
+    public int getStoredIndexVersion() throws Exception {
+        if (!connectionManager.isAvailable()) {
+            return -1;
+        }
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + POST_INDEX_META_INDEX + "/_doc/version"))
+                .GET()
+                .build());
+        if (response.statusCode() == 404) {
+            return -1;
+        }
+        if (response.statusCode() != 200) {
+            throw new ElasticsearchUnavailableException("Unable to read article index version: "
+                    + response.statusCode());
+        }
+        return objectMapper.readTree(response.body()).path("_source").path("version").asInt(-1);
+    }
+
+    public void storeIndexVersion(int version) throws Exception {
+        com.fasterxml.jackson.databind.node.ObjectNode body = objectMapper.createObjectNode();
+        body.put("version", version);
+        body.put("updatedAt", java.time.Instant.now().toString());
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri(
+                        "/" + POST_INDEX_META_INDEX + "/_doc/version?refresh=true"))
+                .PUT(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .header("Content-Type", "application/json")
+                .build());
+        if (response.statusCode() != 200 && response.statusCode() != 201) {
+            throw new ElasticsearchUnavailableException("Unable to store article index version: "
+                    + response.statusCode());
+        }
+    }
+
+    /**
+     * Returns the newest article update timestamp currently visible through the
+     * alias, or {@code null} when the index is empty. Used to detect content
+     * drift even when the document id set still matches.
+     */
+    public java.time.OffsetDateTime getMaxIndexedUpdatedAt(String indexName) throws Exception {
+        validateIndexName(indexName);
+        com.fasterxml.jackson.databind.node.ObjectNode body = objectMapper.createObjectNode();
+        body.put("size", 0);
+        body.putObject("aggs").putObject("maxUpdated")
+                .putObject("max").put("field", "updatedAt");
+        HttpResponse<String> response = connectionManager.sendRequest(HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + indexName + "/_search"))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .header("Content-Type", "application/json")
+                .build());
+        if (response.statusCode() == 404) {
+            return null;
+        }
+        if (response.statusCode() != 200) {
+            throw new ElasticsearchUnavailableException("Unable to read newest article index timestamp: "
+                    + response.statusCode());
+        }
+        com.fasterxml.jackson.databind.JsonNode value = objectMapper.readTree(response.body())
+                .path("aggregations").path("maxUpdated").path("value");
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        return java.time.Instant.ofEpochMilli(value.asLong()).atOffset(java.time.ZoneOffset.UTC);
     }
 
     public long getPostIndexCount(String indexName) throws Exception {
