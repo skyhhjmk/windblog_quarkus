@@ -108,7 +108,6 @@ public class TagController {
         return template
                 .data("language", lang)
                 .data("pjaxRequest", pjaxRequest)
-                .data("pjaxRequest", pjaxRequest)
                 .data("jsonLd", structuredDataService.collection(i18n.t("tag.title"), "/tag", lang,
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                 i18n.t("tag.title"), "/tag"))))
@@ -180,6 +179,7 @@ public class TagController {
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                         i18n.t("tag.title"), "/tag"),
                                 new com.biliwind.blog.service.StructuredDataService.Breadcrumb(tagName, "/tag/" + entity.slug))))
+                .data("pjaxRequest", pjaxRequest)
                 .data("detailMode", true)
                 .data("pageTitle", withPageSuffix(i18n.format("tag.detail_title", tagName), currentPage))
                 .data("pageDescription", tagPageDescription(entity, lang))

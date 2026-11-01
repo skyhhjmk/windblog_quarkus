@@ -16,11 +16,7 @@ public class SeoResponseFilter {
     @ServerResponseFilter
     public Uni<Void> filter(ContainerRequestContext request, ContainerResponseContext response) {
         String path = request.getUriInfo().getRequestUri().getPath();
-        if (path.startsWith("/api/")) return Uni.createFrom().voidItem();
-        if (path.startsWith("/q/")) {
-            response.getHeaders().putSingle("X-Robots-Tag", "noindex");
-            return Uni.createFrom().voidItem();
-        }
+        if (path.startsWith("/api/") || path.startsWith("/q/")) return Uni.createFrom().voidItem();
         return Uni.createFrom().voidItem().invoke(() -> {
             if (response.getStatus() == 404 && "GET".equals(request.getMethod())) {
                 try { seo.recordNotFound(path, request.getHeaderString("Referer")); }

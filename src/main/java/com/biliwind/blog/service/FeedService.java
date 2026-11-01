@@ -138,6 +138,9 @@ public class FeedService {
         if (summary == null || summary.isBlank()) {
             summary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), language);
         }
+        if (summary == null) {
+            summary = "";
+        }
 
         // The feed falls back to another language's title when a translation is
         // missing; link to the URL that actually renders that content.

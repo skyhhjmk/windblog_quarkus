@@ -109,7 +109,6 @@ public class CategoryController {
         return template
                 .data("language", lang)
                 .data("pjaxRequest", pjaxRequest)
-                .data("pjaxRequest", pjaxRequest)
                 .data("jsonLd", structuredDataService.collection(i18n.t("category.title"), "/category", lang,
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                 i18n.t("category.title"), "/category"))))
@@ -180,6 +179,7 @@ public class CategoryController {
                 .data("jsonLd", structuredDataService.collection(resolveCategoryName(entity, lang), "/category/" + entity.slug, lang,
                         buildBreadcrumbs(entity, lang).stream().map(item ->
                                 new com.biliwind.blog.service.StructuredDataService.Breadcrumb(item.name(), item.url())).toList()))
+                .data("pjaxRequest", pjaxRequest)
                 .data("detailMode", true)
                 .data("pageTitle", withPageSuffix(
                         i18n.format("category.detail_title", resolveCategoryName(entity, lang)), currentPage))

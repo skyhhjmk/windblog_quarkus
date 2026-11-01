@@ -1,10 +1,12 @@
 package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.security.PasswordHasher;
+import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
+import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -38,13 +40,19 @@ class PublicSeoPagesTest {
 
     private String chineseOnlySlug;
     private String bilingualSlug;
+    private String categorySlug;
+    private String tagSlug;
     private String seededUsername;
 
     @BeforeAll
     void seedChineseOnlyPost() {
         chineseOnlySlug = "seo-zh-only-" + UUID.randomUUID();
         bilingualSlug = "seo-bilingual-" + UUID.randomUUID();
+        categorySlug = "seo-category-" + UUID.randomUUID();
+        tagSlug = "seo-tag-" + UUID.randomUUID();
         seededUsername = "seo-author-" + UUID.randomUUID();
+        String categorySlugValue = categorySlug;
+        String tagSlugValue = tagSlug;
         String slug = chineseOnlySlug;
         String bilingual = bilingualSlug;
         String username = seededUsername;
@@ -88,6 +96,25 @@ class PublicSeoPagesTest {
 
             post.currentRevision = revision;
             post.publishedRevision = revision;
+
+            Category category = new Category();
+            category.slug = categorySlugValue;
+            category.name = Map.of("zh-cn", "SEO 分类", "en-US", "SEO category");
+            category.description = Map.of("zh-cn", "分类描述", "en-US", "Category description");
+            category.path = "seo_category";
+            category.postCount = 0L;
+            category.enabled = true;
+            category.createdAt = now;
+            category.updatedAt = now;
+            category.persist();
+
+            Tag tag = new Tag();
+            tag.slug = tagSlugValue;
+            tag.name = Map.of("zh-cn", "SEO 标签", "en-US", "SEO tag");
+            tag.description = Map.of("zh-cn", "标签描述", "en-US", "Tag description");
+            tag.createdAt = now;
+            tag.updatedAt = now;
+            tag.persist();
 
             Post second = new Post();
             second.slug = bilingual;
@@ -215,9 +242,31 @@ class PublicSeoPagesTest {
     }
 
     @Test
+    void categoryAndTagDetailsRenderAfterPjaxChanges() {
+        given().get("/category/" + categorySlug).then().statusCode(200)
+                .body(containsString("SEO category"))
+                .body(containsString("Category description"));
+        given().get("/zh-cn/category/" + categorySlug).then().statusCode(200)
+                .body(containsString("SEO 分类"))
+                .body(containsString("分类描述"));
+        given().get("/tag/" + tagSlug).then().statusCode(200)
+                .body(containsString("SEO tag"))
+                .body(containsString("Tag description"));
+        given().get("/zh-cn/tag/" + tagSlug).then().statusCode(200)
+                .body(containsString("SEO 标签"))
+                .body(containsString("标签描述"));
+        given().header("X-PJAX", "true").get("/category/" + categorySlug).then().statusCode(200)
+                .body(containsString("id=\"pjax-content-root\""));
+        given().header("X-PJAX", "true").get("/tag/" + tagSlug).then().statusCode(200)
+                .body(containsString("id=\"pjax-content-root\""));
+    }
+
+    @Test
     void robotsBlocksQuarkusManagementEndpoints() {
         given().get("/robots.txt").then().statusCode(200)
                 .body(containsString("Disallow: /q/"));
+        given().get("/q/health/live").then()
+                .header("X-Robots-Tag", "noindex");
     }
 
     @Test
