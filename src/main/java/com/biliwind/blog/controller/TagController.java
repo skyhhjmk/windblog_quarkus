@@ -96,7 +96,8 @@ public class TagController {
                 .sorted((a, b) -> Long.compare(b.postCount, a.postCount))
                 .toList();
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+        Template template = pjaxRequest ? tagContent : tag;
         String pageTitle = safeKeyword.isBlank()
                 ? i18n.t("tag.title")
                 : i18n.format("tag.filtered_title", safeKeyword);
@@ -106,6 +107,8 @@ public class TagController {
         }
         return template
                 .data("language", lang)
+                .data("pjaxRequest", pjaxRequest)
+                .data("pjaxRequest", pjaxRequest)
                 .data("jsonLd", structuredDataService.collection(i18n.t("tag.title"), "/tag", lang,
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                 i18n.t("tag.title"), "/tag"))))
@@ -169,7 +172,8 @@ public class TagController {
                         featuredImages.get(post.id)))
                 .toList();
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+        Template template = pjaxRequest ? tagContent : tag;
         return template
                 .data("language", lang)
                 .data("jsonLd", structuredDataService.collection(tagName, "/tag/" + entity.slug, lang,

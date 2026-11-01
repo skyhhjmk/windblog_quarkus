@@ -171,7 +171,11 @@ public class PostController {
         long epoch = lastUpdated.toEpochSecond();
         String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion
                 + (pjaxRequest ? "_pjax" : "_full")
-                + "_" + seoManagementService.robots(("zh-cn".equalsIgnoreCase(resolvedLang) ? "" : "/" + resolvedLang) + "/post/" + slug);
+                // RESTEasy splits If-None-Match on commas, so the robots value
+                // (index,follow) must not carry one into the ETag.
+                + "_" + seoManagementService.robots(
+                        ("zh-cn".equalsIgnoreCase(resolvedLang) ? "" : "/" + resolvedLang) + "/post/" + slug)
+                        .replace(',', '_');
         EntityTag etag = new EntityTag(etagValue);
         boolean protectedPage = snapshot.visibility() == 2;
 
@@ -312,6 +316,7 @@ public class PostController {
 
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
+                .data("pjaxRequest", pjaxRequest)
                 .data("contentLanguage", contentLanguage)
                 .data("postSlug", slug)
                 .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())

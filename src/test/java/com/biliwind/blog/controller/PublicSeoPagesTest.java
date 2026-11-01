@@ -21,6 +21,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Contract checks for the public SEO surface: titles, canonicals, hreflang,
@@ -124,6 +125,31 @@ class PublicSeoPagesTest {
         given().get("/zh-cn/post/" + chineseOnlySlug).then().statusCode(200)
                 .body(containsString("<link rel=\"canonical\" href=\"" + SITE + "/zh-cn/post/" + chineseOnlySlug + "\""))
                 .body(containsString("hreflang=\"x-default\" href=\"" + SITE + "/zh-cn/post/" + chineseOnlySlug + "\""));
+    }
+
+    @Test
+    void articleConditionalRequestsReachNotModified() {
+        String etag = given().get("/post/" + chineseOnlySlug)
+                .then().statusCode(200)
+                .extract().header("ETag");
+        assertNotNull(etag, "article responses must expose an ETag");
+
+        given().header("If-None-Match", etag)
+                .get("/post/" + chineseOnlySlug)
+                .then().statusCode(304);
+    }
+
+    @Test
+    void headMetadataIsOnlyDuplicatedIntoPjaxFragments() {
+        given().get("/post/" + chineseOnlySlug).then().statusCode(200)
+                .body(not(containsString("id=\"pjax-head-metadata\"")));
+
+        given().header("X-PJAX", "true")
+                .get("/post/" + chineseOnlySlug)
+                .then().statusCode(200)
+                .body(containsString("id=\"pjax-head-metadata\""))
+                .body(containsString("hreflang=\"zh-cn\""))
+                .body(not(containsString("<!DOCTYPE")));
     }
 
     @Test

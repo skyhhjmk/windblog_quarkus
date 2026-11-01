@@ -97,7 +97,8 @@ public class CategoryController {
                 .map(category -> toCategoryListItem(category, lang, childCounts.getOrDefault(category.id, 0L)))
                 .toList();
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+        Template template = pjaxRequest ? categoryContent : category;
         String pageTitle = safeKeyword.isBlank()
                 ? i18n.t("category.title")
                 : i18n.format("category.filtered_title", safeKeyword);
@@ -107,6 +108,8 @@ public class CategoryController {
         }
         return template
                 .data("language", lang)
+                .data("pjaxRequest", pjaxRequest)
+                .data("pjaxRequest", pjaxRequest)
                 .data("jsonLd", structuredDataService.collection(i18n.t("category.title"), "/category", lang,
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                 i18n.t("category.title"), "/category"))))
@@ -170,7 +173,8 @@ public class CategoryController {
                         featuredImages.get(post.id)))
                 .toList();
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+        Template template = pjaxRequest ? categoryContent : category;
         return template
                 .data("language", lang)
                 .data("jsonLd", structuredDataService.collection(resolveCategoryName(entity, lang), "/category/" + entity.slug, lang,
