@@ -326,7 +326,8 @@ public class ConfigInitializer {
                 {"moderate", "评论审核 AI 配置"},
                 {"summarize", "AI 摘要配置"},
                 {"translate", "AI 翻译配置"},
-                {"assistant", "写作助手 AI 配置"}
+                {"assistant", "写作助手 AI 配置"},
+                {"topic", "话题功能 AI 配置"}
         }) {
             ObjectNode field = aiOperationConfigFields.addObject();
             field.put("key", operation[0]);
@@ -340,8 +341,9 @@ public class ConfigInitializer {
         aiOperationConfigValue.put("summarize", "");
         aiOperationConfigValue.put("translate", "");
         aiOperationConfigValue.put("assistant", "");
+        aiOperationConfigValue.put("topic", "");
         list.add(new SettingDefinition("ai_operation_configs", aiOperationConfigValue, "object", "功能设置",
-                aiOperationConfigSchema, "分别指定 AI 评论审核、摘要和翻译使用的提供商或轮询组。"));
+                aiOperationConfigSchema, "分别指定 AI 评论审核、摘要、翻译和话题功能使用的提供商或轮询组。"));
 
         ObjectNode elasticsearchSchema = mapper.createObjectNode();
         elasticsearchSchema.put("type", "object");

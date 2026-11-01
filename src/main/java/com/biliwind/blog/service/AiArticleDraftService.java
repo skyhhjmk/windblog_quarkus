@@ -5,6 +5,7 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostHelper;
 import com.biliwind.blog.common.helper.SlugHelper;
 import com.biliwind.blog.context.AdminRequestContext;
+import com.biliwind.blog.model.CodexCreatorDraftAssignment;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
@@ -21,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
+import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 
 import java.time.OffsetDateTime;
@@ -82,7 +84,7 @@ public class AiArticleDraftService {
         String prompt = buildPrompt(topic, effectiveLanguage, instructions);
         AiResult result;
         try {
-            result = aiManager.complete(providerId, SYSTEM_PROMPT, prompt)
+            result = aiManager.complete(providerId, "topic", SYSTEM_PROMPT, prompt)
                     .toCompletableFuture()
                     .join();
         } catch (CompletionException exception) {
@@ -104,33 +106,74 @@ public class AiArticleDraftService {
         Map<String, String> contentMap = PostHelper.injectBlockIds(
                 Map.of(effectiveLanguage, content));
 
-        Post post = new Post();
-        post.slug = slug;
-        post.title = titleMap;
-        post.summary = summaryMap;
-        post.status = PostStatus.DRAFT;
-        post.visibility = 0;
-        post.renderType = PostRenderType.MARKDOWN;
-        post.aiSummaryStatus = 2;
-        post.user = operator;
-        post.repostPolicyCode = repostPolicyCatalog.require(repostPolicyCode).code();
-        post.createdAt = now;
-        post.updatedAt = now;
-        post.persist();
+        // Check if a draft post already exists for this topic (regeneration case)
+        Long existingPostId = topic.path("postId").canConvertToLong() ? topic.path("postId").asLong(0) : 0;
+        Post post = null;
+        if (existingPostId > 0) {
+            post = Post.find("id = ?1", existingPostId)
+                    .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
+        }
+        if (post == null) {
+            CodexCreatorDraftAssignment assignment = CodexCreatorDraftAssignment.<CodexCreatorDraftAssignment>find(
+                    "topicId = ?1 order by createdAt desc", topicId).firstResult();
+            if (assignment != null && assignment.postId != null) {
+                post = Post.find("id = ?1", assignment.postId)
+                        .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
+            }
+        }
 
-        PostRevision revision = new PostRevision();
-        revision.post = post;
-        revision.title = titleMap;
-        revision.contentMarkdown = contentMap;
-        revision.editorType = 0;
-        revision.revisionNumber = 1;
-        revision.createdBy = operator;
-        revision.createdAt = now;
-        revision.persist();
-        post.currentRevision = revision;
+        boolean isRegeneration = post != null;
+        if (isRegeneration) {
+            if (post.status != PostStatus.DRAFT) {
+                throw new BadRequestException("原文章已不再是草稿，拒绝覆盖其当前修订");
+            }
+            post.title = titleMap;
+            post.summary = summaryMap;
+            post.repostPolicyCode = repostPolicyCatalog.require(repostPolicyCode).code();
+            post.updatedAt = now;
+            post.persist();
+
+            int nextRevision = (post.currentRevision != null
+                    ? post.currentRevision.revisionNumber : 1) + 1;
+            PostRevision revision = new PostRevision();
+            revision.post = post;
+            revision.title = titleMap;
+            revision.contentMarkdown = contentMap;
+            revision.editorType = 0;
+            revision.revisionNumber = nextRevision;
+            revision.createdBy = operator;
+            revision.createdAt = now;
+            revision.persist();
+            post.currentRevision = revision;
+        } else {
+            post = new Post();
+            post.slug = slug;
+            post.title = titleMap;
+            post.summary = summaryMap;
+            post.status = PostStatus.DRAFT;
+            post.visibility = 0;
+            post.renderType = PostRenderType.MARKDOWN;
+            post.aiSummaryStatus = 2;
+            post.user = operator;
+            post.repostPolicyCode = repostPolicyCatalog.require(repostPolicyCode).code();
+            post.createdAt = now;
+            post.updatedAt = now;
+            post.persist();
+
+            PostRevision revision = new PostRevision();
+            revision.post = post;
+            revision.title = titleMap;
+            revision.contentMarkdown = contentMap;
+            revision.editorType = 0;
+            revision.revisionNumber = 1;
+            revision.createdBy = operator;
+            revision.createdAt = now;
+            revision.persist();
+            post.currentRevision = revision;
+        }
 
         articleExternalLinkService.syncMarkdownLinks(post, contentMap);
-        auditService.log("post", post.id, "ai_article_draft", null,
+        auditService.log("post", post.id, isRegeneration ? "ai_article_draft_regenerate" : "ai_article_draft", null,
                 Map.of("topicId", topicId, "language", effectiveLanguage,
                         "provider", result == null || result.provider == null ? "AI_MANAGER" : result.provider));
         postSyncedEvent.fire(new PostSyncedEvent(post.id));

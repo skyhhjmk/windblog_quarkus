@@ -154,6 +154,15 @@ public class AiManager {
      * assistant/writing operation.
      */
     public CompletionStage<AiResult> complete(Long providerId, String systemPrompt, String prompt) {
+        return complete(providerId, "assistant", systemPrompt, prompt);
+    }
+
+    /**
+     * Free-form completion for a designated operation (e.g. "assistant", "topic").
+     * When no providerId is supplied, the configured operation provider/polling-group is selected,
+     * falling back to assistant/writing.
+     */
+    public CompletionStage<AiResult> complete(Long providerId, String operation, String systemPrompt, String prompt) {
         List<AiProviderConfig> configs = new ArrayList<>(configService.listAll());
         if (configs.isEmpty()) {
             return CompletableFuture.failedFuture(new RuntimeException("当前没有任何已启用的 AI 配置"));
@@ -167,7 +176,11 @@ public class AiManager {
                 return CompletableFuture.failedFuture(new RuntimeException("指定的 AI 配置不存在或已禁用"));
             }
         } else {
-            selected = selectionService.select("assistant", configs);
+            String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
+            selected = selectionService.select(op, configs);
+            if (selected == null && !"assistant".equals(op)) {
+                selected = selectionService.select("assistant", configs);
+            }
             if (selected == null) {
                 selected = selectionService.select("writing", configs);
             }
@@ -179,13 +192,17 @@ public class AiManager {
             return CompletableFuture.failedFuture(new RuntimeException("没有可用的 AI 配置"));
         }
         final AiProviderConfig primary = selected;
+        String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
         // 降级配置必须在调用线程上解析：异步回调线程没有事务/请求上下文，不能访问数据库。
-        AiProviderConfig fallback = selectionService.fallback("assistant", configs, primary);
+        AiProviderConfig fallback = selectionService.fallback(op, configs, primary);
+        if (fallback == null && !"assistant".equals(op)) {
+            fallback = selectionService.fallback("assistant", configs, primary);
+        }
         if (fallback == null) {
             fallback = selectionService.fallback("writing", configs, primary);
         }
         final AiProviderConfig fallbackConfig = fallback;
-        log.info("[AI] 开始写作调用，使用配置={}, provider={}", primary.name, primary.provider);
+        log.info("[AI] 开始完成调用，使用配置={}, provider={}, operation={}", primary.name, primary.provider, op);
         return executeComplete(primary, systemPrompt, prompt).exceptionallyCompose(error ->
                 fallbackConfig == null ? CompletableFuture.failedFuture(error)
                         : executeComplete(fallbackConfig, systemPrompt, prompt));

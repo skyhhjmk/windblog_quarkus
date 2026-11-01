@@ -74,6 +74,7 @@ public class AdminAiTopicDiscoveryController {
         AiResult result;
         try {
             result = aiManager.complete(request == null ? null : request.providerId(),
+                            "topic",
                             SYSTEM_PROMPT, buildPrompt(seeds, maxTopics, language))
                     .toCompletableFuture()
                     .join();
