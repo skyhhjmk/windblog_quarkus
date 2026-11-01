@@ -1,6 +1,8 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.context.AdminRequestContext;
+import com.biliwind.blog.common.constant.LanguageConstant;
+import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.controller.api.admin.dto.AdminPostDtos.*;
 import com.biliwind.blog.model.*;
@@ -215,9 +217,10 @@ public class AdminPostApiController {
         post.status = PostStatus.DRAFT;
         post.visibility = request.visibility() == null ? 0 : request.visibility();
         post.password = resolveCreatedPassword(post.visibility, request.password());
-        post.seoTitle = request.seoTitle();
-        post.seoKeywords = request.seoKeywords();
-        post.seoDescription = request.seoDescription();
+        String seoLanguage = primaryLanguage(request.title());
+        post.seoTitle = mergeSeo(null, request.seoTitleTranslations(), seoLanguage, request.seoTitle());
+        post.seoKeywords = mergeSeo(null, request.seoKeywordsTranslations(), seoLanguage, request.seoKeywords());
+        post.seoDescription = mergeSeo(null, request.seoDescriptionTranslations(), seoLanguage, request.seoDescription());
         post.renderType = resolveRenderType(request.renderType());
         post.aiSummaryStatus = request.aiSummaryStatus() == null ? 0 : request.aiSummaryStatus();
         post.user = operator;
@@ -407,6 +410,9 @@ public class AdminPostApiController {
         fields.put("title", request.title());
         fields.put("summary", request.summary() == null ? "" : request.summary());
         fields.put("contentMarkdown", request.contentMarkdown());
+        putIfPresent(fields, "seoTitle", request.seoTitle());
+        putIfPresent(fields, "seoDescription", request.seoDescription());
+        putIfPresent(fields, "seoKeywords", request.seoKeywords());
 
         try {
             com.biliwind.blog.service.ai.AiResult result = aiManager
@@ -416,11 +422,15 @@ public class AdminPostApiController {
             String translatedTitle = requiredTranslation(result, "title");
             String translatedSummary = requiredTranslation(result, "summary");
             String translatedContent = requiredTranslation(result, "contentMarkdown");
+            String translatedSeoTitle = optionalTranslation(result, "seoTitle");
+            String translatedSeoDescription = optionalTranslation(result, "seoDescription");
+            String translatedSeoKeywords = optionalTranslation(result, "seoKeywords");
             auditService.log("post", id, "ai_translation", null,
                     Map.of("sourceLanguage", sourceLanguage, "targetLanguage", targetLanguage));
             postAiMetadataService.record(id, revisionId, "translate", result, "DRAFT");
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
-                    translatedTitle, translatedSummary, translatedContent);
+                    translatedTitle, translatedSummary, translatedContent,
+                    translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords);
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
@@ -454,6 +464,9 @@ public class AdminPostApiController {
         fields.put("title", request.title());
         fields.put("summary", request.summary() == null ? "" : request.summary());
         fields.put("contentMarkdown", request.contentMarkdown());
+        putIfPresent(fields, "seoTitle", request.seoTitle());
+        putIfPresent(fields, "seoDescription", request.seoDescription());
+        putIfPresent(fields, "seoKeywords", request.seoKeywords());
 
         try {
             com.biliwind.blog.service.ai.AiResult result = aiManager
@@ -463,8 +476,12 @@ public class AdminPostApiController {
             String translatedTitle = requiredTranslation(result, "title");
             String translatedSummary = requiredTranslation(result, "summary");
             String translatedContent = requiredTranslation(result, "contentMarkdown");
+            String translatedSeoTitle = optionalTranslation(result, "seoTitle");
+            String translatedSeoDescription = optionalTranslation(result, "seoDescription");
+            String translatedSeoKeywords = optionalTranslation(result, "seoKeywords");
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
-                    translatedTitle, translatedSummary, translatedContent);
+                    translatedTitle, translatedSummary, translatedContent,
+                    translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords);
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
@@ -499,6 +516,13 @@ public class AdminPostApiController {
             nextSummary.put(targetLanguage, request.summary());
         }
 
+        Map<String, String> nextSeoTitle = new LinkedHashMap<>(post.seoTitle == null ? Map.of() : post.seoTitle);
+        Map<String, String> nextSeoKeywords = new LinkedHashMap<>(post.seoKeywords == null ? Map.of() : post.seoKeywords);
+        Map<String, String> nextSeoDescription = new LinkedHashMap<>(post.seoDescription == null ? Map.of() : post.seoDescription);
+        updateLocalizedValue(nextSeoTitle, targetLanguage, request.seoTitle());
+        updateLocalizedValue(nextSeoKeywords, targetLanguage, request.seoKeywords());
+        updateLocalizedValue(nextSeoDescription, targetLanguage, request.seoDescription());
+
         Map<String, String> currentContent = post.currentRevision == null || post.currentRevision.contentMarkdown == null
                 ? Map.of() : post.currentRevision.contentMarkdown;
         Map<String, String> nextContent = new LinkedHashMap<>(currentContent);
@@ -520,6 +544,9 @@ public class AdminPostApiController {
         post.currentRevision = nextRevision;
         post.title = nextTitle;
         post.summary = nextSummary;
+        post.seoTitle = nextSeoTitle.isEmpty() ? null : nextSeoTitle;
+        post.seoKeywords = nextSeoKeywords.isEmpty() ? null : nextSeoKeywords;
+        post.seoDescription = nextSeoDescription.isEmpty() ? null : nextSeoDescription;
         post.updatedAt = OffsetDateTime.now();
 
         mediaService.syncPostReferences(post, nextRevision.contentMarkdown);
@@ -700,6 +727,7 @@ public class AdminPostApiController {
 
     private AdminPostDetail toDetail(Post post) {
         List<Long> tagIds = getTagIdsByPostId(post.id);
+        String seoLanguage = primaryLanguage(post.title);
 
         return new AdminPostDetail(
                 post.id,
@@ -712,9 +740,9 @@ public class AdminPostApiController {
                 post.visibility,
                 null,
                 post.password != null && !post.password.isBlank(),
-                post.seoTitle,
-                post.seoKeywords,
-                post.seoDescription,
+                adminSeoValue(post.seoTitle, seoLanguage),
+                adminSeoValue(post.seoKeywords, seoLanguage),
+                adminSeoValue(post.seoDescription, seoLanguage),
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 post.currentRevision == null ? 0 : post.currentRevision.editorType,
                 post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
@@ -734,7 +762,10 @@ public class AdminPostApiController {
                 post.publishedRevision != null,
                 post.publishedAt,
                 post.createdAt,
-                post.updatedAt);
+                post.updatedAt,
+                post.seoTitle,
+                post.seoKeywords,
+                post.seoDescription);
     }
 
 
@@ -763,6 +794,32 @@ public class AdminPostApiController {
             throw badRequest(fieldName + " 必须是有效的语言代码");
         }
         return normalized;
+    }
+
+    private static void putIfPresent(Map<String, String> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value.trim());
+        }
+    }
+
+    private static void updateLocalizedValue(Map<String, String> target, String language, String value) {
+        if (value == null) {
+            return;
+        }
+        String key = LanguageHelper.normalizeToSupportedLang(language);
+        if (key == null) {
+            key = language;
+        }
+        if (value.isBlank()) {
+            target.remove(key);
+        } else {
+            target.put(key, value.trim());
+        }
+    }
+
+    private String optionalTranslation(com.biliwind.blog.service.ai.AiResult result, String field) {
+        String value = result == null || result.contents == null ? null : result.contents.get(field);
+        return value == null ? "" : value.trim();
     }
 
     private String requiredTranslation(com.biliwind.blog.service.ai.AiResult result, String field) {
@@ -931,16 +988,23 @@ public class AdminPostApiController {
             contentAccessTicketService.revokePasswordTickets(post.id);
             changed = true;
         }
-        if (request.seoTitle() != null && !Objects.equals(post.seoTitle, request.seoTitle())) {
-            post.seoTitle = request.seoTitle();
+        String seoLanguage = primaryLanguage(request.title() != null ? request.title() : post.title);
+        Map<String, String> nextSeoTitle = mergeSeo(
+                post.seoTitle, request.seoTitleTranslations(), seoLanguage, request.seoTitle());
+        if (!Objects.equals(post.seoTitle, nextSeoTitle)) {
+            post.seoTitle = nextSeoTitle;
             changed = true;
         }
-        if (request.seoKeywords() != null && !Objects.equals(post.seoKeywords, request.seoKeywords())) {
-            post.seoKeywords = request.seoKeywords();
+        Map<String, String> nextSeoKeywords = mergeSeo(
+                post.seoKeywords, request.seoKeywordsTranslations(), seoLanguage, request.seoKeywords());
+        if (!Objects.equals(post.seoKeywords, nextSeoKeywords)) {
+            post.seoKeywords = nextSeoKeywords;
             changed = true;
         }
-        if (request.seoDescription() != null && !Objects.equals(post.seoDescription, request.seoDescription())) {
-            post.seoDescription = request.seoDescription();
+        Map<String, String> nextSeoDescription = mergeSeo(
+                post.seoDescription, request.seoDescriptionTranslations(), seoLanguage, request.seoDescription());
+        if (!Objects.equals(post.seoDescription, nextSeoDescription)) {
+            post.seoDescription = nextSeoDescription;
             changed = true;
         }
 
@@ -1054,6 +1118,7 @@ public class AdminPostApiController {
         }
 
         List<Long> tagIds = getTagIdsByPostId(post.id);
+        String seoLanguage = primaryLanguage(revision.title);
 
         return new AdminPostDetail(
                 post.id,
@@ -1066,9 +1131,9 @@ public class AdminPostApiController {
                 post.visibility,
                 null,
                 post.password != null && !post.password.isBlank(),
-                post.seoTitle,
-                post.seoKeywords,
-                post.seoDescription,
+                adminSeoValue(post.seoTitle, seoLanguage),
+                adminSeoValue(post.seoKeywords, seoLanguage),
+                adminSeoValue(post.seoDescription, seoLanguage),
                 post.renderType == null ? PostRenderType.MARKDOWN.code() : post.renderType.code(),
                 revision.editorType,
                 post.aiSummaryStatus == null ? 0 : post.aiSummaryStatus,
@@ -1088,7 +1153,10 @@ public class AdminPostApiController {
                 post.publishedRevision != null,
                 post.publishedAt,
                 post.createdAt,
-                post.updatedAt);
+                post.updatedAt,
+                post.seoTitle,
+                post.seoKeywords,
+                post.seoDescription);
     }
 
     @POST
@@ -1178,5 +1246,63 @@ public class AdminPostApiController {
             return false;
         }
         return revision.id.equals(revision.post.publishedRevision.id);
+    }
+
+    private static String primaryLanguage(Map<String, String> title) {
+        if (title == null || title.isEmpty()) {
+            return LanguageConstant.DEFAULT_LANG;
+        }
+        String resolved = LanguageHelper.resolveLocalizedLanguage(title, LanguageConstant.DEFAULT_LANG);
+        return resolved == null ? LanguageConstant.DEFAULT_LANG : resolved;
+    }
+
+    private static String adminSeoValue(Map<String, String> values, String language) {
+        String resolved = LanguageHelper.resolveLocalizedValue(values, language);
+        return resolved == null || resolved.isBlank() ? null : resolved.trim();
+    }
+
+    /**
+     * Keeps the legacy single-value admin fields working while allowing API
+     * clients to edit every language. The string field always targets the
+     * article's primary language; translation maps win when both are present.
+     */
+    private static Map<String, String> mergeSeo(Map<String, String> existing,
+                                                Map<String, String> translations,
+                                                String primaryLanguage,
+                                                String value) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (existing != null) {
+            existing.forEach((key, text) -> {
+                if (key != null && text != null && !text.isBlank()) {
+                    result.put(key, text);
+                }
+            });
+        }
+        if (value != null) {
+            if (value.isBlank()) {
+                result.remove(primaryLanguage);
+            } else {
+                result.put(primaryLanguage, value.trim());
+            }
+        }
+        // Explicit translation maps win over the legacy single-value field.
+        if (translations != null) {
+            for (Map.Entry<String, String> entry : translations.entrySet()) {
+                if (entry.getKey() == null || entry.getKey().isBlank()) {
+                    continue;
+                }
+                String key = entry.getKey().trim();
+                String normalized = LanguageHelper.normalizeToSupportedLang(key);
+                if (normalized != null) {
+                    key = normalized;
+                }
+                if (entry.getValue() == null || entry.getValue().isBlank()) {
+                    result.remove(key);
+                } else {
+                    result.put(key, entry.getValue().trim());
+                }
+            }
+        }
+        return result.isEmpty() ? null : result;
     }
 }

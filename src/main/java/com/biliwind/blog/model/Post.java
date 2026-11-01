@@ -76,17 +76,20 @@ public class Post extends PanacheEntityBase {
     @Column(length = 100)
     public String password;
 
-    /** SEO 标题 */
-    @Column(name = "seo_title")
-    public String seoTitle;
+    /** SEO 标题（多语言） */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "seo_title", columnDefinition = "jsonb")
+    public Map<String, String> seoTitle;
 
-    /** SEO 关键词 */
-    @Column(name = "seo_keywords")
-    public String seoKeywords;
+    /** SEO 关键词（多语言） */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "seo_keywords", columnDefinition = "jsonb")
+    public Map<String, String> seoKeywords;
 
-    /** SEO 描述 */
-    @Column(name = "seo_description", columnDefinition = "text")
-    public String seoDescription;
+    /** SEO 描述（多语言） */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "seo_description", columnDefinition = "jsonb")
+    public Map<String, String> seoDescription;
 
 
     /**

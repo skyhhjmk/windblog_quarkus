@@ -272,8 +272,10 @@ public class PostController {
         }
         String publicHtml = snapshot.postPrice() > 0 || protectedPage
                 ? resolvePostBody(snapshot.renderType(), publicPreview).body() : postBody.body();
-        String seoTitle = resolveSeoTitle(snapshot, displayTitle);
-        String pageDescription = resolvePageDescription(snapshot, localizedAiSummary, localizedContent, resolvedLang);
+        String seoTitle = resolveSeoTitle(snapshot, displayTitle, contentLanguage);
+        String pageDescription = resolvePageDescription(
+                snapshot, localizedAiSummary, localizedContent, contentLanguage);
+        String pageKeywords = resolveSeoKeywords(snapshot, contentLanguage);
         // Canonicalise a fallback render to the language that actually has the
         // article body; the fallback URL itself must not compete as a duplicate.
         String canonicalUrl = buildCanonicalUrl(slug, contentLanguage);
@@ -325,7 +327,7 @@ public class PostController {
                 .data("postTitle", displayTitle)
                 .data("pageTitle", seoTitle)
                 .data("pageDescription", pageDescription)
-                .data("pageKeywords", snapshot.seoKeywords())
+                .data("pageKeywords", pageKeywords)
                 .data("aiSummary", localizedAiSummary)
                 .data("aiSummaryStatus", aiSummaryStatusVal)
                 .data("postBody", postBody.body())
@@ -405,11 +407,19 @@ public class PostController {
 
     private String resolveSeoTitle(
             com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
-            String displayTitle) {
-        if (snapshot.seoTitle() != null && !snapshot.seoTitle().isBlank()) {
-            return snapshot.seoTitle().trim();
+            String displayTitle, String language) {
+        String seoTitle = LanguageHelper.lookupIgnoreCase(snapshot.seoTitle(), language);
+        if (seoTitle != null && !seoTitle.isBlank()) {
+            return seoTitle.trim();
         }
         return displayTitle;
+    }
+
+    private String resolveSeoKeywords(
+            com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
+            String language) {
+        String keywords = LanguageHelper.lookupIgnoreCase(snapshot.seoKeywords(), language);
+        return keywords == null || keywords.isBlank() ? null : keywords.trim();
     }
 
     private String resolvePageDescription(
@@ -417,8 +427,9 @@ public class PostController {
                                           String localizedAiSummary,
                                           String localizedContent,
                                           String language) {
-        if (snapshot.seoDescription() != null && !snapshot.seoDescription().isBlank()) {
-            return snapshot.seoDescription().trim();
+        String seoDescription = LanguageHelper.lookupIgnoreCase(snapshot.seoDescription(), language);
+        if (seoDescription != null && !seoDescription.isBlank()) {
+            return seoDescription.trim();
         }
 
         String localizedSummary = LanguageHelper.resolveLocalizedValue(snapshot.summary(), language);

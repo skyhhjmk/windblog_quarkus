@@ -56,11 +56,11 @@ public class AmpPageService {
         if (title == null || title.isBlank()) {
             title = normalizedSlug;
         }
-        String summary = resolveSummary(snapshot, language);
-        String rawContent = resolveContent(snapshot.previewContent(), language);
         // The public article may only exist in one language. Canonicalise the
         // fallback render to that language so the AMP and standard pages agree.
         String contentLanguage = LanguageHelper.resolveLocalizedLanguage(snapshot.previewContent(), language);
+        String summary = resolveSummary(snapshot, contentLanguage);
+        String rawContent = resolveContent(snapshot.previewContent(), language);
 
         if (snapshot.visibility() != 0 || snapshot.postPrice() > 0) {
             return Optional.of(AmpPost.unavailable(
@@ -124,7 +124,7 @@ public class AmpPageService {
     }
 
     private String resolveSummary(PublicCacheRefreshService.PublicPostSnapshot snapshot, String language) {
-        String summary = snapshot.seoDescription();
+        String summary = LanguageHelper.lookupIgnoreCase(snapshot.seoDescription(), language);
         if (summary != null) {
             summary = summary.trim();
         }

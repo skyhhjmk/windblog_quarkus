@@ -18,4 +18,9 @@
       <loc>{baseUrl}/sitemap-tags-{page}.xml</loc>
    </sitemap>
    {/for}
+   {#for page in linkPages}
+   <sitemap>
+      <loc>{baseUrl}/sitemap-links-{page}.xml</loc>
+   </sitemap>
+   {/for}
 </sitemapindex>

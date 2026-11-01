@@ -34,7 +34,10 @@ public final class AdminPostDtos {
                         List<Long> tagIds,
                         List<String> visibilityRegions,
                         List<String> contentDeclarations,
-                        String repostPolicyCode) {
+                        String repostPolicyCode,
+                        Map<String, String> seoTitleTranslations,
+                        Map<String, String> seoKeywordsTranslations,
+                        Map<String, String> seoDescriptionTranslations) {
         }
 
     public record PostUpdateRequest(
@@ -60,7 +63,10 @@ public final class AdminPostDtos {
                         List<Long> tagIds,
                         List<String> visibilityRegions,
                         List<String> contentDeclarations,
-                        String repostPolicyCode) {
+                        String repostPolicyCode,
+                        Map<String, String> seoTitleTranslations,
+                        Map<String, String> seoKeywordsTranslations,
+                        Map<String, String> seoDescriptionTranslations) {
         }
 
         public record PostTranslationRequest(
@@ -68,7 +74,10 @@ public final class AdminPostDtos {
                         String targetLanguage,
                         String title,
                         String summary,
-                        String contentMarkdown) {
+                        String contentMarkdown,
+                        String seoTitle,
+                        String seoDescription,
+                        String seoKeywords) {
         }
 
         public record PostTranslationResponse(
@@ -76,14 +85,20 @@ public final class AdminPostDtos {
                         String targetLanguage,
                         String title,
                         String summary,
-                        String contentMarkdown) {
+                        String contentMarkdown,
+                        String seoTitle,
+                        String seoDescription,
+                        String seoKeywords) {
         }
 
         public record PostSaveTranslationRequest(
                         String targetLanguage,
                         String title,
                         String summary,
-                        String contentMarkdown) {
+                        String contentMarkdown,
+                        String seoTitle,
+                        String seoDescription,
+                        String seoKeywords) {
         }
 
         public record AdminPostItem(
@@ -149,7 +164,10 @@ public final class AdminPostDtos {
                         Boolean hasPublishedRevision,
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
-                        OffsetDateTime updatedAt) {
+                        OffsetDateTime updatedAt,
+                        Map<String, String> seoTitleTranslations,
+                        Map<String, String> seoKeywordsTranslations,
+                        Map<String, String> seoDescriptionTranslations) {
         }
 
     public record PostRevisionItem(

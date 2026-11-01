@@ -202,6 +202,9 @@ public class UserPostSubmissionController {
         fields.put("title", request.title());
         fields.put("summary", request.summary() == null ? "" : request.summary());
         fields.put("contentMarkdown", request.contentMarkdown());
+        putIfPresent(fields, "seoTitle", request.seoTitle());
+        putIfPresent(fields, "seoDescription", request.seoDescription());
+        putIfPresent(fields, "seoKeywords", request.seoKeywords());
 
         try {
             com.biliwind.blog.service.ai.AiResult result = aiManager
@@ -214,7 +217,10 @@ public class UserPostSubmissionController {
             return Response.ok(Map.of(
                     "success", true,
                     "data", new PostTranslationResponse(sourceLanguage, targetLanguage,
-                            translatedTitle, translatedSummary, translatedContent)
+                            translatedTitle, translatedSummary, translatedContent,
+                            optionalTranslation(result, "seoTitle"),
+                            optionalTranslation(result, "seoDescription"),
+                            optionalTranslation(result, "seoKeywords"))
             )).build();
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
@@ -282,6 +288,17 @@ public class UserPostSubmissionController {
             throw new BadRequestException(paramName + " 不能为空");
         }
         return lang.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static void putIfPresent(Map<String, String> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value.trim());
+        }
+    }
+
+    private String optionalTranslation(com.biliwind.blog.service.ai.AiResult result, String field) {
+        String value = result == null || result.contents == null ? null : result.contents.get(field);
+        return value == null ? "" : value.trim();
     }
 
     private String requiredTranslation(com.biliwind.blog.service.ai.AiResult result, String field) {

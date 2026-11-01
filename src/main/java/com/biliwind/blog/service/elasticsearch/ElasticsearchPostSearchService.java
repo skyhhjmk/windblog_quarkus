@@ -757,9 +757,9 @@ public class ElasticsearchPostSearchService {
             categoryDocuments = List.of(Map.of("name", name == null ? "" : name, "slug", post.category.slug));
         }
         document.put("categories", categoryDocuments);
-        document.put("seoTitle", post.seoTitle != null ? post.seoTitle : "");
-        document.put("seoKeywords", post.seoKeywords != null ? post.seoKeywords : "");
-        document.put("seoDescription", post.seoDescription != null ? post.seoDescription : "");
+        document.put("seoTitle", joinLocalized(post.seoTitle));
+        document.put("seoKeywords", joinLocalized(post.seoKeywords));
+        document.put("seoDescription", joinLocalized(post.seoDescription));
         document.put("viewCount", post.viewCount != null ? post.viewCount : 0L);
         document.put("featured", post.featured != null ? post.featured : false);
         document.put("allowComment", post.allowComment != null ? post.allowComment : true);
@@ -1533,5 +1533,14 @@ public class ElasticsearchPostSearchService {
         public ElasticsearchUnavailableException(String message) {
             super(message);
         }
+    }
+
+    private static String joinLocalized(java.util.Map<String, String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        return values.values().stream()
+                .filter(value -> value != null && !value.isBlank())
+                .collect(java.util.stream.Collectors.joining(" "));
     }
 }

@@ -173,7 +173,7 @@ public class AdminTranslationService {
             return new PreparedTranslation(post.id, post.slug, null, target,
                     revision.id, revision.revisionNumber, post.version, true,
                     "该文章已存在目标语言译本", published,
-                    null, null, null);
+                    null, null, null, null, null, null);
         }
 
         String source = resolveSourceLanguage(post, target, sourceLanguage);
@@ -182,6 +182,9 @@ public class AdminTranslationService {
         String sourceSummary = post.summary == null ? null
                 : LanguageHelper.resolveLocalizedValue(post.summary, source);
         String sourceContent = sourceKey == null ? null : revision.contentMarkdown.get(sourceKey);
+        String sourceSeoTitle = LanguageHelper.lookupIgnoreCase(post.seoTitle, source);
+        String sourceSeoDescription = LanguageHelper.lookupIgnoreCase(post.seoDescription, source);
+        String sourceSeoKeywords = LanguageHelper.lookupIgnoreCase(post.seoKeywords, source);
         if (sourceTitle == null || sourceTitle.isBlank()) {
             throw new BadRequestException("找不到源语言标题: " + source);
         }
@@ -193,7 +196,8 @@ public class AdminTranslationService {
         }
         return new PreparedTranslation(post.id, post.slug, source, target,
                 revision.id, revision.revisionNumber, post.version, false, null, published,
-                sourceTitle, sourceSummary == null ? "" : sourceSummary, sourceContent);
+                sourceTitle, sourceSummary == null ? "" : sourceSummary, sourceContent,
+                sourceSeoTitle, sourceSeoDescription, sourceSeoKeywords);
     }
 
     private TranslatedFields translatePrepared(PreparedTranslation prepared) {
@@ -201,11 +205,17 @@ public class AdminTranslationService {
         fields.put("title", prepared.sourceTitle());
         fields.put("summary", prepared.sourceSummary());
         fields.put("contentMarkdown", prepared.sourceContent());
+        putIfPresent(fields, "seoTitle", prepared.sourceSeoTitle());
+        putIfPresent(fields, "seoDescription", prepared.sourceSeoDescription());
+        putIfPresent(fields, "seoKeywords", prepared.sourceSeoKeywords());
 
         AiResult aiResult = requestTranslation(prepared.sourceLanguage(), prepared.targetLanguage(), fields);
         String translatedTitle = required(aiResult, "title");
         String translatedSummary = optional(aiResult, "summary");
         String translatedContent = required(aiResult, "contentMarkdown");
+        String translatedSeoTitle = optional(aiResult, "seoTitle");
+        String translatedSeoDescription = optional(aiResult, "seoDescription");
+        String translatedSeoKeywords = optional(aiResult, "seoKeywords");
 
         List<String> issues = MarkdownTranslationGuard.verify(prepared.sourceContent(), translatedContent);
         if (!issues.isEmpty()) {
@@ -213,12 +223,16 @@ public class AdminTranslationService {
             translatedTitle = required(aiResult, "title");
             translatedSummary = optional(aiResult, "summary");
             translatedContent = required(aiResult, "contentMarkdown");
+            translatedSeoTitle = optional(aiResult, "seoTitle");
+            translatedSeoDescription = optional(aiResult, "seoDescription");
+            translatedSeoKeywords = optional(aiResult, "seoKeywords");
             issues = MarkdownTranslationGuard.verify(prepared.sourceContent(), translatedContent);
             if (!issues.isEmpty()) {
                 throw new BadRequestException("AI 译文未保持原文 Markdown 结构: " + String.join("；", issues));
             }
         }
-        return new TranslatedFields(translatedTitle, translatedSummary, translatedContent, aiResult);
+        return new TranslatedFields(translatedTitle, translatedSummary, translatedContent,
+                translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords, aiResult);
     }
 
     private TranslatePostResult saveTranslation(PreparedTranslation prepared,
@@ -245,6 +259,12 @@ public class AdminTranslationService {
         Map<String, String> nextContent = new LinkedHashMap<>(revision.contentMarkdown);
         nextContent.put(targetKey, translated.contentMarkdown());
         nextContent = PostHelper.injectBlockIds(nextContent);
+        Map<String, String> nextSeoTitle = copyLocalized(post.seoTitle);
+        putIfPresent(nextSeoTitle, targetKey, translated.seoTitle());
+        Map<String, String> nextSeoDescription = copyLocalized(post.seoDescription);
+        putIfPresent(nextSeoDescription, targetKey, translated.seoDescription());
+        Map<String, String> nextSeoKeywords = copyLocalized(post.seoKeywords);
+        putIfPresent(nextSeoKeywords, targetKey, translated.seoKeywords());
 
         User operator = currentOperator(operatorId);
         PostRevision nextRevision = new PostRevision();
@@ -265,6 +285,9 @@ public class AdminTranslationService {
         }
         post.title = nextTitle;
         post.summary = nextSummary;
+        post.seoTitle = nextSeoTitle.isEmpty() ? null : nextSeoTitle;
+        post.seoDescription = nextSeoDescription.isEmpty() ? null : nextSeoDescription;
+        post.seoKeywords = nextSeoKeywords.isEmpty() ? null : nextSeoKeywords;
         post.updatedAt = OffsetDateTime.now();
 
         mediaService.syncPostReferences(post, nextContent);
@@ -288,7 +311,9 @@ public class AdminTranslationService {
                                        String targetLanguage, Long revisionId, int revisionNumber,
                                        Integer postVersion,
                                        boolean skipped, String skipMessage, boolean published,
-                                       String sourceTitle, String sourceSummary, String sourceContent) {
+                                       String sourceTitle, String sourceSummary, String sourceContent,
+                                       String sourceSeoTitle, String sourceSeoDescription,
+                                       String sourceSeoKeywords) {
         TranslatePostResult skippedResult() {
             return new TranslatePostResult(postId, slug, null, targetLanguage, false, true,
                     published, revisionNumber, skipMessage, null, null, null);
@@ -296,7 +321,18 @@ public class AdminTranslationService {
     }
 
     private record TranslatedFields(String title, String summary, String contentMarkdown,
+                                    String seoTitle, String seoDescription, String seoKeywords,
                                     AiResult aiResult) {
+    }
+
+    private static void putIfPresent(Map<String, String> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value.trim());
+        }
+    }
+
+    private static Map<String, String> copyLocalized(Map<String, String> values) {
+        return new LinkedHashMap<>(values == null ? Map.of() : values);
     }
 
     private AiResult requestTranslation(String source, String target, Map<String, String> fields) {

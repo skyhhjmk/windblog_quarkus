@@ -37,13 +37,16 @@ class PublicSeoPagesTest {
     PasswordHasher passwordHasher;
 
     private String chineseOnlySlug;
+    private String bilingualSlug;
     private String seededUsername;
 
     @BeforeAll
     void seedChineseOnlyPost() {
         chineseOnlySlug = "seo-zh-only-" + UUID.randomUUID();
+        bilingualSlug = "seo-bilingual-" + UUID.randomUUID();
         seededUsername = "seo-author-" + UUID.randomUUID();
         String slug = chineseOnlySlug;
+        String bilingual = bilingualSlug;
         String username = seededUsername;
         QuarkusTransaction.requiringNew().run(() -> {
             User user = new User();
@@ -61,6 +64,9 @@ class PublicSeoPagesTest {
             post.slug = slug;
             post.title = Map.of("zh-cn", "仅中文的 SEO 测试文章");
             post.summary = Map.of("zh-cn", "用于验证语言回退 canonical 的摘要");
+            post.seoTitle = Map.of("zh-cn", "仅中文 SEO 标题");
+            post.seoDescription = Map.of("zh-cn", "仅中文 SEO 描述");
+            post.seoKeywords = Map.of("zh-cn", "SEO,测试");
             post.status = PostStatus.PUBLISHED;
             post.visibility = 0;
             post.renderType = PostRenderType.MARKDOWN;
@@ -82,6 +88,37 @@ class PublicSeoPagesTest {
 
             post.currentRevision = revision;
             post.publishedRevision = revision;
+
+            Post second = new Post();
+            second.slug = bilingual;
+            second.title = Map.of("zh-cn", "双语 SEO 文章", "en-US", "Bilingual SEO article");
+            second.summary = Map.of("zh-cn", "中文摘要", "en-US", "English summary");
+            second.seoTitle = Map.of("zh-cn", "中文 SEO 标题", "en-US", "English SEO title");
+            second.seoDescription = Map.of("zh-cn", "中文 SEO 描述", "en-US", "English SEO description");
+            second.seoKeywords = Map.of("zh-cn", "中文,关键词", "en-US", "english,keywords");
+            second.status = PostStatus.PUBLISHED;
+            second.visibility = 0;
+            second.renderType = PostRenderType.MARKDOWN;
+            second.user = user;
+            second.publishedAt = now;
+            second.createdAt = now;
+            second.updatedAt = now;
+            second.persist();
+
+            PostRevision secondRevision = new PostRevision();
+            secondRevision.post = second;
+            secondRevision.title = second.title;
+            secondRevision.contentMarkdown = Map.of(
+                    "zh-cn", "这是中文正文。",
+                    "en-US", "This is the English body.");
+            secondRevision.editorType = 0;
+            secondRevision.revisionNumber = 1;
+            secondRevision.createdBy = user;
+            secondRevision.createdAt = now;
+            secondRevision.persist();
+
+            second.currentRevision = secondRevision;
+            second.publishedRevision = secondRevision;
         });
     }
 
@@ -152,6 +189,41 @@ class PublicSeoPagesTest {
                 .body(containsString("hreflang=\"zh-cn\""))
                 .body(containsString("rel=\"amphtml\""))
                 .body(not(containsString("<!DOCTYPE")));
+    }
+
+    @Test
+    void localizedSeoFieldsFollowTheRenderedLanguage() {
+        given().get("/zh-cn/post/" + chineseOnlySlug).then().statusCode(200)
+                .body(containsString("仅中文 SEO 标题"))
+                .body(containsString("content=\"仅中文 SEO 描述\""))
+                .body(containsString("content=\"SEO,测试\""));
+
+        // The English URL renders the Chinese body, so it uses the zh SEO copy.
+        given().get("/en-US/post/" + chineseOnlySlug).then().statusCode(200)
+                .body(containsString("仅中文 SEO 标题"))
+                .body(containsString("content=\"仅中文 SEO 描述\""));
+
+        given().get("/post/" + bilingualSlug).then().statusCode(200)
+                .body(containsString("English SEO title"))
+                .body(containsString("content=\"English SEO description\""))
+                .body(containsString("content=\"english,keywords\""));
+
+        given().get("/zh-cn/post/" + bilingualSlug).then().statusCode(200)
+                .body(containsString("中文 SEO 标题"))
+                .body(containsString("content=\"中文 SEO 描述\""))
+                .body(containsString("content=\"中文,关键词\""));
+    }
+
+    @Test
+    void robotsBlocksQuarkusManagementEndpoints() {
+        given().get("/robots.txt").then().statusCode(200)
+                .body(containsString("Disallow: /q/"));
+    }
+
+    @Test
+    void sitemapIndexIncludesTheLinkShard() {
+        given().get("/sitemap.xml").then().statusCode(200)
+                .body(containsString("/sitemap-links-1.xml"));
     }
 
     @Test

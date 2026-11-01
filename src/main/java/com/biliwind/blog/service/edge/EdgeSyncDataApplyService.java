@@ -518,6 +518,45 @@ public class EdgeSyncDataApplyService {
         return value.asInt();
     }
 
+    private Map<String, String> readLocalizedOrLegacy(JsonNode node, String fieldName, JsonNode titleNode) {
+        JsonNode localized = node.get(fieldName + "I18n");
+        if (localized != null && !localized.isNull()) {
+            return readStringMap(node, fieldName + "I18n");
+        }
+        return readLocalizedField(node, fieldName, titleNode);
+    }
+
+    /**
+     * WESP snapshots written before the SEO i18n migration used a single text
+     * value; attach it to the article's primary language. New snapshots carry
+     * a localized object.
+     */
+    private Map<String, String> readLocalizedField(JsonNode node, String fieldName, JsonNode titleNode) {
+        JsonNode value = node.get(fieldName);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (value.isTextual()) {
+            String text = value.asText();
+            if (text.isBlank()) {
+                return null;
+            }
+            String language = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG;
+            if (titleNode != null && titleNode.isObject()) {
+                Map<String, String> title = new LinkedHashMap<>();
+                titleNode.fields().forEachRemaining(entry -> {
+                    if (entry.getValue() != null && entry.getValue().isTextual()) {
+                        title.put(entry.getKey(), entry.getValue().asText());
+                    }
+                });
+                language = com.biliwind.blog.common.helper.LanguageHelper.resolveLocalizedLanguage(
+                        title, language);
+            }
+            return Map.of(language, text);
+        }
+        return readStringMap(node, fieldName);
+    }
+
     private Map<String, String> readStringMap(JsonNode node, String fieldName) {
         JsonNode value = node.get(fieldName);
         if (value == null || value.isNull()) {
@@ -678,9 +717,9 @@ public class EdgeSyncDataApplyService {
         String statusName = readRequiredText(validatedPostNode, "status");
         post.status = PostStatus.valueOf(statusName);
         post.visibility = readRequiredShort(validatedPostNode, "visibility");
-        post.seoTitle = readOptionalText(validatedPostNode, "seoTitle");
-        post.seoKeywords = readOptionalText(validatedPostNode, "seoKeywords");
-        post.seoDescription = readOptionalText(validatedPostNode, "seoDescription");
+        post.seoTitle = readLocalizedOrLegacy(validatedPostNode, "seoTitle", validatedPostNode.get("title"));
+        post.seoKeywords = readLocalizedOrLegacy(validatedPostNode, "seoKeywords", validatedPostNode.get("title"));
+        post.seoDescription = readLocalizedOrLegacy(validatedPostNode, "seoDescription", validatedPostNode.get("title"));
         post.renderType = PostRenderType.valueOf(readRequiredText(validatedPostNode, "renderType"));
 
         Long userId = readReferenceId(validatedPostNode, "user");
@@ -783,7 +822,8 @@ public class EdgeSyncDataApplyService {
                 ) values (
                     :id, :slug, cast(:title as jsonb), cast(:summary as jsonb), cast(:aiSummary as jsonb),
                     null, :status, :visibility, :userId, :publishedAt, current_timestamp, current_timestamp,
-                    null, 0, :renderType, null, :seoTitle, :seoKeywords, :seoDescription, :categoryId,
+                    null, 0, :renderType, null, cast(:seoTitle as jsonb), cast(:seoKeywords as jsonb),
+                    cast(:seoDescription as jsonb), :categoryId,
                     null, :viewCount, :featured, :allowComment, cast(:extraInfo as jsonb),
                     cast(:visibilityRegions as jsonb), :aiSummaryStatus, cast(:contentDeclarations as jsonb),
                     :repostPolicyCode, :authorName
@@ -799,9 +839,9 @@ public class EdgeSyncDataApplyService {
                 .setParameter("userId", post.user.id)
                 .setParameter("publishedAt", post.publishedAt)
                 .setParameter("renderType", post.renderType.code())
-                .setParameter("seoTitle", post.seoTitle)
-                .setParameter("seoKeywords", post.seoKeywords)
-                .setParameter("seoDescription", post.seoDescription)
+                .setParameter("seoTitle", writeJsonValue(post.seoTitle))
+                .setParameter("seoKeywords", writeJsonValue(post.seoKeywords))
+                .setParameter("seoDescription", writeJsonValue(post.seoDescription))
                 .setParameter("categoryId", categoryId)
                 .setParameter("viewCount", post.viewCount)
                 .setParameter("featured", post.featured)

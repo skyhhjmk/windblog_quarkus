@@ -26,10 +26,12 @@ public class SeoAuditService {
 
     public Map<String, Object> inspect(Post post, String language, String keyword) {
         Document doc = Jsoup.parseBodyFragment(html(post, language));
-        String title = post.seoTitle == null || post.seoTitle.isBlank()
-                ? LanguageHelper.resolveLocalizedValue(post.publishedRevision.title, language) : post.seoTitle;
-        String description = post.seoDescription == null || post.seoDescription.isBlank()
-                ? LanguageHelper.resolveLocalizedValue(post.summary, language) : post.seoDescription;
+        String seoTitle = LanguageHelper.lookupIgnoreCase(post.seoTitle, language);
+        String title = seoTitle == null || seoTitle.isBlank()
+                ? LanguageHelper.resolveLocalizedValue(post.publishedRevision.title, language) : seoTitle.trim();
+        String seoDescription = LanguageHelper.lookupIgnoreCase(post.seoDescription, language);
+        String description = seoDescription == null || seoDescription.isBlank()
+                ? LanguageHelper.resolveLocalizedValue(post.summary, language) : seoDescription.trim();
         List<String> issues = new ArrayList<>();
         int score = 100;
         if (title == null || title.isBlank()) { issues.add("标题为空"); score -= 25; }

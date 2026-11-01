@@ -441,9 +441,14 @@ public class EdgeDataSyncService {
         putShort(publicPost, "aiSummaryStatus", post.aiSummaryStatus);
         putText(publicPost, "status", post.status == null ? null : post.status.name());
         putShort(publicPost, "visibility", post.visibility);
-        putText(publicPost, "seoTitle", post.seoTitle);
-        putText(publicPost, "seoKeywords", post.seoKeywords);
-        putText(publicPost, "seoDescription", post.seoDescription);
+        // Keep the legacy text fields for older edge nodes; new nodes prefer
+        // the localized maps and ignore the single-value copies.
+        putText(publicPost, "seoTitle", firstLocalizedValue(post.seoTitle));
+        putText(publicPost, "seoKeywords", firstLocalizedValue(post.seoKeywords));
+        putText(publicPost, "seoDescription", firstLocalizedValue(post.seoDescription));
+        putLocalized(publicPost, "seoTitleI18n", post.seoTitle);
+        putLocalized(publicPost, "seoKeywordsI18n", post.seoKeywords);
+        putLocalized(publicPost, "seoDescriptionI18n", post.seoDescription);
         putText(publicPost, "renderType", post.renderType == null ? null : post.renderType.name());
         putReference(publicPost, "user", post.user == null ? null : post.user.id);
         // WESP never transfers account credentials, but the public read model
@@ -521,6 +526,26 @@ public class EdgeDataSyncService {
         ObjectNode reference = objectMapper.createObjectNode();
         reference.put("id", id);
         target.set(fieldName, reference);
+    }
+
+    private static String firstLocalizedValue(Map<String, String> values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values.values()) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private void putLocalized(ObjectNode target, String fieldName, Map<String, String> value) {
+        if (value == null) {
+            target.putNull(fieldName);
+            return;
+        }
+        target.set(fieldName, objectMapper.valueToTree(value));
     }
 
     private void putText(ObjectNode target, String fieldName, String value) {

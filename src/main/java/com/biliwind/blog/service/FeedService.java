@@ -3,8 +3,11 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Category;
+import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.Tag;
+import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import io.quarkus.qute.TemplateData;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -166,11 +169,8 @@ public class FeedService {
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<SitemapUrlView> result = new ArrayList<>();
         for (Category category : categories) {
-            String path = "/category/" + encodeSlug(category.slug);
-            result.add(new SitemapUrlView(
-                    getBaseUrl() + path,
-                    formatLastModified(category.updatedAt, category.createdAt),
-                    seoPageService.alternates(path)));
+            addLocalizedEntries(result, "/category/" + encodeSlug(category.slug),
+                    formatLastModified(category.updatedAt, category.createdAt));
         }
         return result;
     }
@@ -183,36 +183,64 @@ public class FeedService {
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<SitemapUrlView> result = new ArrayList<>();
         for (Tag tag : tags) {
-            String path = "/tag/" + encodeSlug(tag.slug);
-            result.add(new SitemapUrlView(
-                    getBaseUrl() + path,
-                    formatLastModified(tag.updatedAt, tag.createdAt),
-                    seoPageService.alternates(path)));
+            addLocalizedEntries(result, "/tag/" + encodeSlug(tag.slug),
+                    formatLastModified(tag.updatedAt, tag.createdAt));
         }
         return result;
     }
 
     public List<SitemapUrlView> getPageSitemapUrls() {
         if (!config.getBoolean("seo", "index_enabled", true)) return List.of();
-        String normalizedBaseUrl = getBaseUrl();
         List<SitemapUrlView> result = new ArrayList<>();
         for (String path : pagePaths()) {
-            List<SeoPageService.Alternate> alternates = seoPageService.alternates(path);
-            if (alternates.isEmpty()) {
-                result.add(new SitemapUrlView(normalizedBaseUrl + path, "", List.of()));
-                continue;
-            }
-            // List every advertised language as its own entry, not only the
-            // region default URL, so the non-default versions are discoverable
-            // directly from the sitemap.
-            for (SeoPageService.Alternate alternate : alternates) {
-                if ("x-default".equals(alternate.language())) {
-                    continue;
-                }
-                result.add(new SitemapUrlView(alternate.url(), "", alternates));
-            }
+            addLocalizedEntries(result, path, "");
         }
         return result;
+    }
+
+    public List<Integer> getLinkSitemapPages() {
+        return sitemapPages(Link.count("status = 1"));
+    }
+
+    public List<SitemapUrlView> getLinkSitemapUrls() {
+        return getLinkSitemapUrls(1);
+    }
+
+    public List<SitemapUrlView> getLinkSitemapUrls(int page) {
+        if (!config.getBoolean("seo", "index_enabled", true)) return List.of();
+        if (page < 1 || page > getLinkSitemapPages().size()) {
+            throw new jakarta.ws.rs.NotFoundException();
+        }
+        List<Link> links = Link.find("status = 1 order by id")
+                .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
+        List<SitemapUrlView> result = new ArrayList<>();
+        for (Link link : links) {
+            if (!LinkMonitorPolicy.isVisibleOnPublicPage(link)
+                    || !LinkMonitorPolicy.isVisibleInRegion(link, BlogRegion.GLOBAL)) {
+                continue;
+            }
+            addLocalizedEntries(result, "/link/" + link.id,
+                    formatLastModified(link.updatedAt, link.createdAt));
+        }
+        return result;
+    }
+
+    /**
+     * Emits one URL per advertised language (skipping x-default) so every
+     * translated page is directly discoverable from the sitemap.
+     */
+    private void addLocalizedEntries(List<SitemapUrlView> result, String path, String lastmod) {
+        List<SeoPageService.Alternate> alternates = seoPageService.alternates(path);
+        if (alternates.isEmpty()) {
+            result.add(new SitemapUrlView(getBaseUrl() + path, lastmod, List.of()));
+            return;
+        }
+        for (SeoPageService.Alternate alternate : alternates) {
+            if ("x-default".equals(alternate.language())) {
+                continue;
+            }
+            result.add(new SitemapUrlView(alternate.url(), lastmod, alternates));
+        }
     }
 
     private List<String> pagePaths() {

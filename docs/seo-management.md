@@ -2,13 +2,19 @@
 
 管理端入口为「AMP / SEO → SEO 管理」。文章编辑器的发布设置中新增搜索标题、描述和关键词；留空时沿用文章标题、摘要、AI 摘要或正文回退。文章 SEO 字段当前沿用后端已有的单值字段，不是多语言字段。
 
+## 多语言 SEO 字段
+
+文章的 `seo_title`、`seo_keywords`、`seo_description` 以 JSONB 按语言保存（`152-add-post-seo-i18n` 迁移会把旧单值归入文章主语言）。后台现有单值输入仍可用，写入文章主语言；API 还可通过 `seoTitleTranslations`、`seoKeywordsTranslations`、`seoDescriptionTranslations` 编辑所有语言，响应同时返回单值（主语言）和完整映射。公开页按实际正文语言读取 SEO，缺失时才回退标题/摘要，不会把其他语言的 SEO 文案用于当前页面。
+
+一键 AI 翻译会同时翻译已填写的 SEO 标题、描述和关键词；`seoKeywords` 输出目标语言关键词短语，其他内容字段保持原有 Markdown 结构校验。
+
 ## Sitemap 与多语言
 
 `/sitemap.xml` 按 1000 篇文章或分类/标签一组列出分片。`/sitemap-posts.xml`、`/sitemap-categories.xml` 和 `/sitemap-tags.xml` 保留为第一片兼容入口；搜索引擎应提交索引地址，索引会列出全部分片。
 
 仅将已发布、公开、有发布版本、global 区域可见且未设置 noindex 的文章放入文章地图。只发布同时具有对应标题和正文的语言版本，输出 hreflang、双向 alternate 和可用默认语言的 x-default。普通 HTML、AMP 和 PJAX 也输出文章语言关联。文章地图从免费公开正文提取最多三张图片，不读取付费原文图片。
 
-Sitemap、robots 中的 Sitemap 地址及 Canonical 均使用相同的 global 规范域名策略。页面、分类和标签的 sitemap 分片会同时输出 `xhtml:link` 语言关联；文章地图的 alternates 直接复用已加载的发布版本，避免逐条重复查询。站点地图没有主动通知或保证收录的含义，应在 Search Console 中提交。sitemap、robots 与 RSS 响应带有 `Cache-Control: public, max-age=3600`；RSS 同时声明 `Vary: Cookie`，因为订阅语言跟随语言 Cookie。
+Sitemap、robots 中的 Sitemap 地址及 Canonical 均使用相同的 global 规范域名策略。页面、分类、标签和友链详情都会按语言分别列出 URL，并输出 `xhtml:link` 语言关联；文章地图的 alternates 直接复用已加载的发布版本，避免逐条重复查询。友链详情使用独立的 `/sitemap-links-{page}.xml` 分片，只包含已通过且公开可见的友链。站点地图没有主动通知或保证收录的含义，应在 Search Console 中提交。sitemap、robots 与 RSS 响应带有 `Cache-Control: public, max-age=3600`；RSS 同时声明 `Vary: Cookie`，因为订阅语言跟随语言 Cookie。
 
 ## 标题、描述与分页
 
@@ -22,7 +28,7 @@ Sitemap、robots 中的 Sitemap 地址及 Canonical 均使用相同的 global �
 
 ## 收录与跳转
 
-系统设置 `seo` 控制公开页面的全站 index/follow，并提供 Google 验证码字段。文章可单独设置 noindex/nofollow；单篇禁止标记优先于全站允许设置。HTML meta 和响应 `X-Robots-Tag` 同步输出。搜索页允许抓取并返回 noindex，使搜索引擎能读取禁止收录规则。后台和 API 仍通过 robots 禁止抓取。
+系统设置 `seo` 控制公开页面的全站 index/follow，并提供 Google 验证码字段。文章可单独设置 noindex/nofollow；单篇禁止标记优先于全站允许设置。HTML meta 和响应 `X-Robots-Tag` 同步输出。搜索页允许抓取并返回 noindex，使搜索引擎能读取禁止收录规则。后台、API 和 Quarkus 管理端点（`/q/`）仍通过 robots 禁止抓取，`/q/` 响应同时带 `X-Robots-Tag: noindex`。
 
 重定向支持站内路径的 301、302、307 和 308；拒绝系统路径、外站目标、自指和循环，串联规则直接指向最终目标。仅处理 GET/HEAD，不转发旧 URL 的查询参数。修改文章 slug 时保留普通页、AMP 和已支持语言页的旧 URL 301。
 

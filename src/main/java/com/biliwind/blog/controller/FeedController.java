@@ -45,6 +45,10 @@ public class FeedController {
     Template sitemapTagsTemplate;
 
     @Inject
+    @Location("feeds/sitemap-links.xml")
+    Template sitemapLinksTemplate;
+
+    @Inject
     @Location("feeds/rss.xml")
     Template rssTemplate;
 
@@ -56,7 +60,8 @@ public class FeedController {
                 .data("baseUrl", feedService.getBaseUrl())
                 .data("postPages", feedService.getPostSitemapPages())
                 .data("categoryPages", feedService.getCategorySitemapPages())
-                .data("tagPages", feedService.getTagSitemapPages());
+                .data("tagPages", feedService.getTagSitemapPages())
+                .data("linkPages", feedService.getLinkSitemapPages());
     }
 
     @GET
@@ -125,6 +130,24 @@ public class FeedController {
     }
 
     @GET
+    @Path("/sitemap-links.xml")
+    @Produces(MediaType.APPLICATION_XML)
+    public TemplateInstance sitemapLinks() {
+        return sitemapLinksTemplate
+                .data("baseUrl", feedService.getBaseUrl())
+                .data("items", feedService.getLinkSitemapUrls(1));
+    }
+
+    @GET
+    @Path("/sitemap-links-{page}.xml")
+    @Produces(MediaType.APPLICATION_XML)
+    public TemplateInstance sitemapLinksPage(@jakarta.ws.rs.PathParam("page") int page) {
+        return sitemapLinksTemplate
+                .data("baseUrl", feedService.getBaseUrl())
+                .data("items", feedService.getLinkSitemapUrls(page));
+    }
+
+    @GET
     @Path("/rss.xml")
     @Produces(MediaType.APPLICATION_XML)
     public TemplateInstance rss() {
@@ -154,6 +177,7 @@ public class FeedController {
                 + "Allow: /\n"
                 + "Disallow: /admin\n"
                 + "Disallow: /api/\n"
+                + "Disallow: /q/\n"
                 + "Sitemap: " + feedService.getBaseUrl() + "/sitemap.xml\n";
     }
 }
