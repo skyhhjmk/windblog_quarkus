@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /** Issues a short-lived, Grafana-only JWT after the normal Admin boundary has authenticated a user. */
 @ApplicationScoped
@@ -23,14 +24,15 @@ public class GrafanaEmbedTokenService {
     @Inject
     ObjectMapper objectMapper;
 
-    @ConfigProperty(name = "windblog.observability.grafana.embed-secret", defaultValue = "")
-    String secret;
+    @ConfigProperty(name = "windblog.observability.grafana.embed-secret")
+    Optional<String> secret;
 
     @ConfigProperty(name = "windblog.observability.grafana.embed-path")
     String embedPath;
 
     public EmbedUrl issue(long userId, String username) {
-        if (secret == null || secret.length() < 32) {
+        String configuredSecret = secret.orElse(null);
+        if (configuredSecret == null || configuredSecret.length() < 32) {
             throw new IllegalStateException("Grafana embedding is not configured");
         }
         long now = Instant.now().getEpochSecond();
@@ -65,7 +67,7 @@ public class GrafanaEmbedTokenService {
     private String sign(String content) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.init(new SecretKeySpec(secret.orElseThrow().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(
                     mac.doFinal(content.getBytes(StandardCharsets.US_ASCII)));
         } catch (Exception exception) {
@@ -75,7 +77,7 @@ public class GrafanaEmbedTokenService {
 
     /** Kept package-visible for focused token contract tests. */
     boolean hasConfiguredSecret() {
-        return secret != null && secret.length() >= 32;
+        return secret.filter(s -> s.length() >= 32).isPresent();
     }
 
     public record EmbedUrl(String url, long expiresAtEpochSeconds) {
