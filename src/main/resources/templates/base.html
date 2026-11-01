@@ -32,7 +32,9 @@
     {#if config:googleAdsensePublisherId}
         <meta name="google-adsense-account" content="{config:googleAdsensePublisherId}"/>
     {/if}
-    <link rel="icon" href="{config:faviconUrl}"/>
+    {#if config:faviconUrl}
+        <link rel="icon" href="{config:faviconUrl}"/>
+    {/if}
     <link rel="alternate" type="application/rss+xml" title="{config:siteTitle}" href="{languagePrefix}/feed"/>
 
     {#if canonicalUrl.or(null)}
@@ -390,7 +392,7 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/main.js?v=seo-20261101" defer></script>
+<script src="/assets/js/main.js?v=seo-20261101-2" defer></script>
 <script src="/assets/js/drag-character-trail.js?v=cover-grid-20261030" defer></script>
 <script src="/assets/js/ruler-hud.js?v=ruler-hud-20261030-v3" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>

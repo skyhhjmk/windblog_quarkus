@@ -91,7 +91,8 @@ class PublicSeoPagesTest {
                 .body(containsString("WindBlog - 极简主义者的技术博客"))
                 .body(containsString("<link rel=\"canonical\" href=\"" + SITE + "/\""))
                 .body(containsString("<meta name=\"robots\" content=\"index,follow\""))
-                .body(containsString("<meta property=\"og:site_name\" content=\"WindBlog\""));
+                .body(containsString("<meta property=\"og:site_name\" content=\"WindBlog\""))
+                .body(not(containsString("<link rel=\"icon\" href=\"\"")));
     }
 
     @Test
@@ -149,6 +150,7 @@ class PublicSeoPagesTest {
                 .then().statusCode(200)
                 .body(containsString("id=\"pjax-head-metadata\""))
                 .body(containsString("hreflang=\"zh-cn\""))
+                .body(containsString("rel=\"amphtml\""))
                 .body(not(containsString("<!DOCTYPE")));
     }
 

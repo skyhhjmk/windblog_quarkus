@@ -17,6 +17,9 @@
                     {/if}
                 {/for}
             {/if}
+            {#if ampUrl.or(null)}
+                <link rel="amphtml" href="{ampUrl}" data-pjax-managed="true"/>
+            {/if}
             {#if jsonLd.or(null)}
                 <script type="application/ld+json" nonce="{cspNonce}" data-pjax-managed="true">{jsonLd.raw}</script>
             {/if}

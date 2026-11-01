@@ -802,7 +802,7 @@
 
             document.head.querySelectorAll(
                 'meta[property^="og:"], meta[property^="article:"], meta[name^="twitter:"], '
-                    + 'script[type="application/ld+json"], link[rel="alternate"][hreflang]'
+                    + 'script[type="application/ld+json"], link[rel="alternate"][hreflang], link[rel="amphtml"]'
             ).forEach(function (metadataNode) {
                 metadataNode.remove();
             });
