@@ -8,6 +8,7 @@ import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.elasticsearch.ElasticsearchPostIndexRepository;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -23,7 +24,9 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Contract checks for the public SEO surface: titles, canonicals, hreflang,
@@ -37,6 +40,9 @@ class PublicSeoPagesTest {
 
     @Inject
     PasswordHasher passwordHasher;
+
+    @Inject
+    ElasticsearchPostIndexRepository postIndexRepository;
 
     private String chineseOnlySlug;
     private String bilingualSlug;
@@ -216,6 +222,14 @@ class PublicSeoPagesTest {
                 .body(containsString("hreflang=\"zh-cn\""))
                 .body(containsString("rel=\"amphtml\""))
                 .body(not(containsString("<!DOCTYPE")));
+    }
+
+    @Test
+    void elasticsearchSelfHealingQueriesWork() {
+        assertTrue(postIndexRepository.countPublicPublishedPosts() >= 1);
+        assertNotNull(postIndexRepository.maxPublicPublishedUpdatedAt());
+        assertFalse(postIndexRepository.listPublicPublishedIdsUpdatedAfter(
+                java.time.OffsetDateTime.now().minusDays(1)).isEmpty());
     }
 
     @Test
