@@ -134,10 +134,8 @@ public class QuteGlobalProvider {
 
     @TemplateGlobal
     public static String defaultCanonicalUrl() {
-        String baseUrl = canonicalBaseUrl();
         String requestPath = "/";
         String language = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG;
-        String defaultLanguage = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG;
         try {
             HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
             if (request != null && request.path() != null && !request.path().isBlank()) {
@@ -146,7 +144,6 @@ public class QuteGlobalProvider {
             com.biliwind.blog.context.LanguageContext context =
                     Arc.container().instance(com.biliwind.blog.context.LanguageContext.class).get();
             language = context.getLang();
-            defaultLanguage = context.getDefaultLang();
         } catch (Exception exception) {
             requestPath = "/";
         }
@@ -154,7 +151,8 @@ public class QuteGlobalProvider {
         if (!requestPath.startsWith("/")) {
             requestPath = "/" + requestPath;
         }
-        return baseUrl + LanguageHelper.localizedPath(requestPath, language, defaultLanguage);
+        return Arc.container().instance(CanonicalUrlService.class).get()
+                .buildLocalizedPath(requestPath, language);
     }
     @TemplateGlobal
     public static java.util.List<com.biliwind.blog.service.SeoPageService.Alternate> seoAlternates() {

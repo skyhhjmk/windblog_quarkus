@@ -95,7 +95,7 @@ public class IndexController {
             // proxy's internal scheme, which would redirect HTTPS visitors to HTTP.
             return Response.status(Response.Status.MOVED_PERMANENTLY)
                     .location(java.net.URI.create(
-                            canonicalUrlService.buildPath(languageContext.homeUrl())))
+                            canonicalUrlService.buildLocalizedPath("/", languageContext.getLang())))
                     .build();
         }
 

@@ -2,7 +2,6 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
-import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
@@ -28,12 +27,6 @@ public class SeoPageService {
 
     @Inject
     CanonicalUrlService canonical;
-
-    @Inject
-    RegionContext regionContext;
-
-    @Inject
-    LanguageSettingsService languageSettingsService;
 
     public List<Alternate> alternates(String path) {
         String plain = normalizePath(path);
@@ -100,11 +93,7 @@ public class SeoPageService {
         if (availableLanguages.isEmpty()) {
             return List.of();
         }
-        String defaultLanguage = LanguageHelper.normalizeToSupportedLang(
-                languageSettingsService.defaultLanguage(regionContext.getCurrentRegion()));
-        if (defaultLanguage == null) {
-            defaultLanguage = LanguageConstant.DEFAULT_LANG;
-        }
+        String defaultLanguage = canonical.getDefaultLanguage();
         List<Alternate> result = new ArrayList<>();
         for (String lang : LanguageConstant.SUPPORTED_LANG_ORDER) {
             if (!availableLanguages.contains(lang)) {

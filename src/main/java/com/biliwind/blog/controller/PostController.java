@@ -392,14 +392,12 @@ public class PostController {
     }
 
     private String buildCanonicalUrl(String slug, String language) {
-        String defaultLanguage = languageContext.getDefaultLang();
-        String path = LanguageHelper.localizedPath("/post/" + slug, language, defaultLanguage);
-        return canonicalUrlService.buildPath(path);
+        return canonicalUrlService.buildLocalizedPath("/post/" + slug, language);
     }
 
     private String buildAmpUrl(String slug, String language) {
         String path = LanguageHelper.localizedPath("/amp/post/" + slug, language,
-                languageContext.getDefaultLang());
+                canonicalUrlService.getDefaultLanguage());
         return publicUrlService.buildPath(path);
     }
 

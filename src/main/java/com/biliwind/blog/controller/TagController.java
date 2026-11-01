@@ -115,7 +115,7 @@ public class TagController {
                 .data("detailMode", false)
                 .data("pageTitle", withPageSuffix(pageTitle, currentPage))
                 .data("pageDescription", i18n.t("tag.list_description"))
-                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(canonicalPath)))
+                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(canonicalPath, lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tags")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
@@ -183,8 +183,8 @@ public class TagController {
                 .data("detailMode", true)
                 .data("pageTitle", withPageSuffix(i18n.format("tag.detail_title", tagName), currentPage))
                 .data("pageDescription", tagPageDescription(entity, lang))
-                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(
-                        "/tag/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""))))
+                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(
+                        "/tag/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tag / " + entity.slug)
                 .data("totalCount", totalCount)
                 .data("currentPage", currentPage)

@@ -27,9 +27,6 @@ public class FeedService {
     RegionContext regionContext;
 
     @Inject
-    LanguageSettingsService languageSettingsService;
-
-    @Inject
     CanonicalUrlService canonicalUrlService;
 
     private static final DateTimeFormatter RFC_822_FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
@@ -73,7 +70,6 @@ public class FeedService {
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<PostSitemapUrlView> urls = new ArrayList<>();
         if (!config.getBoolean("seo", "index_enabled", true)) return urls;
-        String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
         for (var post : posts) {
             String plainPath = "/post/" + encodeSlug(post.slug);
             List<String> languages = new ArrayList<>();
@@ -91,8 +87,7 @@ public class FeedService {
             List<SeoPageService.Alternate> alternates =
                     seoPageService.alternatesForLanguages(plainPath, languages);
             for (String lang : languages) {
-                String postPath = LanguageHelper.localizedPath(plainPath, lang, regionDefault);
-                String loc = getBaseUrl() + postPath;
+                String loc = canonicalUrlService.buildLocalizedPath(plainPath, lang);
                 List<String> images = List.of();
                 if (postAccessService.getPostPrice(post) == 0) {
                     String content = LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
@@ -129,8 +124,7 @@ public class FeedService {
     }
 
     public String getHomeUrl() {
-        String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
-        return getBaseUrl() + LanguageHelper.localizedPath("/", languageContext.getLang(), regionDefault);
+        return canonicalUrlService.buildLocalizedPath("/", languageContext.getLang());
     }
 
     private FeedPostView toView(PublicCacheRefreshService.PublicPostListSnapshot snapshot, String language) {
@@ -142,12 +136,11 @@ public class FeedService {
             summary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), language);
         }
 
-        String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
         // The feed falls back to another language's title when a translation is
         // missing; link to the URL that actually renders that content.
         String contentLanguage = LanguageHelper.resolveLocalizedLanguage(snapshot.title(), language);
-        String url = getBaseUrl() + LanguageHelper.localizedPath(
-                "/post/" + encodeSlug(snapshot.slug()), contentLanguage, regionDefault);
+        String url = canonicalUrlService.buildLocalizedPath(
+                "/post/" + encodeSlug(snapshot.slug()), contentLanguage);
         return new FeedPostView(
                 snapshot.slug(),
                 url,

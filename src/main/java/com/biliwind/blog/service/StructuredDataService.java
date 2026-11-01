@@ -175,7 +175,12 @@ public class StructuredDataService {
             if (context == null) {
                 return path;
             }
-            return context.localize(LanguageHelper.stripLanguagePrefix(path));
+            String defaultLanguage = canonicalUrlService == null ? null : canonicalUrlService.getDefaultLanguage();
+            if (defaultLanguage == null) {
+                defaultLanguage = context.getDefaultLang();
+            }
+            return LanguageHelper.localizedPath(
+                    LanguageHelper.stripLanguagePrefix(path), context.getLang(), defaultLanguage);
         } catch (RuntimeException exception) {
             // Outside a request (for example a manually constructed test).
             return path;

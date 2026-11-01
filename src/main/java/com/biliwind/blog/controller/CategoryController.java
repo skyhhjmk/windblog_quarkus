@@ -116,7 +116,7 @@ public class CategoryController {
                 .data("detailMode", false)
                 .data("pageTitle", withPageSuffix(pageTitle, currentPage))
                 .data("pageDescription", i18n.t("category.list_description"))
-                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(canonicalPath)))
+                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(canonicalPath, lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / categories")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
@@ -184,8 +184,8 @@ public class CategoryController {
                 .data("pageTitle", withPageSuffix(
                         i18n.format("category.detail_title", resolveCategoryName(entity, lang)), currentPage))
                 .data("pageDescription", categoryDescription(entity, lang))
-                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(
-                        "/category/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""))))
+                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(
+                        "/category/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / category / " + entity.slug)
                 .data("totalCount", childItems.size())
                 .data("postCount", postCount)

@@ -18,9 +18,6 @@ import java.util.Optional;
 public class AmpPageService {
 
     @Inject
-    LanguageSettingsService languageSettingsService;
-
-    @Inject
     StructuredDataService structuredDataService;
 
     @Inject
@@ -148,17 +145,12 @@ public class AmpPageService {
     }
 
     private String buildCanonicalUrl(String slug, String language) {
-        return canonicalUrlService.buildPath(LanguageHelper.localizedPath(
-                "/post/" + slug, language, defaultLanguage()));
+        return canonicalUrlService.buildLocalizedPath("/post/" + slug, language);
     }
 
     private String buildAmpUrl(String slug, String language) {
         return publicUrlService.buildPath(LanguageHelper.localizedPath(
-                "/amp/post/" + slug, language, defaultLanguage()));
-    }
-
-    private String defaultLanguage() {
-        return languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
+                "/amp/post/" + slug, language, canonicalUrlService.getDefaultLanguage()));
     }
 
     private String normalizeSlug(String value) {

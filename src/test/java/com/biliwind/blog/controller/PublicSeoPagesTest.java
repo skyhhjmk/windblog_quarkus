@@ -153,6 +153,14 @@ class PublicSeoPagesTest {
     }
 
     @Test
+    void pjaxFragmentsCarryTheServerCanonical() {
+        given().header("X-PJAX", "true").get("/").then().statusCode(200)
+                .body(containsString("data-page-canonical=\"" + SITE + "/\""));
+        given().header("X-PJAX", "true").get("/zh-cn/category").then().statusCode(200)
+                .body(containsString("data-page-canonical=\"" + SITE + "/zh-cn/category\""));
+    }
+
+    @Test
     void sitemapListsEveryPageLanguageAndAlternates() {
         given().get("/sitemap-pages.xml").then().statusCode(200)
                 .header("Cache-Control", containsString("max-age=3600"))
