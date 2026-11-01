@@ -7,6 +7,7 @@ import com.biliwind.blog.context.CspNonceContext;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.i18n.I18n;
+import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.service.ConfigTemplateData;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.Location;
@@ -66,6 +67,9 @@ public class IndexController {
     @Inject
     I18n i18n;
 
+    @Inject
+    CanonicalUrlService canonicalUrlService;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public Response index(@Context HttpHeaders httpHeaders) {
@@ -87,8 +91,11 @@ public class IndexController {
         String requestPath = languageContext.getPath();
         if (subPage == 1 && requestPath != null && requestPath.startsWith("/page/")) {
             // /page/1 (and /page/0, which is clamped to 1) duplicates the home page.
+            // Use the canonical origin: a relative Location is resolved against the
+            // proxy's internal scheme, which would redirect HTTPS visitors to HTTP.
             return Response.status(Response.Status.MOVED_PERMANENTLY)
-                    .location(java.net.URI.create(languageContext.homeUrl()))
+                    .location(java.net.URI.create(
+                            canonicalUrlService.buildPath(languageContext.homeUrl())))
                     .build();
         }
 
