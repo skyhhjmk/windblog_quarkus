@@ -176,7 +176,9 @@ public class PostController {
                 + "_" + seoManagementService.robots(
                         ("zh-cn".equalsIgnoreCase(resolvedLang) ? "" : "/" + resolvedLang) + "/post/" + slug)
                         .replace(',', '_');
-        EntityTag etag = new EntityTag(etagValue);
+        // The CSP nonce changes on every render, so the validator is weak; a
+        // strong tag would also fail when a CDN normalizes it to W/"...".
+        EntityTag etag = new EntityTag(etagValue, true);
         boolean protectedPage = snapshot.visibility() == 2;
 
         // 评估客户端提供的 If-None-Match 首部
