@@ -6,6 +6,8 @@ import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.i18n.I18n;
+import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
@@ -57,6 +59,12 @@ public class CategoryController {
     @Inject
     RegionContext regionContext;
 
+    @Inject
+    I18n i18n;
+
+    @Inject
+    CanonicalUrlService canonicalUrlService;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance list(@QueryParam("q") String keyword,
@@ -90,12 +98,22 @@ public class CategoryController {
                 .toList();
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? categoryContent : category;
+        String pageTitle = safeKeyword.isBlank()
+                ? i18n.t("category.title")
+                : i18n.format("category.filtered_title", safeKeyword);
+        String canonicalPath = "/category";
+        if (safeKeyword.isBlank() && currentPage > 1) {
+            canonicalPath = canonicalPath + "?page=" + currentPage;
+        }
         return template
                 .data("language", lang)
-                .data("jsonLd", structuredDataService.collection("分类", "/category", lang,
-                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb("分类", "/category"))))
+                .data("jsonLd", structuredDataService.collection(i18n.t("category.title"), "/category", lang,
+                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
+                                i18n.t("category.title"), "/category"))))
                 .data("detailMode", false)
-                .data("pageTitle", safeKeyword.isBlank() ? "Categories" : "Categories - " + safeKeyword)
+                .data("pageTitle", withPageSuffix(pageTitle, currentPage))
+                .data("pageDescription", i18n.t("category.list_description"))
+                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(canonicalPath)))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / categories")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
@@ -159,7 +177,11 @@ public class CategoryController {
                         buildBreadcrumbs(entity, lang).stream().map(item ->
                                 new com.biliwind.blog.service.StructuredDataService.Breadcrumb(item.name(), item.url())).toList()))
                 .data("detailMode", true)
-                .data("pageTitle", "Category - " + resolveCategoryName(entity, lang))
+                .data("pageTitle", withPageSuffix(
+                        i18n.format("category.detail_title", resolveCategoryName(entity, lang)), currentPage))
+                .data("pageDescription", categoryDescription(entity, lang))
+                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(
+                        "/category/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""))))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / category / " + entity.slug)
                 .data("totalCount", childItems.size())
                 .data("postCount", postCount)
@@ -316,7 +338,20 @@ public class CategoryController {
 
     private String resolveCategoryDescription(Category category, String lang) {
         String description = LanguageHelper.resolveLocalizedValue(category.description, lang);
-        return description == null || description.isBlank() ? "Category archive." : description;
+        return description == null || description.isBlank()
+                ? i18n.t("category.list_description") : description;
+    }
+
+    private String categoryDescription(Category category, String lang) {
+        String description = LanguageHelper.resolveLocalizedValue(category.description, lang);
+        if (description != null && !description.isBlank()) {
+            return description.trim();
+        }
+        return i18n.format("category.page_description", resolveCategoryName(category, lang));
+    }
+
+    private String withPageSuffix(String title, int page) {
+        return page > 1 ? title + " - " + i18n.format("index.page", page) : title;
     }
 
     private String normalizeSlug(String slug) {

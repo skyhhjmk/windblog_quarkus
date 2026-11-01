@@ -9,7 +9,7 @@
         {/for}
         {#if ogData.or(null)}
             {#for entry in ogData.entrySet}
-                {#if entry.key.startsWith('og:')}
+                {#if entry.key.startsWith('og:') || entry.key.startsWith('article:')}
                     <meta property="{entry.key}" content="{entry.value}" data-pjax-managed="true"/>
                 {#else}
                     <meta name="{entry.key}" content="{entry.value}" data-pjax-managed="true"/>

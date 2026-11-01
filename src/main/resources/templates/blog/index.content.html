@@ -1,5 +1,8 @@
-<div id="pjax-content-root" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{i18n.t('index.nav')}{#if subPage && subPage > 1} - {i18n.t('common.page')} {subPage}{/if}">
+<div id="pjax-content-root" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{pageTitle}" data-page-description="{pageDescription ?: ''}">
     <template id="pjax-head-metadata">
+        {#for alternate in seoAlternates}
+        <link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}" data-pjax-managed="true"/>
+        {/for}
         {#if jsonLd.or(null)}
             <script type="application/ld+json" nonce="{cspNonce}" data-pjax-managed="true">{jsonLd.raw}</script>
         {/if}

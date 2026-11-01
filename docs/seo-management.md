@@ -8,7 +8,17 @@
 
 仅将已发布、公开、有发布版本、global 区域可见且未设置 noindex 的文章放入文章地图。只发布同时具有对应标题和正文的语言版本，输出 hreflang、双向 alternate 和可用默认语言的 x-default。普通 HTML、AMP 和 PJAX 也输出文章语言关联。文章地图从免费公开正文提取最多三张图片，不读取付费原文图片。
 
-Sitemap、robots 中的 Sitemap 地址及 Canonical 均使用相同的 global 规范域名策略。站点地图没有主动通知或保证收录的含义，应在 Search Console 中提交。
+Sitemap、robots 中的 Sitemap 地址及 Canonical 均使用相同的 global 规范域名策略。页面、分类和标签的 sitemap 分片会同时输出 `xhtml:link` 语言关联；文章地图的 alternates 直接复用已加载的发布版本，避免逐条重复查询。站点地图没有主动通知或保证收录的含义，应在 Search Console 中提交。sitemap、robots 与 RSS 响应带有 `Cache-Control: public, max-age=3600`；RSS 同时声明 `Vary: Cookie`，因为订阅语言跟随语言 Cookie。
+
+## 标题、描述与分页
+
+首页标题使用站点标题与副标题（副标题仅在同语言为区域默认语言时追加），分页首页追加页码；`og:title` 与 `<title>` 保持一致。分类/标签列表与详情页使用当前语言生成标题，并优先使用分类/标签自身描述作为 meta description；分页页标题追加页码。
+
+分类、标签的 `?page=N` 页面输出自引用 canonical（包含页码）；带 `q=` 的筛选页 canonical 指回未筛选的列表页。`/page/1` 永久重定向到语言首页，`/page/0` 同样处理，超出总页数的页码返回 404，不再以 200 渲染空列表。
+
+## 语言回退页
+
+文章只在标题与正文都存在的语言下输出 hreflang alternates（与 sitemap 一致），x-default 优先使用区域默认语言。访问不存在翻译的语言 URL 时仍会回退渲染正文，但 canonical、AMP canonical 与结构化数据 URL 指向实际正文语言，避免回退页作为重复内容参与索引。
 
 ## 收录与跳转
 

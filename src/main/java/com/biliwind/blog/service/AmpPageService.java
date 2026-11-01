@@ -61,6 +61,9 @@ public class AmpPageService {
         }
         String summary = resolveSummary(snapshot, language);
         String rawContent = resolveContent(snapshot.previewContent(), language);
+        // The public article may only exist in one language. Canonicalise the
+        // fallback render to that language so the AMP and standard pages agree.
+        String contentLanguage = LanguageHelper.resolveLocalizedLanguage(snapshot.previewContent(), language);
 
         if (snapshot.visibility() != 0 || snapshot.postPrice() > 0) {
             return Optional.of(AmpPost.unavailable(
@@ -68,8 +71,8 @@ public class AmpPageService {
                     language,
                     title,
                     summary,
-                    buildCanonicalUrl(normalizedSlug, language),
-                    buildAmpUrl(normalizedSlug, language),
+                    buildCanonicalUrl(normalizedSlug, contentLanguage),
+                    buildAmpUrl(normalizedSlug, contentLanguage),
                     snapshot.updatedAt() == null ? snapshot.publishedAt() : snapshot.updatedAt()));
         }
 
@@ -77,7 +80,7 @@ public class AmpPageService {
                 ampContentRenderer.render(snapshot.renderType(), rawContent);
         RepostPolicyCatalog.Policy repostPolicy = repostPolicyCatalog.resolve(
                 snapshot.repostPolicyCode(), snapshot.contentDeclarations());
-        String canonicalUrl = buildCanonicalUrl(normalizedSlug, language);
+        String canonicalUrl = buildCanonicalUrl(normalizedSlug, contentLanguage);
         return Optional.of(new AmpPost(
                 true,
                 null,
@@ -87,7 +90,7 @@ public class AmpPageService {
                 summary,
                 rendered.html(),
                 canonicalUrl,
-                buildAmpUrl(normalizedSlug, language),
+                buildAmpUrl(normalizedSlug, contentLanguage),
                 snapshot.updatedAt() == null ? snapshot.publishedAt() : snapshot.updatedAt(),
                 rendered.imageCount(),
                 rendered.removedElementCount(),
@@ -98,7 +101,7 @@ public class AmpPageService {
                 repostPolicy.conditionsFor(language),
                 repostPolicy.licenseUrl(),
                 canonicalUrl,
-                structuredDataService.article(snapshot, title, summary, canonicalUrl, language, rendered.html())));
+                structuredDataService.article(snapshot, title, summary, canonicalUrl, contentLanguage, rendered.html())));
     }
 
     public boolean isEnabled() {

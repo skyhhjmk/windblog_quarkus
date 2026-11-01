@@ -11,7 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.Provider;
 
-/** Keeps PJAX fragments and complete HTML documents out of shared caches. */
+/** Keeps PJAX fragments out of shared caches while leaving full documents cacheable. */
 @Provider
 @Priority(Priorities.HEADER_DECORATOR)
 @ApplicationScoped
@@ -25,10 +25,26 @@ public class PjaxResponseFilter implements ContainerResponseFilter {
 
         MultivaluedMap<String, Object> headers = responseContext.getHeaders();
         appendVary(headers, PjaxHelper.PJAX_HEADER);
-        // A PJAX fragment and a complete document share the same URL. Do not
-        // allow either HTML variant to be stored, because a proxy that ignores
-        // the custom Vary key could otherwise serve a fragment on refresh.
-        applyNoStore(headers);
+        // A PJAX fragment and a complete document share the same URL. Only the
+        // fragment is made unstorable, so a cache (even one ignoring Vary) can
+        // never replay a fragment, while full documents keep the article ETag
+        // and short max-age for crawlers and CDNs. Account pages stay
+        // uncacheable because they render per-user state.
+        if (PjaxHelper.isPjaxRequest(requestContext.getHeaders())
+                || isPrivatePage(requestContext.getUriInfo().getPath())
+                || responseContext.getStatus() >= 400) {
+            appendVary(headers, "Cookie");
+            applyNoStore(headers);
+        }
+    }
+
+    static boolean isPrivatePage(String path) {
+        if (path == null || path.isBlank()) {
+            return false;
+        }
+        String normalized = path.startsWith("/") ? path : "/" + path;
+        return normalized.startsWith("/user/") || normalized.equals("/user")
+                || normalized.startsWith("/admin");
     }
 
     static boolean isHtmlResponse(ContainerResponseContext responseContext) {

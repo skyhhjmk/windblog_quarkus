@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
    {#for item in items}
    <url>
       <loc>{item.loc}</loc>
       {#if item.lastmod}
       <lastmod>{item.lastmod}</lastmod>
       {/if}
+      {#for alternate in item.alternates}
+      <xhtml:link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}"/>
+      {/for}
       <changefreq>weekly</changefreq>
       <priority>0.6</priority>
    </url>

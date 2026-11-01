@@ -132,6 +132,8 @@ public class FeedController {
                 .data("baseUrl", feedService.getBaseUrl())
                 .data("blogTitle", blogTitle)
                 .data("blogDescription", blogDescription)
+                .data("feedLanguage", feedService.getCurrentLanguage())
+                .data("feedHomeUrl", feedService.getHomeUrl())
                 .data("lastBuildDate", feedService.getCurrentRfc822Date())
                 .data("posts", feedService.getPublishedPosts());
     }

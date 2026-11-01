@@ -167,4 +167,21 @@ public class QuteGlobalProvider {
         HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
         return Arc.container().instance(com.biliwind.blog.service.SeoManagementService.class).get().robots(request.path());
     }
+
+    @TemplateGlobal
+    public static String ogLocale() {
+        String lang = languageContext().getLang();
+        return lang != null && lang.toLowerCase(java.util.Locale.ROOT).startsWith("en")
+                ? "en_US" : "zh_CN";
+    }
+
+    @TemplateGlobal
+    public static String publisherLogoUrl() {
+        try {
+            return Arc.container().instance(com.biliwind.blog.service.StructuredDataService.class)
+                    .get().publisherLogoUrl();
+        } catch (Exception exception) {
+            return null;
+        }
+    }
 }

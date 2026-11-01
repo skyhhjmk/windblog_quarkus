@@ -19,4 +19,15 @@ class SeoManagementServiceTest {
         assertThrows(BadRequestException.class, () -> service.saveRedirect(null, "/same", "/same", 301, true));
         assertThrows(BadRequestException.class, () -> service.saveRedirect(null, "/old", "/new", 200, true));
     }
+
+    @Test void linkInterstitialIsNoindexWhileRegularPagesStayIndexable() {
+        service.config = new ConfigManager() {
+            @Override public Boolean getBoolean(String key, String field, Boolean fallback) {
+                return true;
+            }
+        };
+        assertEquals("noindex,follow", service.robots("/link/go/token"));
+        assertEquals("index,follow", service.robots("/tools"));
+        assertEquals("noindex,follow", service.robots("/search"));
+    }
 }

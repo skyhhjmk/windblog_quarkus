@@ -6,6 +6,8 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.CspNonceContext;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.i18n.I18n;
+import com.biliwind.blog.service.ConfigTemplateData;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -61,6 +63,9 @@ public class IndexController {
     @Inject
     CspNonceContext cspNonceContext;
 
+    @Inject
+    I18n i18n;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public Response index(@Context HttpHeaders httpHeaders) {
@@ -79,23 +84,35 @@ public class IndexController {
             subPage = 1;
         }
 
+        String requestPath = languageContext.getPath();
+        if (subPage == 1 && requestPath != null && requestPath.startsWith("/page/")) {
+            // /page/1 (and /page/0, which is clamped to 1) duplicates the home page.
+            return Response.status(Response.Status.MOVED_PERMANENTLY)
+                    .location(java.net.URI.create(languageContext.homeUrl()))
+                    .build();
+        }
+
         String language = languageContext.getLang();
         String currentRegion = regionContext.getCurrentRegion().getCode();
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
         String renderedPageCacheKey = buildRenderedPageCacheKey(
                 "index:v2:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
 
-        RenderedPageCache cachedPage = getRenderedPage(renderedPageCacheKey);
-        if (cachedPage != null) {
-            String currentNonce = cspNonceContext.getNonce();
-            return buildHtmlResponse(replaceNonce(cachedPage.html, cachedPage.nonce, currentNonce));
-        }
-
         com.biliwind.blog.service.PublicCacheRefreshService.PublicIndexPageSnapshot pageCache =
                 publicCacheRefreshService.findPublishedIndexPage(subPage, PAGE_SIZE, language, currentRegion);
 
         long totalPostsCount = pageCache.totalPostsCount();
         long totalPages = pageCache.totalPages();
+        if (subPage > totalPages) {
+            // Do not serve an empty page with a 200 status: it is a soft 404.
+            throw new jakarta.ws.rs.NotFoundException("Page not found: " + subPage);
+        }
+
+        RenderedPageCache cachedPage = getRenderedPage(renderedPageCacheKey);
+        if (cachedPage != null) {
+            String currentNonce = cspNonceContext.getNonce();
+            return buildHtmlResponse(replaceNonce(cachedPage.html, cachedPage.nonce, currentNonce));
+        }
         List<IndexPostItem> postItems = toIndexItems(pageCache.posts(), language);
 
         Template template;
@@ -105,8 +122,10 @@ public class IndexController {
             template = index;
         }
 
+        String pageTitle = homepageTitle(subPage);
         String renderedHtml = template
                 .data("jsonLd", structuredDataService.home(subPage, language))
+                .data("pageTitle", pageTitle)
                 .data("language", language)
                 .data("subPage", subPage)
                 .data("currentPage", subPage)
@@ -135,6 +154,20 @@ public class IndexController {
 
         setRenderedPageHtml(renderedPageCacheKey, renderedHtml, cspNonceContext.getNonce());
         return buildHtmlResponse(renderedHtml);
+    }
+
+    private String homepageTitle(int subPage) {
+        StringBuilder title = new StringBuilder(ConfigTemplateData.siteTitle());
+        String subtitle = ConfigTemplateData.siteSubtitle();
+        // Site title and subtitle are single configured values, so they form the
+        // brand part of every language's homepage title.
+        if (subtitle != null && !subtitle.isBlank()) {
+            title.append(" - ").append(subtitle.trim());
+        }
+        if (subPage > 1) {
+            title.append(" - ").append(i18n.format("index.page", subPage));
+        }
+        return title.toString();
     }
 
     private List<PaginationPage> buildPaginationPages(int currentPage, long totalPages) {

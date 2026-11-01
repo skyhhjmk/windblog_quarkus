@@ -1,5 +1,8 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.i18n.I18n;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,14 +26,17 @@ public class StructuredDataService {
     @Inject ObjectMapper mapper;
     @Inject ConfigManager configManager;
     @Inject CanonicalUrlService canonicalUrlService;
+    @Inject LanguageContext languageContext;
+    @Inject I18n i18n;
 
     public record Breadcrumb(String name, String path) {}
 
     public String home(int page, String language) {
-        String home = canonicalUrlService.buildPath("/");
+        String home = canonicalUrlService.buildPath(localizePath("/"));
         if (page > 1) {
-            return collection("首页 - 页码 " + page, "/page/" + page, language,
-                    List.of(new Breadcrumb("首页 - 页码 " + page, "/page/" + page)));
+            String title = homePageTitle(page);
+            String path = "/page/" + page;
+            return collection(title, path, language, List.of(new Breadcrumb(title, path)));
         }
         ObjectNode website = node("WebSite", home + "#website");
         website.put("url", home);
@@ -42,7 +48,7 @@ public class StructuredDataService {
     }
 
     public String collection(String title, String path, String language, List<Breadcrumb> trail) {
-        String url = canonicalUrlService.buildPath(path);
+        String url = canonicalUrlService.buildPath(localizePath(path));
         ObjectNode page = node("CollectionPage", url + "#webpage");
         page.put("url", url);
         page.put("name", title);
@@ -51,7 +57,7 @@ public class StructuredDataService {
         List<Breadcrumb> completeTrail = new ArrayList<>(trail);
         String base = canonicalUrlService.buildPath("/");
         String lastUrl = completeTrail.isEmpty() ? null
-                : absoluteUrl(completeTrail.getLast().path(), base);
+                : absoluteUrl(localizePath(completeTrail.getLast().path()), base);
         // Imported category paths may omit the current category or resolve no ancestors.
         if (!absoluteUrl(url, base).equals(lastUrl)) {
             completeTrail.add(new Breadcrumb(title, url));
@@ -105,17 +111,16 @@ public class StructuredDataService {
         }
         List<Breadcrumb> trail = new ArrayList<>();
         if (snapshot.categorySlug() != null && !snapshot.categorySlug().isBlank()) {
-            String category = com.biliwind.blog.common.helper.LanguageHelper.resolveLocalizedValue(
-                    snapshot.categoryName(), language);
+            String category = LanguageHelper.resolveLocalizedValue(snapshot.categoryName(), language);
             trail.add(new Breadcrumb(category == null || category.isBlank() ? snapshot.categorySlug() : category,
-                    "/category/" + snapshot.categorySlug()));
+                    localizePath("/category/" + snapshot.categorySlug())));
         }
         trail.add(new Breadcrumb(title, canonicalUrl));
         return graph(List.of(article, publisher, breadcrumb(canonicalUrl, trail)));
     }
 
     private ObjectNode publisher() {
-        String home = canonicalUrlService.buildPath("/");
+        String home = canonicalUrlService.buildPath(localizePath("/"));
         ObjectNode publisher = node("Organization", home + "#publisher");
         publisher.put("name", siteName());
         publisher.put("url", home);
@@ -145,12 +150,58 @@ public class StructuredDataService {
     private ObjectNode breadcrumb(String pageUrl, List<Breadcrumb> trail) {
         ObjectNode breadcrumb = node("BreadcrumbList", pageUrl + "#breadcrumb");
         ArrayNode items = breadcrumb.putArray("itemListElement");
-        addBreadcrumb(items, "首页", canonicalUrlService.buildPath("/"));
+        addBreadcrumb(items, homeLabel(), canonicalUrlService.buildPath(localizePath("/")));
         for (Breadcrumb item : trail) {
-            String url = absoluteUrl(item.path(), canonicalUrlService.buildPath("/"));
+            String url = absoluteUrl(localizePath(item.path()), canonicalUrlService.buildPath("/"));
             if (url != null) addBreadcrumb(items, item.name(), url);
         }
         return breadcrumb;
+    }
+
+    /**
+     * Applies the current language prefix so JSON-LD URLs match the page
+     * canonical, including structured data rendered for a non-default
+     * language. Absolute URLs are kept as-is.
+     */
+    private String localizePath(String path) {
+        if (path == null || path.isBlank()) {
+            return path;
+        }
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            return path;
+        }
+        try {
+            LanguageContext context = languageContext;
+            if (context == null) {
+                return path;
+            }
+            return context.localize(LanguageHelper.stripLanguagePrefix(path));
+        } catch (RuntimeException exception) {
+            // Outside a request (for example a manually constructed test).
+            return path;
+        }
+    }
+
+    private String homeLabel() {
+        try {
+            if (i18n != null) {
+                return i18n.t("structured.home");
+            }
+        } catch (RuntimeException ignored) {
+            // Fall back to the English label outside a request.
+        }
+        return "Home";
+    }
+
+    private String homePageTitle(int page) {
+        try {
+            if (i18n != null) {
+                return i18n.format("structured.home_page", page);
+            }
+        } catch (RuntimeException ignored) {
+            // Fall back to the English label outside a request.
+        }
+        return "Home - Page " + page;
     }
 
     private void addBreadcrumb(ArrayNode items, String name, String url) {

@@ -47,7 +47,7 @@ public class LangResponseFilter implements ContainerResponseFilter {
                 responseContext.getHeaderString(HttpHeaders.CACHE_CONTROL))) {
             // Language and authentication cookies affect public HTML. Do not let a
             // shared cache serve one cookie context to another visitor.
-            responseContext.getHeaders().putSingle(HttpHeaders.VARY, "Cookie");
+            PjaxResponseFilter.appendVary(responseContext.getHeaders(), "Cookie");
             if (cookieNeedsUpdate) {
                 responseContext.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, "no-store");
             }

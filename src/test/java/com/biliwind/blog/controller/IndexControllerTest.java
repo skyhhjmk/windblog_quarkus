@@ -4,6 +4,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.endsWith;
 
 /**
  * IndexController 单元集成测试
@@ -22,20 +23,20 @@ class IndexControllerTest {
     }
 
     @Test
-    void shouldReturnPageWithPagination() {
-        given()
+    void shouldRedirectFirstPageToHome() {
+        given().redirects().follow(false)
                 .when().get("/page/1")
                 .then()
-                .statusCode(200)
-                .contentType("text/html;charset=UTF-8");
+                .statusCode(301)
+                .header("Location", endsWith("/"));
     }
 
     @Test
-    void shouldHandleInvalidPageNumber() {
-        given()
+    void shouldRedirectInvalidPageNumberToHome() {
+        given().redirects().follow(false)
                 .when().get("/page/0")
                 .then()
-                .statusCode(200)
-                .contentType("text/html;charset=UTF-8");
+                .statusCode(301)
+                .header("Location", endsWith("/"));
     }
 }

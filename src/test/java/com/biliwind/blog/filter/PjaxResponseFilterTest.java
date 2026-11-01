@@ -6,6 +6,8 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PjaxResponseFilterTest {
 
@@ -27,6 +29,16 @@ class PjaxResponseFilterTest {
         PjaxResponseFilter.appendVary(headers, PjaxHelper.PJAX_HEADER);
 
         assertEquals("Accept-Language, X-PJAX", headers.getFirst("Vary"));
+    }
+
+    @Test
+    void accountPagesStayPrivateWhilePublicPagesRemainCacheable() {
+        assertTrue(PjaxResponseFilter.isPrivatePage("/user/center"));
+        assertTrue(PjaxResponseFilter.isPrivatePage("user/login"));
+        assertTrue(PjaxResponseFilter.isPrivatePage("/admin/posts"));
+        assertFalse(PjaxResponseFilter.isPrivatePage("/post/example"));
+        assertFalse(PjaxResponseFilter.isPrivatePage("/category"));
+        assertFalse(PjaxResponseFilter.isPrivatePage(null));
     }
 
     @Test

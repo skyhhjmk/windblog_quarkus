@@ -73,11 +73,25 @@ public class FeedService {
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<PostSitemapUrlView> urls = new ArrayList<>();
         if (!config.getBoolean("seo", "index_enabled", true)) return urls;
+        String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
         for (var post : posts) {
-            String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
+            String plainPath = "/post/" + encodeSlug(post.slug);
+            List<String> languages = new ArrayList<>();
             for (String lang : com.biliwind.blog.common.constant.LanguageConstant.SUPPORTED_LANG_ORDER) {
-                if (!hasLanguage(post.publishedRevision.title, lang) || !hasLanguage(post.publishedRevision.contentMarkdown, lang)) continue;
-                String postPath = LanguageHelper.localizedPath("/post/" + encodeSlug(post.slug), lang, regionDefault);
+                if (hasLanguage(post.publishedRevision.title, lang)
+                        && hasLanguage(post.publishedRevision.contentMarkdown, lang)) {
+                    languages.add(lang);
+                }
+            }
+            if (languages.isEmpty()) {
+                continue;
+            }
+            // Compute the alternates from the revision already loaded above;
+            // resolving them per URL would run one extra query per entry.
+            List<SeoPageService.Alternate> alternates =
+                    seoPageService.alternatesForLanguages(plainPath, languages);
+            for (String lang : languages) {
+                String postPath = LanguageHelper.localizedPath(plainPath, lang, regionDefault);
                 String loc = getBaseUrl() + postPath;
                 List<String> images = List.of();
                 if (postAccessService.getPostPrice(post) == 0) {
@@ -88,15 +102,14 @@ public class FeedService {
                     images = StructuredDataService.imageUrls(sanitizer.sanitize(html), loc);
                 }
                 urls.add(new PostSitemapUrlView(loc, formatLastModified(post.updatedAt, post.createdAt), images,
-                        seoPageService.alternates(postPath)));
+                        alternates));
             }
         }
         return urls;
     }
 
     private boolean hasLanguage(java.util.Map<String, String> values, String language) {
-        return values != null && values.entrySet().stream().anyMatch(e -> language.equalsIgnoreCase(e.getKey())
-                && e.getValue() != null && !e.getValue().isBlank());
+        return LanguageHelper.hasLocalizedValue(values, language);
     }
 
     private String encodeSlug(String slug) {
@@ -111,6 +124,15 @@ public class FeedService {
         return OffsetDateTime.now().format(RFC_822_FORMATTER);
     }
 
+    public String getCurrentLanguage() {
+        return languageContext.getLang();
+    }
+
+    public String getHomeUrl() {
+        String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
+        return getBaseUrl() + LanguageHelper.localizedPath("/", languageContext.getLang(), regionDefault);
+    }
+
     private FeedPostView toView(PublicCacheRefreshService.PublicPostListSnapshot snapshot, String language) {
         String title = LanguageHelper.resolveLocalizedValue(snapshot.title(), language);
         if (title == null || title.isBlank()) title = snapshot.slug();
@@ -120,8 +142,15 @@ public class FeedService {
             summary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), language);
         }
 
+        String regionDefault = languageSettingsService.defaultLanguage(regionContext.getCurrentRegion());
+        // The feed falls back to another language's title when a translation is
+        // missing; link to the URL that actually renders that content.
+        String contentLanguage = LanguageHelper.resolveLocalizedLanguage(snapshot.title(), language);
+        String url = getBaseUrl() + LanguageHelper.localizedPath(
+                "/post/" + encodeSlug(snapshot.slug()), contentLanguage, regionDefault);
         return new FeedPostView(
                 snapshot.slug(),
+                url,
                 title,
                 summary,
                 snapshot.publishedAt() != null ? snapshot.publishedAt().format(RFC_822_FORMATTER) : "",
@@ -144,9 +173,11 @@ public class FeedService {
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<SitemapUrlView> result = new ArrayList<>();
         for (Category category : categories) {
+            String path = "/category/" + encodeSlug(category.slug);
             result.add(new SitemapUrlView(
-                    getBaseUrl() + "/category/" + encodeSlug(category.slug),
-                    formatLastModified(category.updatedAt, category.createdAt)));
+                    getBaseUrl() + path,
+                    formatLastModified(category.updatedAt, category.createdAt),
+                    seoPageService.alternates(path)));
         }
         return result;
     }
@@ -159,9 +190,11 @@ public class FeedService {
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<SitemapUrlView> result = new ArrayList<>();
         for (Tag tag : tags) {
+            String path = "/tag/" + encodeSlug(tag.slug);
             result.add(new SitemapUrlView(
-                    getBaseUrl() + "/tag/" + encodeSlug(tag.slug),
-                    formatLastModified(tag.updatedAt, tag.createdAt)));
+                    getBaseUrl() + path,
+                    formatLastModified(tag.updatedAt, tag.createdAt),
+                    seoPageService.alternates(path)));
         }
         return result;
     }
@@ -169,21 +202,30 @@ public class FeedService {
     public List<SitemapUrlView> getPageSitemapUrls() {
         if (!config.getBoolean("seo", "index_enabled", true)) return List.of();
         String normalizedBaseUrl = getBaseUrl();
-        return List.of(
-                new SitemapUrlView(normalizedBaseUrl + "/", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/subnet", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/timestamp", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/log-formatter", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/base-encoder", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/cron", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/regex", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/hash", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tools/json-diff", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/category", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/tag", ""),
-                new SitemapUrlView(normalizedBaseUrl + "/link", "")
-        );
+        List<SitemapUrlView> result = new ArrayList<>();
+        for (String path : pagePaths()) {
+            List<SeoPageService.Alternate> alternates = seoPageService.alternates(path);
+            if (alternates.isEmpty()) {
+                result.add(new SitemapUrlView(normalizedBaseUrl + path, "", List.of()));
+                continue;
+            }
+            // List every advertised language as its own entry, not only the
+            // region default URL, so the non-default versions are discoverable
+            // directly from the sitemap.
+            for (SeoPageService.Alternate alternate : alternates) {
+                if ("x-default".equals(alternate.language())) {
+                    continue;
+                }
+                result.add(new SitemapUrlView(alternate.url(), "", alternates));
+            }
+        }
+        return result;
+    }
+
+    private List<String> pagePaths() {
+        return List.of("/", "/tools", "/tools/subnet", "/tools/timestamp", "/tools/log-formatter",
+                "/tools/base-encoder", "/tools/cron", "/tools/regex", "/tools/hash", "/tools/json-diff",
+                "/category", "/tag", "/link", "/terms", "/privacy");
     }
 
     private String formatLastModified(OffsetDateTime updatedAt, OffsetDateTime createdAt) {
@@ -199,6 +241,7 @@ public class FeedService {
     @TemplateData
     public record FeedPostView(
             String slug,
+            String url,
             String title,
             String summary,
             String pubDate,
@@ -212,6 +255,7 @@ public class FeedService {
     @TemplateData
     public record SitemapUrlView(
             String loc,
-            String lastmod
+            String lastmod,
+            List<SeoPageService.Alternate> alternates
     ) {}
 }

@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.context.LanguageContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -136,6 +137,25 @@ class StructuredDataServiceTest {
         assertNull(service.publisherLogoUrl());
         JsonNode publisher = mapper.readTree(service.home(1, "zh-CN")).path("@graph").get(1);
         assertFalse(publisher.has("logo"));
+    }
+
+    @Test
+    void structuredDataUrlsFollowTheLanguagePrefixCanonicalUses() throws Exception {
+        LanguageContext context = new LanguageContext();
+        context.setLang("en-us");
+        context.setDefaultLang("zh-cn");
+        service.languageContext = context;
+
+        JsonNode home = mapper.readTree(service.home(1, "en-us")).path("@graph");
+        assertEquals(ORIGIN + "/en-US/", home.get(0).path("url").asText());
+        assertEquals(ORIGIN + "/en-US/#publisher", home.get(1).path("@id").asText());
+
+        JsonNode collection = mapper.readTree(service.collection("Java", "/category/java", "en-us",
+                List.of(new StructuredDataService.Breadcrumb("Java", "/category/java")))).path("@graph");
+        assertEquals(ORIGIN + "/en-US/category/java", collection.get(0).path("url").asText());
+        JsonNode items = collection.get(1).path("itemListElement");
+        assertEquals(ORIGIN + "/en-US/", items.get(0).path("item").asText());
+        assertEquals(ORIGIN + "/en-US/category/java", items.get(items.size() - 1).path("item").asText());
     }
 
     @Test

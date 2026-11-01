@@ -6,6 +6,8 @@ import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.i18n.I18n;
+import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
@@ -55,6 +57,12 @@ public class TagController {
     @Inject
     RegionContext regionContext;
 
+    @Inject
+    I18n i18n;
+
+    @Inject
+    CanonicalUrlService canonicalUrlService;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance list(@QueryParam("q") String keyword,
@@ -89,12 +97,22 @@ public class TagController {
                 .toList();
 
         Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? tagContent : tag;
+        String pageTitle = safeKeyword.isBlank()
+                ? i18n.t("tag.title")
+                : i18n.format("tag.filtered_title", safeKeyword);
+        String canonicalPath = "/tag";
+        if (safeKeyword.isBlank() && currentPage > 1) {
+            canonicalPath = canonicalPath + "?page=" + currentPage;
+        }
         return template
                 .data("language", lang)
-                .data("jsonLd", structuredDataService.collection("标签", "/tag", lang,
-                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb("标签", "/tag"))))
+                .data("jsonLd", structuredDataService.collection(i18n.t("tag.title"), "/tag", lang,
+                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
+                                i18n.t("tag.title"), "/tag"))))
                 .data("detailMode", false)
-                .data("pageTitle", safeKeyword.isBlank() ? "Tags" : "Tags - " + safeKeyword)
+                .data("pageTitle", withPageSuffix(pageTitle, currentPage))
+                .data("pageDescription", i18n.t("tag.list_description"))
+                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(canonicalPath)))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tags")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
@@ -155,10 +173,14 @@ public class TagController {
         return template
                 .data("language", lang)
                 .data("jsonLd", structuredDataService.collection(tagName, "/tag/" + entity.slug, lang,
-                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb("标签", "/tag"),
+                        List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
+                                        i18n.t("tag.title"), "/tag"),
                                 new com.biliwind.blog.service.StructuredDataService.Breadcrumb(tagName, "/tag/" + entity.slug))))
                 .data("detailMode", true)
-                .data("pageTitle", "Tag - " + tagName)
+                .data("pageTitle", withPageSuffix(i18n.format("tag.detail_title", tagName), currentPage))
+                .data("pageDescription", tagPageDescription(entity, lang))
+                .data("canonicalUrl", canonicalUrlService.buildPath(languageContext.localize(
+                        "/tag/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""))))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tag / " + entity.slug)
                 .data("totalCount", totalCount)
                 .data("currentPage", currentPage)
@@ -274,7 +296,20 @@ public class TagController {
 
     private String resolveTagDescription(Tag tag, String lang) {
         String description = LanguageHelper.resolveLocalizedValue(tag.description, lang);
-        return description == null || description.isBlank() ? "Tag archive." : description;
+        return description == null || description.isBlank()
+                ? i18n.t("tag.list_description") : description;
+    }
+
+    private String tagPageDescription(Tag tag, String lang) {
+        String description = LanguageHelper.resolveLocalizedValue(tag.description, lang);
+        if (description != null && !description.isBlank()) {
+            return description.trim();
+        }
+        return i18n.format("tag.page_description", resolveTagName(tag, lang));
+    }
+
+    private String withPageSuffix(String title, int page) {
+        return page > 1 ? title + " - " + i18n.format("index.page", page) : title;
     }
 
     private String normalizeSlug(String slug) {

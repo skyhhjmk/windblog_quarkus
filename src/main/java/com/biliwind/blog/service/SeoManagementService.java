@@ -18,7 +18,8 @@ public class SeoManagementService {
         boolean noindex = !config.getBoolean("seo", "index_enabled", true);
         boolean nofollow = !config.getBoolean("seo", "follow_enabled", true);
         if (path.matches("(?i)(/zh-cn|/en-us)?/search(/.*)?") || path.startsWith("/admin")
-                || path.startsWith("/api/")) noindex = true;
+                || path.startsWith("/api/") || path.startsWith("/user/")
+                || path.startsWith("/link/go/")) noindex = true;
         String plain = path.replaceFirst("^/(?i:zh-cn|en-us)(?=/|$)", "").replace("/amp/post/", "/post/");
         if (plain.startsWith("/post/")) {
             String slug = java.net.URLDecoder.decode(plain.substring(6), java.nio.charset.StandardCharsets.UTF_8);

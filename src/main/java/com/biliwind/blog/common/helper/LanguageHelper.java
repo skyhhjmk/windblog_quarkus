@@ -214,6 +214,31 @@ public final class LanguageHelper {
     }
 
     /**
+     * Reports whether a localized map has non-blank content for the requested
+     * language, accepting {@code en-US}, {@code en-us} and short aliases the
+     * same way {@link #resolveLocalizedValue(Map, String)} does.
+     */
+    public static boolean hasLocalizedValue(Map<String, String> localized, String language) {
+        if (localized == null || language == null) {
+            return false;
+        }
+        String normalized = normalizeToSupportedLang(language);
+        for (Map.Entry<String, String> entry : localized.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isBlank()) {
+                continue;
+            }
+            if (entry.getKey().equalsIgnoreCase(language)) {
+                return true;
+            }
+            String keyLanguage = normalizeToSupportedLang(entry.getKey());
+            if (keyLanguage != null && normalized != null && keyLanguage.equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Language keys in existing content are a mix of {@code en-US}, {@code en-us}
      * and short aliases. Always resolve them case-insensitively so a translation
      * saved under either spelling is served by the public renderer.

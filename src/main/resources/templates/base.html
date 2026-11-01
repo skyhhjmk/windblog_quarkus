@@ -33,6 +33,7 @@
         <meta name="google-adsense-account" content="{config:googleAdsensePublisherId}"/>
     {/if}
     <link rel="icon" href="{config:faviconUrl}"/>
+    <link rel="alternate" type="application/rss+xml" title="{config:siteTitle}" href="{languagePrefix}/feed"/>
 
     {#if canonicalUrl.or(null)}
         <link rel="canonical" href="{canonicalUrl}" data-site-base="{canonicalBaseUrl}"/>
@@ -43,10 +44,12 @@
     {#for alternate in seoAlternates}
         <link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}"/>
     {/for}
-    <meta name="google-site-verification" content="{config:googleSiteVerification}"/>
+    {#if config:googleSiteVerification}
+        <meta name="google-site-verification" content="{config:googleSiteVerification}"/>
+    {/if}
     {#if ogData.or(null)}
         {#for entry in ogData.entrySet}
-            {#if entry.key.startsWith('og:')}
+            {#if entry.key.startsWith('og:') || entry.key.startsWith('article:')}
                 <meta property="{entry.key}" content="{entry.value}"/>
             {#else}
                 <meta name="{entry.key}" content="{entry.value}"/>
@@ -57,6 +60,11 @@
         <meta property="og:description" content="{pageDescription ?: config:siteDescription}"/>
         <meta property="og:type" content="website"/>
         <meta property="og:url" content="{defaultCanonicalUrl}"/>
+        <meta property="og:site_name" content="{config:siteTitle}"/>
+        <meta property="og:locale" content="{ogLocale}"/>
+        {#if publisherLogoUrl.or(null)}
+            <meta property="og:image" content="{publisherLogoUrl}"/>
+        {/if}
         <meta name="twitter:card" content="summary"/>
         <meta name="twitter:title" content="{pageTitle ?: config:siteTitle}"/>
         <meta name="twitter:description" content="{pageDescription ?: config:siteDescription}"/>
@@ -382,7 +390,7 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/main.js?v=lang-switch-20261029" defer></script>
+<script src="/assets/js/main.js?v=seo-20261101" defer></script>
 <script src="/assets/js/drag-character-trail.js?v=cover-grid-20261030" defer></script>
 <script src="/assets/js/ruler-hud.js?v=ruler-hud-20261030-v3" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>

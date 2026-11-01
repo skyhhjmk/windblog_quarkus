@@ -214,7 +214,7 @@ public class PostController {
         long postPrice = snapshot.postPrice();
         String ampUrl = null;
         if (ampPageService.isEnabled() && snapshot.visibility() == 0 && postPrice <= 0) {
-            ampUrl = buildAmpUrl(slug, resolvedLang);
+            ampUrl = buildAmpUrl(slug, contentLanguage);
         }
         PostBodyView postBody = resolvePostBody(snapshot.renderType(), localizedContent);
         if (postBody.html()) {
@@ -268,6 +268,9 @@ public class PostController {
                 ? resolvePostBody(snapshot.renderType(), publicPreview).body() : postBody.body();
         String seoTitle = resolveSeoTitle(snapshot, displayTitle);
         String pageDescription = resolvePageDescription(snapshot, localizedAiSummary, localizedContent, resolvedLang);
+        // Canonicalise a fallback render to the language that actually has the
+        // article body; the fallback URL itself must not compete as a duplicate.
+        String canonicalUrl = buildCanonicalUrl(slug, contentLanguage);
 
         int aiSummaryStatusVal = 0;
         if (snapshot.aiSummaryStatus() != null) {
@@ -278,7 +281,7 @@ public class PostController {
             authorName = "Unknown";
         }
 
-        String authorAvatar = "/static/img/avatar-default.png";
+        String authorAvatar = "/assets/img/avatar-default.svg";
 
         String renderTypeName = null;
         if (postBody.renderType() != null) {
@@ -346,12 +349,11 @@ public class PostController {
                 .data("repostPolicyLicenseUrl", repostPolicy.licenseUrl())
                 .data("repostDirectCopyText", repostDirectCopyText)
                 .data("repostOriginalUrl", repostOriginalUrl)
-                .data("canonicalUrl", buildCanonicalUrl(slug))
+                .data("canonicalUrl", canonicalUrl)
                 .data("ampUrl", ampUrl)
-                .data("ogData", buildOgData(slug, seoTitle, pageDescription, publicHtml))
+                .data("ogData", buildOgData(canonicalUrl, seoTitle, pageDescription, publicHtml, snapshot, contentLanguage))
                 .data("jsonLd", structuredDataService.article(snapshot, seoTitle, pageDescription,
-                        buildCanonicalUrl(slug), resolvedLang,
-                        publicHtml));
+                        canonicalUrl, contentLanguage, publicHtml));
 
         Response.ResponseBuilder responseBuilder = Response.ok(templateInstance)
                 .header("Vary", "Accept-Language, Cookie");
@@ -384,8 +386,7 @@ public class PostController {
         return labels;
     }
 
-    private String buildCanonicalUrl(String slug) {
-        String language = languageContext.getLang();
+    private String buildCanonicalUrl(String slug, String language) {
         String defaultLanguage = languageContext.getDefaultLang();
         String path = LanguageHelper.localizedPath("/post/" + slug, language, defaultLanguage);
         return canonicalUrlService.buildPath(path);
@@ -439,14 +440,26 @@ public class PostController {
         return normalizedDescription.substring(0, 160);
     }
 
-    private java.util.Map<String, String> buildOgData(String slug, String title, String summary, String publicHtml) {
+    private java.util.Map<String, String> buildOgData(String canonicalUrl, String title, String summary,
+                                                      String publicHtml,
+                                                      com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
+                                                      String language) {
         java.util.Map<String, String> og = new java.util.HashMap<>();
         og.put("og:title", title);
         og.put("og:description", summary != null ? summary : "");
         og.put("og:type", "article");
-        og.put("og:url", buildCanonicalUrl(slug));
+        og.put("og:url", canonicalUrl);
+        og.put("og:site_name", com.biliwind.blog.service.ConfigTemplateData.siteTitle());
+        og.put("og:locale", language != null
+                && language.toLowerCase(java.util.Locale.ROOT).startsWith("en") ? "en_US" : "zh_CN");
+        if (snapshot.publishedAt() != null) {
+            og.put("article:published_time", snapshot.publishedAt().toString());
+        }
+        if (snapshot.updatedAt() != null) {
+            og.put("article:modified_time", snapshot.updatedAt().toString());
+        }
 
-        List<String> images = com.biliwind.blog.service.StructuredDataService.imageUrls(publicHtml, buildCanonicalUrl(slug));
+        List<String> images = com.biliwind.blog.service.StructuredDataService.imageUrls(publicHtml, canonicalUrl);
         String imageUrl = images.isEmpty()
                 ? structuredDataService.publisherLogoUrl()
                 : images.getFirst();

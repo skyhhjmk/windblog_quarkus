@@ -801,7 +801,8 @@
             }
 
             document.head.querySelectorAll(
-                'meta[property^="og:"], meta[name^="twitter:"], script[type="application/ld+json"], link[rel="alternate"][hreflang]'
+                'meta[property^="og:"], meta[property^="article:"], meta[name^="twitter:"], '
+                    + 'script[type="application/ld+json"], link[rel="alternate"][hreflang]'
             ).forEach(function (metadataNode) {
                 metadataNode.remove();
             });
