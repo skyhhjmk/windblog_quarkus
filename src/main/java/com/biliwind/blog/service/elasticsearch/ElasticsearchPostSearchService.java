@@ -60,7 +60,7 @@ public class ElasticsearchPostSearchService {
      * The scheduled feedback service rebuilds the alias target when the stored
      * marker does not match, because this index is a disposable search cache.
      */
-    public static final int POST_INDEX_VERSION = 4;
+    public static final int POST_INDEX_VERSION = 5;
     @Inject
     ElasticsearchConnectionManager connectionManager;
     @Inject
@@ -342,7 +342,11 @@ public class ElasticsearchPostSearchService {
                                   "type": "completion",
                                   "analyzer": "windblog_index_analyzer",
                                   "search_analyzer": "windblog_search_analyzer"
-                                }
+                                },
+                                "titles": { "type": "object", "enabled": false },
+                                "summaries": { "type": "object", "enabled": false },
+                                "contents": { "type": "object", "enabled": false },
+                                "aiSummaries": { "type": "object", "enabled": false }
                   }
                 }
               },
@@ -755,9 +759,16 @@ public class ElasticsearchPostSearchService {
         String defaultTitle = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String defaultSummary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
 
+        String combinedTitle = post.title != null && !post.title.isEmpty()
+                ? post.title.values().stream().filter(v -> v != null && !v.isBlank()).collect(java.util.stream.Collectors.joining(" \n "))
+                : (defaultTitle != null ? defaultTitle : "");
+
         Map<String, Object> document = new java.util.HashMap<>();
         document.put("id", post.id);
-        document.put("title", defaultTitle != null ? defaultTitle : "");
+        document.put("title", combinedTitle);
+        document.put("titles", post.title != null ? post.title : Map.of());
+        document.put("summaries", post.summary != null ? post.summary : Map.of());
+        document.put("aiSummaries", post.aiSummary != null ? post.aiSummary : Map.of());
         document.put("slug", post.slug != null ? post.slug : "");
         document.put("status", post.status != null ? post.status.name() : "DRAFT");
         document.put("visibility", post.visibility == 0 ? "PUBLIC" : (post.visibility == 1 ? "PRIVATE" : "PASSWORD"));
@@ -799,25 +810,26 @@ public class ElasticsearchPostSearchService {
         }
 
         PostRevision publishedRevision = post.publishedRevision;
-        if (publishedRevision != null) {
-            String content = "";
-            if (publishedRevision.contentMarkdown != null) {
-                content = LanguageHelper.resolveLocalizedValue(publishedRevision.contentMarkdown, lang);
+        Map<String, String> contentsMap = new java.util.HashMap<>();
+        List<String> searchableContents = new ArrayList<>();
+        if (publishedRevision != null && publishedRevision.contentMarkdown != null) {
+            for (Map.Entry<String, String> entry : publishedRevision.contentMarkdown.entrySet()) {
+                if (entry.getValue() != null && !entry.getValue().isBlank()) {
+                    String searchable = SearchContentHelper.toSearchableText(entry.getValue(), post.renderType);
+                    contentsMap.put(entry.getKey(), searchable);
+                    searchableContents.add(searchable);
+                }
             }
-            String searchableContent = SearchContentHelper.toSearchableText(content, post.renderType);
-            document.put("content", searchableContent);
-            document.put("contentHtml", searchableContent);
-            document.put("summary", defaultSummary != null ? defaultSummary : "");
-
-            String localizedAiSummary = post.aiSummary != null ?
-                    LanguageHelper.resolveLocalizedValue(post.aiSummary, lang) : "";
-            document.put("aiSummary", localizedAiSummary != null ? localizedAiSummary : "");
-        } else {
-            document.put("content", "");
-            document.put("contentHtml", "");
-            document.put("summary", defaultSummary != null ? defaultSummary : "");
-            document.put("aiSummary", "");
         }
+        document.put("contents", contentsMap);
+        String combinedContent = searchableContents.isEmpty() ? "" : String.join("\n\n", searchableContents);
+        document.put("content", combinedContent);
+        document.put("contentHtml", combinedContent);
+        document.put("summary", defaultSummary != null ? defaultSummary : "");
+
+        String localizedAiSummary = post.aiSummary != null ?
+                LanguageHelper.resolveLocalizedValue(post.aiSummary, lang) : "";
+        document.put("aiSummary", localizedAiSummary != null ? localizedAiSummary : "");
 
         if (tags != null && !tags.isEmpty()) {
             document.put("tags", tags);
@@ -826,13 +838,24 @@ public class ElasticsearchPostSearchService {
         }
         document.put("translations", translationSearchText(post));
 
-        // 填充搜索建议字段 (Completion Suggester)
+        // 填充搜索建议字段 (Completion Suggester)：纳入所有语言标题
         List<String> suggestions = new ArrayList<>();
-        if (defaultTitle != null && !defaultTitle.isBlank()) {
+        if (post.title != null) {
+            for (String titleVal : post.title.values()) {
+                if (titleVal != null && !titleVal.isBlank() && !suggestions.contains(titleVal)) {
+                    suggestions.add(titleVal);
+                }
+            }
+        }
+        if (suggestions.isEmpty() && defaultTitle != null && !defaultTitle.isBlank()) {
             suggestions.add(defaultTitle);
         }
         if (tags != null) {
-            suggestions.addAll(tags);
+            for (String tag : tags) {
+                if (tag != null && !tag.isBlank() && !suggestions.contains(tag)) {
+                    suggestions.add(tag);
+                }
+            }
         }
         document.put("suggest", suggestions);
 
@@ -1343,6 +1366,11 @@ public class ElasticsearchPostSearchService {
                 }
             }
 
+            Map<String, String> titles = parseStringMap(source.path("titles"));
+            Map<String, String> summaries = parseStringMap(source.path("summaries"));
+            Map<String, String> contents = parseStringMap(source.path("contents"));
+            Map<String, String> aiSummaries = parseStringMap(source.path("aiSummaries"));
+
             SearchedPost post = new SearchedPost(
                 source.path("id").asLong(),
                     source.path("authorId").asLong(0),
@@ -1363,7 +1391,11 @@ public class ElasticsearchPostSearchService {
                     titleSegments,
                     summarySegments,
                     contentSnippets,
-                    content
+                    content,
+                    titles,
+                    summaries,
+                    contents,
+                    aiSummaries
             );
             posts.add(post);
         }
@@ -1431,6 +1463,21 @@ public class ElasticsearchPostSearchService {
         } else {
             segments.add(new SearchHighlightSegment(text, highlighted));
         }
+    }
+
+    private Map<String, String> parseStringMap(com.fasterxml.jackson.databind.JsonNode node) {
+        if (node == null || !node.isObject()) {
+            return Map.of();
+        }
+        Map<String, String> map = new java.util.HashMap<>();
+        var fields = node.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            if (entry.getValue() != null && !entry.getValue().isNull()) {
+                map.put(entry.getKey(), entry.getValue().asText(""));
+            }
+        }
+        return map;
     }
 
     /**
@@ -1607,8 +1654,40 @@ public class ElasticsearchPostSearchService {
         List<SearchHighlightSegment> titleSegments,
         List<SearchHighlightSegment> summarySegments,
         List<List<SearchHighlightSegment>> contentSnippets,
-        String content
+        String content,
+        Map<String, String> titles,
+        Map<String, String> summaries,
+        Map<String, String> contents,
+        Map<String, String> aiSummaries
     ) {
+        public SearchedPost(
+                Long id,
+                Long authorId,
+                String title,
+                String summary,
+                String aiSummary,
+                String slug,
+                String authorName,
+                String categoryName,
+                String categorySlug,
+                String categoryPath,
+                List<SearchCategory> categories,
+                List<String> tags,
+                int viewCount,
+                boolean featured,
+                String publishedAt,
+                String createdAt,
+                List<SearchHighlightSegment> titleSegments,
+                List<SearchHighlightSegment> summarySegments,
+                List<List<SearchHighlightSegment>> contentSnippets,
+                String content
+        ) {
+            this(id, authorId, title, summary, aiSummary, slug, authorName, categoryName, categorySlug,
+                    categoryPath, categories, tags, viewCount, featured, publishedAt, createdAt,
+                    titleSegments, summarySegments, contentSnippets, content,
+                    Map.of(), Map.of(), Map.of(), Map.of());
+        }
+
         public SearchedPost(
                 Long id,
                 Long authorId,
@@ -1632,7 +1711,48 @@ public class ElasticsearchPostSearchService {
         ) {
             this(id, authorId, title, summary, aiSummary, slug, authorName, categoryName, categorySlug,
                     categoryPath, categories, tags, viewCount, featured, publishedAt, createdAt,
-                    titleSegments, summarySegments, contentSnippets, "");
+                    titleSegments, summarySegments, contentSnippets, "",
+                    Map.of(), Map.of(), Map.of(), Map.of());
+        }
+
+        public String title(String lang) {
+            if (titles != null && !titles.isEmpty()) {
+                String localized = LanguageHelper.resolveLocalizedValue(titles, lang);
+                if (localized != null && !localized.isBlank()) {
+                    return localized;
+                }
+            }
+            return title != null ? title : "";
+        }
+
+        public String summary(String lang) {
+            if (summaries != null && !summaries.isEmpty()) {
+                String localized = LanguageHelper.resolveLocalizedValue(summaries, lang);
+                if (localized != null && !localized.isBlank()) {
+                    return localized;
+                }
+            }
+            return summary != null ? summary : "";
+        }
+
+        public String aiSummary(String lang) {
+            if (aiSummaries != null && !aiSummaries.isEmpty()) {
+                String localized = LanguageHelper.resolveLocalizedValue(aiSummaries, lang);
+                if (localized != null && !localized.isBlank()) {
+                    return localized;
+                }
+            }
+            return aiSummary != null ? aiSummary : "";
+        }
+
+        public String content(String lang) {
+            if (contents != null && !contents.isEmpty()) {
+                String localized = LanguageHelper.resolveLocalizedValue(contents, lang);
+                if (localized != null && !localized.isBlank()) {
+                    return localized;
+                }
+            }
+            return content != null ? content : "";
         }
     }
 

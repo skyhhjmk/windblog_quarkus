@@ -118,4 +118,81 @@ class SearchWeightHelperTest {
         int weight = SearchWeightHelper.calculateWeight(title, content, "Java Quarkus");
         assertEquals(250, weight);
     }
+
+    @Test
+    @DisplayName("多语言搜索：当前语言命中获得优先加成，且优先于仅其他语言命中的文章")
+    void shouldPrioritizeCurrentLanguageMatchInMultilingualSearch() {
+        // 文章 A：英文标题包含 "Docker Architecture"，中文标题为 "容器架构"
+        java.util.Map<String, String> titlesA = java.util.Map.of(
+                "en-US", "Docker Architecture Overview",
+                "zh-CN", "容器架构概览"
+        );
+        java.util.Map<String, String> contentsA = java.util.Map.of(
+                "en-US", "Docker is a lightweight container platform...",
+                "zh-CN", "容器技术非常轻量..."
+        );
+
+        // 文章 B：英文标题为 "Microservices Guide"，中文标题为 "Docker 容器实战"
+        java.util.Map<String, String> titlesB = java.util.Map.of(
+                "en-US", "Microservices Guide",
+                "zh-CN", "Docker 容器实战指南"
+        );
+        java.util.Map<String, String> contentsB = java.util.Map.of(
+                "en-US", "Modern microservices design...",
+                "zh-CN", "Docker 容器在企业中广泛使用..."
+        );
+
+        // 当用户在英文界面 (en-US) 搜索 "Docker"：
+        // 文章 A 的英文标题和正文命中，包含当前语言加成 (500)
+        int weightAEn = SearchWeightHelper.calculateMultilingualWeight(titlesA, contentsA, "Docker", "en-US");
+        // 文章 B 的英文未命中，但中文命中 (跨语言匹配，无 500 加成)
+        int weightBEn = SearchWeightHelper.calculateMultilingualWeight(titlesB, contentsB, "Docker", "en-US");
+
+        // 验证文章 A 权重远高于文章 B
+        org.junit.jupiter.api.Assertions.assertTrue(weightAEn > weightBEn,
+                "Current language match (A=" + weightAEn + ") must rank higher than cross-lang match (B=" + weightBEn + ")");
+        org.junit.jupiter.api.Assertions.assertTrue(weightBEn > 0,
+                "Cross-language match should still produce positive weight (B=" + weightBEn + ")");
+
+        // 反之，当用户在中文界面 (zh-CN) 搜索 "Docker"：
+        int weightAZh = SearchWeightHelper.calculateMultilingualWeight(titlesA, contentsA, "Docker", "zh-CN");
+        int weightBZh = SearchWeightHelper.calculateMultilingualWeight(titlesB, contentsB, "Docker", "zh-CN");
+
+        // 文章 B 的中文标题和正文命中，包含当前语言加成 (500)
+        org.junit.jupiter.api.Assertions.assertTrue(weightBZh > weightAZh,
+                "Current language match (B=" + weightBZh + ") must rank higher than cross-lang match (A=" + weightAZh + ")");
+    }
+
+    @Test
+    @DisplayName("跨语言搜索：即便当前语言没有匹配项，其他语言命中依然能被成功检索出并返回权重")
+    void shouldSupportCrossLanguageSearch() {
+        // 文章仅有中文
+        java.util.Map<String, String> titles = java.util.Map.of("zh-CN", "从零搭建 Kubernetes 集群");
+        java.util.Map<String, String> contents = java.util.Map.of("zh-CN", "Kubernetes 是当今主流的编排系统。");
+
+        // 在英文环境 (en-US) 下搜索中文关键词 "集群"
+        int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contents, "集群", "en-US");
+
+        // 标题命中 "集群" (+100)
+        assertEquals(100, weight);
+    }
+
+    @Test
+    @DisplayName("双语均命中时，获得当前语言加成及额外的多语言完善度微量加成")
+    void shouldAwardBonusWhenBothLanguagesMatch() {
+        java.util.Map<String, String> titles = java.util.Map.of(
+                "en-US", "Mastering Java Virtual Machine",
+                "zh-CN", "深入理解 Java 虚拟机"
+        );
+        java.util.Map<String, String> contents = java.util.Map.of(
+                "en-US", "Java Virtual Machine (JVM) internals...",
+                "zh-CN", "Java 虚拟机底层机制解析..."
+        );
+
+        int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contents, "Java", "en-US");
+        // 当前语言 (en-US) 命中: +500 (boost) + title (100) + content position (40) + count (5) = 645
+        // 其他语言 (zh-CN) 命中: title (100) + content position (40) + count (5) = 145 -> bonus = min(50, 14) = 14
+        // 总权重 = 645 + 14 = 659
+        org.junit.jupiter.api.Assertions.assertTrue(weight >= 645, "Weight with current lang match should be >= 645");
+    }
 }

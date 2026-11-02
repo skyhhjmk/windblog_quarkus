@@ -761,34 +761,115 @@ public class SearchController {
             OffsetDateTime threshold = dateThreshold(date);
             List<SearchHit> hits = new ArrayList<>();
 
+            List<Long> postIds = searchResult.posts().stream()
+                    .map(ElasticsearchPostSearchService.SearchedPost::id)
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .toList();
+
+            Map<Long, Post> postMap = postIds.isEmpty() ? Map.of() :
+                    entityManager.createQuery(
+                            "select p from Post p left join fetch p.publishedRevision left join fetch p.category where p.id in :postIds",
+                            Post.class)
+                            .setParameter("postIds", postIds)
+                            .getResultList()
+                            .stream()
+                            .collect(java.util.stream.Collectors.toMap(p -> p.id, p -> p, (a, b) -> a));
+
             for (ElasticsearchPostSearchService.SearchedPost post : searchResult.posts()) {
                 OffsetDateTime publishedAt = resolveSearchDate(post);
                 if (threshold != null && publishedAt != null && publishedAt.isBefore(threshold)) {
                     continue;
                 }
 
-                int weight = SearchWeightHelper.calculateWeight(post.title(), post.content(), keyword);
+                Post dbPost = post.id() != null ? postMap.get(post.id()) : null;
+
+                Map<String, String> titles = (dbPost != null && dbPost.title != null && !dbPost.title.isEmpty())
+                        ? dbPost.title
+                        : post.titles();
+
+                Map<String, String> summaries = (dbPost != null && dbPost.summary != null && !dbPost.summary.isEmpty())
+                        ? dbPost.summary
+                        : post.summaries();
+
+                Map<String, String> aiSummaries = (dbPost != null && dbPost.aiSummary != null && !dbPost.aiSummary.isEmpty())
+                        ? dbPost.aiSummary
+                        : post.aiSummaries();
+
+                Map<String, String> contents = post.contents();
+                if (dbPost != null && dbPost.publishedRevision != null && dbPost.publishedRevision.contentMarkdown != null) {
+                    Map<String, String> dbContents = new java.util.HashMap<>();
+                    for (Map.Entry<String, String> entry : dbPost.publishedRevision.contentMarkdown.entrySet()) {
+                        if (entry.getValue() != null && !entry.getValue().isBlank()) {
+                            dbContents.put(entry.getKey(), SearchContentHelper.toSearchableText(entry.getValue(), dbPost.renderType));
+                        }
+                    }
+                    if (!dbContents.isEmpty()) {
+                        contents = dbContents;
+                    }
+                }
+
+                String displayTitle = LanguageHelper.resolveLocalizedValue(titles, lang);
+                if (displayTitle == null || displayTitle.isBlank()) {
+                    displayTitle = post.title(lang);
+                }
+                if (displayTitle == null || displayTitle.isBlank()) {
+                    displayTitle = post.slug();
+                }
+
+                String displaySummary = LanguageHelper.resolveLocalizedValue(summaries, lang);
+                if (displaySummary == null || displaySummary.isBlank()) {
+                    displaySummary = post.summary(lang);
+                }
+                if (displaySummary == null || displaySummary.isBlank()) {
+                    displaySummary = "No summary available.";
+                }
+
+                String displayAiSummary = LanguageHelper.resolveLocalizedValue(aiSummaries, lang);
+                if (displayAiSummary == null || displayAiSummary.isBlank()) {
+                    displayAiSummary = post.aiSummary(lang);
+                }
+
+                String displayCategoryName = (dbPost != null && dbPost.category != null && dbPost.category.name != null)
+                        ? LanguageHelper.resolveLocalizedValue(dbPost.category.name, lang)
+                        : post.categoryName();
+
+                List<SearchHighlightSegment> titleSegments;
+                if (displayTitle.equals(post.title()) && post.titleSegments() != null && !post.titleSegments().isEmpty()) {
+                    titleSegments = post.titleSegments();
+                } else {
+                    titleSegments = fallbackHighlight(displayTitle, keyword);
+                }
+
+                List<SearchHighlightSegment> summarySegments;
+                if (displaySummary.equals(post.summary()) && post.summarySegments() != null && !post.summarySegments().isEmpty()) {
+                    summarySegments = post.summarySegments();
+                } else {
+                    summarySegments = fallbackHighlight(displaySummary, keyword);
+                }
+
+                int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contents, keyword, lang);
 
                 SearchHit hit = new SearchHit(
                     "post",
                     "Post",
-                    post.title(),
-                    post.summary(),
-                    post.aiSummary(),
+                    displayTitle,
+                    displaySummary,
+                    displayAiSummary,
                     languageContext.localize("/post/" + post.slug()),
                     post.slug(),
                     publishedAt,
                     publishedAt != null ? formatDate(publishedAt) : "unknown",
                     "author: " + post.authorName() + " | views: " + post.viewCount(),
                         "[Read More]",
-                        post.categoryName(),
+                        displayCategoryName,
                         post.categorySlug(),
                         post.viewCount(),
                         List.of(),
                         post.categories().stream().map(category -> new IndexController.CategoryItem(
                                 category.name(), category.slug())).toList(),
-                        post.titleSegments(),
-                        post.summarySegments(),
+                        titleSegments,
+                        summarySegments,
                         post.contentSnippets(),
                         resolveSearchAuthorName(post.authorId(), post.authorName()),
                         weight
@@ -927,7 +1008,17 @@ public class SearchController {
         String searchableText = SearchContentHelper.toSearchableText(content, post.renderType);
         List<List<SearchHighlightSegment>> contentSnippets = fallbackContentSnippets(
                 searchableText, keyword);
-        int weight = SearchWeightHelper.calculateWeight(title, searchableText, keyword);
+
+        Map<String, String> titles = post.title != null ? post.title : Map.of();
+        Map<String, String> contentsMap = new java.util.HashMap<>();
+        if (post.publishedRevision != null && post.publishedRevision.contentMarkdown != null) {
+            for (Map.Entry<String, String> entry : post.publishedRevision.contentMarkdown.entrySet()) {
+                if (entry.getValue() != null && !entry.getValue().isBlank()) {
+                    contentsMap.put(entry.getKey(), SearchContentHelper.toSearchableText(entry.getValue(), post.renderType));
+                }
+            }
+        }
+        int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contentsMap, keyword, lang);
         return new SearchHit(
                 "post",
                 "Post",

@@ -1,7 +1,12 @@
 package com.biliwind.blog.common.helper;
 
+import com.biliwind.blog.common.constant.LanguageConstant;
+
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 文章搜索权重计算工具类
@@ -16,7 +21,12 @@ import java.util.Locale;
  *    - 前 80% 出现：+10 权重
  *    - 前 80% 都没有（>= 80% 或未出现）：不加权重（+0）
  * 4. 正文中出现关键词次数越多权重越高，出现一次关键字权重 +5；
- * 5. 位置计算与出现次数计算互不冲突，两者累加。
+ * 5. 位置计算与出现次数计算互不冲突，两者累加；
+ * 6. 多语言与跨语言搜索支持：
+ *    - 优先匹配当前语言：当前语言（如 en-US / zh-CN）命中时，额外赋予当前语言匹配加成 (+500)，
+ *      确保当前语言相关的文章排在前面，避免搜英文标题搜不出来；
+ *    - 支持跨语言检索：若当前语言未命中但其他语言版本命中，依然返回有效权重并保留被检索出的能力；
+ *    - 当当前语言命中且其他语言也命中时，附加微量多语言加成（最高 +50），综合排序更优。
  */
 public final class SearchWeightHelper {
 
@@ -28,7 +38,140 @@ public final class SearchWeightHelper {
     public static final int CONTENT_FIRST_OCCURRENCE_P80_WEIGHT = 10;
     public static final int CONTENT_OCCURRENCE_WEIGHT = 5;
 
+    /** 当前语言匹配额外提权加成 */
+    public static final int CURRENT_LANG_MATCH_BOOST = 500;
+
     private SearchWeightHelper() {
+    }
+
+    /**
+     * 计算文章针对多语言场景与当前语言上下文的综合搜索权重
+     *
+     * @param titles      文章各语言标题映射（如 zh-cn -> 中文标题, en-us -> 英文标题）
+     * @param contents    文章各语言正文可搜索纯文本映射
+     * @param keyword     搜索关键字
+     * @param currentLang 当前请求上下文语言（如 zh-CN, en-US）
+     * @return 最终综合搜索权重
+     */
+    public static int calculateMultilingualWeight(
+            Map<String, String> titles,
+            Map<String, String> contents,
+            String keyword,
+            String currentLang) {
+        if (keyword == null || keyword.isBlank()) {
+            return BASE_WEIGHT;
+        }
+        List<String> terms = extractTerms(keyword);
+        return calculateMultilingualWeightByTerms(titles, contents, terms, currentLang);
+    }
+
+    /**
+     * 计算文章针对多语言场景与分词项列表的综合搜索权重
+     *
+     * @param titles      文章各语言标题映射
+     * @param contents    文章各语言正文纯文本映射
+     * @param terms       分词后的搜索关键词列表
+     * @param currentLang 当前上下文语言
+     * @return 最终综合搜索权重
+     */
+    public static int calculateMultilingualWeightByTerms(
+            Map<String, String> titles,
+            Map<String, String> contents,
+            List<String> terms,
+            String currentLang) {
+        if (terms == null || terms.isEmpty()) {
+            return BASE_WEIGHT;
+        }
+
+        String normalizedCurrentLang = LanguageHelper.normalizeToSupportedLang(currentLang);
+        if (normalizedCurrentLang == null) {
+            normalizedCurrentLang = LanguageConstant.DEFAULT_LANG;
+        }
+
+        Set<String> allLangs = new LinkedHashSet<>();
+        if (titles != null) {
+            allLangs.addAll(titles.keySet());
+        }
+        if (contents != null) {
+            allLangs.addAll(contents.keySet());
+        }
+
+        // 1. 严格计算当前语言下的匹配权重
+        String currentTitle = titles != null ? findMatchingLanguageValue(titles, normalizedCurrentLang) : null;
+        String currentContent = contents != null ? findMatchingLanguageValue(contents, normalizedCurrentLang) : null;
+        int currentLangWeight = 0;
+        if ((currentTitle != null && !currentTitle.isBlank()) || (currentContent != null && !currentContent.isBlank())) {
+            currentLangWeight = calculateWeightByTerms(currentTitle, currentContent, terms);
+        }
+
+        // 2. 遍历计算其他语言版本的最高匹配权重
+        int maxOtherLangWeight = 0;
+        for (String langKey : allLangs) {
+            if (langKey == null || langKey.isBlank()) {
+                continue;
+            }
+            String normKey = LanguageHelper.normalizeToSupportedLang(langKey);
+            if (normKey != null && normKey.equalsIgnoreCase(normalizedCurrentLang)) {
+                continue;
+            }
+            if (langKey.equalsIgnoreCase(normalizedCurrentLang)) {
+                continue;
+            }
+
+            String otherTitle = titles != null ? titles.get(langKey) : null;
+            String otherContent = contents != null ? contents.get(langKey) : null;
+            int otherWeight = calculateWeightByTerms(otherTitle, otherContent, terms);
+            if (otherWeight > maxOtherLangWeight) {
+                maxOtherLangWeight = otherWeight;
+            }
+        }
+
+        // 3. 优先匹配当前语言：当前语言命中赋大加成；若只有其他语言命中，作为跨语言搜索保留其权重
+        if (currentLangWeight > 0) {
+            int otherBonus = maxOtherLangWeight > 0 ? Math.min(50, (int) (maxOtherLangWeight * 0.1)) : 0;
+            return CURRENT_LANG_MATCH_BOOST + currentLangWeight + otherBonus;
+        } else if (maxOtherLangWeight > 0) {
+            return maxOtherLangWeight;
+        } else {
+            return BASE_WEIGHT;
+        }
+    }
+
+    /**
+     * 严格按目标语言（及其变体/别名）从多语言 Map 中查找对应内容，不 fallback 到其他语言
+     */
+    public static String findMatchingLanguageValue(Map<String, String> localized, String language) {
+        if (localized == null || localized.isEmpty() || language == null) {
+            return null;
+        }
+        String direct = LanguageHelper.lookupIgnoreCase(localized, language);
+        if (direct != null && !direct.isBlank()) {
+            return direct;
+        }
+        String normalized = LanguageHelper.normalizeToSupportedLang(language);
+        if (normalized != null && !normalized.equalsIgnoreCase(language)) {
+            direct = LanguageHelper.lookupIgnoreCase(localized, normalized);
+            if (direct != null && !direct.isBlank()) {
+                return direct;
+            }
+        }
+        if (normalized != null && normalized.contains("-")) {
+            String shortAlias = normalized.substring(0, normalized.indexOf('-'));
+            direct = LanguageHelper.lookupIgnoreCase(localized, shortAlias);
+            if (direct != null && !direct.isBlank()) {
+                return direct;
+            }
+        }
+        for (Map.Entry<String, String> entry : localized.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isBlank()) {
+                continue;
+            }
+            String keyNorm = LanguageHelper.normalizeToSupportedLang(entry.getKey());
+            if (keyNorm != null && normalized != null && keyNorm.equalsIgnoreCase(normalized)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     /**
