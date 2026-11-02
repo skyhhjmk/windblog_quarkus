@@ -1,11 +1,15 @@
 /**
  * Article image lightbox.
  *
- * theme.css caps the height of images inside #post-body-content so an
+ * theme.css caps the height of images inside #post-content-section so an
  * extremely tall picture cannot push the rest of the post far down. This
  * module is the pure client-side counterpart: it decorates only images that
  * are actually rendered inside the article body and opens them in a
  * click-to-zoom lightbox with a FLIP transition from the inline thumbnail.
+
+ * #post-content-section is the stable root: post-premium.js renames the
+ * inner #post-body-content wrapper when it builds its block outline, so the
+ * inner id cannot be used as the long-lived anchor.
  *
  * Locked blocks never contain image markup. Authorized block HTML is injected
  * by post-premium.js into the same article body, and the MutationObserver below
@@ -15,7 +19,7 @@
     'use strict';
 
     var OVERLAY_ID = 'article-lightbox';
-    var BODY_ID = 'post-body-content';
+    var CONTENT_ID = 'post-content-section';
     var MIN_ZOOM_EDGE = 96;
     var READABLE_WIDTH = 320;
     var VIEWPORT_GAP = 24;
@@ -33,7 +37,7 @@
     }
 
     function articleBody() {
-        return document.getElementById(BODY_ID);
+        return document.getElementById(CONTENT_ID);
     }
 
     function isVisible(image) {

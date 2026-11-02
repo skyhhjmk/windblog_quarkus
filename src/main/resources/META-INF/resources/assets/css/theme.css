@@ -758,15 +758,15 @@ input::placeholder {
 /* Cap very tall article images so they cannot push the rest of the post far
    down. The width shrinks proportionally; the lightbox restores a readable
    size on demand. */
-#post-body-content img {
+#post-content-section img {
     max-height: min(65vh, 40rem);
 }
 
-#post-body-content img.article-image-zoomable {
+#post-content-section img.article-image-zoomable {
     cursor: zoom-in;
 }
 
-#post-body-content img.article-image-zoomable:focus-visible {
+#post-content-section img.article-image-zoomable:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 4px;
 }
