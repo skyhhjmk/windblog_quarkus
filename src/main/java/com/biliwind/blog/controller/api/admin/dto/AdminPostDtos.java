@@ -88,7 +88,8 @@ public final class AdminPostDtos {
                         String contentMarkdown,
                         String seoTitle,
                         String seoDescription,
-                        String seoKeywords) {
+                        String seoKeywords,
+                        String slug) {
         }
 
         public record PostSaveTranslationRequest(

@@ -220,7 +220,8 @@ public class UserPostSubmissionController {
                             translatedTitle, translatedSummary, translatedContent,
                             optionalTranslation(result, "seoTitle"),
                             optionalTranslation(result, "seoDescription"),
-                            optionalTranslation(result, "seoKeywords"))
+                            optionalTranslation(result, "seoKeywords"),
+                            SlugHelper.slugify(translatedTitle))
             )).build();
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();

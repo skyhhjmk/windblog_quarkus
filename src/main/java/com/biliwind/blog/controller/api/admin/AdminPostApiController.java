@@ -188,18 +188,21 @@ public class AdminPostApiController {
         return result;
     }
 
+    @GET
+    @Path("/slug-preview")
+    @Operation(summary = "根据标题预览 URL 友好的 slug")
+    @APIResponse(responseCode = "200", description = "返回由标题生成的 slug")
+    public Map<String, String> previewSlug(@QueryParam("title") String title) {
+        return Map.of("slug", com.biliwind.blog.common.helper.SlugHelper.slugify(title));
+    }
+
     @POST
     @Transactional
     @Operation(summary = "创建文章草稿")
     @APIResponse(responseCode = "200", description = "创建成功")
     @APIResponse(responseCode = "409", description = "slug 冲突")
     public AdminPostDetail create(@Valid PostCreateRequest request) {
-        String slug = request.slug();
-        if (slug == null || slug.isBlank()) {
-            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(request.title());
-        } else {
-            slug = slug.trim();
-        }
+        String slug = resolvePostSlug(request.slug(), request.title());
 
         if (Post.count("slug = ?1", slug) > 0) {
             throw conflict("slug 已存在");
@@ -430,7 +433,8 @@ public class AdminPostApiController {
             postAiMetadataService.record(id, revisionId, "translate", result, "DRAFT");
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
                     translatedTitle, translatedSummary, translatedContent,
-                    translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords);
+                    translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords,
+                    com.biliwind.blog.common.helper.SlugHelper.slugify(translatedTitle));
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
@@ -481,7 +485,8 @@ public class AdminPostApiController {
             String translatedSeoKeywords = optionalTranslation(result, "seoKeywords");
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
                     translatedTitle, translatedSummary, translatedContent,
-                    translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords);
+                    translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords,
+                    com.biliwind.blog.common.helper.SlugHelper.slugify(translatedTitle));
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
@@ -891,6 +896,24 @@ public class AdminPostApiController {
     }
 
 
+    /**
+     * Normalizes a client supplied slug (or derives one from the title) so a
+     * URL never contains transliterated leftovers such as spaces, CJK glyphs
+     * or punctuation. Existing slugs that are already URL friendly are kept
+     * unchanged.
+     */
+    private String resolvePostSlug(String requested, Map<String, String> title) {
+        String slug = requested == null || requested.isBlank()
+                ? "" : com.biliwind.blog.common.helper.SlugHelper.slugify(requested);
+        if (slug.isBlank()) {
+            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(title);
+        }
+        if (slug.isBlank()) {
+            slug = "post-" + Long.toString(System.currentTimeMillis(), 36);
+        }
+        return slug;
+    }
+
     private boolean updatePostTags(Post post, List<Long> newTagIds) {
         List<PostTag> postTags = PostTag.find("post.id = ?1", post.id).list();
         List<Long> currentTagIds = new ArrayList<>();
@@ -933,19 +956,21 @@ public class AdminPostApiController {
         boolean changed = false;
 
         if (request.slug() != null) {
-            String nextSlug = request.slug().trim();
-            if (nextSlug.isBlank()) {
-                nextSlug = com.biliwind.blog.common.helper.SlugHelper.slugify(request.title() != null ? request.title() : post.title);
-            }
-
-            if (!nextSlug.equals(post.slug) && Post.count("slug = ?1", nextSlug) > 0) {
-                throw conflict("slug 已存在");
-            }
+            String requestedSlug = request.slug().trim();
+            // An untouched stored slug keeps its legacy spelling; only a slug
+            // the editor actually changed is normalized for URLs.
+            String nextSlug = requestedSlug.equals(post.slug)
+                    ? post.slug
+                    : resolvePostSlug(requestedSlug,
+                            request.title() != null ? request.title() : post.title);
             if (!nextSlug.equals(post.slug)) {
+                if (Post.count("slug = ?1", nextSlug) > 0) {
+                    throw conflict("slug 已存在");
+                }
                 seoManagementService.recordPostMove(post.slug, nextSlug);
+                post.slug = nextSlug;
                 changed = true;
             }
-            post.slug = nextSlug;
         }
 
         if (request.summary() != null && !Objects.equals(post.summary, request.summary())) {
