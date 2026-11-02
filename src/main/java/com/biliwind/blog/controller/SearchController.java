@@ -4,6 +4,7 @@ import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.dto.SearchHighlightSegment;
 import com.biliwind.blog.common.helper.SearchContentHelper;
+import com.biliwind.blog.common.helper.SearchWeightHelper;
 import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.helper.LanguageHelper;
@@ -308,12 +309,29 @@ public class SearchController {
             return new ElasticsearchResult(List.of(), 0, false, true, true);
         }
 
-        String orderBy = "latest".equals(sort) || sort.isBlank()
+        String searchPattern = "%" + escapeLike(keyword.toLowerCase(Locale.ROOT)) + "%";
+        OffsetDateTime threshold = dateThreshold(date);
+
+        if (sort.isBlank()) {
+            int safePage = Math.min(MAX_FALLBACK_PAGE, Math.max(1, page));
+            int candidateLimit = Math.min(1000, Math.max(100, safePage * PAGE_SIZE));
+            PostFallbackPage fallbackPosts = findPostFallbackCandidates(keyword, searchPattern, threshold, candidateLimit);
+            List<SearchHit> candidates = new ArrayList<>();
+            Map<Long, List<IndexController.TagItem>> tagsByPost = loadTagsByPost(fallbackPosts.items(), lang);
+            for (Post post : fallbackPosts.items()) {
+                candidates.add(toPostHit(post, lang, tagsByPost, keyword));
+            }
+            candidates.sort(hitComparator(sort));
+            int fromIndex = Math.min(candidates.size(), (safePage - 1) * PAGE_SIZE);
+            int toIndex = Math.min(candidates.size(), fromIndex + PAGE_SIZE);
+            List<SearchHit> hits = new ArrayList<>(candidates.subList(fromIndex, toIndex));
+            return new ElasticsearchResult(hits, fallbackPosts.total(), false, true, true);
+        }
+
+        String orderBy = "latest".equals(sort)
                 ? "p.published_at DESC NULLS LAST, p.id DESC"
                 : "p.view_count DESC NULLS LAST, p.published_at DESC NULLS LAST, p.id DESC";
         String regionPattern = "%\"" + regionContext.getCurrentRegion().getCode() + "\"%";
-        String searchPattern = "%" + escapeLike(keyword.toLowerCase(Locale.ROOT)) + "%";
-        OffsetDateTime threshold = dateThreshold(date);
 
         String where = "p.status = 1 and p.deleted_at is null and p.visibility = 0 "
                 + "and p.published_revision_id is not null "
@@ -417,7 +435,7 @@ public class SearchController {
         String searchPattern = "%" + escapeLike(keyword.toLowerCase(Locale.ROOT)) + "%";
         int safePage = Math.min(MAX_FALLBACK_PAGE, Math.max(1, page));
         // Each source is bounded and paged in PostgreSQL; never materialize the full table.
-        int candidateLimit = safePage * PAGE_SIZE;
+        int candidateLimit = Math.min(1000, Math.max(100, safePage * PAGE_SIZE));
 
         PostFallbackPage posts = findPostFallbackCandidates(keyword, searchPattern, threshold, candidateLimit);
         TaxonomyFallbackPage tags = findTaxonomyFallbackCandidates("tags", searchPattern, threshold, candidateLimit);
@@ -622,6 +640,7 @@ public class SearchController {
         if (authorName.isBlank()) {
             authorName = authorNameFromMeta(meta);
         }
+        int weight = hitNode.path("weight").asInt(0);
         return new SearchHit(
                 hitNode.path("type").asText("post"),
                 hitNode.path("typeLabel").asText("Post"),
@@ -642,7 +661,8 @@ public class SearchController {
                 parseHighlightSegments(hitNode.path("titleSegments"), title),
                 parseHighlightSegments(hitNode.path("summarySegments"), summary),
                 parseContentSnippets(hitNode.path("contentSnippets")),
-                authorName
+                authorName,
+                weight
         );
     }
 
@@ -747,6 +767,8 @@ public class SearchController {
                     continue;
                 }
 
+                int weight = SearchWeightHelper.calculateWeight(post.title(), post.content(), keyword);
+
                 SearchHit hit = new SearchHit(
                     "post",
                     "Post",
@@ -768,7 +790,8 @@ public class SearchController {
                         post.titleSegments(),
                         post.summarySegments(),
                         post.contentSnippets(),
-                        resolveSearchAuthorName(post.authorId(), post.authorName())
+                        resolveSearchAuthorName(post.authorId(), post.authorName()),
+                        weight
                 );
                 hits.add(hit);
             }
@@ -901,8 +924,10 @@ public class SearchController {
         String content = post.publishedRevision == null || post.publishedRevision.contentMarkdown == null
                 ? ""
                 : LanguageHelper.resolveLocalizedValue(post.publishedRevision.contentMarkdown, lang);
+        String searchableText = SearchContentHelper.toSearchableText(content, post.renderType);
         List<List<SearchHighlightSegment>> contentSnippets = fallbackContentSnippets(
-                SearchContentHelper.toSearchableText(content, post.renderType), keyword);
+                searchableText, keyword);
+        int weight = SearchWeightHelper.calculateWeight(title, searchableText, keyword);
         return new SearchHit(
                 "post",
                 "Post",
@@ -923,7 +948,8 @@ public class SearchController {
                 fallbackHighlight(title, keyword),
                 fallbackHighlight(summary, keyword),
                 contentSnippets,
-                PostAuthorHelper.displayName(post)
+                PostAuthorHelper.displayName(post),
+                weight
         );
     }
 
@@ -998,14 +1024,7 @@ public class SearchController {
     }
 
     private List<String> highlightTerms(String keyword) {
-        if (keyword == null || keyword.isBlank()) {
-            return List.of();
-        }
-        return java.util.Arrays.stream(keyword.trim().split("\\s+"))
-                .filter(term -> !term.isBlank())
-                .distinct()
-                .limit(8)
-                .toList();
+        return SearchWeightHelper.extractTerms(keyword);
     }
 
     private void addPlainSegment(List<SearchHighlightSegment> segments, String text) {
@@ -1090,16 +1109,20 @@ public class SearchController {
 
         Comparator<SearchHit> byTitle = Comparator.comparing(hit -> hit.title.toLowerCase(Locale.ROOT));
 
+        Comparator<SearchHit> byWeightDesc = Comparator
+                .comparingInt((SearchHit hit) -> hit.weight)
+                .reversed();
+
         if ("hot".equals(sort)) {
             Comparator<SearchHit> byViewCount = Comparator
                     .comparingLong((SearchHit hit) -> hit.viewCount)
                     .reversed();
-            return byViewCount.thenComparing(byDateDesc).thenComparing(byTitle);
+            return byViewCount.thenComparing(byWeightDesc).thenComparing(byDateDesc).thenComparing(byTitle);
         }
         if ("latest".equals(sort)) {
-            return byDateDesc.thenComparing(byTypeWeight).thenComparing(byTitle);
+            return byDateDesc.thenComparing(byWeightDesc).thenComparing(byTypeWeight).thenComparing(byTitle);
         }
-        return byTypeWeight.thenComparing(byDateDesc).thenComparing(byTitle);
+        return byWeightDesc.thenComparing(byTypeWeight).thenComparing(byDateDesc).thenComparing(byTitle);
     }
 
     private OffsetDateTime effectiveDate(Post post) {
@@ -1271,7 +1294,8 @@ public class SearchController {
             List<SearchHighlightSegment> titleSegments,
             List<SearchHighlightSegment> summarySegments,
             List<List<SearchHighlightSegment>> contentSnippets,
-            String authorName
+            String authorName,
+            int weight
     ) {
         public SearchHit(String type, String typeLabel, String title, String summary, String aiSummary,
                          String url, String slug, OffsetDateTime date, String dateText, String meta,
@@ -1281,7 +1305,20 @@ public class SearchController {
                     categoryName, categorySlug, viewCount, tags, categories,
                     title == null || title.isEmpty() ? List.of() : List.of(new SearchHighlightSegment(title, false)),
                     summary == null || summary.isEmpty() ? List.of() : List.of(new SearchHighlightSegment(summary, false)),
-                    List.of(), "");
+                    List.of(), "", 0);
+        }
+
+        public SearchHit(String type, String typeLabel, String title, String summary, String aiSummary,
+                         String url, String slug, OffsetDateTime date, String dateText, String meta,
+                         String actionLabel, String categoryName, String categorySlug, long viewCount,
+                         List<IndexController.TagItem> tags, List<IndexController.CategoryItem> categories,
+                         List<SearchHighlightSegment> titleSegments,
+                         List<SearchHighlightSegment> summarySegments,
+                         List<List<SearchHighlightSegment>> contentSnippets,
+                         String authorName) {
+            this(type, typeLabel, title, summary, aiSummary, url, slug, date, dateText, meta, actionLabel,
+                    categoryName, categorySlug, viewCount, tags, categories,
+                    titleSegments, summarySegments, contentSnippets, authorName, 0);
         }
     }
 

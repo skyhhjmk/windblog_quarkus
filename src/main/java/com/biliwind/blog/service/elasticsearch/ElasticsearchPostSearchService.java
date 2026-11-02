@@ -1318,6 +1318,7 @@ public class ElasticsearchPostSearchService {
 
             String title = source.path("title").asText("");
             String summary = source.path("summary").asText("");
+            String content = source.path("content").asText("");
             List<SearchHighlightSegment> titleSegments = highlightedFieldSegments(
                     highlight.path("title"), title, highlightMarkers);
             List<SearchHighlightSegment> summarySegments = highlightedFieldSegments(
@@ -1361,7 +1362,8 @@ public class ElasticsearchPostSearchService {
                     source.path("createdAt").asText(""),
                     titleSegments,
                     summarySegments,
-                    contentSnippets
+                    contentSnippets,
+                    content
             );
             posts.add(post);
         }
@@ -1604,8 +1606,35 @@ public class ElasticsearchPostSearchService {
         String createdAt,
         List<SearchHighlightSegment> titleSegments,
         List<SearchHighlightSegment> summarySegments,
-        List<List<SearchHighlightSegment>> contentSnippets
-    ) {}
+        List<List<SearchHighlightSegment>> contentSnippets,
+        String content
+    ) {
+        public SearchedPost(
+                Long id,
+                Long authorId,
+                String title,
+                String summary,
+                String aiSummary,
+                String slug,
+                String authorName,
+                String categoryName,
+                String categorySlug,
+                String categoryPath,
+                List<SearchCategory> categories,
+                List<String> tags,
+                int viewCount,
+                boolean featured,
+                String publishedAt,
+                String createdAt,
+                List<SearchHighlightSegment> titleSegments,
+                List<SearchHighlightSegment> summarySegments,
+                List<List<SearchHighlightSegment>> contentSnippets
+        ) {
+            this(id, authorId, title, summary, aiSummary, slug, authorName, categoryName, categorySlug,
+                    categoryPath, categories, tags, viewCount, featured, publishedAt, createdAt,
+                    titleSegments, summarySegments, contentSnippets, "");
+        }
+    }
 
     public record HealthResult(String status, boolean ilmPolicyExists, boolean indexTemplateExists,
                                boolean postAliasExists) {
