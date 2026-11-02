@@ -56,6 +56,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
             status = Response.Status.CONFLICT;
             message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
             errorType = "ConflictError";
+            LOGGER.debug("业务冲突: path={}, message={}", request == null ? null : request.path(), message);
         } else if (exception instanceof ConcurrentModificationException) {
             status = Response.Status.CONFLICT;
             message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
