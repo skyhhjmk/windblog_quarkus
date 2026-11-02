@@ -152,4 +152,5 @@
     <include file="db/migration/151-create-repost-referral-events.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/152-add-post-seo-i18n.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/153-create-local-ai-topic-pool.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/154-create-ai-topic-pool-runs.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

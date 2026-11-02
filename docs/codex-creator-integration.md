@@ -14,7 +14,7 @@ Codex Creator 作为独立仓库 `codex-creator` 挂载在本仓库的 `codex-cr
 系统设置「功能设置 → 话题功能 AI 配置」同时决定话题生成使用的提供商和话题数据的存储后端：
 
 - 留空且已配置 Codex Creator 共享密钥，或显式选择 Codex Creator：话题池、查询种子、运行记录和草稿回写继续由 Codex Creator 管理。
-- 选择普通 AI 提供商或轮询组，或留空但未配置 Codex Creator 共享密钥：话题生成、审核和草稿回写全部由 WindBlog 本地处理，数据保存在 `ai_topic_pool`、`ai_topic_pool_seeds`、`ai_topic_pool_settings` 三张表；该模式不调用 Codex Creator，也不要求共享密钥，因此不会再出现“共享密钥未配置”。管理端「API 提供商」列表不会显示内部 Codex Creator 条目。
+- 选择普通 AI 提供商或轮询组，或留空但未配置 Codex Creator 共享密钥：话题生成、审核和草稿回写全部由 WindBlog 本地处理，数据保存在 `ai_topic_pool`、`ai_topic_pool_seeds`、`ai_topic_pool_settings`、`ai_topic_pool_runs` 四张表；该模式不调用 Codex Creator，也不要求共享密钥，因此不会再出现“共享密钥未配置”。普通提供商的话题生成通过 `runs.start` 异步执行并由管理端轮询，避免模型耗时超过公网边缘超时而返回 554。管理端「API 提供商」列表不会显示内部 Codex Creator 条目。
 
 `TopicAutomationGateway` 在两套实现之间路由命令，因此管理端的同一个话题页面无需区分后端。
 

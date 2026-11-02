@@ -23,6 +23,9 @@ class LocalAiTopicServiceTest {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    AiTopicRunService runService;
+
     @Test
     @Transactional
     void importsListsAndReviewsTopicsWithoutCodex() throws Exception {
@@ -95,6 +98,27 @@ class LocalAiTopicServiceTest {
         JsonNode after = objectMapper.valueToTree(service.dispatch("seeds.list",
                 objectMapper.createObjectNode(), "tester", "trace"));
         assertTrue(!after.path("items").toString().contains(name));
+    }
+
+    @Test
+    @Transactional
+    void exposesLocalDiscoveryRuns() {
+        Map<String, Object> created = runService.create(4L, 2, "trace-run");
+        long runId = ((Number) created.get("id")).longValue();
+        runService.markStarted(runId);
+        runService.complete(runId, 3);
+
+        JsonNode view = objectMapper.valueToTree(service.dispatch("runs.read",
+                objectMapper.valueToTree(Map.of("id", runId)), "tester", "trace"));
+        assertEquals("SUCCEEDED", view.path("status").asText());
+        assertEquals(3, view.path("topicCount").asInt());
+        assertEquals(4, view.path("providerId").asLong());
+
+        JsonNode list = objectMapper.valueToTree(service.dispatch("runs.list",
+                objectMapper.valueToTree(Map.of("page", 1, "pageSize", 20)),
+                "tester", "trace"));
+        assertTrue(list.path("total").asInt() >= 1);
+        assertTrue(list.path("items").toString().contains("trace-run"));
     }
 
     private Long findTopicId(String title) {

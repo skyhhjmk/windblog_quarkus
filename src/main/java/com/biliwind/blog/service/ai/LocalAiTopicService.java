@@ -38,6 +38,15 @@ public class LocalAiTopicService {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    AiTopicRunService runService;
+
+    @Inject
+    AiTopicRunner runner;
+
+    @Inject
+    AiTopicModeService modeService;
+
     @Transactional
     public Object dispatch(String command, JsonNode payload, String actorId, String traceId) {
         return switch (command) {
@@ -56,18 +65,68 @@ public class LocalAiTopicService {
             case "topics.review" -> reviewTopic(requiredId(payload, "id"),
                     text(payload, "decision", ""), text(payload, "note", ""));
             case "topics.bindDraft" -> bindDraft(requiredId(payload, "topicId"), payload);
-            case "runs.list" -> Map.of("items", List.of(), "total", 0,
-                    "page", integer(payload, "page", 1),
-                    "pageSize", integer(payload, "pageSize", 20));
-            case "runs.read" -> throw new IllegalArgumentException("本地话题模式没有 Codex 运行记录");
-            case "runs.start" -> throw new IllegalArgumentException(
-                    "话题功能当前使用 AI 提供商生成，请在“立即运行”中选择 API 提供商");
+            case "runs.start" -> startRun(payload, actorId, traceId);
+            case "runs.read" -> runService.view(requiredId(payload, "id"));
+            case "runs.list" -> runService.list(integer(payload, "page", 1),
+                    integer(payload, "pageSize", 20));
             case "models.list" -> Map.of("topic", List.of(), "article", List.of());
             case "test-servers.list" -> Map.of("items", List.of());
             case "test-servers.setup-guide" -> Map.of();
             case "quota.read" -> Map.of("mode", "LOCAL", "unlimited", true);
             default -> throw new IllegalArgumentException("本地话题模式不支持命令: " + command);
         };
+    }
+
+    /**
+     * Creates an asynchronous discovery run and returns immediately. The public
+     * admin request must not stay open for the full provider generation time.
+     */
+    private Map<String, Object> startRun(JsonNode payload, String actorId, String traceId) {
+        Map<String, Object> active = runService.activeRun();
+        if (active != null) return active;
+
+        AiTopicPoolSettings settings = settings();
+        Long providerId = payload != null && payload.hasNonNull("providerId")
+                ? payload.path("providerId").asLong() : null;
+        if (modeService.localMode() && modeService.isCodexProvider(providerId)) {
+            providerId = null;
+        }
+        int maxTopics = Math.max(1, Math.min(50,
+                integer(payload, "maxTopics", settings.maxTopicsPerRun)));
+        String language = text(payload, "language", "zh-CN");
+        List<AiTopicDiscoveryService.Seed> seeds = parseSeeds(payload == null ? null : payload.get("seeds"));
+        if (seeds.isEmpty()) {
+            seeds = seedsFromDb(settings.maxSeedsPerRun);
+        }
+        if (seeds.isEmpty()) {
+            throw new IllegalArgumentException("话题种子为空，请先配置主题查询种子");
+        }
+
+        Map<String, Object> run = runService.create(providerId, seeds.size(), traceId);
+        Long runId = requiredId(objectMapper.valueToTree(run), "id");
+        runner.start(runId, providerId, seeds, maxTopics, language, actorId, traceId);
+        return run;
+    }
+
+    private List<AiTopicDiscoveryService.Seed> parseSeeds(JsonNode values) {
+        List<AiTopicDiscoveryService.Seed> seeds = new ArrayList<>();
+        if (values == null || !values.isArray()) return seeds;
+        for (JsonNode value : values) {
+            long id = value.path("id").asLong(0);
+            String query = text(value, "query", "");
+            if (id <= 0 || query.isBlank()) continue;
+            seeds.add(new AiTopicDiscoveryService.Seed(id,
+                    text(value, "name", ""), query, text(value, "language", "zh-CN")));
+        }
+        return seeds;
+    }
+
+    private List<AiTopicDiscoveryService.Seed> seedsFromDb(int maxSeeds) {
+        return AiTopicPoolSeed.<AiTopicPoolSeed>find("enabled = true order by sortOrder asc, id asc")
+                .page(0, Math.max(1, maxSeeds)).list().stream()
+                .map(seed -> new AiTopicDiscoveryService.Seed(
+                        seed.id, seed.name, seed.query, seed.language))
+                .toList();
     }
 
     private AiTopicPoolSettings settings() {
