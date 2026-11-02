@@ -178,6 +178,13 @@ public class AiManager {
         } else {
             String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
             selected = selectionService.select(op, configs);
+            if (selected == null && selectionService.configuredId(op) != null) {
+                // An explicit selection that is disabled or does not allow this
+                // operation must not silently fall back to another provider
+                // (which could be the Codex Creator interface).
+                return CompletableFuture.failedFuture(new RuntimeException(
+                        "功能配置的 AI 提供商不存在、已禁用或不支持该操作: " + op));
+            }
             if (selected == null && !"assistant".equals(op)) {
                 selected = selectionService.select("assistant", configs);
             }

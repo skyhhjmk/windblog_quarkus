@@ -333,7 +333,9 @@ public class ConfigInitializer {
             field.put("key", operation[0]);
             field.put("label", operation[1]);
             field.put("widget", "select");
-            field.put("hint", "选择单个提供商或轮询组；留空时自动选择");
+            field.put("hint", "topic".equals(operation[0])
+                    ? "选择普通提供商或轮询组后，话题生成、话题池和草稿回写由 WindBlog 本地处理，不再依赖 Codex Creator；留空时沿用 Codex Creator 话题池。"
+                    : "选择单个提供商或轮询组；留空时自动选择");
             field.putArray("options");
         }
         ObjectNode aiOperationConfigValue = mapper.createObjectNode();

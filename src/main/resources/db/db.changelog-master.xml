@@ -151,4 +151,5 @@
     <include file="db/migration/150-add-user-repost-ban.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/151-create-repost-referral-events.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/152-add-post-seo-i18n.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/153-create-local-ai-topic-pool.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

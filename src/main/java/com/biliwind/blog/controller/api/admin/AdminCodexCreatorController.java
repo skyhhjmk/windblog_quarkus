@@ -4,6 +4,7 @@ import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.service.ai.CodexCreatorHttpClient;
 import com.biliwind.blog.service.ai.CodexCreatorConnectionService;
 import com.biliwind.blog.service.ai.CodexCreatorDraftService;
+import com.biliwind.blog.service.ai.TopicAutomationGateway;
 import com.biliwind.blog.service.AuditService;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.smallrye.common.annotation.Blocking;
@@ -42,6 +43,9 @@ public class AdminCodexCreatorController {
 
     @Inject
     CodexCreatorDraftService draftService;
+
+    @Inject
+    TopicAutomationGateway topicGateway;
 
     @GET
     @Path("/status")
@@ -104,8 +108,8 @@ public class AdminCodexCreatorController {
     @Path("/topic-automation")
     @Operation(summary = "查询 AI 主题自动化设置和主题池")
     public CompletionStage<Response> topicAutomation() {
-        CompletionStage<JsonNode> settings = client.topicCommand("settings.read", Map.of(), actorId(), traceId());
-        CompletionStage<JsonNode> seeds = client.topicCommand("seeds.list", Map.of(), actorId(), traceId());
+        CompletionStage<JsonNode> settings = topicGateway.command("settings.read", Map.of(), actorId(), traceId());
+        CompletionStage<JsonNode> seeds = topicGateway.command("seeds.list", Map.of(), actorId(), traceId());
         return settings.thenCombine(seeds, (settingsResponse, seedResponse) -> {
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("settings", commandData(settingsResponse));
@@ -279,7 +283,7 @@ public class AdminCodexCreatorController {
     }
 
     private CompletionStage<Response> proxy(String command, Object payload) {
-        return client.topicCommand(command, payload, actorId(), traceId())
+        return topicGateway.command(command, payload, actorId(), traceId())
                 .thenApply(response -> Response.ok(response).build())
                 .exceptionally(error -> serviceUnavailable(error));
     }

@@ -9,6 +9,15 @@ Codex Creator 作为独立仓库 `codex-creator` 挂载在本仓库的 `codex-cr
 - 内容工具：Codex app-server 通过私有 `/mcp` 只获得 `windblog.list_categories`、`windblog.create_category`、`windblog.update_category`、`windblog.list_tags`、`windblog.create_tag`、`windblog.update_tag` 和 `windblog.upload_image`。这些工具再调用 WindBlog 的签名接口 `POST /api/internal/integrations/codex-creator/content`；分类、标签和图片写入均有父服务幂等记录。没有删除、任意 URL、shell、SQL 或文件写入工具。
 - 图片：`windblog.upload_image` 只接收 PNG、JPEG、GIF 或 WebP 的 base64 字节；WindBlog 会重新校验 MIME、Magic Number、病毒扫描和大小，并强制保存 `aiUploaded=true`、`uploadSource=CODEX_CREATOR`、`generationMethod=CODEX_APP_SERVER` 元数据。普通管理员上传不会自动带这个标记。
 
+## 话题功能的存储后端
+
+系统设置「功能设置 → 话题功能 AI 配置」同时决定话题生成使用的提供商和话题数据的存储后端：
+
+- 留空且已配置 Codex Creator 共享密钥，或显式选择 Codex Creator：话题池、查询种子、运行记录和草稿回写继续由 Codex Creator 管理。
+- 选择普通 AI 提供商或轮询组，或留空但未配置 Codex Creator 共享密钥：话题生成、审核和草稿回写全部由 WindBlog 本地处理，数据保存在 `ai_topic_pool`、`ai_topic_pool_seeds`、`ai_topic_pool_settings` 三张表；该模式不调用 Codex Creator，也不要求共享密钥，因此不会再出现“共享密钥未配置”。管理端「API 提供商」列表不会显示内部 Codex Creator 条目。
+
+`TopicAutomationGateway` 在两套实现之间路由命令，因此管理端的同一个话题页面无需区分后端。
+
 ## 文章生成质量门槛
 
 话题文章采用“研究与写作 → 确定性质检 → 带问题重写 → WindBlog 草稿”的流程。生成结果只有在以下检查全部通过后才会进入 WindBlog：

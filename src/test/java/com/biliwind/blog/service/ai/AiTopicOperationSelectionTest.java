@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiTopicOperationSelectionTest {
@@ -100,6 +101,45 @@ class AiTopicOperationSelectionTest {
         assertNotNull(res);
         assertEquals("topic", selectedOp.get(), "应优先使用 topic 操作选择器");
         assertEquals("topic-provider", executedProvider.get(), "应执行 topic 操作对应的提供商/轮询组");
+    }
+
+    @Test
+    void aiManagerDoesNotFallBackWhenConfiguredTopicProviderIsUnusable() {
+        AiProviderConfig codexConfig = provider(1L, "codex-creator");
+        codexConfig.provider = "CODEX_CREATOR";
+
+        AiManager manager = new AiManager() {
+            @Override
+            public CompletionStage<AiResult> executeComplete(AiProviderConfig config, String systemPrompt, String prompt) {
+                throw new AssertionError("配置失效时不应执行任何提供商: " + config.name);
+            }
+        };
+        manager.configService = new AiProviderConfigService() {
+            @Override
+            public List<AiProviderConfig> listAll() {
+                return List.of(codexConfig);
+            }
+        };
+        manager.selectionService = new AiSelectionService() {
+            @Override
+            public AiProviderConfig select(String operation, List<AiProviderConfig> configs) {
+                return null;
+            }
+
+            @Override
+            public AiProviderConfig fallback(String operation, List<AiProviderConfig> configs, AiProviderConfig current) {
+                return null;
+            }
+
+            @Override
+            String configuredId(String operation) {
+                return "99";
+            }
+        };
+
+        RuntimeException error = assertThrows(RuntimeException.class,
+                () -> manager.complete(null, "topic", "sys", "prompt").toCompletableFuture().join());
+        assertTrue(error.getMessage().contains("topic"));
     }
 
     @Test

@@ -3,7 +3,8 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.common.exception.BadRequestException;
 import com.biliwind.blog.service.ai.AiManager;
 import com.biliwind.blog.service.ai.AiResult;
-import com.biliwind.blog.service.ai.CodexCreatorHttpClient;
+import com.biliwind.blog.service.ai.AiTopicModeService;
+import com.biliwind.blog.service.ai.TopicAutomationGateway;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.common.annotation.Blocking;
@@ -30,8 +31,9 @@ import java.util.concurrent.CompletionException;
 /**
  * API-provider topic discovery. Used by the Flutter topics page when the admin
  * switches from Codex Creator mode to an AI provider (including polling
- * groups). Generated topics are imported into the shared Codex Creator topic
- * pool so review and draft generation keep working unchanged.
+ * groups). Generated topics are stored in the pool selected by the topic
+ * operation setting: WindBlog's local pool for normal providers, or the
+ * shared Codex Creator pool when Codex Creator is the topic backend.
  */
 @Path("/api/admin/ai/topics/discover")
 @Produces(MediaType.APPLICATION_JSON)
@@ -48,7 +50,10 @@ public class AdminAiTopicDiscoveryController {
     AiManager aiManager;
 
     @Inject
-    CodexCreatorHttpClient codexClient;
+    TopicAutomationGateway topicGateway;
+
+    @Inject
+    AiTopicModeService topicMode;
 
     @Inject
     ObjectMapper objectMapper;
@@ -63,7 +68,7 @@ public class AdminAiTopicDiscoveryController {
                 ? 10 : Math.max(1, Math.min(50, request.maxTopics()));
         List<Seed> seeds = request == null ? List.of() : safeSeeds(request.seeds());
         if (seeds.isEmpty()) {
-            seeds = loadCodexSeeds();
+            seeds = loadSeeds();
         }
         if (seeds.isEmpty()) {
             throw new BadRequestException("话题种子为空，请先配置主题查询种子");
@@ -71,10 +76,15 @@ public class AdminAiTopicDiscoveryController {
         String language = request == null || request.language() == null || request.language().isBlank()
                 ? "zh-CN" : request.language().trim();
 
+        Long providerId = request == null ? null : request.providerId();
+        if (topicMode.localMode() && topicMode.isCodexProvider(providerId)) {
+            // A Codex Creator provider cannot generate without the Codex service;
+            // fall back to the provider pinned to the topic operation.
+            providerId = null;
+        }
         AiResult result;
         try {
-            result = aiManager.complete(request == null ? null : request.providerId(),
-                            "topic",
+            result = aiManager.complete(providerId, "topic",
                             SYSTEM_PROMPT, buildPrompt(seeds, maxTopics, language))
                     .toCompletableFuture()
                     .join();
@@ -89,7 +99,7 @@ public class AdminAiTopicDiscoveryController {
         }
 
         try {
-            JsonNode imported = codexClient.topicCommand("topics.import",
+            JsonNode imported = topicGateway.command("topics.import",
                             Map.of("topics", topics),
                             "windblog-admin:" + actorId(), UUID.randomUUID().toString())
                     .toCompletableFuture()
@@ -106,9 +116,11 @@ public class AdminAiTopicDiscoveryController {
             return Response.ok(body).build();
         } catch (RuntimeException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
-            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+            return Response.status(topicMode.localMode()
+                            ? Response.Status.INTERNAL_SERVER_ERROR
+                            : Response.Status.SERVICE_UNAVAILABLE)
                     .entity(Map.of("success", false,
-                            "message", "话题已生成但写入 Codex Creator 失败: " + safeMessage(cause),
+                            "message", "话题已生成但保存失败: " + safeMessage(cause),
                             "topics", topics))
                     .build();
         }
@@ -217,9 +229,9 @@ public class AdminAiTopicDiscoveryController {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Seed> loadCodexSeeds() {
+    private List<Seed> loadSeeds() {
         try {
-            JsonNode response = codexClient.topicCommand("seeds.list", Map.of(),
+            JsonNode response = topicGateway.command("seeds.list", Map.of(),
                             "windblog-admin:" + actorId(), UUID.randomUUID().toString())
                     .toCompletableFuture().join();
             JsonNode items = response.path("data").path("items");

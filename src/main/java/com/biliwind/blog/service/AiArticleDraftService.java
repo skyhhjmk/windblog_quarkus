@@ -13,7 +13,7 @@ import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ai.AiManager;
 import com.biliwind.blog.service.ai.AiResult;
-import com.biliwind.blog.service.ai.CodexCreatorHttpClient;
+import com.biliwind.blog.service.ai.TopicAutomationGateway;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
 import com.biliwind.blog.service.link.ArticleExternalLinkService;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
@@ -49,7 +49,7 @@ public class AiArticleDraftService {
     AiManager aiManager;
 
     @Inject
-    CodexCreatorHttpClient codexClient;
+    TopicAutomationGateway topicGateway;
 
     @Inject
     AdminRequestContext adminRequestContext;
@@ -195,7 +195,7 @@ public class AiArticleDraftService {
             payload.put("repostPolicyCode", post.repostPolicyCode);
             payload.put("modelName", result == null || result.modelId == null ? "" : result.modelId);
             payload.put("provider", result == null || result.provider == null ? "AI_MANAGER" : result.provider);
-            codexClient.topicCommand("topics.bindDraft", payload,
+            topicGateway.command("topics.bindDraft", payload,
                             "windblog-admin:" + operator.id, UUID.randomUUID().toString())
                     .toCompletableFuture()
                     .join();
@@ -209,20 +209,20 @@ public class AiArticleDraftService {
 
     private JsonNode readTopic(Long topicId) {
         try {
-            JsonNode response = codexClient.topicCommand("topics.read", Map.of("id", topicId),
+            JsonNode response = topicGateway.command("topics.read", Map.of("id", topicId),
                             "windblog-admin:" + actorId(), UUID.randomUUID().toString())
                     .toCompletableFuture()
                     .join();
             JsonNode data = response.path("data");
             if (data.isMissingNode() || data.isNull() || data.isEmpty()) {
-                throw new BadRequestException("话题不存在或 Codex Creator 未返回话题详情");
+                throw new BadRequestException("话题不存在");
             }
             return data;
         } catch (BadRequestException exception) {
             throw exception;
         } catch (RuntimeException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
-            throw new BadRequestException("读取话题失败，请确认 Codex Creator 连接正常: " + safeMessage(cause));
+            throw new BadRequestException("读取话题失败: " + safeMessage(cause));
         }
     }
 
