@@ -635,6 +635,7 @@ public class PostController {
 
     private record PostBodyView(String body, boolean html, PostRenderType renderType) {}
 
+    @RegisterForReflection
     public record AttachmentView(String blockId, String fileName, String formattedSize, long price,
                                  boolean unlocked, boolean loginRequired, String downloadUrl) {
     }
