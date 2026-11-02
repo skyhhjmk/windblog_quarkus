@@ -15,7 +15,7 @@ public class AiSelectionService {
     @Inject
     ObjectMapper objectMapper;
 
-    @ConfigProperty(name = "windblog.ai.codex-creator.prefer", defaultValue = "true")
+    @ConfigProperty(name = "windblog.ai.codex-creator.prefer", defaultValue = "false")
     boolean preferCodexCreator;
 
     public AiProviderConfig select(String operation, List<AiProviderConfig> configs) {
@@ -39,6 +39,11 @@ public class AiSelectionService {
                 if (config.enabled && "CODEX_CREATOR".equalsIgnoreCase(config.provider)
                         && allows(config, operation)) return config;
             }
+        }
+        // Prefer normal/standard AI providers over CODEX_CREATOR
+        for (AiProviderConfig config : configs) {
+            if (config.enabled && !"CODEX_CREATOR".equalsIgnoreCase(config.provider)
+                    && allows(config, operation)) return config;
         }
         for (AiProviderConfig config : configs) {
             if (config.enabled && allows(config, operation)) return config;
@@ -76,12 +81,16 @@ public class AiSelectionService {
         }
     }
 
-    private String configuredId(String operation) {
+    String configuredId(String operation) {
         if (operation == null) return null;
-        SystemSetting setting = SystemSetting.findByKey("ai_operation_configs");
-        if (setting == null || setting.configValue == null) return null;
-        JsonNode selected = setting.configValue.get(operation);
-        if (selected == null || selected.isNull() || selected.asText().isBlank()) return null;
-        return selected.asText().trim();
+        try {
+            SystemSetting setting = SystemSetting.findByKey("ai_operation_configs");
+            if (setting == null || setting.configValue == null) return null;
+            JsonNode selected = setting.configValue.get(operation);
+            if (selected == null || selected.isNull() || selected.asText().isBlank()) return null;
+            return selected.asText().trim();
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 }

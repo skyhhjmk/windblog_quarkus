@@ -102,6 +102,42 @@ class AiTopicOperationSelectionTest {
         assertEquals("topic-provider", executedProvider.get(), "应执行 topic 操作对应的提供商/轮询组");
     }
 
+    @Test
+    void selectionServicePrefersStandardAiOverCodexCreatorByDefault() {
+        AiSelectionService selectionService = new AiSelectionService();
+        selectionService.preferCodexCreator = false;
+        selectionService.objectMapper = new ObjectMapper();
+
+        AiProviderConfig codexConfig = provider(1L, "codex-creator");
+        codexConfig.provider = "CODEX_CREATOR";
+
+        AiProviderConfig standardConfig = provider(2L, "standard-openai");
+        standardConfig.provider = "OPENAI";
+
+        // Even if codexConfig is first in the list
+        List<AiProviderConfig> configs = List.of(codexConfig, standardConfig);
+
+        AiProviderConfig selected = selectionService.select("topic", configs);
+        assertNotNull(selected);
+        assertEquals("standard-openai", selected.name, "默认应优先选择普通 AI API 提供商");
+    }
+
+    @Test
+    void selectionServiceFallsBackToCodexCreatorWhenNoOtherProviderAvailable() {
+        AiSelectionService selectionService = new AiSelectionService();
+        selectionService.preferCodexCreator = false;
+        selectionService.objectMapper = new ObjectMapper();
+
+        AiProviderConfig codexConfig = provider(1L, "codex-creator");
+        codexConfig.provider = "CODEX_CREATOR";
+
+        List<AiProviderConfig> configs = List.of(codexConfig);
+
+        AiProviderConfig selected = selectionService.select("topic", configs);
+        assertNotNull(selected);
+        assertEquals("codex-creator", selected.name, "在无其他普通 AI 提供商时才回退至 Codex Creator");
+    }
+
     private static AiProviderConfig provider(Long id, String name) {
         AiProviderConfig config = new AiProviderConfig();
         config.id = id;

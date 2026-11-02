@@ -64,6 +64,9 @@ public class AiArticleDraftService {
     AuditService auditService;
 
     @Inject
+    PostAiMetadataService postAiMetadataService;
+
+    @Inject
     ObjectMapper objectMapper;
 
     @Inject
@@ -176,6 +179,10 @@ public class AiArticleDraftService {
         auditService.log("post", post.id, isRegeneration ? "ai_article_draft_regenerate" : "ai_article_draft", null,
                 Map.of("topicId", topicId, "language", effectiveLanguage,
                         "provider", result == null || result.provider == null ? "AI_MANAGER" : result.provider));
+        if (result != null && post.currentRevision != null) {
+            result.generationMode = isRegeneration ? "MANUAL_REGENERATION" : "MANUAL_ASSIGNMENT";
+            postAiMetadataService.record(post.id, post.currentRevision.id, "article", result, "DRAFT");
+        }
         postSyncedEvent.fire(new PostSyncedEvent(post.id));
 
         String warning = null;
