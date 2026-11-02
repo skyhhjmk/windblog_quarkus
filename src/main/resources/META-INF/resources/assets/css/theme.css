@@ -755,6 +755,22 @@ input::placeholder {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
+/* Cap very tall article images so they cannot push the rest of the post far
+   down. The width shrinks proportionally; the lightbox restores a readable
+   size on demand. */
+#post-body-content img {
+    max-height: min(65vh, 40rem);
+}
+
+#post-body-content img.article-image-zoomable {
+    cursor: zoom-in;
+}
+
+#post-body-content img.article-image-zoomable:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+}
+
 .prose img.article-image-loading {
     box-sizing: border-box;
     border: 1px solid var(--image-placeholder-border);
@@ -796,6 +812,94 @@ input::placeholder {
 @media (prefers-reduced-motion: reduce) {
     .prose img.article-image-loading {
         animation: none;
+    }
+}
+
+/* ==========================================================
+   Article image lightbox
+   ========================================================== */
+.article-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+}
+
+.article-lightbox-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(3, 6, 12, 0.9);
+    opacity: 0;
+    transition: opacity 0.28s ease;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+
+.article-lightbox.is-open .article-lightbox-backdrop {
+    opacity: 1;
+}
+
+/* The padding centres short images and top-aligns tall ones; tall images
+   scroll inside the stage instead of shrinking to an unreadable sliver. */
+.article-lightbox-stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: max(24px, calc((100vh - var(--article-lightbox-image-height, 100vh)) / 2)) 24px;
+}
+
+.article-lightbox-image {
+    display: block;
+    flex: 0 0 auto;
+    max-width: none;
+    max-height: none;
+    border-radius: 8px;
+    background: #0b0f16;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+    transition: transform 0.32s cubic-bezier(0.22, 0.8, 0.26, 1);
+    will-change: transform;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.article-lightbox-close {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    background: rgba(15, 19, 28, 0.78);
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.article-lightbox-close:hover {
+    background: rgba(30, 41, 59, 0.92);
+    transform: scale(1.05);
+}
+
+.article-lightbox-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .article-lightbox-backdrop,
+    .article-lightbox-image {
+        transition: none;
     }
 }
 
