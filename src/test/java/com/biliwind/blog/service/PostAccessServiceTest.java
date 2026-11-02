@@ -256,7 +256,51 @@ class PostAccessServiceTest {
         );
 
         assertTrue(unlocked.containsKey("free-block"));
-        assertEquals("free content", unlocked.get("free-block"));
+        assertTrue(unlocked.get("free-block").contains("free content"));
+        assertTrue(unlocked.get("free-block").contains("hide-block-shell"));
+        assertTrue(unlocked.get("free-block").contains("已解锁"));
         assertFalse(unlocked.containsKey("paid-block"));
+    }
+
+    @Test
+    @Transactional
+    void unlockedBlockShellRendersNestedMarkdown() {
+        User user = createTestUser();
+        OffsetDateTime now = OffsetDateTime.now();
+        Post post = new Post();
+        post.slug = "shell-post-" + UUID.randomUUID();
+        post.title = Map.of("zh-cn", "外壳测试");
+        post.status = PostStatus.PUBLISHED;
+        post.visibility = 0;
+        post.renderType = PostRenderType.MARKDOWN;
+        post.user = user;
+        post.createdAt = now;
+        post.updatedAt = now;
+        post.persist();
+
+        PostRevision revision = new PostRevision();
+        revision.post = post;
+        revision.title = post.title;
+        revision.contentMarkdown = Map.of("zh-cn",
+                "[hide-text id=shell-block show=\"解锁说明\"]**bold** content[/hide-text]");
+        revision.editorType = 6;
+        revision.revisionNumber = 1;
+        revision.createdBy = user;
+        revision.createdAt = now;
+        revision.persist();
+        post.currentRevision = revision;
+        post.publishedRevision = revision;
+
+        String preview = postAccessService.getPreviewOnlyContent(
+                revision.contentMarkdown.get("zh-cn"), 0, false, post.id, 0L, null);
+        String html = com.biliwind.blog.common.helper.MarkdownHelper.toHtml(preview);
+        org.jsoup.nodes.Document document = org.jsoup.Jsoup.parseBodyFragment(html);
+        org.jsoup.nodes.Element shell = document.selectFirst(".hide-block-shell");
+        org.jsoup.nodes.Element header = shell == null ? null : shell.selectFirst(".hide-block-header");
+        org.junit.jupiter.api.Assertions.assertNotNull(shell);
+        org.junit.jupiter.api.Assertions.assertNotNull(header);
+        org.junit.jupiter.api.Assertions.assertNotNull(shell.selectFirst("strong"));
+        assertTrue(header.text().contains("解锁说明"));
+        assertTrue(header.text().contains("已解锁"));
     }
 }

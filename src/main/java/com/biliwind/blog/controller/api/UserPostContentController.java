@@ -134,7 +134,7 @@ public class UserPostContentController {
                 || postAccessService.hasPurchasedPost(userId, postId);
 
         localizedContent = postAccessService.rewriteProtectedMediaReferences(
-                postId, localizedContent, userId, hasPurchased, headers.getHeaderString("X-Device-Id"));
+                post, localizedContent, userId, hasPurchased, headers.getHeaderString("X-Device-Id"));
 
         PostBodyView postBody = resolvePostBody(post.renderType, localizedContent);
 
@@ -234,7 +234,7 @@ public class UserPostContentController {
         java.util.Map<String, String> rewrittenBlocks = new java.util.HashMap<>();
         for (java.util.Map.Entry<String, String> entry : unlockedBlocks.entrySet()) {
             rewrittenBlocks.put(entry.getKey(), postAccessService.rewriteProtectedMediaReferences(
-                    postId, entry.getValue(), userId, hasPurchased, headers.getHeaderString("X-Device-Id")));
+                    post, entry.getValue(), userId, hasPurchased, headers.getHeaderString("X-Device-Id")));
         }
 
         // 渲染 Markdown

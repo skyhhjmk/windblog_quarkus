@@ -1,0 +1,157 @@
+<!-- 1. 内容权限与价格 (最优先) -->
+{#if postPrice > 0}
+    <section
+            class="sidebar-widget bg-card border border-accent/20 rounded-xl p-6 transition-all duration-300">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-1.5 h-6 bg-accent rounded-full shadow-[0_0_12px_rgba(6,182,212,0.5)]"></div>
+            <h3 class="text-sm font-bold tracking-wider text-main uppercase">{i18n.t('post.content_access')}</h3>
+        </div>
+        <div class="sidebar-price-tag group !p-4 !bg-accent/[0.03]">
+            <div class="sidebar-price-unit">{i18n.t('post.unlock_requires')}</div>
+            <div class="sidebar-price-value">{postPrice}</div>
+            <div class="sidebar-price-unit">{i18n.t('post.points')}</div>
+
+            <div class="sidebar-status-badge mt-4">
+                {#if hasPurchased}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <path d="M20 6L9 17l-5-5"></path>
+                    </svg>
+                    <span class="text-green-500 font-bold">{i18n.t('post.unlock_full')}</span>
+                {#else}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="3">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span class="text-accent/80">{i18n.t('post.unlock_waiting')}</span>
+                {/if}
+            </div>
+        </div>
+    </section>
+{/if}
+
+<!-- 2. 文章目录 (TOC) -->
+{#include sidebar/toc.html /}
+
+<!-- 2.5 区块大纲与偏好控制 -->
+{#include sidebar/block_manager.html /}
+
+<!-- 3. 附件信息 (如果有) -->
+{#if attachments && ! attachments.isEmpty}
+    <section
+            class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300"
+            data-attachments-section="true">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-1.5 h-6 bg-accent rounded-full"></div>
+            <h3 class="text-sm font-bold tracking-wider text-main uppercase">{i18n.t('post.attachments')}</h3>
+        </div>
+        <div class="space-y-3" data-attachment-list="true">
+            {#for attachment in attachments}
+                <div class="card card-static p-4 space-y-3 border-border/60 bg-card-bg/50"
+                     data-attachment-block-id="{attachment.blockId ?: ''}"
+                     data-attachment-unlocked="{attachment.unlocked}">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 shrink-0 rounded-lg bg-card-bg border border-border flex items-center justify-center text-accent">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs text-main font-bold truncate mb-0.5"
+                               title="{attachment.fileName}">{attachment.fileName}</p>
+                            <p class="text-[10px] text-gray-500 font-mono opacity-80 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                {#if attachment.formattedSize && !attachment.formattedSize.isEmpty}
+                                    <span>{attachment.formattedSize}</span>
+                                {/if}
+                                <span data-attachment-status="true">
+                                    {#if attachment.unlocked}
+                                        <span class="text-green-500 font-bold">{i18n.t('post.attachments_unlocked')}</span>
+                                    {#else if attachment.loginRequired}
+                                        <span class="text-accent/80">{i18n.t('post.attachments_login_required')}</span>
+                                    {#else}
+                                        <span class="text-amber-500">{i18n.format('post.attachments_price', attachment.price)}</span>
+                                    {/if}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    <div data-attachment-action="true">
+                        {#if attachment.unlocked && attachment.downloadUrl}
+                            <a href="{attachment.downloadUrl}" download
+                               aria-label="{i18n.t('post.download')}" title="{i18n.t('post.download')}"
+                               class="flex items-center justify-center gap-2 w-full py-2 bg-accent/10 border border-accent/30 rounded-lg text-xs font-bold text-accent hover:bg-accent/20 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                {i18n.t('post.download')}
+                            </a>
+                        {#else if attachment.loginRequired}
+                            <a href="{attachmentLoginUrl}"
+                               class="flex items-center justify-center w-full py-2 bg-input-bg border border-border/80 rounded-lg text-xs font-bold text-gray-400 hover:text-accent hover:border-accent/50 transition-all">
+                                {i18n.t('post.attachments_login')}
+                            </a>
+                        {#else if attachment.price > 0}
+                            <button type="button"
+                                    class="buy-post-btn flex items-center justify-center w-full py-2 bg-accent text-[var(--accent-foreground)] rounded-lg text-xs font-bold hover:opacity-90 transition-opacity"
+                                    data-price="{attachment.price}" data-block-id="{attachment.blockId}">
+                                {i18n.format('post.attachments_unlock', attachment.price)}
+                            </button>
+                        {#else}
+                            <p class="text-[10px] text-gray-500 text-center">{i18n.t('post.attachments_hint')}</p>
+                        {/if}
+                    </div>
+                </div>
+            {/for}
+        </div>
+    </section>
+{/if}
+
+<!-- 4. 作者信息 -->
+
+
+<!-- 5. 关联商品 -->
+{#if relatedStoreItems && ! relatedStoreItems.isEmpty}
+    <section
+            class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-1.5 h-6 bg-accent rounded-full"></div>
+            <h3 class="text-sm font-bold tracking-wider text-main uppercase">{i18n.t('post.related_store')}</h3>
+        </div>
+        <div class="space-y-5">
+            {#for item in relatedStoreItems}
+                <div class="card card-static overflow-hidden group/item border-border/60 hover:border-accent/40 transition-all bg-card-bg/30">
+                    <div class="p-5 space-y-4">
+                        <div class="flex justify-between items-start gap-4">
+                            <h4 class="text-sm font-black text-main line-clamp-2 leading-relaxed">{item.name}</h4>
+                            <div class="px-2.5 py-1 bg-accent/10 text-accent text-xs font-black rounded-lg border border-accent/20 font-mono shadow-sm">
+                                {item.price}P
+                            </div>
+                        </div>
+                        {#if item.description}
+                            <p class="text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90">{item.description}</p>
+                        {/if}
+                        <a href="{languagePrefix}/user/store"
+                           class="flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]">
+                            {i18n.t('post.store_detail')}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="ml-2" width="14" height="14"
+                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <line x1="7" y1="17" x2="17" y2="7"></line>
+                                <polyline points="7 7 17 7 17 17"></polyline>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            {/for}
+        </div>
+    </section>
+{/if}
+
+<!-- 6. 其他小部件 -->
+{#include sidebar/recent_posts.html /}
+{#include sidebar/tags.html /}

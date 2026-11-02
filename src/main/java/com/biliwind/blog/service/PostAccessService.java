@@ -15,6 +15,28 @@ import jakarta.ws.rs.BadRequestException;
 @ApplicationScoped
 public class PostAccessService {
 
+    private static final java.util.regex.Pattern HIDDEN_ATTACHMENT_PATTERN = java.util.regex.Pattern.compile(
+            "\\[\\s*hide-attachment(.*?)\\](.*?)\\[\\s*/hide-attachment\\s*\\]",
+            java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern MARKDOWN_ATTACHMENT_LINK = java.util.regex.Pattern.compile(
+            "\\[([^\\]]*)\\]\\(\\s*<?([^\\s)>]+)>?(?:\\s+\"[^\"]*\")?\\s*\\)");
+    private static final java.util.regex.Pattern HTML_ATTACHMENT_LINK = java.util.regex.Pattern.compile(
+            "<a\\b[^>]*\\bhref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
+            java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * A [hide-attachment] shortcode. Free blocks still require a login; priced
+     * blocks require the matching block purchase (or the whole article).
+     */
+    public record HiddenAttachmentBlock(String blockId, String name, long price,
+                                        String content, String url) {
+    }
+
+    /** Sidebar projection for an attachment and its current unlock state. */
+    public record AttachmentItem(String blockId, String name, long price, boolean unlocked,
+                                 boolean loginRequired, String downloadUrl, String formattedSize) {
+    }
+
     @Inject
     @io.quarkus.qute.Location("system/components/premium_card.html")
     io.quarkus.qute.Template premiumCardTemplate;
@@ -22,6 +44,13 @@ public class PostAccessService {
     @Inject
     @io.quarkus.qute.Location("system/components/premium_attachment.html")
     io.quarkus.qute.Template premiumAttachmentTemplate;
+
+    @Inject
+    @io.quarkus.qute.Location("system/components/hide_block.html")
+    io.quarkus.qute.Template hideBlockTemplate;
+
+    @Inject
+    com.biliwind.blog.i18n.I18n i18n;
 
     @Inject
     @io.quarkus.qute.Location("system/components/store_item_card.html")
@@ -76,13 +105,392 @@ public class PostAccessService {
 
     /**
      * Keep the historical attachment marker protected while also covering
-     * inline images and other media references in protected posts.
+     * inline images and other media references in protected posts. Media that
+     * is only linked from a [hide-attachment] block is protected as well: a
+     * free attachment still requires a login, so its raw /uploads URL must not
+     * bypass the content gate.
      */
     public boolean isProtectedMediaReference(PostMedia reference) {
         if (reference == null) {
             return false;
         }
-        return reference.usageType == 3 || isProtectedPost(reference.post);
+        return reference.usageType == 3 || isProtectedPost(reference.post)
+                || isMediaInsideHiddenAttachment(reference.post, reference.media);
+    }
+
+    /** All attachment blocks of a post, across every published language. */
+    public java.util.List<HiddenAttachmentBlock> findHiddenAttachmentBlocks(Post post) {
+        java.util.LinkedHashMap<String, HiddenAttachmentBlock> blocks = new java.util.LinkedHashMap<>();
+        com.biliwind.blog.model.PostRevision revision = resolvePublicContentRevision(post);
+        if (revision == null || revision.contentMarkdown == null) {
+            return java.util.List.of();
+        }
+        for (String content : revision.contentMarkdown.values()) {
+            for (HiddenAttachmentBlock block : parseHiddenAttachmentBlocks(content)) {
+                blocks.putIfAbsent(block.blockId(), block);
+            }
+        }
+        return new java.util.ArrayList<>(blocks.values());
+    }
+
+    /** Attachment blocks whose body references the given media. */
+    public java.util.List<HiddenAttachmentBlock> findHiddenAttachmentBlocksForMedia(
+            Post post, com.biliwind.blog.model.Media media) {
+        if (post == null || media == null) {
+            return java.util.List.of();
+        }
+        java.util.List<String> tokens = attachmentMediaTokens(media);
+        if (tokens.isEmpty()) {
+            return java.util.List.of();
+        }
+        java.util.List<HiddenAttachmentBlock> matches = new java.util.ArrayList<>();
+        for (HiddenAttachmentBlock block : findHiddenAttachmentBlocks(post)) {
+            if (block.content() == null) {
+                continue;
+            }
+            for (String token : tokens) {
+                if (block.content().contains(token)) {
+                    matches.add(block);
+                    break;
+                }
+            }
+        }
+        return matches;
+    }
+
+    public boolean isMediaInsideHiddenAttachment(Post post, com.biliwind.blog.model.Media media) {
+        return !findHiddenAttachmentBlocksForMedia(post, media).isEmpty();
+    }
+
+    /**
+     * Free attachments are visible to any logged-in user. Priced attachments
+     * need the matching block purchase, or the whole article purchase.
+     */
+    public boolean canAccessHiddenAttachment(Post post, HiddenAttachmentBlock block, Long userId) {
+        if (post == null || block == null || userId == null) {
+            return false;
+        }
+        if (post.user != null && userId.equals(post.user.id)) {
+            return true;
+        }
+        if (hasPurchasedPost(userId, post.id)) {
+            return true;
+        }
+        if (block.price() <= 0) {
+            return true;
+        }
+        return hasPurchasedBlock(userId, post.id, block.blockId());
+    }
+
+    public boolean canAccessProtectedMedia(Post post, com.biliwind.blog.model.Media media, Long userId) {
+        if (post == null || media == null || userId == null) {
+            return false;
+        }
+        if (post.user != null && userId.equals(post.user.id)) {
+            return true;
+        }
+        if (hasPurchasedPost(userId, post.id)) {
+            return true;
+        }
+        for (HiddenAttachmentBlock block : findHiddenAttachmentBlocksForMedia(post, media)) {
+            if (canAccessHiddenAttachment(post, block, userId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Builds the right-sidebar attachment list for the current reader. Locked
+     * attachments never expose their URL; free ones show a login prompt and
+     * priced ones show the block purchase action.
+     */
+    public java.util.List<AttachmentItem> resolveAttachmentItems(Post post, String content,
+                                                                 Long userId, String deviceId) {
+        java.util.List<AttachmentItem> items = new java.util.ArrayList<>();
+        if (post == null || content == null || content.isEmpty()) {
+            return items;
+        }
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (HiddenAttachmentBlock block : parseHiddenAttachmentBlocks(content)) {
+            if (!seen.add(block.blockId())) {
+                continue;
+            }
+            boolean unlocked = canAccessHiddenAttachment(post, block, userId);
+            boolean loginRequired = !unlocked && block.price() <= 0;
+            String downloadUrl = null;
+            String formattedSize = "";
+            if (unlocked && userId != null) {
+                com.biliwind.blog.model.Media media = findMediaByAttachmentUrl(block.url());
+                if (media != null && media.deletedAt == null) {
+                    formattedSize = formatFileSize(media.size);
+                    downloadUrl = "/api/media/download/" + contentAccessTicketService
+                            .issueMediaDownloadPath(media.id, post.id, userId,
+                                    java.time.Duration.ofMinutes(10), deviceId);
+                } else if (block.url() != null && !block.url().startsWith("/uploads/")) {
+                    downloadUrl = block.url();
+                }
+            }
+            items.add(new AttachmentItem(block.blockId(), block.name(), block.price(), unlocked,
+                    loginRequired, downloadUrl, formattedSize));
+        }
+        return items;
+    }
+
+    /**
+     * Wraps unlocked block content in the same amber shell used by the Flutter
+     * editor preview. The shell is injected as an HTML block; blank lines keep
+     * the inner Markdown parseable after the shell header (CommonMark rule).
+     */
+    private String renderUnlockedBlock(String blockType, String blockId, String attrStr, String content) {
+        boolean attachment = "hide-attachment".equals(blockType);
+        String show = extractAttribute(attrStr, "show");
+        long price = 0L;
+        String priceText = extractAttribute(attrStr, "price");
+        if (priceText != null && !priceText.isBlank()) {
+            try {
+                price = Long.parseLong(priceText.trim());
+            } catch (NumberFormatException ignored) {
+                price = 0L;
+            }
+        }
+        price = Math.max(0L, price);
+
+        String title;
+        if (show != null && !show.isBlank()) {
+            title = show.trim();
+        } else if (attachment) {
+            title = translateOrDefault("post.hide_block.attachment_default", "付费附件区块");
+        } else {
+            title = translateOrDefault("post.hide_block.text_default", "付费隐藏内容");
+        }
+        String priceLabel = null;
+        if (price > 0) {
+            priceLabel = translatePrice(price);
+        }
+        return "\n\n" + hideBlockTemplate
+                .data("blockType", blockType)
+                .data("blockId", blockId)
+                .data("icon", attachment ? "📎" : "🔓")
+                .data("title", title)
+                .data("priceLabel", priceLabel)
+                .data("statusLabel", translateOrDefault("post.hide_block.unlocked", "已解锁"))
+                .data("content", content == null ? "" : content)
+                .render() + "\n\n";
+    }
+
+    /**
+     * Snapshot previews may be rebuilt outside a request; fall back to the
+     * default-language labels instead of failing on the request-scoped i18n bean.
+     */
+    private String translateOrDefault(String key, String fallback) {
+        try {
+            String value = i18n.t(key);
+            return value == null || value.isBlank() || value.equals(key) ? fallback : value;
+        } catch (Exception exception) {
+            return fallback;
+        }
+    }
+
+    private String translatePrice(long price) {
+        try {
+            return i18n.format("post.hide_block.price", price);
+        } catch (Exception exception) {
+            return price + " 积分";
+        }
+    }
+
+    /** Issues a short-lived download path for an attachment after access was checked. */
+    public String issueAttachmentDownloadUrl(Long mediaId, Long postId, Long userId, String deviceId) {
+        if (mediaId == null || postId == null || userId == null) {
+            return null;
+        }
+        return "/api/media/download/" + contentAccessTicketService.issueMediaDownloadPath(
+                mediaId, postId, userId, java.time.Duration.ofMinutes(10), deviceId);
+    }
+
+    private java.util.List<HiddenAttachmentBlock> parseHiddenAttachmentBlocks(String content) {
+        java.util.List<HiddenAttachmentBlock> blocks = new java.util.ArrayList<>();
+        if (content == null || content.isEmpty()) {
+            return blocks;
+        }
+        java.util.regex.Matcher matcher = HIDDEN_ATTACHMENT_PATTERN.matcher(content);
+        while (matcher.find()) {
+            String attributes = matcher.group(1);
+            String body = matcher.group(2);
+            String explicitId = extractAttribute(attributes, "id");
+            String blockId = (explicitId != null && !explicitId.isBlank())
+                    ? explicitId : generateBlockId(attributes, body);
+            long price = 0L;
+            String priceText = extractAttribute(attributes, "price");
+            if (priceText != null && !priceText.isBlank()) {
+                try {
+                    price = Long.parseLong(priceText.trim());
+                } catch (NumberFormatException ignored) {
+                    price = 0L;
+                }
+            }
+            String url = extractAttachmentUrl(body);
+            String name = extractAttribute(attributes, "show");
+            if (name == null || name.isBlank()) {
+                name = extractAttachmentLabel(body);
+            }
+            if (name == null || name.isBlank()) {
+                name = attachmentFileName(url);
+            }
+            if (name == null || name.isBlank()) {
+                name = "附件";
+            }
+            blocks.add(new HiddenAttachmentBlock(blockId, name.trim(), Math.max(0L, price), body, url));
+        }
+        return blocks;
+    }
+
+    private java.util.List<String> attachmentMediaTokens(com.biliwind.blog.model.Media media) {
+        java.util.List<String> tokens = new java.util.ArrayList<>();
+        addAttachmentToken(tokens, media.url);
+        addAttachmentToken(tokens, media.storageKey);
+        if (media.storageKey != null && !media.storageKey.isBlank()) {
+            addAttachmentToken(tokens, "/uploads/" + media.storageKey);
+        }
+        addAttachmentToken(tokens, media.fileName);
+        return tokens;
+    }
+
+    private void addAttachmentToken(java.util.List<String> tokens, String value) {
+        if (value != null && !value.isBlank() && value.length() >= 4 && !tokens.contains(value)) {
+            tokens.add(value);
+        }
+    }
+
+    private String extractAttachmentUrl(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        java.util.regex.Matcher markdown = MARKDOWN_ATTACHMENT_LINK.matcher(body);
+        while (markdown.find()) {
+            String candidate = sanitizeAttachmentUrl(markdown.group(2));
+            if (candidate != null) {
+                return candidate;
+            }
+        }
+        java.util.regex.Matcher html = HTML_ATTACHMENT_LINK.matcher(body);
+        while (html.find()) {
+            String candidate = sanitizeAttachmentUrl(html.group(1));
+            if (candidate != null) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private String extractAttachmentLabel(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        java.util.regex.Matcher markdown = MARKDOWN_ATTACHMENT_LINK.matcher(body);
+        while (markdown.find()) {
+            String label = markdown.group(1);
+            if (label != null && !label.isBlank()) {
+                return label.trim();
+            }
+        }
+        java.util.regex.Matcher html = HTML_ATTACHMENT_LINK.matcher(body);
+        while (html.find()) {
+            String label = html.group(2) == null ? null : html.group(2).replaceAll("<[^>]+>", "").trim();
+            if (label != null && !label.isBlank()) {
+                return label;
+            }
+        }
+        return null;
+    }
+
+    private String sanitizeAttachmentUrl(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String url = raw.trim();
+        if (url.isEmpty()) {
+            return null;
+        }
+        String lower = url.toLowerCase(java.util.Locale.ROOT);
+        if (lower.startsWith("javascript:") || lower.startsWith("data:")) {
+            return null;
+        }
+        if (lower.startsWith("http://") || lower.startsWith("https://") || url.startsWith("/")) {
+            return url;
+        }
+        return null;
+    }
+
+    private String attachmentFileName(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String path = url.trim();
+        int queryIndex = path.indexOf('?');
+        if (queryIndex >= 0) {
+            path = path.substring(0, queryIndex);
+        }
+        int fragmentIndex = path.indexOf('#');
+        if (fragmentIndex >= 0) {
+            path = path.substring(0, fragmentIndex);
+        }
+        int slashIndex = path.lastIndexOf('/');
+        String name = slashIndex >= 0 ? path.substring(slashIndex + 1) : path;
+        try {
+            return java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            return name;
+        }
+    }
+
+    private com.biliwind.blog.model.Media findMediaByAttachmentUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String candidate = url.trim();
+        com.biliwind.blog.model.Media media = com.biliwind.blog.model.Media
+                .find("url = ?1 and deletedAt is null", candidate).firstResult();
+        if (media != null) {
+            return media;
+        }
+        int queryIndex = candidate.indexOf('?');
+        if (queryIndex >= 0) {
+            candidate = candidate.substring(0, queryIndex);
+        }
+        int fragmentIndex = candidate.indexOf('#');
+        if (fragmentIndex >= 0) {
+            candidate = candidate.substring(0, fragmentIndex);
+        }
+        String path = candidate;
+        if (!path.startsWith("/uploads/")) {
+            try {
+                java.net.URI uri = java.net.URI.create(candidate);
+                path = uri.getPath() == null ? "" : uri.getPath();
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        if (!path.startsWith("/uploads/")) {
+            return null;
+        }
+        String storageKey = path.substring("/uploads/".length());
+        if (storageKey.isBlank() || storageKey.contains("/")) {
+            return null;
+        }
+        return com.biliwind.blog.model.Media
+                .find("storageKey = ?1 and deletedAt is null", storageKey).firstResult();
+    }
+
+    private String formatFileSize(Long bytes) {
+        if (bytes == null || bytes <= 0) {
+            return "";
+        }
+        if (bytes < 1024 * 1024) {
+            return (bytes / 1024) + " KB";
+        }
+        return String.format(java.util.Locale.ROOT, "%.2f MB", bytes / (1024.0 * 1024.0));
     }
 
     public boolean hasProtectedMediaReference(Long mediaId) {
@@ -397,8 +805,9 @@ public class PostAccessService {
             boolean isUnlocked = fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId);
 
             if (isUnlocked) {
-                // 已解锁：只保留内容，删掉标签
-                textMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(content));
+                // 已解锁：保留 Flutter 预览中的区块外壳
+                textMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
+                        renderUnlockedBlock("hide-text", blockId, attrStr, content)));
             } else {
                 // 未解锁：显示占位符
                 String title = extractAttribute(attrStr, "show");
@@ -442,24 +851,37 @@ public class PostAccessService {
             String priceStr = extractAttribute(attrStr, "price");
             long requiredPrice = (priceStr != null && !priceStr.isEmpty()) ? Long.parseLong(priceStr) : 0;
 
-            // 附件也支持区块解锁，免费附件直接解锁
-            boolean isUnlocked = fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId);
+            // 免费附件同样需要登录；付费附件按区块购买状态解锁。
+            boolean isUnlocked = fullUnlocked
+                    || hasPurchasedBlock(userId, postId, blockId)
+                    || (requiredPrice == 0 && userId != null);
 
             if (isUnlocked) {
-                // 已购买：只保留内容，删掉标签
-                attachMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(content));
+                // 已解锁：保留 Flutter 预览中的区块外壳
+                attachMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
+                        renderUnlockedBlock("hide-attachment", blockId, attrStr, content)));
             } else {
-                // 未购买：显示占位符
-                boolean isFree = requiredPrice == 0;
-                String label = (requiredPrice > 0 ? "专享资源 (" + requiredPrice + " 积分)" : "专享资源");
+                // 未解锁：显示占位符
+                boolean requiresLogin = requiredPrice == 0;
+                String showName = extractAttribute(attrStr, "show");
+                String label;
+                if (showName != null && !showName.isBlank()) {
+                    label = showName.trim() + (requiredPrice > 0 ? " (" + requiredPrice + " 积分)" : "");
+                } else {
+                    label = (requiredPrice > 0 ? "专享资源 (" + requiredPrice + " 积分)" : "专享资源");
+                }
                 String displayPrice = String.valueOf(requiredPrice > 0 ? requiredPrice : postPrice);
-                String buttonText = isFree ? "免费解锁附件" : ("支付 " + displayPrice + " 积分解锁附件");
-                String descText = isFree ? "当前为免费资源，解锁后即可获取下载链接" : "解锁该资源即可获取下载链接，或购买全文解锁更多";
+                String buttonText = requiresLogin ? "登录后查看附件"
+                        : ("支付 " + displayPrice + " 积分解锁附件");
+                String descText = requiresLogin
+                        ? "该附件仅登录用户可查看，登录后即可获取下载链接"
+                        : "解锁该资源即可获取下载链接，或购买全文解锁更多";
 
                 String replacement = "\n\n" + premiumAttachmentTemplate
                         .data("title", label)
                         .data("desc", descText)
                         .data("showButton", true)
+                        .data("requiresLogin", requiresLogin)
                         .data("postRef", postRef)
                         .data("price", displayPrice)
                         .data("blockId", blockId)
@@ -508,7 +930,7 @@ public class PostAccessService {
                 }
             }
             if (fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId)) {
-                unlockedBlocks.put(blockId, content);
+                unlockedBlocks.put(blockId, renderUnlockedBlock("hide-text", blockId, attrStr, content));
             }
         }
 
@@ -532,8 +954,10 @@ public class PostAccessService {
                     // 忽略解析错误，默认为 0
                 }
             }
-            if (fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId)) {
-                unlockedBlocks.put(blockId, content);
+            if (fullUnlocked
+                    || hasPurchasedBlock(userId, postId, blockId)
+                    || (requiredPrice == 0 && userId != null)) {
+                unlockedBlocks.put(blockId, renderUnlockedBlock("hide-attachment", blockId, attrStr, content));
             }
         }
 
@@ -662,9 +1086,16 @@ public class PostAccessService {
 
     public String rewriteProtectedMediaReferences(Long postId, String content, Long userId,
                                                    boolean authorized, String deviceId) {
-        if (content == null || content.isBlank() || postId == null) {
+        Post post = postId == null ? null : Post.findById(postId);
+        return rewriteProtectedMediaReferences(post, content, userId, authorized, deviceId);
+    }
+
+    public String rewriteProtectedMediaReferences(Post post, String content, Long userId,
+                                                   boolean authorized, String deviceId) {
+        if (content == null || content.isBlank() || post == null) {
             return content;
         }
+        Long postId = post.id;
         java.util.List<PostMedia> references = findProtectedMediaReferences(postId);
         String rewritten = content;
         java.util.Map<Long, String> replacementByMedia = new java.util.HashMap<>();
@@ -678,7 +1109,11 @@ public class PostAccessService {
                     continue;
                 }
                 if (replacement == null) {
-                    if (!authorized || userId == null) {
+                    // A login is enough for a free attachment; priced blocks and
+                    // protected posts still need their own purchase/author check.
+                    boolean canDownload = authorized
+                            || canAccessProtectedMedia(post, reference.media, userId);
+                    if (!canDownload || userId == null) {
                         replacement = "[受保护附件已隐藏]";
                     } else {
                         replacement = "/api/media/download/"
@@ -796,12 +1231,19 @@ public class PostAccessService {
             String priceAttr = extractAttribute(attrStr, "price");
             boolean isFree = priceAttr == null || priceAttr.equals("0") || priceAttr.isEmpty();
             String displayPrice = isFree ? String.valueOf(postPrice) : priceAttr;
-            String buttonText = isFree ? "免费解锁附件" : ("支付 " + displayPrice + " 积分解锁附件");
+            String buttonText = isFree ? "登录后查看附件"
+                    : ("支付 " + displayPrice + " 积分解锁附件");
+            String showName = extractAttribute(attrStr, "show");
+            String title = (showName == null || showName.isBlank()) ? "专属附件已隐藏" : showName.trim();
+            String descText = isFree
+                    ? "该附件仅登录用户可查看，登录后即可获取下载链接"
+                    : "您可以解锁当前区块或购买整篇文章后查看该专属附件。";
 
             String replacement = "\n\n" + premiumAttachmentTemplate
-                    .data("title", "专属附件已隐藏")
-                    .data("desc", "您可以解锁当前区块或购买整篇文章后查看该专属附件。")
+                    .data("title", title)
+                    .data("desc", descText)
                     .data("showButton", true)
+                    .data("requiresLogin", isFree)
                     .data("postRef", postRef)
                     .data("price", displayPrice)
                     .data("blockId", blockId)

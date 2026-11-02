@@ -1,0 +1,8 @@
+<div class="hide-block-shell border border-amber-400/30 bg-amber-400/5 rounded-lg my-4 overflow-hidden"{#if blockId != null} data-block-id="{blockId}"{/if}>
+<div class="hide-block-header flex items-center gap-2 px-3 py-1.5 bg-amber-500/80 text-white text-[11px] font-bold"><span class="hide-block-icon text-[12px] leading-none">{icon}</span><span class="hide-block-title">{title}</span>{#if priceLabel}<span class="hide-block-price ml-1 px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-normal">{priceLabel}</span>{/if}<span class="hide-block-status ml-auto px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-normal">{statusLabel}</span></div>
+<div class="hide-block-body px-4 py-3">
+
+{content.raw}
+
+</div>
+</div>

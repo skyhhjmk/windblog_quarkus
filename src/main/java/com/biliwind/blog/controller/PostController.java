@@ -158,6 +158,8 @@ public class PostController {
         }
 
         String resolvedLang = languageContext.getLang();
+        Long requestUserId = resolveUserId(httpHeaders);
+        String deviceId = httpHeaders.getHeaderString("X-Device-Id");
 
         // 计算 ETag 逻辑。使用显式 if/else，禁止三目
         java.time.OffsetDateTime lastUpdated = snapshot.updatedAt();
@@ -171,6 +173,9 @@ public class PostController {
         long epoch = lastUpdated.toEpochSecond();
         String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion
                 + (pjaxRequest ? "_pjax" : "_full")
+                // The attachment widget and content gate depend on the reader,
+                // so a cached anonymous body must not satisfy a logged-in request.
+                + (requestUserId == null ? "_anon" : "_u" + requestUserId)
                 // RESTEasy splits If-None-Match on commas, so the robots value
                 // (index,follow) must not carry one into the ETag.
                 + "_" + seoManagementService.robots(
@@ -197,24 +202,27 @@ public class PostController {
         languageContext.setContentLanguage(contentLanguage);
         String localizedTitle = LanguageHelper.resolveLocalizedValue(snapshot.title(), resolvedLang);
         String publicPreview = resolveSnapshotContent(snapshot, resolvedLang);
-        Long requestUserId = resolveUserId(httpHeaders);
-        String deviceId = httpHeaders.getHeaderString("X-Device-Id");
         String localizedContent = resolveSnapshotContent(snapshot, resolvedLang);
+        Post postEntity = Post.find(
+                "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
+                snapshot.postId(), PostStatus.PUBLISHED).firstResult();
+        boolean contentAccessible = snapshot.visibility() == 0;
         boolean hasPurchased = false;
         if (protectedPage) {
-            Post protectedPost = Post.find(
-                    "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
-                    snapshot.postId(), PostStatus.PUBLISHED).firstResult();
             PostAccessPolicy.Decision access = postAccessPolicy.evaluate(
-                    protectedPost, requestUserId, null,
+                    postEntity, requestUserId, null,
                     readPasswordTicket(httpHeaders, snapshot.postId()), deviceId);
-            if (access.allowed() && protectedPost != null) {
-                localizedContent = resolveContent(protectedPost.publishedRevision, resolvedLang);
-                boolean author = postAccessPolicy.isAuthor(protectedPost, requestUserId);
-                hasPurchased = author || postAccessService.hasPurchasedPost(requestUserId, protectedPost.id);
+            if (access.allowed() && postEntity != null) {
+                contentAccessible = true;
+                localizedContent = resolveContent(postEntity.publishedRevision, resolvedLang);
+                hasPurchased = postAccessService.hasPurchasedPost(requestUserId, postEntity.id);
                 localizedContent = postAccessService.rewriteProtectedMediaReferences(
-                        protectedPost.id, localizedContent, requestUserId, hasPurchased, deviceId);
+                        postEntity, localizedContent, requestUserId, hasPurchased, deviceId);
             }
+        }
+        if (postEntity != null) {
+            boolean author = postAccessPolicy.isAuthor(postEntity, requestUserId);
+            hasPurchased = author || postAccessService.hasPurchasedPost(requestUserId, postEntity.id);
         }
 
         long postPrice = snapshot.postPrice();
@@ -249,20 +257,39 @@ public class PostController {
         }
 
         List<AttachmentView> attachments = new java.util.ArrayList<>();
-        if (snapshot.attachments() != null) {
-            for (com.biliwind.blog.service.PublicCacheRefreshService.PublicAttachmentSnapshot attachment
-                    : snapshot.attachments()) {
-                if (!isAttachmentVisible(attachment, currentRegion)) {
-                    continue;
+        if (contentAccessible && postEntity != null) {
+            java.util.Set<String> attachmentNames = new java.util.HashSet<>();
+            String attachmentContent = resolveContent(postEntity.publishedRevision, resolvedLang);
+            for (com.biliwind.blog.service.PostAccessService.AttachmentItem item
+                    : postAccessService.resolveAttachmentItems(postEntity, attachmentContent,
+                            requestUserId, deviceId)) {
+                attachments.add(new AttachmentView(item.blockId(), item.name(), item.formattedSize(),
+                        item.price(), item.unlocked(), item.loginRequired(), item.downloadUrl()));
+                attachmentNames.add(item.name());
+            }
+            if (snapshot.attachments() != null && !snapshot.attachments().isEmpty()) {
+                List<PostMedia> legacyAttachments =
+                        PostMedia.list("post.id = ?1 and usageType = 3", postEntity.id);
+                for (PostMedia legacy : legacyAttachments) {
+                    if (legacy.media == null || legacy.media.deletedAt != null) {
+                        continue;
+                    }
+                    if (!mediaAccessService.canAccess(legacy.media, regionContext.getCurrentRegion())) {
+                        continue;
+                    }
+                    String fileName = legacy.media.fileName;
+                    if (fileName == null || fileName.isBlank() || !attachmentNames.add(fileName)) {
+                        continue;
+                    }
+                    String formattedSize = formatAttachmentSize(legacy.media.size);
+                    boolean unlocked = hasPurchased;
+                    String downloadUrl = unlocked
+                            ? postAccessService.issueAttachmentDownloadUrl(legacy.media.id,
+                                    postEntity.id, requestUserId, deviceId)
+                            : null;
+                    attachments.add(new AttachmentView(null, fileName, formattedSize, 0L,
+                            unlocked, false, downloadUrl));
                 }
-                long bytes = attachment.size() == null ? 0L : attachment.size();
-                String formattedSize;
-                if (bytes < 1024 * 1024) {
-                    formattedSize = (bytes / 1024) + " KB";
-                } else {
-                    formattedSize = String.format("%.2f MB", bytes / (1024.0 * 1024.0));
-                }
-                attachments.add(new AttachmentView(attachment.fileName(), "", formattedSize));
             }
         }
 
@@ -348,8 +375,10 @@ public class PostController {
                 .data("postTags", postTags)
                 .data("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
                 .data("attachments", attachments)
+                .data("userAuthenticated", requestUserId != null)
+                .data("attachmentLoginUrl", buildAttachmentLoginUrl(slug, resolvedLang))
                 .data("relatedStoreItems", snapshot.relatedStoreItems())
-                .data("relatedArticles", seoAuditService.related(com.biliwind.blog.model.Post.findById(snapshot.postId()), resolvedLang))
+                .data("relatedArticles", seoAuditService.related(postEntity, resolvedLang))
                 .data("repostPolicyCode", repostPolicy.code())
                 .data("repostPolicyName", repostPolicy.nameFor(resolvedLang))
                 .data("repostPolicySummary", repostPolicy.summaryFor(resolvedLang))
@@ -604,34 +633,29 @@ public class PostController {
         return verified == null ? null : verified.uid();
     }
 
-    private boolean isAttachmentVisible(
-            com.biliwind.blog.service.PublicCacheRefreshService.PublicAttachmentSnapshot attachment,
-            String regionCode) {
-        if (containsRegion(attachment.hiddenRegions(), regionCode)) {
-            return false;
-        }
-        List<String> visibleRegions = attachment.visibilityRegions();
-        if (visibleRegions == null || visibleRegions.isEmpty()) {
-            return true;
-        }
-        return containsRegion(visibleRegions, "GLOBAL") || containsRegion(visibleRegions, regionCode);
-    }
-
-    private boolean containsRegion(List<String> regions, String expected) {
-        if (regions == null || expected == null) {
-            return false;
-        }
-        for (String region : regions) {
-            if (region != null && expected.equalsIgnoreCase(region.trim())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private record PostBodyView(String body, boolean html, PostRenderType renderType) {}
 
-    public record AttachmentView(String fileName, String downloadUrl, String formattedSize) {
+    public record AttachmentView(String blockId, String fileName, String formattedSize, long price,
+                                 boolean unlocked, boolean loginRequired, String downloadUrl) {
+    }
+
+    private String buildAttachmentLoginUrl(String slug, String language) {
+        String postPath = LanguageHelper.localizedPath("/post/" + slug, language,
+                canonicalUrlService.getDefaultLanguage());
+        String loginPath = LanguageHelper.localizedPath("/user/login", language,
+                canonicalUrlService.getDefaultLanguage());
+        return loginPath + "?redirect="
+                + java.net.URLEncoder.encode(postPath, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private String formatAttachmentSize(Long bytes) {
+        if (bytes == null || bytes <= 0) {
+            return "";
+        }
+        if (bytes < 1024 * 1024) {
+            return (bytes / 1024) + " KB";
+        }
+        return String.format(java.util.Locale.ROOT, "%.2f MB", bytes / (1024.0 * 1024.0));
     }
 
 }

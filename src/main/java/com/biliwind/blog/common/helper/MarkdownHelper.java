@@ -47,7 +47,8 @@ public final class MarkdownHelper {
             .addAttributes("th", "align")
             .addAttributes("td", "align")
             // 允许卡片购买按钮属性
-            .addAttributes("button", "class", "data-post-id", "data-price", "data-block-id")
+            .addAttributes("button", "class", "data-post-id", "data-post-ref", "data-price",
+                    "data-block-id", "data-login-required")
             .addProtocols("a", "href", "http", "https", "mailto")
             .addProtocols("img", "src", "http", "https");
 

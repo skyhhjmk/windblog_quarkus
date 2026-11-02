@@ -12,7 +12,8 @@
     let config = {
         postRef: '',
         postPrice: 0,
-        hasPurchased: false
+        hasPurchased: false,
+        authenticated: false
     };
     let buyButtonListenerBound = false;
     let repostButtonListenerBound = false;
@@ -28,6 +29,7 @@
         config.postRef = container.dataset.postRef || '';
         config.postPrice = parseFloat(container.dataset.postPrice) || 0;
         config.hasPurchased = container.dataset.hasPurchased === 'true';
+        config.authenticated = container.dataset.authenticated === 'true';
 
         initBuyButtons();
         initRepostLicenseButton();
@@ -86,11 +88,16 @@
             const target = e.target.closest('.buy-post-btn');
             if (target) {
                 e.preventDefault();
+                if (target.dataset.loginRequired === 'true' && !config.authenticated) {
+                    window.location.href = '/user/login?redirect='
+                        + encodeURIComponent(window.location.pathname);
+                    return;
+                }
                 const postRef = target.dataset.postRef || config.postRef;
                 const pPrice = target.dataset.price || config.postPrice;
                 const bId = target.dataset.blockId;
 
-                await buyCurrentPost(postRef, pPrice, target, bId);
+                await buyCurrentPost(postRef, pPrice, target, bId, target.dataset.loginRequired === 'true');
             }
         });
     }
@@ -279,7 +286,11 @@
     }
 
     // Purchase article or block
-    async function buyCurrentPost(postRef, price, button, blockId) {
+    async function buyCurrentPost(postRef, price, button, blockId, loginOnly) {
+        if (loginOnly) {
+            await loadFullPostContent(blockId);
+            return;
+        }
         const confirmMsg = blockId
             ? window.wbT('js.unlock_confirm', '确认解锁该内容区块吗？')
             : window.wbTf('js.unlock_purchase_price', price, '确认使用 {0} 积分购买并解锁这篇文章吗？');
@@ -397,44 +408,45 @@
             }
         });
 
-        if (contentData.attachments) {
-            updateAttachments(contentData.attachments);
-        }
+        syncSidebarAttachments(contentData);
     }
 
-    // Update attachments section
-    function updateAttachments(attachments) {
-        const sidebarAttachments = document.querySelector('[data-attachments-section="true"]');
-        if (!sidebarAttachments || !attachments) return;
-
-        const attachmentsHtml = attachments.map(media => {
-            let html = '<div class="card card-static p-4 flex items-center gap-4 group/file hover:border-accent/40 transition-all border-border/60 bg-card-bg/50">';
-            html += '<div class="w-10 h-10 rounded-lg bg-card-bg border border-border flex items-center justify-center text-accent group-hover/file:scale-110 transition-transform">';
-            html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
-            html += '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>';
-            html += '<polyline points="14 2 14 8 20 8"></polyline>';
-            html += '</svg></div>';
-            html += '<div class="flex-1 min-w-0">';
-            html += '<p class="text-xs text-main font-bold truncate mb-0.5" title="' + escapeHtml(media.fileName) + '">' + escapeHtml(media.fileName) + '</p>';
-            html += '<p class="text-[10px] text-gray-500 font-mono opacity-80">' + media.formattedSize + '</p></div>';
-
-            if (media.url) {
-                html += '<a href="' + escapeHtml(media.url) + '" download class="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-all">';
-                html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">';
-                html += '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>';
-                html += '<polyline points="7 10 12 15 17 10"></polyline>';
-                html += '<line x1="12" y1="15" x2="12" y2="3"></line></svg></a>';
+    // Unlock the matching right-sidebar rows in place after a block purchase or
+    // a full-article purchase, using the download link from the rendered block.
+    function syncSidebarAttachments(contentData) {
+        const blocks = contentData.blocks || {};
+        document.querySelectorAll('[data-attachment-block-id]').forEach(function (row) {
+            const blockId = row.getAttribute('data-attachment-block-id');
+            if (!blockId || !blocks[blockId] || row.getAttribute('data-attachment-unlocked') === 'true') {
+                return;
             }
-            html += '</div>';
-            return html;
-        }).join('');
 
-        const wrapper = sidebarAttachments.querySelector('.space-y-3');
-        if (wrapper) {
-            wrapper.innerHTML = attachmentsHtml;
-        } else {
-            sidebarAttachments.innerHTML = '<h3 class="text-sm font-bold tracking-wider text-main uppercase mb-6"><div class="w-1.5 h-6 bg-accent rounded-full inline-block mr-3 vertical-middle"></div>专属资源</h3><div class="space-y-3">' + attachmentsHtml + '</div>';
-        }
+            let href = '';
+            try {
+                const holder = document.createElement('div');
+                holder.innerHTML = blocks[blockId];
+                const anchor = holder.querySelector('a[href]');
+                href = anchor ? anchor.getAttribute('href') : '';
+            } catch (error) {
+                console.error('解析附件链接失败:', error);
+            }
+
+            row.setAttribute('data-attachment-unlocked', 'true');
+            const status = row.querySelector('[data-attachment-status]');
+            if (status) {
+                status.className = 'text-green-500 font-bold';
+                status.textContent = window.wbT('js.attachments_unlocked', '已解锁');
+            }
+            const action = row.querySelector('[data-attachment-action]');
+            if (action && href && /^(https?:\/\/|\/)/i.test(href)) {
+                const link = document.createElement('a');
+                link.href = href;
+                link.setAttribute('download', '');
+                link.className = 'flex items-center justify-center w-full py-2 bg-accent/10 border border-accent/30 rounded-lg text-xs font-bold text-accent hover:bg-accent/20 transition-all';
+                link.textContent = window.wbT('js.download_attachment', '下载附件');
+                action.replaceChildren(link);
+            }
+        });
     }
 
     // Update global purchase status
@@ -446,13 +458,13 @@
             el.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> 已解锁';
         });
 
-        // Update sidebar badge
-        const badge = document.querySelector('.sidebar-status-badge');
-        if (badge) {
+        // Update every sidebar badge; the hidden PJAX template duplicates the
+        // visible sidebar, so querySelector would update only one copy.
+        document.querySelectorAll('.sidebar-status-badge').forEach(function (badge) {
             badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">' +
                 '<path d="M20 6L9 17l-5-5"></path></svg>' +
                 '<span class="text-green-500 font-bold">已解锁全文</span>';
-        }
+        });
 
         // Remove all unlock buttons as everything is unlocked
         document.querySelectorAll('.buy-post-btn').forEach(btn => btn.remove());
@@ -472,13 +484,6 @@
         const parts = value.split("; " + name + "=");
         if (parts.length === 2) return parts.pop().split(';').shift();
         return null;
-    }
-
-    function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 
     // --- Block Manager & Preference Controls ---

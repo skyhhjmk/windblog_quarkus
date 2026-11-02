@@ -45,10 +45,20 @@ public class MediaAccessPolicy {
         if (relation == null || !postAccessService.isProtectedMediaReference(relation)) {
             return new Decision(false, "MEDIA_NOT_ATTACHED");
         }
-        if (!postAccessPolicy.isAuthor(post, userId) && !postAccessService.hasPurchasedPost(userId, post.id)) {
+        if (postAccessPolicy.isAuthor(post, userId) || postAccessService.hasPurchasedPost(userId, post.id)) {
+            return new Decision(true, "ALLOWED");
+        }
+        java.util.List<PostAccessService.HiddenAttachmentBlock> attachmentBlocks =
+                postAccessService.findHiddenAttachmentBlocksForMedia(post, media);
+        if (!attachmentBlocks.isEmpty()) {
+            for (PostAccessService.HiddenAttachmentBlock block : attachmentBlocks) {
+                if (postAccessService.canAccessHiddenAttachment(post, block, userId)) {
+                    return new Decision(true, "ALLOWED");
+                }
+            }
             return new Decision(false, "PURCHASE_REQUIRED");
         }
-        return new Decision(true, "ALLOWED");
+        return new Decision(false, "PURCHASE_REQUIRED");
     }
 
     public record Decision(boolean allowed, String reason) {
