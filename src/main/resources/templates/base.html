@@ -34,6 +34,8 @@
     {/if}
     {#if config:faviconUrl}
         <link rel="icon" href="{config:faviconUrl}"/>
+    {#else}
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
     {/if}
     <link rel="alternate" type="application/rss+xml" title="{config:siteTitle}" href="{languagePrefix}/feed"/>
 

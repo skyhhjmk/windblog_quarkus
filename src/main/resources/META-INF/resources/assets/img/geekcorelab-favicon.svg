@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%" shape-rendering="crispEdges">
+  <!-- GeekCoreLab Favicon: Overclocked Molten Plasma Core Chip -->
+  <rect x="0" y="0" width="512" height="512" rx="64" fill="#080302"/>
+
+  <!-- Left Pins (Red-Hot Copper / Amber) -->
+  <rect x="32" y="128" width="64" height="32" fill="#ea580c"/>
+  <rect x="32" y="192" width="64" height="32" fill="#f97316"/>
+  <rect x="32" y="256" width="64" height="32" fill="#fb923c"/>
+  <rect x="32" y="320" width="64" height="32" fill="#f97316"/>
+  <rect x="32" y="384" width="64" height="32" fill="#ea580c"/>
+
+  <!-- Right Pins -->
+  <rect x="416" y="128" width="64" height="32" fill="#ea580c"/>
+  <rect x="416" y="192" width="64" height="32" fill="#f97316"/>
+  <rect x="416" y="256" width="64" height="32" fill="#fb923c"/>
+  <rect x="416" y="320" width="64" height="32" fill="#f97316"/>
+  <rect x="416" y="384" width="64" height="32" fill="#ea580c"/>
+
+  <!-- Dark Carbon Body -->
+  <rect x="96" y="64" width="320" height="384" fill="#261009"/>
+  <rect x="112" y="80" width="288" height="352" fill="#140805"/>
+
+  <!-- Top Thermal Vent / Exhaust Notch -->
+  <rect x="208" y="64" width="96" height="32" fill="#f97316"/>
+  <rect x="224" y="64" width="64" height="16" fill="#fde047"/>
+
+  <!-- Superheated Chamber Recess -->
+  <rect x="160" y="128" width="192" height="224" fill="#431407"/>
+
+  <!-- The Molten Plasma G-Core -->
+  <!-- Top bar of G -->
+  <rect x="192" y="160" width="128" height="32" fill="#ea580c"/>
+  <!-- Left wall -->
+  <rect x="192" y="192" width="32" height="128" fill="#f97316"/>
+  <!-- Bottom bar -->
+  <rect x="192" y="288" width="128" height="32" fill="#ea580c"/>
+  <!-- Right leg -->
+  <rect x="288" y="224" width="32" height="96" fill="#f97316"/>
+  <!-- Shelf -->
+  <rect x="256" y="224" width="32" height="32" fill="#fdba74"/>
+
+  <!-- Incandescent Fusion Core (Sun-Like White-Yellow Core) -->
+  <rect x="224" y="192" width="48" height="48" fill="#fde047"/>
+  <rect x="232" y="200" width="32" height="32" fill="#ffffff"/>
+
+  <!-- Thermal Venting Sparks / Energy Bleed -->
+  <rect x="144" y="112" width="16" height="16" fill="#ea580c"/>
+  <rect x="352" y="112" width="16" height="16" fill="#ea580c"/>
+  <rect x="144" y="368" width="16" height="16" fill="#ea580c"/>
+  <rect x="352" y="368" width="16" height="16" fill="#ea580c"/>
+</svg>
