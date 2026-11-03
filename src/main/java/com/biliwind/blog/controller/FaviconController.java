@@ -35,7 +35,7 @@ public class FaviconController {
                 : configManager.getString("appearance", "favicon_url", "").trim();
 
         if (target == null || target.isBlank()) {
-            if ("favicon.svg".equalsIgnoreCase(fileName)) {
+            if ("favicon.svg".equalsIgnoreCase(fileName) || "favicon.png".equalsIgnoreCase(fileName)) {
                 throw new NotFoundException();
             }
             return Response.status(Response.Status.FOUND)

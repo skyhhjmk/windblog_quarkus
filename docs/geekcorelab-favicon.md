@@ -31,8 +31,8 @@
 
 在本项目中，该图标已正式部署并接入：
 
-- **根级静态资源**：[`src/main/resources/META-INF/resources/favicon.svg`](file:///home/hhjmk/codes/windblog_quarkus/src/main/resources/META-INF/resources/favicon.svg)
-- **静态资源归档**：[`src/main/resources/META-INF/resources/assets/img/geekcorelab-favicon.svg`](file:///home/hhjmk/codes/windblog_quarkus/src/main/resources/META-INF/resources/assets/img/geekcorelab-favicon.svg)
+- **根级静态资源**：[`src/main/resources/META-INF/resources/favicon.svg`](file:///home/hhjmk/codes/windblog_quarkus/src/main/resources/META-INF/resources/favicon.svg) 与 PNG 变体 [`src/main/resources/META-INF/resources/favicon.png`](file:///home/hhjmk/codes/windblog_quarkus/src/main/resources/META-INF/resources/favicon.png)
+- **静态资源归档**：[`src/main/resources/META-INF/resources/assets/img/geekcorelab-favicon.svg`](file:///home/hhjmk/codes/windblog_quarkus/src/main/resources/META-INF/resources/assets/img/geekcorelab-favicon.svg) 与 PNG 变体 [`src/main/resources/META-INF/resources/assets/img/geekcorelab-favicon.png`](file:///home/hhjmk/codes/windblog_quarkus/src/main/resources/META-INF/resources/assets/img/geekcorelab-favicon.png)
 - **模板自动加载**：[`src/main/resources/templates/base.html`](file:///home/hhjmk/codes/windblog_quarkus/src/main/resources/templates/base.html) 已配置自动回退：
   ```html
   {#if config:faviconUrl}
