@@ -34,12 +34,14 @@ public final class MarkdownHelper {
 
     // 文章内容允许的标签；脚本、内联样式和 SVG 不属于文章数据，避免内容域承担主动内容。
     private static final Safelist POST_SAFE_LIST = Safelist.relaxed()
-            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "button")
+            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "button", "picture", "source")
             .addAttributes("code", "class")
             .addAttributes("pre", "class")
             .addAttributes("span", "class")
             .addAttributes("div", "class", "id", "data-name", "data-group", "data-title", "data-block-id")
             .addAttributes("img", "width", "height", "loading", "decoding", "class")
+            .addAttributes("picture", "class")
+            .addAttributes("source", "type", "srcset", "media")
             .addAttributes("a", "href", "target", "rel", "class", "title",
                     "data-article-link-preview", "data-link-name", "data-link-url",
                     "data-link-description", "data-link-icon")
@@ -154,25 +156,74 @@ public final class MarkdownHelper {
                 if (media == null || media.mediaType != 0) {
                     continue;
                 }
-                int[] dimensions = mediaDimensions(media);
-                if (dimensions == null) {
-                    continue;
-                }
                 org.jsoup.nodes.Element image = entry.getKey();
-                image.attr("width", String.valueOf(dimensions[0]));
-                image.attr("height", String.valueOf(dimensions[1]));
+                int[] dimensions = mediaDimensions(media);
+                if (dimensions != null) {
+                    image.attr("width", String.valueOf(dimensions[0]));
+                    image.attr("height", String.valueOf(dimensions[1]));
+                }
                 if (image.attr("loading").isBlank()) {
                     image.attr("loading", "lazy");
                 }
                 if (image.attr("decoding").isBlank()) {
                     image.attr("decoding", "async");
                 }
+                attachWebpVariant(image, media);
             }
         } catch (RuntimeException exception) {
             // Non-request render paths (for example search indexing) may not have a
             // Hibernate session. Rendering remains safe; it simply omits dimensions.
-            log.debug("无法为 Markdown 图片补充媒体尺寸", exception);
+            log.debug("无法为 Markdown 图片补充媒体尺寸与变体", exception);
         }
+    }
+
+    private static void attachWebpVariant(org.jsoup.nodes.Element image, Media media) {
+        String webpUrl = resolveWebpUrl(media);
+        if (webpUrl == null || webpUrl.isBlank()) {
+            return;
+        }
+        String currentSrc = image.attr("src").trim();
+        if (currentSrc.equalsIgnoreCase(webpUrl) || currentSrc.endsWith("_webp.webp")) {
+            return;
+        }
+        org.jsoup.nodes.Element parent = image.parent();
+        if (parent != null && "picture".equalsIgnoreCase(parent.tagName())) {
+            return;
+        }
+        org.jsoup.nodes.Element picture = new org.jsoup.nodes.Element("picture");
+        picture.addClass("article-image-picture");
+        org.jsoup.nodes.Element source = new org.jsoup.nodes.Element("source");
+        source.attr("type", "image/webp");
+        source.attr("srcset", webpUrl);
+        image.before(picture);
+        picture.appendChild(source);
+        picture.appendChild(image);
+    }
+
+    private static String resolveWebpUrl(Media media) {
+        if (media == null) {
+            return null;
+        }
+        if (media.metadata != null) {
+            Object webpUrl = media.metadata.get("webpUrl");
+            if (webpUrl instanceof String url && !url.isBlank()) {
+                return url.trim();
+            }
+        }
+        if (media.storageClasses != null) {
+            for (Object providerObj : media.storageClasses.values()) {
+                if (providerObj instanceof java.util.Map<?, ?> providerMap) {
+                    Object webpObj = providerMap.get("webp");
+                    if (webpObj instanceof java.util.Map<?, ?> webpMap) {
+                        Object path = webpMap.get("path");
+                        if (path instanceof String pathStr && !pathStr.isBlank()) {
+                            return pathStr.startsWith("/") ? pathStr : "/uploads/" + pathStr;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private static int[] mediaDimensions(Media media) {

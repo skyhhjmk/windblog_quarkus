@@ -746,6 +746,11 @@ input::placeholder {
     border-bottom-color: var(--accent);
 }
 
+.prose picture,
+.article-image-picture {
+    display: contents;
+}
+
 .prose img {
     display: block;
     max-width: 100%;

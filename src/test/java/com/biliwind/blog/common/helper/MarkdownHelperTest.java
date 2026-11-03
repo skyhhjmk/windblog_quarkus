@@ -250,4 +250,15 @@ class MarkdownHelperTest {
         org.junit.jupiter.api.Assertions.assertFalse(html.contains("javascript:"));
         org.junit.jupiter.api.Assertions.assertFalse(html.contains("evil.example"));
     }
+
+    @Test
+    void shouldAllowPictureAndSourceTagsInMarkdownHtml() {
+        String markdown = "<picture class=\"article-image-picture\"><source type=\"image/webp\" srcset=\"/uploads/test_webp.webp\"><img src=\"/uploads/test.png\" alt=\"test\"></picture>";
+        String html = MarkdownHelper.toHtml(markdown);
+
+        assertTrue(html.contains("<picture"));
+        assertTrue(html.contains("<source"));
+        assertTrue(html.contains("srcset=\"/uploads/test_webp.webp\""));
+        assertTrue(html.contains("<img"));
+    }
 }
