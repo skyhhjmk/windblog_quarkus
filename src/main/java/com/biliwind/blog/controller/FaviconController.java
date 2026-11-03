@@ -24,12 +24,24 @@ public class FaviconController {
     @Inject
     ConfigManager configManager;
 
+    @Inject
+    com.biliwind.blog.service.FaviconResolverService faviconResolverService;
+
     @GET
     @Path("/{fileName: favicon\\.(ico|jpg|jpeg|jpe|png|webp|svg|gif|avif|bmp|tif|tiff)}")
     public Response getFavicon(@PathParam("fileName") String fileName) {
-        String target = configManager.getString("appearance", "favicon_url", "").trim();
-        if (target.isEmpty()) {
-            throw new NotFoundException();
+        String target = faviconResolverService != null
+                ? faviconResolverService.resolveFaviconUrl()
+                : configManager.getString("appearance", "favicon_url", "").trim();
+
+        if (target == null || target.isBlank()) {
+            if ("favicon.svg".equalsIgnoreCase(fileName)) {
+                throw new NotFoundException();
+            }
+            return Response.status(Response.Status.FOUND)
+                    .location(URI.create("/favicon.svg"))
+                    .header("Cache-Control", "public, max-age=86400")
+                    .build();
         }
 
         URI targetUri;

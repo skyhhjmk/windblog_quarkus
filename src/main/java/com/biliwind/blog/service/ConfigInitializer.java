@@ -58,10 +58,15 @@ public class ConfigInitializer {
                 boolean defaultValueChanged = false;
                 if (setting.configValue != null && def.defaultValue != null && setting.configValue.isObject() && def.defaultValue.isObject()) {
                     defaultValueChanged = mergeMissingObjectFields((ObjectNode) setting.configValue, def.defaultValue);
-                    if ("appearance".equals(def.key)
-                            && "/favicon.ico".equals(setting.configValue.path("favicon_url").asText())) {
-                        ((ObjectNode) setting.configValue).put("favicon_url", "");
-                        defaultValueChanged = true;
+                    if ("appearance".equals(def.key)) {
+                        if ("/favicon.ico".equals(setting.configValue.path("favicon_url").asText())) {
+                            ((ObjectNode) setting.configValue).put("favicon_url", "");
+                            defaultValueChanged = true;
+                        }
+                        if ("/logo.png".equals(setting.configValue.path("logo_url").asText())) {
+                            ((ObjectNode) setting.configValue).put("logo_url", "");
+                            defaultValueChanged = true;
+                        }
                     }
                 }
 
@@ -189,14 +194,32 @@ public class ConfigInitializer {
         ObjectNode appearanceSchema = mapper.createObjectNode();
         appearanceSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode appearanceFields = appearanceSchema.putArray("fields");
-        appearanceFields.addObject().put("key", "logo_url").put("label", "Logo链接").put("widget", "input");
-        appearanceFields.addObject().put("key", "favicon_url").put("label", "Favicon").put("widget", "media_picker")
-                .put("hint", "从媒体库选择图片；favicon.ico、.jpg、.jpeg、.png、.webp、.svg、.gif 和 .avif 地址都会提供该图标。");
+        appearanceFields.addObject()
+                .put("key", "logo_url")
+                .put("label", "站点Logo（SEO结构化数据与社交分享）")
+                .put("widget", "media_picker")
+                .put("hint", "用于搜索引擎结构化数据（JSON-LD Publisher Logo）及社交媒体分享默认主图（OpenGraph og:image）。支持输入链接或从媒体库选择。");
+        appearanceFields.addObject()
+                .put("key", "favicon_url")
+                .put("label", "Favicon（默认）")
+                .put("widget", "media_picker")
+                .put("hint", "网站默认图标；从媒体库选择图片。页面渲染时会根据访客所在区域自动适配切换 CDN 与域名；也可在下方按区域单独指定。");
+        for (BlogRegion region : BlogRegion.values()) {
+            if (region == BlogRegion.GLOBAL) {
+                continue;
+            }
+            appearanceFields.addObject()
+                    .put("key", "favicon_url_regions." + region.getCode())
+                    .put("label", region.getDisplayName() + " Favicon")
+                    .put("widget", "media_picker")
+                    .put("hint", "可选；留空时自动继承默认 Favicon 并按当前区域自动切换 CDN/域名。");
+        }
         appearanceFields.addObject().put("key", "theme_color").put("label", "主题色").put("widget", "input");
 
         ObjectNode appearanceValue = mapper.createObjectNode();
-        appearanceValue.put("logo_url", "/logo.png");
+        appearanceValue.put("logo_url", "");
         appearanceValue.put("favicon_url", "");
+        appearanceValue.putObject("favicon_url_regions");
         appearanceValue.put("theme_color", "#1A1A1A");
 
         list.add(new SettingDefinition("appearance", appearanceValue, "object", "外观设置", appearanceSchema, "外观样式设置"));

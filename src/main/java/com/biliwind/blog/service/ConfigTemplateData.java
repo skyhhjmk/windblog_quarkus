@@ -262,7 +262,13 @@ public class ConfigTemplateData {
     }
 
     public static String faviconUrl() {
-        return configManager().getString("appearance", "favicon_url", "/favicon.ico");
+        try {
+            FaviconResolverService resolver = Arc.container().instance(FaviconResolverService.class).get();
+            if (resolver != null) {
+                return resolver.resolveFaviconUrl();
+            }
+        } catch (Exception ignored) {}
+        return configManager().getString("appearance", "favicon_url", "");
     }
 
     public static String themeColor() {

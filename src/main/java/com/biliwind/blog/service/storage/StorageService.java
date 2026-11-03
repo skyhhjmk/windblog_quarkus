@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.storage;
 
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.StorageClassEntity;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -881,11 +882,27 @@ public class StorageService {
     }
 
     public String getBestAccessUrl(Media media, VariantType variant) {
+        BlogRegion targetRegion = null;
+        try {
+            var ctx = jakarta.enterprise.inject.spi.CDI.current().select(com.biliwind.blog.context.RegionContext.class);
+            if (ctx.isResolvable()) {
+                targetRegion = ctx.get().getCurrentRegion();
+            }
+        } catch (Exception ignored) {}
+        return getBestAccessUrl(media, variant, targetRegion);
+    }
+
+    public String getBestAccessUrl(Media media, VariantType variant, BlogRegion targetRegion) {
         if (media == null || media.storageClasses == null) {
             return null;
         }
 
-        for (StorageClass provider : enabledProviders) {
+        List<StorageClass> providers = enabledProviders;
+        if (targetRegion != null && !providers.isEmpty()) {
+            providers = prioritizeProvidersForRegion(providers, targetRegion);
+        }
+
+        for (StorageClass provider : providers) {
             String storageClassName = provider.getName();
             Object providerDataObj = media.storageClasses.get(storageClassName);
             if (!(providerDataObj instanceof Map)) {
@@ -927,6 +944,37 @@ public class StorageService {
             }
         }
         return null;
+    }
+
+    private List<StorageClass> prioritizeProvidersForRegion(List<StorageClass> providers, BlogRegion targetRegion) {
+        if (targetRegion == null || providers.isEmpty()) {
+            return providers;
+        }
+        String regionCode = targetRegion.getCode().toLowerCase();
+        List<StorageClass> regional = new ArrayList<>();
+        List<StorageClass> others = new ArrayList<>();
+        for (StorageClass provider : providers) {
+            StorageClassEntity entity = getProviderEntityByName(provider.getName());
+            boolean matches = false;
+            if (entity != null) {
+                if (entity.serviceRegion != null && entity.serviceRegion.equalsIgnoreCase(regionCode)) {
+                    matches = true;
+                } else if (entity.contentRegions != null && entity.contentRegions.stream().anyMatch(r -> regionCode.equalsIgnoreCase(r.trim()))) {
+                    matches = true;
+                }
+            }
+            if (matches) {
+                regional.add(provider);
+            } else {
+                others.add(provider);
+            }
+        }
+        if (regional.isEmpty()) {
+            return providers;
+        }
+        List<StorageClass> sorted = new ArrayList<>(regional);
+        sorted.addAll(others);
+        return sorted;
     }
 
     public String getBestSignedUrl(Media media, VariantType variant, java.time.Duration expiration) {
