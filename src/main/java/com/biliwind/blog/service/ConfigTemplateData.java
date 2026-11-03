@@ -39,6 +39,14 @@ public class ConfigTemplateData {
     }
 
     public static String baseUrl() {
+        try {
+            PublicUrlService service = Arc.container().instance(PublicUrlService.class).get();
+            if (service != null) {
+                return service.getBaseUrl();
+            }
+        } catch (RuntimeException ignored) {
+            // Unit tests and startup callers fall back to deployment settings.
+        }
         return PublicUrlService.normalize(
                 org.eclipse.microprofile.config.ConfigProvider.getConfig()
                         .getOptionalValue("windblog.site.public-url", String.class)

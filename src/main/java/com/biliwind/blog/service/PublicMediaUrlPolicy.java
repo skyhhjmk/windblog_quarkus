@@ -80,6 +80,20 @@ public final class PublicMediaUrlPolicy {
         addHosts(hosts, configured);
         addUrlHost(hosts, "blog.url");
         addUrlHost(hosts, "windblog.site.public-url");
+        try {
+            RegionRuleService regionRules =
+                    io.quarkus.arc.Arc.container().instance(RegionRuleService.class).get();
+            if (regionRules != null) {
+                // Both the Chinese and the international domains are owned by
+                // this deployment, so media and links hosted on either one stay
+                // internal when content is rendered on the other.
+                for (String domain : regionRules.siteDomainsCached()) {
+                    hosts.add(domain);
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Outside a running container only the configured hosts apply.
+        }
         return hosts;
     }
 

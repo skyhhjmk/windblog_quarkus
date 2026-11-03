@@ -1,10 +1,11 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.service.PublicUrlService;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Response;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.List;
 import java.util.Map;
@@ -14,8 +15,8 @@ public class AgentCardResource {
 
     private static final String AGENT_VERSION = "1.0.0";
 
-    @ConfigProperty(name = "windblog.site.public-url", defaultValue = "http://localhost:8080")
-    String publicUrl;
+    @Inject
+    PublicUrlService publicUrlService;
 
     @GET
     @Produces("application/json")
@@ -66,10 +67,6 @@ public class AgentCardResource {
     }
 
     String normalizedPublicUrl() {
-        String baseUrl = publicUrl == null ? "" : publicUrl.trim();
-        while (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
-        }
-        return baseUrl;
+        return publicUrlService.getBaseUrl();
     }
 }

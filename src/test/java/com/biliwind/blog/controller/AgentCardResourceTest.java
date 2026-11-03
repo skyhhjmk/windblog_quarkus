@@ -1,5 +1,6 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.service.PublicUrlService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.core.Response;
@@ -12,7 +13,12 @@ class AgentCardResourceTest {
 
     private AgentCardResource card() {
         AgentCardResource card = new AgentCardResource();
-        card.publicUrl = "https://www.geekcorelab.com///";
+        card.publicUrlService = new PublicUrlService() {
+            @Override
+            public String getBaseUrl() {
+                return "https://www.geekcorelab.com";
+            }
+        };
         return card;
     }
 

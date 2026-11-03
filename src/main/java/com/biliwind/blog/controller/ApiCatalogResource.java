@@ -1,10 +1,11 @@
 package com.biliwind.blog.controller;
 
+import com.biliwind.blog.service.PublicUrlService;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HEAD;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.Response;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,8 +17,8 @@ public class ApiCatalogResource {
     private static final String PROFILE = "https://www.rfc-editor.org/info/rfc9727";
     private static final String LINKSET_MEDIA_TYPE = "application/linkset+json; profile=\"" + PROFILE + "\"";
 
-    @ConfigProperty(name = "windblog.site.public-url", defaultValue = "http://localhost:8080")
-    String publicUrl;
+    @Inject
+    PublicUrlService publicUrlService;
 
     @GET
     public Response getCatalog() {
@@ -52,10 +53,6 @@ public class ApiCatalogResource {
     }
 
     private String normalizedPublicUrl() {
-        String baseUrl = publicUrl == null ? "" : publicUrl.trim();
-        while (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
-        }
-        return baseUrl;
+        return publicUrlService.getBaseUrl();
     }
 }

@@ -130,7 +130,7 @@ public class RegionRuleService {
         return List.copyOf(sitesByDomain.values());
     }
 
-    private String canonicalSiteDomain(String pattern) {
+    static String canonicalSiteDomain(String pattern) {
         if (pattern == null || pattern.isBlank()) {
             return "";
         }
@@ -170,20 +170,88 @@ public class RegionRuleService {
     }
 
     public String globalSiteUrl() {
-        for (RuleView rule : getRules()) {
-            if (isRuleType(rule, "domain") && rule.region() == BlogRegion.GLOBAL) {
-                String domain = canonicalSiteDomain(rule.pattern());
-                if (!domain.isBlank()) {
-                    String pattern = rule.pattern().trim();
-                    String candidate = pattern.contains("://") ? pattern : "https://" + pattern;
-                    String configuredHost = URI.create(candidate).getHost();
-                    String host = configuredHost != null && configuredHost.toLowerCase(Locale.ROOT).startsWith("www.")
-                            ? "www." + domain : domain;
-                    return "https://" + host;
-                }
+        return siteUrlFor(BlogRegion.GLOBAL);
+    }
+
+    /**
+     * Preferred HTTPS site URL for a region, derived from its enabled domain
+     * rules. A {@code www} rule wins over its bare-domain sibling so generated
+     * links stay on one host; the request host is never echoed back directly.
+     */
+    public String siteUrlFor(BlogRegion region) {
+        return preferredSiteUrl(getRules(), region);
+    }
+
+    static String preferredSiteUrl(List<RuleView> rules, BlogRegion region) {
+        BlogRegion target = region == null ? BlogRegion.GLOBAL : region;
+        String fallbackUrl = "";
+        for (RuleView rule : rules) {
+            if (rule.ruleType() == null || !"domain".equalsIgnoreCase(rule.ruleType().trim())
+                    || rule.region() != target) {
+                continue;
+            }
+            String url = siteUrlFromPattern(rule.pattern());
+            if (url.isBlank()) {
+                continue;
+            }
+            if (isWwwUrl(url)) {
+                return url;
+            }
+            if (fallbackUrl.isBlank()) {
+                fallbackUrl = url;
             }
         }
-        return "";
+        return fallbackUrl;
+    }
+
+    /**
+     * Bare hosts of the enabled domain rules. Reads only the loaded snapshot so
+     * it is safe on Vert.x IO threads.
+     */
+    public List<String> siteDomainsCached() {
+        RuleSnapshot current = snapshot;
+        if (current == null) {
+            return List.of();
+        }
+        java.util.LinkedHashSet<String> domains = new java.util.LinkedHashSet<>();
+        for (RuleView rule : current.rules()) {
+            if (!isRuleType(rule, "domain")) {
+                continue;
+            }
+            String domain = canonicalSiteDomain(rule.pattern());
+            if (!domain.isBlank()) {
+                domains.add(domain);
+            }
+        }
+        return List.copyOf(domains);
+    }
+
+    static String siteUrlFromPattern(String pattern) {
+        String domain = canonicalSiteDomain(pattern);
+        if (domain.isBlank()) {
+            return "";
+        }
+        String candidate = pattern.trim();
+        if (!candidate.contains("://")) {
+            candidate = "https://" + candidate;
+        }
+        String host = null;
+        try {
+            host = URI.create(candidate).getHost();
+        } catch (IllegalArgumentException ignored) {
+            // canonicalSiteDomain already validated the pattern.
+        }
+        boolean www = host != null && host.toLowerCase(Locale.ROOT).startsWith("www.");
+        return "https://" + (www ? "www." + domain : domain);
+    }
+
+    private static boolean isWwwUrl(String url) {
+        try {
+            String host = URI.create(url).getHost();
+            return host != null && host.toLowerCase(Locale.ROOT).startsWith("www.");
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     private boolean isRuleType(RuleView rule, String expectedType) {
@@ -261,6 +329,6 @@ public class RegionRuleService {
     private record RuleSnapshot(List<RuleView> rules, long expiresAt) {
     }
 
-    private record RuleView(String ruleType, String pattern, BlogRegion region) {
+    record RuleView(String ruleType, String pattern, BlogRegion region) {
     }
 }

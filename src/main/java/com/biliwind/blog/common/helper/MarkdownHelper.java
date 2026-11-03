@@ -316,6 +316,15 @@ public final class MarkdownHelper {
     }
 
     private static String getBlogUrl() {
+        try {
+            com.biliwind.blog.service.PublicUrlService service =
+                    io.quarkus.arc.Arc.container().instance(com.biliwind.blog.service.PublicUrlService.class).get();
+            if (service != null) {
+                return service.getBaseUrl();
+            }
+        } catch (RuntimeException ignored) {
+            // Unit tests and startup callers fall back to deployment settings.
+        }
         return ConfigProvider.getConfig()
                 .getOptionalValue("windblog.site.public-url", String.class)
                 .orElse("http://localhost:8080");
