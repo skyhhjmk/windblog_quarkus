@@ -38,6 +38,18 @@ import java.util.stream.IntStream;
 public class IndexController {
 
     private static final int PAGE_SIZE = 10;
+
+    /**
+     * Machine-readable resources advertised on the homepage for agent discovery
+     * (RFC 8288 Link headers, RFC 9727 section 3). Targets stay origin-relative so
+     * the same header is valid on every regional domain that serves the site.
+     */
+    static final String AGENT_DISCOVERY_LINKS = String.join(", ",
+            "</.well-known/api-catalog>; rel=\"api-catalog\"",
+            "</api/public/openapi>; rel=\"service-desc\"; type=\"application/vnd.oai.openapi+json;version=3.1\"",
+            "</api/public/docs>; rel=\"service-doc\"; type=\"text/html\"",
+            "</.well-known/api-catalog>; rel=\"describedby\"; type=\"application/linkset+json\"");
+
     private static final long RENDERED_PAGE_CACHE_TTL_MILLIS = 1000L;
     private static final ConcurrentHashMap<String, RenderedPageCache> RENDERED_PAGE_CACHE = new ConcurrentHashMap<>();
 
@@ -234,6 +246,7 @@ public class IndexController {
         return Response.ok(html)
                 .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"))
                 .header("Cache-Control", "no-cache")
+                .header("Link", AGENT_DISCOVERY_LINKS)
                 .build();
     }
 
