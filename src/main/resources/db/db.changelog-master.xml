@@ -153,4 +153,5 @@
     <include file="db/migration/152-add-post-seo-i18n.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/153-create-local-ai-topic-pool.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/154-create-ai-topic-pool-runs.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/155-add-ai-provider-concurrency-limit.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>
