@@ -107,10 +107,10 @@ public class EdgeSyncDataApplyService {
             regionRuleService.invalidate();
         }
         if ("POST".equals(entityType)) {
-            postSyncedEvent.fire(new PostSyncedEvent(entityId));
+            postSyncedEvent.fire(new PostSyncedEvent(entityId, true));
         } else if ("CATEGORY".equals(entityType)
                 || "TAG".equals(entityType) || "MEDIA".equals(entityType)) {
-            dataSyncEvent.fire(new DataSyncEvent(entityType, entityId, action));
+            dataSyncEvent.fire(new DataSyncEvent(entityType, entityId, action, true));
         }
     }
 
@@ -214,7 +214,8 @@ public class EdgeSyncDataApplyService {
     private void upsertRegionRule(long ruleId, String payload) throws Exception {
         JsonNode node = objectMapper.readTree(payload);
         RegionRule rule = RegionRule.findById(ruleId);
-        if (rule == null) {
+        boolean newRule = rule == null;
+        if (newRule) {
             rule = new RegionRule();
             rule.id = ruleId;
         }
@@ -224,8 +225,25 @@ public class EdgeSyncDataApplyService {
         rule.region = BlogRegion.fromCode(readOptionalText(node, "region", "global"));
         rule.priority = node.path("priority").asInt(0);
         rule.isEnabled = node.path("isEnabled").asBoolean(true);
-        rule.persist();
+        if (newRule) {
+            insertRegionRule(rule);
+        }
         entityManager.flush();
+    }
+
+    private void insertRegionRule(RegionRule rule) {
+        entityManager.createNativeQuery("""
+                insert into region_rules (id, name, rule_type, pattern, region, priority, is_enabled, created_at, updated_at)
+                values (:id, :name, :ruleType, :pattern, :region, :priority, :isEnabled, current_timestamp, current_timestamp)
+                """)
+                .setParameter("id", rule.id)
+                .setParameter("name", rule.name)
+                .setParameter("ruleType", rule.ruleType)
+                .setParameter("pattern", rule.pattern)
+                .setParameter("region", rule.region.getCode())
+                .setParameter("priority", rule.priority)
+                .setParameter("isEnabled", rule.isEnabled)
+                .executeUpdate();
     }
 
     private void upsertPublicTag(long entityId, String payload) throws Exception {
@@ -362,6 +380,8 @@ public class EdgeSyncDataApplyService {
             media.id = entityId;
         }
 
+        media.version = incomingVersion != null ? incomingVersion : (media.version != null ? media.version : 0);
+
         media.storageKey = readRequiredText(node, "storageKey");
         media.url = readRequiredText(node, "url");
         media.mediaType = readRequiredShort(node, "mediaType");
@@ -435,7 +455,7 @@ public class EdgeSyncDataApplyService {
                 .setParameter("alt", writeJsonValue(media.alt))
                 .setParameter("metadata", writeJsonValue(media.metadata))
                 .setParameter("storageClasses", writeJsonValue(media.storageClasses))
-                .setParameter("version", 0)
+                .setParameter("version", media.version != null ? media.version : 0)
                 .setParameter("processingStatus", media.processingStatus)
                 .setParameter("processingProgress", media.processingProgress)
                 .setParameter("visibilityRegions", writeJsonValue(media.visibilityRegions))
@@ -723,14 +743,11 @@ public class EdgeSyncDataApplyService {
         post.renderType = PostRenderType.valueOf(readRequiredText(validatedPostNode, "renderType"));
 
         Long userId = readReferenceId(validatedPostNode, "user");
-        if (userId == null) {
-            throw new IllegalArgumentException("公开文章快照缺少作者引用");
-        }
-        post.user = entityManager.getReference(User.class, userId);
+        String authorName = readOptionalText(validatedPostNode, "authorName");
+        post.user = resolveOrCreatePostAuthor(userId, authorName);
         Long categoryId = readReferenceId(validatedPostNode, "category");
         post.category = categoryId == null ? null : entityManager.getReference(Category.class, categoryId);
         Map<String, Object> publicExtraInfo = readPublicExtraInfo(validatedPostNode, "extraInfo");
-        String authorName = readOptionalText(validatedPostNode, "authorName");
         if (authorName != null && !authorName.isBlank()) {
             post.authorName = authorName.trim();
             publicExtraInfo.put("wesp_public_author_name", authorName.trim());
@@ -799,15 +816,40 @@ public class EdgeSyncDataApplyService {
         }
         revision.revisionNumber = revisionNumber;
         Long createdById = readReferenceId(node, "createdBy");
-        if (createdById == null) {
-            throw new IllegalArgumentException("公开文章版本快照缺少创建人引用");
-        }
-        revision.createdBy = entityManager.getReference(User.class, createdById);
+        revision.createdBy = resolveOrCreatePostAuthor(createdById, post.authorName);
         if (newRevision) {
             insertPublicRevision(revision);
             return PostRevision.findById(revisionId);
         }
         return revision;
+    }
+
+    private User resolveOrCreatePostAuthor(Long userId, String authorName) {
+        if (userId != null && userId > 0) {
+            User existing = User.findById(userId);
+            if (existing != null) {
+                return existing;
+            }
+        }
+        User fallback = User.<User>find("order by id asc").firstResult();
+        if (fallback != null) {
+            return fallback;
+        }
+        User placeholder = new User();
+        if (userId != null && userId > 0) {
+            placeholder.id = userId;
+        }
+        String safeAuthor = (authorName != null && !authorName.isBlank())
+                ? authorName.trim()
+                : (userId != null ? String.valueOf(userId) : "replica");
+        placeholder.username = "author_" + (userId != null ? userId : java.util.UUID.randomUUID().toString().substring(0, 8));
+        placeholder.email = placeholder.username + "@edge.internal";
+        placeholder.password = "LOCKED_REPLICA_" + java.util.UUID.randomUUID();
+        placeholder.status = 0;
+        placeholder.roleName = "REPLICA_AUTHOR";
+        placeholder.nickname = safeAuthor;
+        placeholder.persist();
+        return placeholder;
     }
 
     private void insertPublicPost(Post post) throws Exception {

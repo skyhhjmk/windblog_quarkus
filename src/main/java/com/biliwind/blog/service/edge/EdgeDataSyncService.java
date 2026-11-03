@@ -90,7 +90,7 @@ public class EdgeDataSyncService {
      * 监听文章同步事件
      */
     public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
-        if (nodeRoleService.isEdgeNode()) {
+        if (nodeRoleService.isEdgeNode() || event.isRemoteSync()) {
             return;
         }
 
@@ -102,7 +102,7 @@ public class EdgeDataSyncService {
      * 监听通用同步事件（如标签）
      */
     public void onDataChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) DataSyncEvent event) {
-        if (nodeRoleService.isEdgeNode()) {
+        if (nodeRoleService.isEdgeNode() || event.isRemoteSync()) {
             return;
         }
 

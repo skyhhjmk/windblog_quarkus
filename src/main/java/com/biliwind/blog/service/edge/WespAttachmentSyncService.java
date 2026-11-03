@@ -36,20 +36,33 @@ public class WespAttachmentSyncService {
     @Inject ObjectMapper mapper;
     @Inject com.biliwind.blog.service.PostAccessService postAccessService;
 
+    private volatile long lastScannedMediaId = 0L;
+
     @Scheduled(every = "1m", identity = "wesp-attachment-manifest-scan")
     void scan() {
         if (!wespSyncService.isEnabled()) return;
         List<Long> mediaIds;
         try {
+            long currentCursor = lastScannedMediaId;
             mediaIds = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() ->
-                    Media.<Media>find("deletedAt is null order by id").range(0, 49)
+                    Media.<Media>find("deletedAt is null and id > ?1 order by id", currentCursor).range(0, 49)
                             .list().stream().map(media -> media.id).toList());
+            if (mediaIds.isEmpty() && currentCursor > 0L) {
+                lastScannedMediaId = 0L;
+                mediaIds = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() ->
+                        Media.<Media>find("deletedAt is null and id > ?1 order by id", 0L).range(0, 49)
+                                .list().stream().map(media -> media.id).toList());
+            }
         } catch (RuntimeException exception) {
             LOG.debug("WESP 附件扫描暂不可用: {}", exception.getMessage());
             return;
         }
+        if (mediaIds.isEmpty()) return;
+
         int created = 0;
+        long lastProcessed = lastScannedMediaId;
         for (Long mediaId : mediaIds) {
+            lastProcessed = mediaId;
             if (isProtectedMedia(mediaId)) continue;
             Optional<String> existing = wespSyncService.findManifestPayload(Long.toString(mediaId), "ORIGINAL");
             if (existing.isPresent()) {
@@ -67,6 +80,7 @@ public class WespAttachmentSyncService {
                 LOG.warn("WESP 附件 {} 清单生成失败: {}", mediaId, exception.getMessage());
             }
         }
+        lastScannedMediaId = lastProcessed;
     }
 
     private boolean isProtectedMedia(Long mediaId) {

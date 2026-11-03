@@ -335,6 +335,10 @@ public class AdminEdgeNodeApiController {
     @Operation(summary = "获取同步进度", description = "获取当前节点的同步进度（仅包含正在进行或最近一次的手动同步任务）")
     @Transactional
     public com.biliwind.blog.service.edge.EdgeDataSyncService.SyncProgress getSyncStatus(@PathParam("nodeId") String nodeId) {
+        EdgeNode node = EdgeNode.findByNodeId(nodeId);
+        if (node != null && node.connectionType == EdgeConnectionType.WESP && wespSyncService.isEnabled()) {
+            return wespSyncService.getSyncProgress(nodeId);
+        }
         return syncService.getSyncStatus(nodeId);
     }
 
@@ -361,6 +365,10 @@ public class AdminEdgeNodeApiController {
         }
         if (safePageSize > 200) {
             safePageSize = 200;
+        }
+
+        if (node.connectionType == EdgeConnectionType.WESP && wespSyncService.isEnabled()) {
+            return wespSyncService.getSyncRecords(nodeId, status, null, safePageSize);
         }
 
         if (status != null && !status.isBlank()) {
@@ -430,7 +438,9 @@ public class AdminEdgeNodeApiController {
                 node.lastHeartbeat,
                 node.metrics,
                 edgeNodeAvailabilityService.calculateRates(nodeId),
-                syncService.getSyncStatus(nodeId)
+                wespNode && wespSyncService.isEnabled()
+                        ? wespSyncService.getSyncProgress(nodeId)
+                        : syncService.getSyncStatus(nodeId)
         );
     }
 

@@ -3,6 +3,7 @@ package com.biliwind.blog.service.edge;
 import com.biliwind.blog.edge.EdgeServiceProto.SyncDataRequest;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.EdgeNode;
+import com.biliwind.blog.model.EdgeSyncRecord;
 import com.biliwind.blog.model.WespSyncCursor;
 import com.biliwind.blog.model.WespSyncOperation;
 import com.biliwind.blog.model.WespSyncReceipt;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * WESP v1 application-layer replication.  This replaces the old primary-to-edge
@@ -93,6 +95,7 @@ public class WespSyncService {
     private volatile long lastSessionMillis;
     private long budgetWindowStartMillis;
     private long budgetUsed;
+    private final Map<String, EdgeDataSyncService.SyncProgress> syncProgressMap = new ConcurrentHashMap<>();
 
     @PostConstruct
     void initialize() {
@@ -292,7 +295,52 @@ public class WespSyncService {
         }
         LOG.info("WESP 已将公开内容、系统设置和区域规则快照加入操作日志，targetNodeId={} items={} force={}",
                 targetNodeId, snapshotItems, force);
+        syncProgressMap.put(targetNodeId, new EdgeDataSyncService.SyncProgress(
+                snapshotItems, 0, "SYNCING", "WESP public snapshot queued (" + snapshotItems + " operations)"));
         return requestOperationId;
+    }
+
+    public EdgeDataSyncService.SyncProgress getSyncProgress(String nodeId) {
+        EdgeDataSyncService.SyncProgress progress = syncProgressMap.get(nodeId);
+        if (progress != null) {
+            return progress;
+        }
+        long total = WespSyncOperation.count("nodeId = ?1", nodeId());
+        long applied = WespSyncOperation.count("nodeId = ?1 and status = 'APPLIED'", nodeId());
+        return new EdgeDataSyncService.SyncProgress((int) total, (int) applied, "IDLE", null);
+    }
+
+    public List<EdgeSyncRecord> getSyncRecords(String targetNodeId, String status, String entityType, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 200));
+        StringBuilder query = new StringBuilder("1=1");
+        List<Object> params = new ArrayList<>();
+        if (status != null && !status.isBlank()) {
+            query.append(" and status = ?").append(params.size() + 1);
+            params.add(status.trim().toUpperCase());
+        }
+        if (entityType != null && !entityType.isBlank()) {
+            query.append(" and entityType = ?").append(params.size() + 1);
+            params.add(entityType.trim().toUpperCase());
+        }
+        query.append(" order by rowId desc");
+        List<WespSyncOperation> operations = WespSyncOperation.find(query.toString(), params.toArray())
+                .range(0, safeLimit - 1).list();
+        List<EdgeSyncRecord> records = new ArrayList<>(operations.size());
+        for (WespSyncOperation op : operations) {
+            EdgeSyncRecord record = new EdgeSyncRecord();
+            record.id = op.rowId;
+            record.nodeId = op.nodeId;
+            record.entityType = op.entityType;
+            record.entityId = op.entityId;
+            record.action = op.action;
+            record.status = op.status;
+            record.errorMessage = op.lastError;
+            record.retryCount = 0;
+            record.createdAt = op.createdAt;
+            record.updatedAt = op.updatedAt;
+            records.add(record);
+        }
+        return records;
     }
 
     /**
@@ -595,7 +643,8 @@ public class WespSyncService {
         if (!effectiveTenantId().equals(tenant)) {
             return result(opId, "REJECTED", "TENANT_NOT_ALLOWED");
         }
-        if (!List.of("POST", "TAG", "CATEGORY", "MEDIA", "MEDIA_MANIFEST", "CLUSTER_PUBLIC_KEY", "SYNC_REQUEST").contains(entityType)
+        if (!List.of("POST", "TAG", "CATEGORY", "MEDIA", "MEDIA_MANIFEST", "CLUSTER_PUBLIC_KEY", "SYNC_REQUEST",
+                "SYSTEM_SETTING", "REGION_RULE", "NODE_REGION").contains(entityType)
                 || !List.of("UPSERT", "UPDATE", "FORCE_UPSERT", "DELETE").contains(action)) {
             return result(opId, "REJECTED", "UNSUPPORTED_OPERATION");
         }
@@ -639,9 +688,24 @@ public class WespSyncService {
         operation.persist();
 
         if (!"FORCE_UPSERT".equals(action)) {
-            WespSyncOperation concurrent = WespSyncOperation.find(
-                    "datasetId = ?1 and entityType = ?2 and entityId = ?3 and seq = ?4 and status = 'APPLIED' and nodeId <> ?5 order by rowId desc",
-                    dataset, entityType, entityId, seq, nodeId).firstResult();
+            long incomingVersion = parseEntityVersion(payload);
+            WespSyncOperation concurrent = null;
+            if (incomingVersion > 0) {
+                List<WespSyncOperation> priors = WespSyncOperation.find(
+                        "datasetId = ?1 and entityType = ?2 and entityId = ?3 and status = 'APPLIED' and nodeId <> ?4 order by rowId desc",
+                        dataset, entityType, entityId, nodeId).range(0, 4).list();
+                for (WespSyncOperation prior : priors) {
+                    long priorVersion = parseEntityVersion(prior.payload);
+                    if (priorVersion == incomingVersion && !prior.payloadHash.equals(payloadHash)) {
+                        concurrent = prior;
+                        break;
+                    }
+                }
+            } else {
+                concurrent = WespSyncOperation.find(
+                        "datasetId = ?1 and entityType = ?2 and entityId = ?3 and incarnation = ?4 and seq = ?5 and status = 'APPLIED' and nodeId <> ?6 order by rowId desc",
+                        dataset, entityType, entityId, incarnationValue, seq, nodeId).firstResult();
+            }
             if (concurrent != null && !concurrent.payloadHash.equals(payloadHash)) {
                 operation.status = "CONFLICT";
                 operation.lastError = "concurrent revision requires explicit merge";
@@ -692,7 +756,9 @@ public class WespSyncService {
         ArrayNode items = mapper.createArrayNode();
         long next = safeAfter;
         for (WespSyncOperation row : rows) {
-            items.add(operationJson(row));
+            if ("APPLIED".equals(row.status)) {
+                items.add(operationJson(row));
+            }
             next = row.rowId;
         }
         Number frontier = (Number) entityManager.createNativeQuery(
@@ -1003,6 +1069,16 @@ public class WespSyncService {
         markSent(accepted);
         markRejected(rejected);
         markConflict(conflicts);
+        if (!accepted.isEmpty()) {
+            for (Map.Entry<String, EdgeDataSyncService.SyncProgress> entry : syncProgressMap.entrySet()) {
+                EdgeDataSyncService.SyncProgress current = entry.getValue();
+                if (current != null && "SYNCING".equals(current.status())) {
+                    int newProcessed = Math.min(current.total(), current.processed() + accepted.size());
+                    String newStatus = newProcessed >= current.total() ? "COMPLETED" : "SYNCING";
+                    syncProgressMap.put(entry.getKey(), new EdgeDataSyncService.SyncProgress(current.total(), newProcessed, newStatus, null));
+                }
+            }
+        }
     }
 
     private void pullChanges() throws Exception {
@@ -1241,7 +1317,7 @@ public class WespSyncService {
         return value;
     }
 
-    private ObjectNode operationJson(WespSyncOperation operation) {
+    ObjectNode operationJson(WespSyncOperation operation) {
         ObjectNode signed = mapper.createObjectNode();
         signed.put("protocol_major", 1);
         signed.put("schema_version", 1);
@@ -1324,7 +1400,7 @@ public class WespSyncService {
         recordPeerSession(nodeId());
     }
 
-    private String signOperation(JsonNode signed) {
+    String signOperation(JsonNode signed) {
         String token = effectiveAuthToken();
         if (token.isBlank()) return "";
         try {
@@ -1349,6 +1425,8 @@ public class WespSyncService {
 
     private SyncDataRequest toSyncRequest(WespSyncOperation operation) {
         long numericId = parseEntityId(operation.entityId, operation.payload);
+        long version = parseEntityVersion(operation.payload);
+        if (version <= 0) version = operation.seq;
         String payload = operation.payload;
         if ("CLUSTER_PUBLIC_KEY".equals(operation.entityType)) {
             try {
@@ -1359,7 +1437,18 @@ public class WespSyncService {
             }
         }
         return SyncDataRequest.newBuilder().setAction(operation.action).setEntityType(operation.entityType)
-                .setPayload(payload).setEntityId(numericId).setEntityVersion(operation.seq).build();
+                .setPayload(payload).setEntityId(numericId).setEntityVersion(version).build();
+    }
+
+    private long parseEntityVersion(String payload) {
+        if (payload == null || payload.isBlank()) return 0L;
+        try {
+            JsonNode root = mapper.readTree(payload);
+            JsonNode candidate = root.path("version");
+            if (!candidate.isNumber()) candidate = root.path("post").path("version");
+            if (candidate.isNumber()) return candidate.asLong();
+        } catch (Exception ignored) { }
+        return 0L;
     }
 
     private long parseEntityId(String entityId, String payload) {
@@ -1384,7 +1473,7 @@ public class WespSyncService {
         }
     }
 
-    private String normalizePayload(String payload, boolean allowScalarText) {
+    String normalizePayload(String payload, boolean allowScalarText) {
         String source = payload == null || payload.isBlank() ? "{}" : payload;
         JsonNode parsed;
         try {
@@ -1478,9 +1567,9 @@ public class WespSyncService {
         if (hash == null || !hash.matches("[0-9a-f]{64}")) throw new WespProtocolException(Response.Status.BAD_REQUEST, "INVALID_HASH", false);
     }
 
-    private static String sha256(String value) { return sha256(value.getBytes(StandardCharsets.UTF_8)); }
+    static String sha256(String value) { return sha256(value.getBytes(StandardCharsets.UTF_8)); }
 
-    private static String sha256(byte[] value) {
+    static String sha256(byte[] value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value)); }
         catch (Exception exception) { throw new IllegalStateException("SHA-256 unavailable", exception); }
     }
