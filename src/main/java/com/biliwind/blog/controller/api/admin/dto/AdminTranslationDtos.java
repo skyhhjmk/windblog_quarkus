@@ -103,4 +103,18 @@ public final class AdminTranslationDtos {
             List<TranslatePostResult> results,
             List<String> errors) {
     }
+
+    public record AutoTranslationStatus(
+            boolean enabled,
+            String targetLanguage,
+            int pendingCount,
+            int queuedCount,
+            int runningCount,
+            OffsetDateTime lastPollAt) {
+    }
+
+    public record AutoTranslationRequest(
+            Boolean enabled,
+            String targetLanguage) {
+    }
 }

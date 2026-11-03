@@ -357,6 +357,9 @@ public class AdminTranslationService {
             if (cause instanceof com.biliwind.blog.service.ai.AiRateLimitException rateLimit) {
                 throw rateLimit;
             }
+            if (cause instanceof com.biliwind.blog.service.ai.AiConcurrencyLimitException concurrency) {
+                throw concurrency;
+            }
             throw new BadRequestException("AI 翻译失败: " + safeMessage(cause));
         }
     }
@@ -513,6 +516,12 @@ public class AdminTranslationService {
         Long userId = operatorId != null ? operatorId : adminRequestContext.getUserId();
         User user = userId == null ? null
                 : User.find("id = ?1 and status = 1 and deletedAt is null", userId).firstResult();
+        if (user == null) {
+            user = User.find("role = ?1 and status = 1 and deletedAt is null order by id asc", "ADMIN").firstResult();
+            if (user == null) {
+                user = User.find("status = 1 and deletedAt is null order by id asc").firstResult();
+            }
+        }
         if (user == null) {
             throw new BadRequestException("当前管理员不存在或已禁用");
         }

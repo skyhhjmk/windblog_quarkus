@@ -41,6 +41,10 @@ public class AiProviderConfig extends PanacheEntityBase {
     @Column(name = "rate_limit_per_minute")
     public Integer rateLimitPerMinute;
 
+    /** 最大并发数；null 或 0 表示不限制。 */
+    @Column(name = "concurrency_limit")
+    public Integer concurrencyLimit;
+
     @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     public String config;

@@ -1,6 +1,8 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.exception.BadRequestException;
+import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.AutoTranslationRequest;
+import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.AutoTranslationStatus;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.BatchTranslateRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslatePostRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslatePostResult;
@@ -9,6 +11,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.Translati
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslationPage;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslationTaskView;
 import com.biliwind.blog.service.AdminTranslationService;
+import com.biliwind.blog.service.AutoTranslationService;
 import com.biliwind.blog.service.TranslationTaskService;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
@@ -42,6 +45,23 @@ public class AdminTranslationController {
 
     @Inject
     TranslationTaskService taskService;
+
+    @Inject
+    AutoTranslationService autoTranslationService;
+
+    @GET
+    @Path("/auto")
+    @Operation(summary = "查询自动翻译状态")
+    public AutoTranslationStatus autoStatus() {
+        return autoTranslationService.getStatus();
+    }
+
+    @POST
+    @Path("/auto")
+    @Operation(summary = "开启或关闭自动翻译")
+    public AutoTranslationStatus updateAutoStatus(AutoTranslationRequest request) {
+        return autoTranslationService.updateStatus(request);
+    }
 
     @GET
     @Operation(summary = "分页查询文章译本状态")

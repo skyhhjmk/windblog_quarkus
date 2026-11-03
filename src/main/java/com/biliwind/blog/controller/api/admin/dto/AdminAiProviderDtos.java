@@ -16,6 +16,7 @@ public class AdminAiProviderDtos {
             String endpoint,
             String model,
             Integer rateLimitPerMinute,
+            Integer concurrencyLimit,
             String apiKey,
             String config,
             OffsetDateTime updatedAt
@@ -33,6 +34,7 @@ public class AdminAiProviderDtos {
                     config.endpoint,
                     config.model,
                     config.rateLimitPerMinute,
+                    config.concurrencyLimit,
                     maskedApiKey,
                     AiProviderConfigSanitizer.maskConfig(config.config),
                     config.updatedAt
@@ -49,6 +51,7 @@ public class AdminAiProviderDtos {
             String apiKey,
             String model,
             Integer rateLimitPerMinute,
+            Integer concurrencyLimit,
             String config
     ) {
     }

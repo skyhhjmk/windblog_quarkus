@@ -66,6 +66,13 @@ public class AiProviderConfigService {
             config.rateLimitPerMinute = update.rateLimitPerMinute() == 0
                     ? null : update.rateLimitPerMinute();
         }
+        if (update.concurrencyLimit() != null) {
+            if (update.concurrencyLimit() < 0) {
+                throw new IllegalArgumentException("最大并发数不能为负数");
+            }
+            config.concurrencyLimit = update.concurrencyLimit() == 0
+                    ? null : update.concurrencyLimit();
+        }
         if (update.config() != null) {
             String c = update.config().trim();
             if (c.isEmpty()) {
@@ -96,6 +103,7 @@ public class AiProviderConfigService {
             String apiKey,
             String model,
             Integer rateLimitPerMinute,
+            Integer concurrencyLimit,
             String config
     ) {
     }

@@ -36,6 +36,9 @@ public class AiManager {
     @Inject
     AiRateLimiter rateLimiter;
 
+    @Inject
+    AiConcurrencyLimiter concurrencyLimiter;
+
     private AiService findService(AiProviderConfig config) {
         if (config == null) return null;
         for (AiService service : providers) {
@@ -136,16 +139,26 @@ public class AiManager {
             String targetLanguage, Map<String, String> fields, String promptTemplate) {
         CompletionStage<AiResult> limited = rateLimited(config);
         if (limited != null) return limited;
-        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-            return pollingService.get().translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
+        CompletionStage<AiResult> concLimited = concurrencyLimited(config);
+        if (concLimited != null) return concLimited;
+        try {
+            CompletionStage<AiResult> stage;
+            if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                stage = pollingService.get().translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
+            } else {
+                AiService service = findService(config);
+                if (service == null) {
+                    concurrencyLimiter.release(config);
+                    return CompletableFuture.failedFuture(
+                            new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+                }
+                stage = service.translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
+            }
+            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+        } catch (Throwable t) {
+            concurrencyLimiter.release(config);
+            return CompletableFuture.failedFuture(t);
         }
-
-        AiService service = findService(config);
-        if (service == null) {
-            return CompletableFuture.failedFuture(
-                    new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
-        }
-        return service.translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
     }
 
     /**
@@ -218,15 +231,26 @@ public class AiManager {
     public CompletionStage<AiResult> executeComplete(AiProviderConfig config, String systemPrompt, String prompt) {
         CompletionStage<AiResult> limited = rateLimited(config);
         if (limited != null) return limited;
-        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-            return pollingService.get().complete(config, systemPrompt, prompt);
+        CompletionStage<AiResult> concLimited = concurrencyLimited(config);
+        if (concLimited != null) return concLimited;
+        try {
+            CompletionStage<AiResult> stage;
+            if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                stage = pollingService.get().complete(config, systemPrompt, prompt);
+            } else {
+                AiService service = findService(config);
+                if (service == null) {
+                    concurrencyLimiter.release(config);
+                    return CompletableFuture.failedFuture(
+                            new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+                }
+                stage = service.complete(config, systemPrompt, prompt);
+            }
+            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+        } catch (Throwable t) {
+            concurrencyLimiter.release(config);
+            return CompletableFuture.failedFuture(t);
         }
-        AiService service = findService(config);
-        if (service == null) {
-            return CompletableFuture.failedFuture(
-                    new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
-        }
-        return service.complete(config, systemPrompt, prompt);
     }
 
     private CompletionStage<AiResult> rateLimited(AiProviderConfig config) {
@@ -237,6 +261,15 @@ public class AiManager {
         return CompletableFuture.failedFuture(new AiRateLimitException(
                 config == null || config.name == null ? "unknown" : config.name,
                 result.retryAfterSeconds()));
+    }
+
+    private CompletionStage<AiResult> concurrencyLimited(AiProviderConfig config) {
+        if (!concurrencyLimiter.tryAcquire(config)) {
+            return CompletableFuture.failedFuture(new AiConcurrencyLimitException(
+                    config == null || config.name == null ? "unknown" : config.name,
+                    config != null && config.concurrencyLimit != null ? config.concurrencyLimit : 0));
+        }
+        return null;
     }
 
     private String configuredTranslationPrompt() {
@@ -254,29 +287,50 @@ public class AiManager {
     public CompletionStage<AiResult> executeSummarize(AiProviderConfig config, Map<String, String> content) {
         CompletionStage<AiResult> limited = rateLimited(config);
         if (limited != null) return limited;
-        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-            return pollingService.get().summarize(config, content);
-        } else {
-            AiService svc = findService(config);
-            if (svc == null)
-                return CompletableFuture.failedFuture(new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
-            return svc.summarize(config, content);
+        CompletionStage<AiResult> concLimited = concurrencyLimited(config);
+        if (concLimited != null) return concLimited;
+        try {
+            CompletionStage<AiResult> stage;
+            if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                stage = pollingService.get().summarize(config, content);
+            } else {
+                AiService svc = findService(config);
+                if (svc == null) {
+                    concurrencyLimiter.release(config);
+                    return CompletableFuture.failedFuture(new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+                }
+                stage = svc.summarize(config, content);
+            }
+            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+        } catch (Throwable t) {
+            concurrencyLimiter.release(config);
+            return CompletableFuture.failedFuture(t);
         }
     }
 
     public CompletionStage<AiResult> executeModerate(AiProviderConfig config, String prompt, String content) {
         CompletionStage<AiResult> limited = rateLimited(config);
         if (limited != null) return limited;
-        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
-            return pollingService.get().moderate(config, prompt, content);
-        } else {
-            AiService svc = findService(config);
-            if (svc == null) {
-                log.warn("[AI] 未找到支持该配置的 AI 服务: name={}, provider={}", config.name, config.provider);
-                return CompletableFuture.failedFuture(new IllegalStateException(
-                        "不支持的 AI 提供商引擎: " + config.provider));
+        CompletionStage<AiResult> concLimited = concurrencyLimited(config);
+        if (concLimited != null) return concLimited;
+        try {
+            CompletionStage<AiResult> stage;
+            if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                stage = pollingService.get().moderate(config, prompt, content);
+            } else {
+                AiService svc = findService(config);
+                if (svc == null) {
+                    concurrencyLimiter.release(config);
+                    log.warn("[AI] 未找到支持该配置的 AI 服务: name={}, provider={}", config.name, config.provider);
+                    return CompletableFuture.failedFuture(new IllegalStateException(
+                            "不支持的 AI 提供商引擎: " + config.provider));
+                }
+                stage = svc.moderate(config, prompt, content);
             }
-            return svc.moderate(config, prompt, content);
+            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+        } catch (Throwable t) {
+            concurrencyLimiter.release(config);
+            return CompletableFuture.failedFuture(t);
         }
     }
 

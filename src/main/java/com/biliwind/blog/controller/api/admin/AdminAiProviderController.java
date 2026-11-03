@@ -46,7 +46,7 @@ public class AdminAiProviderController {
                 configService.upsert(null, new AiProviderConfigService.ConfigUpdate(
                         request.type(), request.name(), request.provider(), request.enabled(),
                         request.endpoint(), request.apiKey(), request.model(),
-                        request.rateLimitPerMinute(), request.config()
+                        request.rateLimitPerMinute(), request.concurrencyLimit(), request.config()
                 ))
         );
         auditService.log("ai_provider", dto.id(), "create", null, java.util.Map.of("name", dto.name()));
@@ -62,7 +62,7 @@ public class AdminAiProviderController {
                 configService.upsert(id, new AiProviderConfigService.ConfigUpdate(
                         request.type(), request.name(), request.provider(), request.enabled(),
                         request.endpoint(), request.apiKey(), request.model(),
-                        request.rateLimitPerMinute(), request.config()
+                        request.rateLimitPerMinute(), request.concurrencyLimit(), request.config()
                 ))
         );
         auditService.log("ai_provider", id, "update", null, java.util.Map.of("name", dto.name()));
