@@ -102,7 +102,7 @@ class CommentCaptchaServiceTest {
 
     private static CommentCaptchaService service(String secret) {
         CommentCaptchaService service = new CommentCaptchaService();
-        service.configuredSecret = secret;
+        service.configuredSecret = java.util.Optional.ofNullable(secret);
         service.eventHashSecret = "unused";
         service.configManager = null;
         service.redis = null;

@@ -17,6 +17,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Optional;
 
 /**
  * Stateless, invisible comment verification shared by every application instance.
@@ -55,8 +56,8 @@ public class CommentCaptchaService {
     @Inject
     RedisDataSource redis;
 
-    @ConfigProperty(name = "windblog.comment-captcha.secret", defaultValue = "")
-    String configuredSecret;
+    @ConfigProperty(name = "windblog.comment-captcha.secret")
+    Optional<String> configuredSecret;
 
     @ConfigProperty(name = "security.event-hash-secret", defaultValue = "windblog-dev-event-hash-secret")
     String eventHashSecret;
@@ -201,7 +202,7 @@ public class CommentCaptchaService {
             if (signingKey != null) {
                 return signingKey;
             }
-            String base = configuredSecret == null ? "" : configuredSecret.trim();
+            String base = configuredSecret.map(String::trim).orElse("");
             if (!base.isEmpty() && base.length() < 32) {
                 LOG.warn("WINDBLOG_COMMENT_CAPTCHA_SECRET 长度不足 32，已回退到 SECURITY_EVENT_HASH_SECRET 派生签名密钥");
                 base = "";

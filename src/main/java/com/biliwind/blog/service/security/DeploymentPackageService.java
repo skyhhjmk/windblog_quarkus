@@ -18,6 +18,7 @@ import java.security.SecureRandom;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -57,8 +58,8 @@ public class DeploymentPackageService {
     String eventHashSecret;
 
     @Inject
-    @ConfigProperty(name = "windblog.comment-captcha.secret", defaultValue = "")
-    String commentCaptchaSecret;
+    @ConfigProperty(name = "windblog.comment-captcha.secret")
+    Optional<String> commentCaptchaSecret;
 
     @Inject
     @ConfigProperty(name = "windblog.site.public-url", defaultValue = "http://localhost:8080")
@@ -203,9 +204,10 @@ public class DeploymentPackageService {
         sb.append("SECURITY_HEADERS_HSTS_ENABLED=true\n");
         sb.append("SWAGGER_UI_ENABLED=false\n");
         sb.append("SECURITY_EVENT_HASH_SECRET=").append(eventHashSecret).append("\n");
-        if (commentCaptchaSecret != null && !commentCaptchaSecret.isBlank()) {
-            sb.append("WINDBLOG_COMMENT_CAPTCHA_SECRET=").append(commentCaptchaSecret.trim()).append("\n");
-        }
+        commentCaptchaSecret
+                .filter(value -> !value.isBlank())
+                .ifPresent(value -> sb.append("WINDBLOG_COMMENT_CAPTCHA_SECRET=")
+                        .append(value.trim()).append("\n"));
         sb.append("WINDBLOG_OUTBOX_ENABLED=false\n");
         sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED=false\n");
         sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED=false\n");
