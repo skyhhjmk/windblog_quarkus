@@ -1,6 +1,8 @@
 package com.biliwind.blog.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ManagedContext;
 import io.smallrye.context.api.ManagedExecutorConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -28,7 +30,7 @@ public class AiTopicRunner {
      * 已提交的事务（Panache 随后会报 ContextNotActiveException）。
      */
     @Inject
-    @ManagedExecutorConfig(cleared = ThreadContext.TRANSACTION)
+    @ManagedExecutorConfig(cleared = { ThreadContext.CDI, ThreadContext.TRANSACTION })
     ManagedExecutor executor;
 
     @Inject
@@ -65,6 +67,8 @@ public class AiTopicRunner {
 
     private void execute(Long runId, Long providerId, List<AiTopicDiscoveryService.Seed> seeds,
                          int maxTopics, String language, String actorId, String traceId) {
+        ManagedContext requestContext = Arc.container().requestContext();
+        requestContext.activate();
         try {
             runService.markStarted(runId);
             List<Map<String, Object>> topics = discoveryService.discover(
@@ -75,6 +79,8 @@ public class AiTopicRunner {
         } catch (RuntimeException exception) {
             log.warn("话题发现任务失败 runId={}", runId, exception);
             runService.fail(runId, rootMessage(exception));
+        } finally {
+            requestContext.terminate();
         }
     }
 

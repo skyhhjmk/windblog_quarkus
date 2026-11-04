@@ -517,7 +517,7 @@ public class AdminTranslationService {
         User user = userId == null ? null
                 : User.find("id = ?1 and status = 1 and deletedAt is null", userId).firstResult();
         if (user == null) {
-            user = User.find("role = ?1 and status = 1 and deletedAt is null order by id asc", "ADMIN").firstResult();
+            user = User.find("roleName = ?1 and status = 1 and deletedAt is null order by id asc", "ADMIN").firstResult();
             if (user == null) {
                 user = User.find("status = 1 and deletedAt is null order by id asc").firstResult();
             }

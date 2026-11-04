@@ -8,13 +8,17 @@ import com.biliwind.blog.model.TranslationTask;
 import com.biliwind.blog.service.ai.AiConcurrencyLimitException;
 import com.biliwind.blog.service.ai.AiRateLimitException;
 import com.biliwind.blog.service.edge.NodeRoleService;
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ManagedContext;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.Blocking;
+import io.smallrye.context.api.ManagedExecutorConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.context.ManagedExecutor;
+import org.eclipse.microprofile.context.ThreadContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +45,12 @@ public class TranslationTaskWorker {
     @Inject
     NodeRoleService nodeRoleService;
 
+    /**
+     * 定时任务自身的请求上下文会在 tick 返回后结束；异步任务必须从干净状态
+     * 开始，否则会复用已关闭的 Session/EntityManager。
+     */
     @Inject
+    @ManagedExecutorConfig(cleared = { ThreadContext.CDI, ThreadContext.TRANSACTION })
     ManagedExecutor managedExecutor;
 
     @ConfigProperty(name = "windblog.ai.translation.max-parallel", defaultValue = "5")
@@ -74,6 +83,18 @@ public class TranslationTaskWorker {
     }
 
     void executeTask(Long id) {
+        // 每个异步任务使用独立的请求上下文，保证非事务 Panache 读取
+        // （AI 提供商/系统设置）在长时间 AI 调用期间可用。
+        ManagedContext requestContext = Arc.container().requestContext();
+        requestContext.activate();
+        try {
+            runTask(id);
+        } finally {
+            requestContext.terminate();
+        }
+    }
+
+    private void runTask(Long id) {
         TranslationTask task = tasks.find(id);
         if (task == null) {
             return;

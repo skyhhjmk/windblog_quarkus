@@ -2,6 +2,8 @@ package com.biliwind.blog.service.ai;
 
 import com.biliwind.blog.service.AiArticleDraftService;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ManagedContext;
 import io.smallrye.context.api.ManagedExecutorConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -27,7 +29,7 @@ public class AiArticleDraftRunner {
      * 已提交的事务（Panache 随后会报 ContextNotActiveException）。
      */
     @Inject
-    @ManagedExecutorConfig(cleared = ThreadContext.TRANSACTION)
+    @ManagedExecutorConfig(cleared = { ThreadContext.CDI, ThreadContext.TRANSACTION })
     ManagedExecutor executor;
 
     @Inject
@@ -56,6 +58,8 @@ public class AiArticleDraftRunner {
 
     private void execute(Long runId, Long topicId, Long providerId, String language, String instructions,
                          String repostPolicyCode, boolean regenerate, Long operatorId) {
+        ManagedContext requestContext = Arc.container().requestContext();
+        requestContext.activate();
         try {
             runService.markStarted(runId);
             JsonNode topic = draftService.readTopic(topicId, operatorId);
@@ -67,6 +71,8 @@ public class AiArticleDraftRunner {
         } catch (RuntimeException exception) {
             log.warn("AI 草稿任务失败 runId={}", runId, exception);
             runService.fail(runId, rootMessage(exception));
+        } finally {
+            requestContext.terminate();
         }
     }
 
