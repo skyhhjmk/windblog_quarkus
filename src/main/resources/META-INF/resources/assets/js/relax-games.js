@@ -3,8 +3,12 @@
  * WindBlog Relax Games Hub (摸鱼小游戏中心)
  * 包含：
  * 1. 🚀 宇宙飞船打 DOM (DOM Space Destroyer) - 三角形飞船跟随鼠标，点击发射子弹，击中 DOM 爆裂删除
- * 2. 🕳️ DOM 引力黑洞 (DOM Gravity Singularity) - 强引力扭曲吸附并吞噬网页 DOM
+ * 2. 🕳️ DOM 引力黑洞 (DOM Gravity Singularity) - 强引力扭曲吸附并吞噬网页 DOM，自带空间坍缩与引力音效
  * 3. 🏓 DOM 弹球粉碎者 (DOM Brick Breaker) - 挡板与弹球反弹撞碎网页组件
+ *
+ * 核心机制：
+ * - 完备的 DOM 框体防护系统 (DOM Frame Protection)：绝对保护页面结构大框体与布局骨架，仅允许击毁内容级叶子元素，防止整页消失
+ * - Web Audio API 原生音效合成器，支持用户手势预激活与立体空间合成
  */
 (function () {
     'use strict';
@@ -20,6 +24,7 @@
         constructor() {
             this.ctx = null;
             this.muted = localStorage.getItem('wb_game_sound_muted') === 'true';
+            this.lastSwallowTime = 0;
         }
 
         initContext() {
@@ -43,7 +48,7 @@
         playLaser() {
             if (this.muted) return;
             this.initContext();
-            if (!this.ctx) return;
+            if (!this.ctx || this.ctx.state !== 'running') return;
 
             try {
                 const now = this.ctx.currentTime;
@@ -54,7 +59,7 @@
                 osc.frequency.setValueAtTime(850, now);
                 osc.frequency.exponentialRampToValueAtTime(140, now + 0.09);
 
-                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.setValueAtTime(0.16, now);
                 gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
 
                 osc.connect(gain);
@@ -69,7 +74,7 @@
         playExplosion() {
             if (this.muted) return;
             this.initContext();
-            if (!this.ctx) return;
+            if (!this.ctx || this.ctx.state !== 'running') return;
 
             try {
                 const now = this.ctx.currentTime;
@@ -107,7 +112,7 @@
         playCombo(combo) {
             if (this.muted) return;
             this.initContext();
-            if (!this.ctx) return;
+            if (!this.ctx || this.ctx.state !== 'running') return;
 
             try {
                 const now = this.ctx.currentTime;
@@ -133,8 +138,8 @@
             } catch (e) {}
         }
 
-        // 黑洞引力吸收音效
-        playSwallow() {
+        // 黑洞激活/生成音效 (重力引力场呼啸)
+        playBlackHoleSpawn() {
             if (this.muted) return;
             this.initContext();
             if (!this.ctx) return;
@@ -143,27 +148,102 @@
                 const now = this.ctx.currentTime;
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
+                const filter = this.ctx.createBiquadFilter();
 
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(150, now);
-                osc.frequency.exponentialRampToValueAtTime(420, now + 0.14);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.exponentialRampToValueAtTime(260, now + 0.35);
 
-                gain.gain.setValueAtTime(0.2, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(320, now);
 
-                osc.connect(gain);
+                gain.gain.setValueAtTime(0.28, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+                osc.connect(filter);
+                filter.connect(gain);
                 gain.connect(this.ctx.destination);
 
                 osc.start(now);
-                osc.stop(now + 0.14);
+                osc.stop(now + 0.35);
+            } catch (e) {}
+        }
+
+        // 黑洞引力坍缩吞噬音效 (饱满清晰的双层空间坍缩声：低频重音 + 奇点共鸣)
+        playBlackHoleSwallow(combo = 1) {
+            if (this.muted) return;
+            this.initContext();
+            if (!this.ctx) return;
+
+            // 限制触发频率，避免一瞬间吞噬多个产生刺耳爆音
+            const nowTime = performance.now();
+            if (nowTime - this.lastSwallowTime < 45) return;
+            this.lastSwallowTime = nowTime;
+
+            try {
+                const now = this.ctx.currentTime;
+
+                // 1. 低频坍缩 Thump (扎实的重低音空间坍缩)
+                const subOsc = this.ctx.createOscillator();
+                const subGain = this.ctx.createGain();
+                subOsc.type = 'sine';
+                subOsc.frequency.setValueAtTime(260, now);
+                subOsc.frequency.exponentialRampToValueAtTime(45, now + 0.16);
+
+                subGain.gain.setValueAtTime(0.38, now);
+                subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+                subOsc.connect(subGain);
+                subGain.connect(this.ctx.destination);
+                subOsc.start(now);
+                subOsc.stop(now + 0.16);
+
+                // 2. 清脆奇点谐波 Chirp (中高频吸入提示，随 Combo 爬升)
+                const chirpOsc = this.ctx.createOscillator();
+                const chirpGain = this.ctx.createGain();
+                const chirpFilter = this.ctx.createBiquadFilter();
+
+                const baseFreq = 520 + Math.min(combo * 40, 500);
+                chirpOsc.type = 'triangle';
+                chirpOsc.frequency.setValueAtTime(baseFreq, now);
+                chirpOsc.frequency.exponentialRampToValueAtTime(baseFreq * 0.4, now + 0.13);
+
+                chirpFilter.type = 'bandpass';
+                chirpFilter.frequency.setValueAtTime(baseFreq * 0.8, now);
+                chirpFilter.Q.setValueAtTime(3.0, now);
+
+                chirpGain.gain.setValueAtTime(0.24, now);
+                chirpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+                chirpOsc.connect(chirpFilter);
+                chirpFilter.connect(chirpGain);
+                chirpGain.connect(this.ctx.destination);
+
+                chirpOsc.start(now);
+                chirpOsc.stop(now + 0.13);
             } catch (e) {}
         }
     }
 
     /* ==========================================================================
-       2. 通用工具函数
+       2. DOM 框体防护体系 (防止误伤页面大框架导致整页内容被拔除)
        ========================================================================== */
     const audio = new GameAudioSynth();
+
+    // 绝对禁止作为整体被摧毁或删除的框体结构标签
+    const PROTECTED_FRAME_TAGS = new Set([
+        'html', 'body', 'head', 'header', 'footer', 'nav', 'main', 'aside',
+        'section', 'article', 'form', 'table', 'thead', 'tbody', 'tfoot',
+        'tr', 'ul', 'ol', 'dl', 'fieldset', 'script', 'style', 'link', 'meta'
+    ]);
+
+    // 允许被击毁/吞噬的内容级叶子标签
+    const DESTRUCTIBLE_CONTENT_TAGS = new Set([
+        'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'a', 'button',
+        'img', 'pre', 'code', 'li', 'svg', 'path', 'kbd', 'input', 'textarea',
+        'label', 'strong', 'em', 'b', 'i', 'time', 'small', 'blockquote',
+        'cite', 'sub', 'sup', 'mark', 'td', 'th', 'dd', 'dt', 'picture', 'figure'
+    ]);
 
     function triggerScreenShake() {
         document.body.classList.remove('wb-screen-shake');
@@ -174,47 +254,115 @@
         }, 150);
     }
 
-    // 检查元素是否是可以被打碎/删除的有效 DOM 目标
-    function isElementDestructible(el) {
-        if (!el || el === document.body || el === document.documentElement) return false;
-        if (el.id === 'wb-game-canvas' || el.closest('.wb-game-hud') || el.closest('.wb-game-trigger') || el.closest('.wb-game-menu-panel') || el.closest('.wb-game-modal-overlay')) {
-            return false;
-        }
-        if (el.classList.contains('wb-dom-shattering')) return false;
+    // 检查元素是否属于框架容器、布局骨架或游戏系统组件
+    function isFrameOrSystemElement(el) {
+        if (!el || el === document.body || el === document.documentElement) return true;
 
-        // 避免一炮干掉最外层巨型容器
+        // 1. 游戏系统组件与弹窗绝对保护
+        if (el.id === 'wb-game-canvas' ||
+            el.closest('.wb-game-hud') ||
+            el.closest('.wb-game-trigger') ||
+            el.closest('.wb-game-menu-panel') ||
+            el.closest('.wb-game-modal-overlay') ||
+            el.closest('#appModal') ||
+            el.closest('#toastContainer')) {
+            return true;
+        }
+
+        // 2. 正在执行破碎消失动画的元素
+        if (el.classList.contains('wb-dom-shattering')) return true;
+
         const tag = el.tagName.toLowerCase();
-        if (tag === 'html' || tag === 'body' || tag === 'head' || tag === 'script' || tag === 'style') {
-            return false;
+        // 结构性骨架标签一律保护
+        if (PROTECTED_FRAME_TAGS.has(tag)) return true;
+
+        // 3. 关键业务 ID 保护
+        const id = el.id || '';
+        if (id === 'pjax-container' ||
+            id === 'sidebar-container' ||
+            id === 'nav-path-text' ||
+            id === 'mobileMenu' ||
+            id === 'mobileUserAuth' ||
+            id === 'userDropdown' ||
+            id === 'languageMenu' ||
+            id === 'pjax-progress') {
+            return true;
         }
 
-        // 如果是大容器，尽量找其子元素
+        // 4. 关键布局类名保护
+        if (el.classList.contains('max-w-1400') ||
+            el.classList.contains('toast-container') ||
+            el.hasAttribute('data-wb-ads-config')) {
+            return true;
+        }
+
+        // 5. 尺寸与面积防护：横贯屏幕的巨大容器或占屏面积过大的元素禁止击毁
         const rect = el.getBoundingClientRect();
-        if (rect.width > window.innerWidth * 0.95 && rect.height > window.innerHeight * 0.95) {
-            return false;
-        }
-        if (rect.width <= 2 || rect.height <= 2) return false;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
 
-        return true;
+        // 宽度超过 45% 且高度大于 80px，说明是大区块/大分栏容器
+        if (rect.width >= vw * 0.45 && rect.height >= 80) return true;
+
+        // 面积超过屏幕 10% 的元素禁止删除
+        if (rect.width * rect.height > vw * vh * 0.10) return true;
+
+        // 6. 复合容器防护：如果包含 2 个及以上的直接元素子节点，属于容器包装层（如卡片、列表盒）
+        // 绝不可一枪把整个外壳拔除，必须打碎具体的子元素
+        if (el.children && el.children.length >= 2) return true;
+
+        // 如果是 div，只要里面还含有子元素，就作为容器保护
+        if (tag === 'div' && el.children && el.children.length > 0) return true;
+
+        return false;
     }
 
-    // 在某个坐标寻找最合适的击碎目标
+    // 检查元素是否是合法的最小内容打击目标
+    function isDestructibleContentTarget(el) {
+        if (!el || isFrameOrSystemElement(el)) return false;
+
+        const tag = el.tagName.toLowerCase();
+        if (DESTRUCTIBLE_CONTENT_TAGS.has(tag)) return true;
+
+        // 如果是没有子元素的叶子 div / 块（例如 badge, pill, divider, icon-box）
+        if (el.children && el.children.length === 0) {
+            const rect = el.getBoundingClientRect();
+            return rect.width >= 3 && rect.height >= 3 && rect.width <= window.innerWidth * 0.5 && rect.height <= window.innerHeight * 0.4;
+        }
+
+        return false;
+    }
+
+    // 在指定的视口 (x, y) 坐标处寻找最深层的合法内容元素（杜绝误伤大框体）
     function findTargetElementAt(x, y) {
         const elements = document.elementsFromPoint(x, y);
         if (!elements || elements.length === 0) return null;
 
         for (let i = 0; i < elements.length; i++) {
-            const el = elements[i];
-            if (isElementDestructible(el)) {
-                // 如果是叶子节点或常见内容块直接击碎
-                const childCount = el.children.length;
-                if (childCount === 0 || ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'button', 'img', 'pre', 'code', 'span', 'li', 'svg'].includes(el.tagName.toLowerCase())) {
-                    return el;
+            const candidate = elements[i];
+
+            // 1. 如果该元素本身就是合法的最小内容目标，直接命中
+            if (isDestructibleContentTarget(candidate)) {
+                return candidate;
+            }
+
+            // 2. 如果命中的是一个包装容器（如卡片或列表），绝不删除该容器，
+            // 而是向内部深入寻找正好覆盖 (x, y) 坐标的具体内容子节点
+            if (candidate && !isFrameOrSystemElement(candidate) && candidate.children && candidate.children.length > 0) {
+                const subItems = candidate.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, a, button, img, pre, code, li, svg, kbd, strong, em, b, time');
+                for (let j = 0; j < subItems.length; j++) {
+                    const sub = subItems[j];
+                    if (isDestructibleContentTarget(sub)) {
+                        const r = sub.getBoundingClientRect();
+                        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+                            return sub;
+                        }
+                    }
                 }
-                // 如果有子节点，再向下看有没有更具体的击中目标
-                return el;
             }
         }
+
+        // 如果该点只落在大框体的空白处/边距上，直接返回 null，决不摧毁外壳
         return null;
     }
 
@@ -316,6 +464,7 @@
         onMouseDown(e) {
             if (e.button !== 0) return;
             if (e.target && (e.target.closest('.wb-game-hud') || e.target.closest('.wb-game-trigger'))) return;
+            audio.initContext();
             this.isMouseDown = true;
             this.shoot();
         }
@@ -419,7 +568,7 @@
                 }
             }
 
-            // 2. 子弹更新与碰撞检测
+            // 2. 子弹更新与碰撞检测 (通过严格的 DOM 框体防护)
             for (let i = this.bullets.length - 1; i >= 0; i--) {
                 const b = this.bullets[i];
                 b.x += b.vx;
@@ -432,7 +581,7 @@
                     continue;
                 }
 
-                // DOM 击中检测
+                // 精准 DOM 击中检测
                 const hitEl = findTargetElementAt(b.x, b.y);
                 if (hitEl) {
                     this.onHitDOM(hitEl, b.x, b.y, b.vx, b.vy);
@@ -466,12 +615,11 @@
 
         // 击中 DOM 元素
         onHitDOM(el, x, y, vx, vy) {
-            // 获取元素位置作为碎屑爆炸中心
             const rect = el.getBoundingClientRect();
             const color = window.getComputedStyle(el).color || '#6366f1';
 
             // 生成击碎碎片粒子
-            const count = Math.min(30, Math.max(16, Math.floor((rect.width * rect.height) / 1000)));
+            const count = Math.min(24, Math.max(12, Math.floor((rect.width * rect.height) / 1200)));
             for (let i = 0; i < count; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = Math.random() * 8 + 3;
@@ -480,7 +628,7 @@
                     y: y,
                     vx: Math.cos(angle) * speed + vx * 0.1,
                     vy: Math.sin(angle) * speed + vy * 0.1,
-                    size: Math.random() * 4 + 2,
+                    size: Math.random() * 3.5 + 2,
                     life: Math.floor(Math.random() * 20 + 20),
                     maxLife: 40,
                     color: Math.random() > 0.5 ? color : '#38bdf8'
@@ -488,14 +636,14 @@
             }
 
             // 元素物理抖动位移方向
-            const rX = (Math.random() - 0.5) * 20;
-            const rY = (Math.random() - 0.5) * 20;
-            const rot = (Math.random() - 0.5) * 24;
+            const rX = (Math.random() - 0.5) * 18;
+            const rY = (Math.random() - 0.5) * 18;
+            const rot = (Math.random() - 0.5) * 20;
             el.style.setProperty('--wb-vx', `${rX}px`);
             el.style.setProperty('--wb-vy', `${rY}px`);
             el.style.setProperty('--wb-rot', `${rot}deg`);
 
-            // 添加碎裂动画并删除该 DOM 元素
+            // 添加碎裂动画并删除该具体内容 DOM 元素
             el.classList.add('wb-dom-shattering');
             setTimeout(() => {
                 if (el.parentNode) {
@@ -679,6 +827,10 @@
             this.ctx = this.canvas.getContext('2d');
             this.onResize();
 
+            // 激活音频并播放黑洞启动音效
+            audio.initContext();
+            audio.playBlackHoleSpawn();
+
             this.mouseX = window.innerWidth / 2;
             this.mouseY = window.innerHeight / 2;
             this.holeRadius = 24;
@@ -735,7 +887,7 @@
         update() {
             this.angle += 0.05;
 
-            // 吸积盘粒子
+            // 吸积盘粒子运动
             for (let i = 0; i < this.diskParticles.length; i++) {
                 const p = this.diskParticles[i];
                 p.angle += p.speed;
@@ -745,21 +897,24 @@
                 }
             }
 
-            // 引力捕获 DOM
-            const sampleCount = 12;
+            // 引力捕获 DOM (经过 DOM 框体防护，只吸引具体的叶子内容节点)
+            const sampleCount = 10;
             for (let i = 0; i < sampleCount; i++) {
                 const a = (Math.PI * 2 / sampleCount) * i + this.angle;
                 const r = Math.random() * this.gravRadius;
                 const sx = this.mouseX + Math.cos(a) * r;
                 const sy = this.mouseY + Math.sin(a) * r;
                 const el = findTargetElementAt(sx, sy);
-                if (el) {
+                if (el && isDestructibleContentTarget(el)) {
                     this.attractDOM(el);
                 }
             }
         }
 
         attractDOM(el) {
+            // 双重安全防护：若属于框体则绝不吸引
+            if (!isDestructibleContentTarget(el)) return;
+
             const rect = el.getBoundingClientRect();
             const cx = rect.left + rect.width / 2;
             const cy = rect.top + rect.height / 2;
@@ -770,18 +925,18 @@
             if (dist < 36) {
                 // 距离过近，直接吞噬
                 el.classList.add('wb-dom-shattering');
-                el.style.transition = 'all 0.15s cubic-bezier(0.5, 0, 0.75, 0)';
+                el.style.transition = 'all 0.16s cubic-bezier(0.5, 0, 0.75, 0)';
                 el.style.transform = `scale(0.01) rotate(180deg)`;
                 setTimeout(() => {
                     if (el.parentNode) el.remove();
-                }, 150);
+                }, 160);
 
                 const combo = this.manager.addHit();
-                audio.playSwallow();
+                audio.playBlackHoleSwallow(combo);
                 this.holeRadius = Math.min(60, this.holeRadius + 0.3);
                 triggerScreenShake();
             } else if (dist < this.gravRadius) {
-                // 受到引力拉扯
+                // 受到引力拉扯扭曲
                 const pullFactor = (1 - dist / this.gravRadius) * 12;
                 const pullX = (dx / dist) * pullFactor;
                 const pullY = (dy / dist) * pullFactor;
@@ -819,7 +974,7 @@
                 this.ctx.fill();
             }
 
-            // 3. 黑洞奇点视界 (绝对纯黑 + 霓虹紫光边缘)
+            // 3. 黑洞奇点视界 (纯黑核心 + 霓虹紫粉光圈)
             this.ctx.globalAlpha = 1;
             this.ctx.shadowColor = '#d946ef';
             this.ctx.shadowBlur = 24;
@@ -871,6 +1026,8 @@
             this.canvas = this.manager.getCanvas();
             this.ctx = this.canvas.getContext('2d');
             this.onResize();
+
+            audio.initContext();
 
             this.paddle.x = window.innerWidth / 2 - this.paddle.w / 2;
             this.paddle.y = window.innerHeight - 45;
@@ -950,16 +1107,15 @@
             const p = this.paddle;
             if (b.y + b.r >= p.y && b.y - b.r <= p.y + p.h && b.x >= p.x && b.x <= p.x + p.w && b.vy > 0) {
                 b.y = p.y - b.r;
-                // 根据击中挡板的位置改变反弹角度
                 const hitPos = (b.x - (p.x + p.w / 2)) / (p.w / 2);
                 b.vx = hitPos * 8;
                 b.vy = -Math.max(5, Math.abs(b.vy));
                 audio.playLaser();
             }
 
-            // 碰 DOM 元素
+            // 碰到 DOM 内容元素反弹击碎
             const hitEl = findTargetElementAt(b.x, b.y);
-            if (hitEl) {
+            if (hitEl && isDestructibleContentTarget(hitEl)) {
                 b.vy = -b.vy;
                 hitEl.classList.add('wb-dom-shattering');
                 setTimeout(() => {
@@ -1173,6 +1329,11 @@
             const hudRestoreBtn = document.getElementById('wbGameHudRestoreBtn');
             const hudExitBtn = document.getElementById('wbGameHudExitBtn');
 
+            // 只要与游戏组件发生点击交互，就立刻预激活 AudioContext
+            const activateAudio = () => audio.initContext();
+            trigger?.addEventListener('click', activateAudio);
+            overlay?.addEventListener('click', activateAudio);
+
             // 切换菜单展开/收起
             trigger?.addEventListener('click', () => {
                 if (this.activeGame) {
@@ -1188,6 +1349,7 @@
             // 选择游戏卡片
             document.querySelectorAll('.wb-game-card').forEach(card => {
                 card.addEventListener('click', (e) => {
+                    audio.initContext();
                     const key = card.getAttribute('data-game-key');
                     this.startGame(key);
                 });
@@ -1195,6 +1357,7 @@
 
             // 音效切换
             soundBtn?.addEventListener('click', () => {
+                audio.initContext();
                 const isMuted = !audio.muted;
                 audio.setMuted(isMuted);
                 soundIcon.className = isMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
@@ -1211,6 +1374,7 @@
 
             // 快捷键 ESC 退出
             window.addEventListener('keydown', (e) => {
+                audio.initContext();
                 if (e.key === 'Escape') {
                     if (this.activeGame) {
                         this.stopGame();
@@ -1239,6 +1403,7 @@
         }
 
         openMenu() {
+            audio.initContext();
             this.isMenuOpen = true;
             document.getElementById('wbGameMenuPanel')?.classList.add('active');
             document.getElementById('wbGameModalOverlay')?.classList.add('active');
@@ -1253,6 +1418,9 @@
         startGame(key) {
             const game = this.games[key];
             if (!game) return;
+
+            // 确保在用户交互的当前栈内激活 AudioContext
+            audio.initContext();
 
             if (this.activeGame) {
                 this.activeGame.stop();
