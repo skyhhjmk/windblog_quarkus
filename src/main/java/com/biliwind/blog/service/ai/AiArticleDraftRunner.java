@@ -2,9 +2,11 @@ package com.biliwind.blog.service.ai;
 
 import com.biliwind.blog.service.AiArticleDraftService;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.smallrye.context.api.ManagedExecutorConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.context.ManagedExecutor;
+import org.eclipse.microprofile.context.ThreadContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +22,12 @@ public class AiArticleDraftRunner {
 
     private static final Logger log = LoggerFactory.getLogger(AiArticleDraftRunner.class);
 
+    /**
+     * 管理端请求本身处于事务中；清空事务上下文，避免异步任务复用请求线程
+     * 已提交的事务（Panache 随后会报 ContextNotActiveException）。
+     */
     @Inject
+    @ManagedExecutorConfig(cleared = ThreadContext.TRANSACTION)
     ManagedExecutor executor;
 
     @Inject
