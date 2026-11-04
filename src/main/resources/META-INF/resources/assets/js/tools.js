@@ -2992,3 +2992,454 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
 
 
 })();
+
+/**
+ * Web Serial terminal.
+ *
+ * Runs entirely in the browser through the Web Serial API. No bytes are sent
+ * to WindBlog: the page only talks to the serial device the user picks.
+ */
+(function () {
+    'use strict';
+
+    const XTERM_VERSION = '5.5.0';
+    const XTERM_BASE = '/assets/vendor/xterm';
+
+    let assetPromise = null;
+    let activeDispose = null;
+    let initToken = 0;
+
+    function initWebSerial() {
+        const root = document.getElementById('serialToolApp');
+        if (!root) {
+            disposeActive();
+            return;
+        }
+        if (root.dataset.serialBooted === '1') {
+            return;
+        }
+        root.dataset.serialBooted = '1';
+        const token = ++initToken;
+        disposeActive();
+        ensureAssets()
+            .then(() => {
+                if (token !== initToken) return;
+                if (!document.getElementById('serialToolApp')) return;
+                bootSerialTerminal(root);
+            })
+            .catch(error => {
+                if (token !== initToken) return;
+                root.dataset.serialBooted = '0';
+                const screen = document.getElementById('serialScreen');
+                if (screen) {
+                    screen.innerHTML = '<div class="p-6 text-xs font-mono text-rose-400">'
+                        + escapeHtml(error && error.message ? error.message : '终端组件加载失败')
+                        + '</div>';
+                }
+            });
+    }
+
+    function disposeActive() {
+        const dispose = activeDispose;
+        activeDispose = null;
+        if (typeof dispose === 'function') {
+            try {
+                dispose();
+            } catch (error) {
+                // Navigation is already in progress.
+            }
+        }
+    }
+
+    function ensureAssets() {
+        if (assetPromise) return assetPromise;
+        assetPromise = loadStyleOnce(XTERM_BASE + '/xterm.css?v=' + XTERM_VERSION)
+            .then(() => loadScriptOnce(XTERM_BASE + '/xterm.js?v=' + XTERM_VERSION))
+            .then(() => loadScriptOnce(XTERM_BASE + '/addon-fit.js?v=0.10.0'))
+            .then(() => {
+                if (typeof window.Terminal !== 'function' || !window.FitAddon) {
+                    throw new Error('xterm 终端组件加载失败');
+                }
+            })
+            .catch(error => {
+                assetPromise = null;
+                throw error;
+            });
+        return assetPromise;
+    }
+
+    function loadStyleOnce(href) {
+        return new Promise((resolve, reject) => {
+            if (document.querySelector('link[data-wb-serial-asset="css"]')) {
+                resolve();
+                return;
+            }
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = href;
+            link.dataset.wbSerialAsset = 'css';
+            link.onload = () => resolve();
+            link.onerror = () => reject(new Error('样式加载失败：' + href));
+            document.head.appendChild(link);
+        });
+    }
+
+    function loadScriptOnce(src) {
+        return new Promise((resolve, reject) => {
+            const existing = document.querySelector('script[data-wb-serial-asset="' + src + '"]');
+            if (existing) {
+                if (existing.dataset.loaded === '1') {
+                    resolve();
+                } else {
+                    existing.addEventListener('load', () => resolve(), { once: true });
+                    existing.addEventListener('error', () => reject(new Error('脚本加载失败：' + src)), { once: true });
+                }
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.dataset.wbSerialAsset = src;
+            script.onload = () => {
+                script.dataset.loaded = '1';
+                resolve();
+            };
+            script.onerror = () => reject(new Error('脚本加载失败：' + src));
+            document.head.appendChild(script);
+        });
+    }
+
+    function bootSerialTerminal(root) {
+        const el = id => document.getElementById(id);
+        const screenEl = el('serialScreen');
+        if (!screenEl) return;
+
+        const fitAddon = new window.FitAddon.FitAddon();
+        const term = new window.Terminal({
+            cursorBlink: true,
+            fontFamily: '"JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, "Courier New", monospace',
+            fontSize: 13,
+            lineHeight: 1.2,
+            scrollback: 5000,
+            allowTransparency: true,
+            theme: {
+                background: '#050b16',
+                foreground: '#d7e3f4',
+                cursor: '#22d3ee',
+                cursorAccent: '#050b16',
+                selectionBackground: 'rgba(34, 211, 238, 0.25)',
+                black: '#0b1220',
+                red: '#f87171',
+                green: '#34d399',
+                yellow: '#fbbf24',
+                blue: '#60a5fa',
+                magenta: '#c084fc',
+                cyan: '#22d3ee',
+                white: '#e2e8f0',
+                brightBlack: '#64748b',
+                brightRed: '#fca5a5',
+                brightGreen: '#6ee7b7',
+                brightYellow: '#fde68a',
+                brightBlue: '#93c5fd',
+                brightMagenta: '#d8b4fe',
+                brightCyan: '#67e8f9',
+                brightWhite: '#f8fafc'
+            }
+        });
+        term.loadAddon(fitAddon);
+        term.open(screenEl);
+        safeFit();
+
+        const state = {
+            term,
+            fitAddon,
+            port: null,
+            reader: null,
+            writer: null,
+            closing: false,
+            disposed: false,
+            resizeTimer: null
+        };
+
+        const ui = {
+            form: el('serialForm'),
+            support: el('serialSupportBadge'),
+            error: el('serialError'),
+            connect: el('serialConnectBtn'),
+            disconnect: el('serialDisconnectBtn'),
+            statusDot: el('serialStatusDot'),
+            statusText: el('serialStatusText'),
+            connectionInfo: el('serialConnectionInfo'),
+            copy: el('serialCopyBtn'),
+            paste: el('serialPasteBtn'),
+            clear: el('serialClearBtn'),
+            baudRate: el('serialBaudRate'),
+            dataBits: el('serialDataBits'),
+            parity: el('serialParity'),
+            stopBits: el('serialStopBits'),
+            flowControl: el('serialFlowControl'),
+            lineEnding: el('serialLineEnding')
+        };
+
+        term.writeln('\x1b[36m╭──────────────────────────────────────────────╮\x1b[0m');
+        term.writeln('\x1b[36m│\x1b[0m  \x1b[1mWeb Serial Terminal\x1b[0m                        \x1b[36m│\x1b[0m');
+        term.writeln('\x1b[36m╰──────────────────────────────────────────────╯\x1b[0m');
+        term.writeln('');
+        term.writeln('  在左侧设置串口参数，然后点击「选择串口并连接」。');
+        term.writeln('  数据仅在浏览器与串口设备之间传输，不经过服务器。');
+        term.writeln('');
+
+        function safeFit() {
+            try {
+                fitAddon.fit();
+            } catch (error) {
+                // The screen may be hidden during navigation.
+            }
+        }
+
+        function setStatus(text, tone) {
+            ui.statusText.textContent = text;
+            const colors = {
+                idle: 'bg-meta/40',
+                connecting: 'bg-amber-400 animate-pulse',
+                online: 'bg-emerald-400',
+                error: 'bg-rose-500'
+            };
+            ui.statusDot.className = 'w-2 h-2 rounded-full ' + (colors[tone] || colors.idle);
+        }
+
+        function showError(message) {
+            ui.error.textContent = message;
+            ui.error.classList.remove('hidden');
+        }
+
+        function hideError() {
+            ui.error.textContent = '';
+            ui.error.classList.add('hidden');
+        }
+
+        function serialSupported() {
+            return typeof navigator !== 'undefined' && 'serial' in navigator && window.isSecureContext;
+        }
+
+        function refreshSupport() {
+            if (serialSupported()) {
+                ui.support.className = 'px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono';
+                ui.support.innerHTML = '<i class="fa-solid fa-circle-check mr-1.5"></i>当前浏览器支持 Web Serial';
+                ui.connect.disabled = false;
+            } else {
+                ui.support.className = 'px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono';
+                ui.support.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1.5"></i>当前浏览器不支持 Web Serial';
+                ui.connect.disabled = false;
+            }
+        }
+
+        function refreshButtons() {
+            const connected = !!state.port;
+            ui.connect.disabled = connected;
+            ui.disconnect.disabled = !connected;
+        }
+
+        function applyLineEnding(data) {
+            const mode = ui.lineEnding.value;
+            if (mode === 'none') return data;
+            const normalized = data.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            if (mode === 'lf') return normalized;
+            if (mode === 'cr') return normalized.replace(/\n/g, '\r');
+            return normalized.replace(/\n/g, '\r\n');
+        }
+
+        async function connectSerial(event) {
+            if (event) event.preventDefault();
+            hideError();
+            if (!serialSupported()) {
+                showError('当前浏览器不支持 Web Serial。请使用 Chrome / Edge，并通过 HTTPS 或 localhost 打开本页。');
+                setStatus('浏览器不支持 Web Serial', 'error');
+                return;
+            }
+            if (state.port) return;
+
+            const label = ui.connect.innerHTML;
+            ui.connect.disabled = true;
+            ui.connect.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>等待选择串口…';
+            try {
+                const port = await navigator.serial.requestPort();
+                await port.open({
+                    baudRate: Number(ui.baudRate.value || 115200),
+                    dataBits: Number(ui.dataBits.value || 8),
+                    stopBits: Number(ui.stopBits.value || 1),
+                    parity: ui.parity.value || 'none',
+                    flowControl: ui.flowControl.value || 'none'
+                });
+                state.port = port;
+                state.closing = false;
+                state.writer = port.writable.getWriter();
+                state.reader = port.readable.getReader();
+                ui.connectionInfo.textContent = ui.baudRate.value + ' ' + ui.dataBits.value
+                    + (ui.parity.value === 'none' ? 'N' : (ui.parity.value === 'even' ? 'E' : 'O'))
+                    + ui.stopBits.value;
+                setStatus('串口已连接', 'online');
+                term.writeln('');
+                term.writeln('\x1b[32m[串口已连接]\x1b[0m ' + ui.connectionInfo.textContent);
+                refreshButtons();
+                readSerialLoop(port);
+            } catch (error) {
+                if (error && error.name === 'NotFoundError') {
+                    showError('未选择串口设备');
+                    setStatus('未连接', 'idle');
+                } else if (error && error.name === 'SecurityError') {
+                    showError('浏览器拒绝了串口权限，请通过 HTTPS 或 localhost 访问后重试');
+                    setStatus('串口权限被拒绝', 'error');
+                } else {
+                    showError(error && error.message ? error.message : '打开串口失败');
+                    setStatus('串口连接失败', 'error');
+                }
+            } finally {
+                ui.connect.innerHTML = label;
+                refreshButtons();
+            }
+        }
+
+        async function readSerialLoop(port) {
+            const reader = state.reader;
+            if (!reader) return;
+            try {
+                while (!state.closing) {
+                    const result = await reader.read();
+                    if (result.done) break;
+                    if (result.value && result.value.length) {
+                        term.write(result.value);
+                    }
+                }
+            } catch (error) {
+                if (!state.closing) {
+                    term.writeln('\r\n\x1b[31m[串口读取失败]\x1b[0m ' + (error && error.message ? error.message : ''));
+                    showError('串口读取失败：' + (error && error.message ? error.message : '未知错误'));
+                    setStatus('串口读取失败', 'error');
+                }
+            }
+            if (port === state.port) {
+                await closeSerial();
+                setStatus('串口已断开', 'idle');
+            }
+        }
+
+        async function closeSerial() {
+            if (!state.port) return;
+            state.closing = true;
+            const reader = state.reader;
+            const writer = state.writer;
+            const port = state.port;
+            state.reader = null;
+            state.writer = null;
+            state.port = null;
+            try {
+                if (reader) {
+                    await reader.cancel();
+                    reader.releaseLock();
+                }
+            } catch (error) {
+                // The reader may already be released by the browser.
+            }
+            try {
+                if (writer) {
+                    writer.releaseLock();
+                }
+            } catch (error) {
+                // The writer may already be released.
+            }
+            try {
+                await port.close();
+            } catch (error) {
+                // The device may already be gone.
+            }
+            ui.connectionInfo.textContent = '';
+            refreshButtons();
+        }
+
+        ui.form.addEventListener('submit', connectSerial);
+        ui.disconnect.addEventListener('click', async () => {
+            await closeSerial();
+            setStatus('串口已断开', 'idle');
+        });
+        ui.clear.addEventListener('click', () => term.clear());
+        ui.copy.addEventListener('click', async () => {
+            const selection = term.getSelection();
+            if (!selection) return;
+            try {
+                await navigator.clipboard.writeText(selection);
+            } catch (error) {
+                term.writeln('\r\n\x1b[33m[复制失败] 浏览器未授予剪贴板权限\x1b[0m');
+            }
+        });
+        ui.paste.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) term.paste(text);
+            } catch (error) {
+                term.writeln('\r\n\x1b[33m[粘贴失败] 浏览器未授予剪贴板权限\x1b[0m');
+            }
+        });
+
+        term.onData(data => {
+            if (!state.writer) return;
+            state.writer.write(new TextEncoder().encode(applyLineEnding(data))).catch(() => {
+                setStatus('串口写入失败', 'error');
+            });
+        });
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (state.resizeTimer) clearTimeout(state.resizeTimer);
+            state.resizeTimer = setTimeout(safeFit, 120);
+        });
+        resizeObserver.observe(screenEl);
+
+        function onSerialDisconnect(event) {
+            if (event && event.target === state.port) {
+                closeSerial();
+                setStatus('串口设备已移除', 'error');
+            }
+        }
+        if ('serial' in navigator) {
+            navigator.serial.addEventListener('disconnect', onSerialDisconnect);
+        }
+
+        refreshSupport();
+        refreshButtons();
+        setStatus('未连接', 'idle');
+
+        activeDispose = function () {
+            if (state.disposed) return;
+            state.disposed = true;
+            if (state.resizeTimer) clearTimeout(state.resizeTimer);
+            resizeObserver.disconnect();
+            if ('serial' in navigator) {
+                navigator.serial.removeEventListener('disconnect', onSerialDisconnect);
+            }
+            closeSerial();
+            try {
+                term.dispose();
+            } catch (error) {
+                // Already disposed.
+            }
+        };
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    document.addEventListener('pjax:start', disposeActive);
+
+    if (document.readyState !== 'loading') {
+        initWebSerial();
+    } else {
+        document.addEventListener('DOMContentLoaded', initWebSerial);
+    }
+    document.addEventListener('page:ready', initWebSerial);
+})();

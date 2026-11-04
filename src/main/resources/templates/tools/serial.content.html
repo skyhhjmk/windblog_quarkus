@@ -1,0 +1,160 @@
+<div id="pjax-content-root" data-page-canonical="{defaultCanonicalUrl}" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}"
+     data-page-description="{pageDescription}"
+     data-page-keywords="{pageKeywords}">
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / serial</div>
+
+    <style nonce="{cspNonce}">
+        #serialScreen { background: #050b16; }
+        #serialScreen .xterm { height: 100%; padding: 10px; }
+        #serialScreen .xterm-viewport { background-color: #050b16 !important; }
+        #serialScreen .xterm-screen { height: 100%; }
+        .serial-glow { box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12), 0 24px 70px -40px rgba(34, 211, 238, 0.5); }
+        .serial-scanline { background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 3px); }
+    </style>
+
+    <section class="space-y-6" id="serialToolApp">
+        <header class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">WEB SERIAL</span>
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <i class="fa-solid fa-shield-halved text-[9px] mr-1"></i>纯本地运行
+                    </span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">Web Serial 串口终端</h1>
+                <p class="text-body text-xs md:text-sm max-w-3xl leading-relaxed">
+                    无需安装串口助手或驱动，直接在浏览器内访问 USB/串口设备。所有串口数据在本机浏览器与设备之间传输，
+                    不会上传到服务器。适合调试单片机、路由器、开发板与串口日志。
+                </p>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-mono">
+                <span id="serialSupportBadge" class="px-3 py-2 rounded-xl bg-card border border-border text-meta">
+                    <i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>检测浏览器支持…
+                </span>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 xl:grid-cols-[380px_minmax(0,1fr)] gap-5">
+            <!-- Left: serial settings -->
+            <form id="serialForm" class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm" autocomplete="off">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-accent"></i>串口参数
+                    </h2>
+                    <span class="text-[10px] font-mono text-meta">浏览器本地</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label for="serialBaudRate" class="text-[11px] font-mono text-meta">波特率</label>
+                        <select id="serialBaudRate" class="w-full bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs focus:border-accent outline-none">
+                            <option value="9600">9600</option>
+                            <option value="19200">19200</option>
+                            <option value="38400">38400</option>
+                            <option value="57600">57600</option>
+                            <option value="115200" selected>115200</option>
+                            <option value="230400">230400</option>
+                            <option value="460800">460800</option>
+                            <option value="921600">921600</option>
+                            <option value="1500000">1500000</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="serialDataBits" class="text-[11px] font-mono text-meta">数据位</label>
+                        <select id="serialDataBits" class="w-full bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs focus:border-accent outline-none">
+                            <option value="8" selected>8</option>
+                            <option value="7">7</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="serialParity" class="text-[11px] font-mono text-meta">校验位</label>
+                        <select id="serialParity" class="w-full bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs focus:border-accent outline-none">
+                            <option value="none" selected>无 (none)</option>
+                            <option value="even">偶校验 (even)</option>
+                            <option value="odd">奇校验 (odd)</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="serialStopBits" class="text-[11px] font-mono text-meta">停止位</label>
+                        <select id="serialStopBits" class="w-full bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs focus:border-accent outline-none">
+                            <option value="1" selected>1</option>
+                            <option value="2">2</option>
+                        </select>
+                    </div>
+                    <div class="col-span-2 space-y-1.5">
+                        <label for="serialFlowControl" class="text-[11px] font-mono text-meta">流控</label>
+                        <select id="serialFlowControl" class="w-full bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs focus:border-accent outline-none">
+                            <option value="none" selected>无 (none)</option>
+                            <option value="hardware">硬件 (RTS/CTS)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 text-[11px] font-mono">
+                    <label for="serialLineEnding" class="text-meta shrink-0">回车换行</label>
+                    <select id="serialLineEnding" class="flex-1 bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs focus:border-accent outline-none">
+                        <option value="none" selected>不追加 (原样发送)</option>
+                        <option value="cr">CR (\r)</option>
+                        <option value="lf">LF (\n)</option>
+                        <option value="crlf">CRLF (\r\n)</option>
+                    </select>
+                </div>
+
+                <div id="serialError" class="hidden text-[11px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2"></div>
+
+                <div class="flex items-center gap-2 pt-1">
+                    <button type="submit" id="serialConnectBtn"
+                            class="flex-1 px-4 py-2.5 rounded-xl bg-accent text-[var(--accent-foreground)] text-xs font-bold hover:opacity-90 transition-opacity">
+                        <i class="fa-solid fa-plug mr-1.5"></i>选择串口并连接
+                    </button>
+                    <button type="button" id="serialDisconnectBtn" disabled
+                            class="px-4 py-2.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-meta hover:text-rose-400 hover:border-rose-400/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                        断开
+                    </button>
+                </div>
+
+                <div class="space-y-2 pt-3 border-t border-border/40 text-[10px] font-mono text-meta leading-relaxed">
+                    <p><i class="fa-solid fa-circle-info mr-1 text-accent"></i>Web Serial 需要 Chrome / Edge 等 Chromium 浏览器，并在 HTTPS 或 localhost 下打开。</p>
+                    <p><i class="fa-solid fa-lock mr-1 text-emerald-400"></i>串口权限由浏览器直接授予，数据不会经过 WindBlog 服务器。</p>
+                </div>
+            </form>
+
+            <!-- Right: terminal -->
+            <div class="space-y-3 min-w-0">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 text-[11px] font-mono">
+                        <span id="serialStatusDot" class="w-2 h-2 rounded-full bg-meta/40"></span>
+                        <span id="serialStatusText" class="text-meta">未连接</span>
+                        <span id="serialConnectionInfo" class="text-meta/60"></span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" id="serialCopyBtn" class="px-2.5 py-1.5 rounded-lg bg-card border border-border text-[11px] font-mono text-meta hover:text-accent hover:border-accent/40 transition-colors" title="复制选中文本">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                        <button type="button" id="serialPasteBtn" class="px-2.5 py-1.5 rounded-lg bg-card border border-border text-[11px] font-mono text-meta hover:text-accent hover:border-accent/40 transition-colors" title="粘贴到串口">
+                            <i class="fa-regular fa-paste"></i>
+                        </button>
+                        <button type="button" id="serialClearBtn" class="px-2.5 py-1.5 rounded-lg bg-card border border-border text-[11px] font-mono text-meta hover:text-accent hover:border-accent/40 transition-colors" title="清空屏幕">
+                            <i class="fa-solid fa-eraser"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="relative rounded-2xl overflow-hidden border border-border serial-glow">
+                    <div id="serialScreen" class="h-[60vh] min-h-[380px] serial-scanline"></div>
+                </div>
+
+                <div class="flex items-start gap-2 text-[10px] font-mono text-meta leading-relaxed">
+                    <i class="fa-solid fa-circle-info mt-0.5"></i>
+                    <span>终端会原样显示串口字节流。多数设备使用 115200 8N1；若出现乱码，请检查波特率与校验位。拔掉设备后浏览器会自动断开。</span>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

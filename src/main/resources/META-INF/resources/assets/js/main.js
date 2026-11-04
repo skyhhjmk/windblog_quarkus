@@ -463,10 +463,10 @@
         }
 
         function canUsePjax(anchor) {
+            if (!anchor) return false;
             if (anchor.matches('[data-language-switch]')) {
                 return false;
             }
-            if (!anchor) return false;
             if (anchor.dataset.noPjax === 'true') return false;
             if (anchor.target && anchor.target !== '_self') return false;
             if (anchor.hasAttribute('download')) return false;

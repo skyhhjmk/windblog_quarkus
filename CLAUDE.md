@@ -115,4 +115,5 @@ Errors use stable `WB-*` codes from `ErrorCodeCatalog`, returned as JSON `errorC
 - `docs/edge-sync-protocol-design.md` — WESP multi-node design and status
 - `docs/ai-topic-automation.md`, `docs/fake-ai-api.md` — AI topic/draft automation and test double
 - `docs/admin-api.md` — admin API overview and Swagger/OpenAPI locations
+- `docs/web-serial.md` — browser-only Web Serial toolbox (xterm, browser support, PJAX notes)
 - `docs/error-codes.md`, `docs/markdown-negotiation.md`, `docs/regional-canonical.md`, `docs/seo-management.md`, `docs/structured-data-seo.md`, `docs/article-reference-cards.md`

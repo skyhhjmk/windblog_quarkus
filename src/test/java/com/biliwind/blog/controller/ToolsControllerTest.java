@@ -118,6 +118,18 @@ class ToolsControllerTest {
     }
 
     @Test
+    void shouldReturnWebSerialPage() {
+        given()
+                .when().get("/tools/serial")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("Web Serial 串口终端"))
+                .body(containsString("serialToolApp"))
+                .body(containsString("tools.js"));
+    }
+
+    @Test
     void shouldSupportPjaxHeader() {
         given()
                 .header("X-PJAX", "true")

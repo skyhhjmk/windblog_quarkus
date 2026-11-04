@@ -93,6 +93,14 @@ public class ToolsController {
     @Location("tools/json-diff.content.html")
     Template jsonDiffContentTemplate;
 
+    @Inject
+    @Location("tools/serial.html")
+    Template serialTemplate;
+
+    @Inject
+    @Location("tools/serial.content.html")
+    Template serialContentTemplate;
+
     @RegisterForReflection
     public static record ToolItem(
             String id,
@@ -188,6 +196,15 @@ public class ToolsController {
                     "/tools/json-diff",
                     "数据处理",
                     "indigo"
+            ),
+            new ToolItem(
+                    "web-serial",
+                    "Web Serial 串口终端",
+                    "通过 Web Serial API 在浏览器内直连 USB/串口设备，基于 xterm 终端，支持常见波特率、数据位、校验位、停止位与流控配置，串口数据完全留在本机。",
+                    "fa-solid fa-terminal",
+                    "/tools/serial",
+                    "开发运维",
+                    "cyan"
             )
     );
 
@@ -288,5 +305,16 @@ public class ToolsController {
                 .data("pageTitle", "JSON 在线格式化与可视化差分对比 (Diff) - 美化/清洗/修复/对比")
                 .data("pageDescription", "全能 JSON 在线工具箱。支持 JSON 语法美化、紧凑压缩、单引号/尾随逗号容错修复、转义去转义，以及双栏结构化差异可视化比对（增、删、改精准高亮）。")
                 .data("pageKeywords", "JSON格式化,JSON美化,JSON Diff,JSON对比,JSON压缩,JSON修复,JSONPath");
+    }
+
+    @GET
+    @Path("/serial")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance webSerial(@Context HttpHeaders headers) {
+        Template template = PjaxHelper.isPjaxRequest(headers) ? serialContentTemplate : serialTemplate;
+        return template
+                .data("pageTitle", "Web Serial 串口终端 - 浏览器内 USB 串口调试控制台")
+                .data("pageDescription", "纯前端 Web Serial 串口终端。无需安装驱动或客户端，直接在浏览器内配置波特率、数据位、校验位、停止位和流控，连接 USB 串口设备并进行 xterm 终端调试，数据完全留在本机。")
+                .data("pageKeywords", "Web Serial,串口终端,在线串口调试,USB串口,波特率,xterm,串口助手");
     }
 }
