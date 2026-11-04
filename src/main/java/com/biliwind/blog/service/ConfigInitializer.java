@@ -450,10 +450,36 @@ public class ConfigInitializer {
         com.fasterxml.jackson.databind.node.ArrayNode securityNetworkFields = securityNetworkSchema.putArray("fields");
         securityNetworkFields.addObject().put("key", "trusted_proxy_cidrs").put("label", "可信代理 CIDR").put("widget", "textarea").put("required", true);
         securityNetworkFields.addObject().put("key", "client_ip_header").put("label", "客户端 IP 请求头").put("widget", "input").put("required", true);
+        ObjectNode clientIpSourceField = securityNetworkFields.addObject();
+        clientIpSourceField.put("key", "client_ip_source");
+        clientIpSourceField.put("label", "客户端 IP 获取方式");
+        clientIpSourceField.put("widget", "select");
+        clientIpSourceField.put("required", true);
+        clientIpSourceField.put("hint", "自动：直连来源在可信代理 CIDR 内时读取请求头；网络连接：始终使用 TCP 连接地址；HTTP 头：始终使用请求头中第一个有效地址，仅在源站只接受可信代理回源时使用，否则请求头可被伪造。");
+        com.fasterxml.jackson.databind.node.ArrayNode clientIpSourceOptions = clientIpSourceField.putArray("options");
+        clientIpSourceOptions.addObject().put("label", "自动（可信代理时读请求头）").put("value", "auto");
+        clientIpSourceOptions.addObject().put("label", "仅网络连接地址").put("value", "network");
+        clientIpSourceOptions.addObject().put("label", "仅 HTTP 请求头").put("value", "header");
         ObjectNode securityNetworkValue = mapper.createObjectNode();
         securityNetworkValue.put("trusted_proxy_cidrs", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16");
         securityNetworkValue.put("client_ip_header", "X-Forwarded-For");
+        securityNetworkValue.put("client_ip_source", "auto");
         list.add(new SettingDefinition("security_network", securityNetworkValue, "object", "安全设置", securityNetworkSchema, "可信代理与客户端 IP 解析设置"));
+
+        ObjectNode commentSecuritySchema = mapper.createObjectNode();
+        commentSecuritySchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode commentSecurityFields = commentSecuritySchema.putArray("fields");
+        ObjectNode powDifficultyField = commentSecurityFields.addObject();
+        powDifficultyField.put("key", "pow_difficulty");
+        powDifficultyField.put("label", "评论工作量证明难度（前导零位数）");
+        powDifficultyField.put("widget", "number");
+        powDifficultyField.put("required", true);
+        powDifficultyField.put("hint", "每增加 1 位，客户端计算量翻倍；建议 14-18，16 约等于普通手机 0.5-1 秒。");
+        commentSecurityFields.addObject().put("key", "challenge_ttl_seconds").put("label", "评论验证有效期（秒）").put("widget", "number").put("required", true);
+        ObjectNode commentSecurityValue = mapper.createObjectNode();
+        commentSecurityValue.put("pow_difficulty", 16);
+        commentSecurityValue.put("challenge_ttl_seconds", 300);
+        list.add(new SettingDefinition("comment_security", commentSecurityValue, "object", "安全设置", commentSecuritySchema, "评论无感工作量证明验证设置"));
         return list;
     }
 

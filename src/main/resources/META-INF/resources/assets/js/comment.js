@@ -27,8 +27,9 @@
     function updateSubmitState(root) {
         const submit = root.querySelector('#comment-submit');
         if (!submit) return;
-        submit.disabled = !root.dataset.captchaId
-            || root.dataset.commentSubmitting === 'true';
+        submit.disabled = root.dataset.commentSubmitting === 'true'
+            || !root.dataset.captchaId
+            || !root.dataset.powNonce;
     }
 
     function readSavedGuestInfo() {
@@ -334,44 +335,155 @@
         }
     }
 
-    async function loadCaptcha(root) {
-        const question = root.querySelector('#comment-captcha-question');
-        const answer = root.querySelector('#comment-captcha-answer');
-        const version = (Number(root.dataset.captchaVersion) || 0) + 1;
-        root.dataset.captchaVersion = String(version);
+    const POW_WORKER_URL = '/assets/js/comment-pow-worker.js?v=comment-pow-20261104';
+    const POW_SOLVE_TIMEOUT_MS = 20000;
+    let powWorker = null;
+
+    function setVerificationStatus(root, key, fallback) {
+        const status = root.querySelector('#comment-verification-status');
+        if (status) status.textContent = window.wbT(key, fallback);
+    }
+
+    function cancelPendingProof(root) {
+        if (powWorker) {
+            powWorker.terminate();
+            powWorker = null;
+        }
+        root.dataset.powNonce = '';
+    }
+
+    function hasFreshProof(root) {
+        const loadedAt = Number(root.dataset.captchaLoadedAt) || 0;
+        return Boolean(root.dataset.captchaId && root.dataset.powNonce)
+            && (loadedAt === 0 || Date.now() - loadedAt < 240000);
+    }
+
+    function ensureChallenge(root) {
+        if (root.dataset.captchaLoading === 'true') return;
+        if (hasFreshProof(root)) return;
+        loadChallenge(root);
+    }
+
+    function solveProof(root, version, challenge, difficulty) {
+        return new Promise((resolve, reject) => {
+            if (typeof Worker === 'undefined') {
+                reject(new Error('worker unsupported'));
+                return;
+            }
+            if (powWorker) {
+                powWorker.terminate();
+                powWorker = null;
+            }
+            let worker;
+            try {
+                worker = new Worker(POW_WORKER_URL);
+            } catch (error) {
+                reject(error);
+                return;
+            }
+            powWorker = worker;
+            const timer = window.setTimeout(() => {
+                worker.terminate();
+                if (powWorker === worker) powWorker = null;
+                reject(new Error('pow timeout'));
+            }, POW_SOLVE_TIMEOUT_MS);
+            worker.onmessage = (event) => {
+                const data = event.data || {};
+                window.clearTimeout(timer);
+                worker.terminate();
+                if (powWorker === worker) powWorker = null;
+                if (data.ok && data.nonce !== undefined && root.dataset.captchaVersion === version) {
+                    root.dataset.powNonce = String(data.nonce);
+                    setVerificationStatus(root, 'js.comment_verification_ready', '安全校验已就绪。');
+                    updateSubmitState(root);
+                    resolve();
+                    return;
+                }
+                reject(new Error('pow failed'));
+            };
+            worker.onerror = () => {
+                window.clearTimeout(timer);
+                worker.terminate();
+                if (powWorker === worker) powWorker = null;
+                reject(new Error('pow error'));
+            };
+            worker.postMessage({challenge: challenge, difficulty: difficulty});
+        });
+    }
+
+    async function loadChallenge(root) {
+        const version = String((Number(root.dataset.captchaVersion) || 0) + 1);
+        root.dataset.captchaVersion = version;
         root.dataset.captchaId = '';
-        if (!question || !answer) return;
-        question.textContent = window.wbT('js.loading_short', '正在加载...');
+        root.dataset.captchaLoadedAt = '0';
+        root.dataset.captchaLoading = 'true';
+        cancelPendingProof(root);
+        setVerificationStatus(root, 'js.comment_verification_preparing', '正在准备安全校验...');
         updateSubmitState(root);
-        answer.value = '';
         try {
             const response = await fetch('/api/comments/captcha', {cache: 'no-store', credentials: 'same-origin', headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(10000)});
             const result = await response.json().catch(() => null);
-            if (root.dataset.captchaVersion !== String(version)) return;
-            if (!response.ok || !result?.success || !result.data?.id || !result.data?.question) {
+            if (root.dataset.captchaVersion !== version) return;
+            if (!response.ok || !result?.success || !result.data?.id) {
                 const message = result?.message || window.wbTf('js.http_error', response.status, '验证码服务返回 HTTP {0}，未提供错误详情');
                 const failure = new Error(message);
                 failure.errorCode = result?.errorCode || response.headers.get('X-WindBlog-Error-Code');
                 throw failure;
             }
             root.dataset.captchaId = result.data.id;
-            question.textContent = result.data.question;
-            updateSubmitState(root);
+            root.dataset.captchaLoadedAt = String(Date.now());
+            await solveProof(root, version, result.data.id, Number(result.data.difficulty) || 16);
         } catch (error) {
-            if (root.dataset.captchaVersion === String(version)) {
-                const fallbackMessage = error.name === 'TimeoutError'
+            if (root.dataset.captchaVersion !== version) return;
+            root.dataset.captchaId = '';
+            root.dataset.captchaLoadedAt = '0';
+            root.dataset.powNonce = '';
+            const expectedFailure = error.name === 'TimeoutError'
+                || error.message === 'Failed to fetch'
+                || error.message === 'pow timeout'
+                || error.message === 'pow failed'
+                || error.message === 'pow error'
+                || error.message === 'worker unsupported';
+            const message = !expectedFailure && error.message
+                ? error.message
+                : error.name === 'TimeoutError'
                     ? window.wbT('js.captcha_timeout', '验证码加载超时，请重试')
                     : error.message === 'Failed to fetch'
                         ? window.wbT('js.captcha_network', '网络连接失败，未能加载验证码')
                         : window.wbT('js.captcha_loading_failed', '验证码加载失败，请重试');
-                const message = error.message && error.message !== 'Failed to fetch'
-                    && error.name !== 'TimeoutError' ? error.message : fallbackMessage;
-                const errorCode = error.errorCode
-                    || window.getErrorCode?.(message, 'WB-UI-COMMENT-CAPTCHA-002');
-                question.textContent = window.formatErrorMessage
-                    ? window.formatErrorMessage(message, errorCode)
-                    : message;
+            const errorCode = error.errorCode
+                || window.getErrorCode?.(message, 'WB-UI-COMMENT-CAPTCHA-002');
+            setVerificationStatus(root, 'js.comment_verification_failed', '安全校验准备失败，点击提交可重试。');
+            setFeedback(root, window.formatErrorMessage
+                ? window.formatErrorMessage(message, errorCode)
+                : message, 'error', errorCode);
+        } finally {
+            if (root.dataset.captchaVersion === version) {
+                root.dataset.captchaLoading = 'false';
+                updateSubmitState(root);
             }
+        }
+    }
+
+    function bindVerificationTrigger(root) {
+        if (root.dataset.verificationBound === 'true') return;
+        root.dataset.verificationBound = 'true';
+        const form = root.querySelector('#comment-form');
+        if (form) {
+            form.addEventListener('focusin', () => ensureChallenge(root), {passive: true});
+            form.addEventListener('pointerdown', () => ensureChallenge(root), {passive: true});
+        }
+        if (typeof IntersectionObserver === 'function') {
+            const observer = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.isIntersecting) {
+                        observer.disconnect();
+                        ensureChallenge(root);
+                        return;
+                    }
+                }
+            }, {rootMargin: '200px 0px'});
+            observer.observe(root);
         }
     }
 
@@ -396,8 +508,9 @@
             event.stopPropagation();
 
             if (root.dataset.commentSubmitting === 'true') return;
-            if (!root.dataset.captchaId) {
-                setFeedback(root, window.wbT('js.captcha_required', '请先加载验证码，点击换一道题重试。'), 'error', 'WB-UI-COMMENT-CAPTCHA-001');
+            if (!hasFreshProof(root)) {
+                ensureChallenge(root);
+                setFeedback(root, window.wbT('js.comment_verification_preparing', '正在准备安全校验，请稍候再提交。'), 'error', 'WB-UI-COMMENT-CAPTCHA-001');
                 return;
             }
 
@@ -410,8 +523,9 @@
             }
 
             if (!form.reportValidity()) return;
-            if (!root.dataset.captchaId) {
-                setFeedback(root, window.wbT('js.captcha_required', '请先加载验证码，点击换一道题重试。'), 'error', 'WB-UI-COMMENT-CAPTCHA-001');
+            if (!hasFreshProof(root)) {
+                ensureChallenge(root);
+                setFeedback(root, window.wbT('js.comment_verification_preparing', '正在准备安全校验，请稍候再提交。'), 'error', 'WB-UI-COMMENT-CAPTCHA-001');
                 return;
             }
 
@@ -423,7 +537,7 @@
                 guestEmail: root.querySelector('#comment-guest-email')?.value.trim() || '',
                 guestWebsite: root.querySelector('#comment-guest-website')?.value.trim() || '',
                 captchaId: root.dataset.captchaId,
-                captchaAnswer: root.querySelector('#comment-captcha-answer')?.value.trim() || ''
+                powNonce: root.dataset.powNonce || ''
             };
 
             saveGuestInfo(root);
@@ -465,9 +579,10 @@
                 setTimeout(() => {
                     root.dataset.commentSubmitting = 'false';
                     root.dataset.captchaId = '';
+                    root.dataset.powNonce = '';
                     window.setLoading(submit, false);
                     updateSubmitState(root);
-                    loadCaptcha(root);
+                    loadChallenge(root);
                 }, 2000);
             } catch (error) {
                 window.WindBlogAnalytics?.trackFormResult('comment', false);
@@ -481,7 +596,7 @@
                 root.dataset.commentSubmitting = 'false';
                 window.setLoading(submit, false);
                 updateSubmitState(root);
-                loadCaptcha(root);
+                loadChallenge(root);
             }
         };
     }
@@ -504,10 +619,12 @@
             };
         }
 
-        const refresh = root.querySelector('#comment-captcha-refresh');
-        if (refresh) refresh.onclick = () => loadCaptcha(root);
-        // Each request can finish independently; a stalled profile must not block the challenge or list.
-        await Promise.allSettled([syncLoginState(root), loadCaptcha(root), loadComments(root)]);
+        // The challenge is fetched only when the visitor engages with the comment form
+        // or scrolls the comment section into view, so crawlers and page prefetches
+        // never touch the verification endpoint.
+        bindVerificationTrigger(root);
+        // Each request can finish independently; a stalled profile must not block the list.
+        await Promise.allSettled([syncLoginState(root), loadComments(root)]);
     }
 
     window.toggleReplies = function (commentId, btn) {

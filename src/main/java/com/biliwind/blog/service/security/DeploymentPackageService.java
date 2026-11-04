@@ -57,6 +57,10 @@ public class DeploymentPackageService {
     String eventHashSecret;
 
     @Inject
+    @ConfigProperty(name = "windblog.comment-captcha.secret", defaultValue = "")
+    String commentCaptchaSecret;
+
+    @Inject
     @ConfigProperty(name = "windblog.site.public-url", defaultValue = "http://localhost:8080")
     String blogUrl;
 
@@ -199,6 +203,9 @@ public class DeploymentPackageService {
         sb.append("SECURITY_HEADERS_HSTS_ENABLED=true\n");
         sb.append("SWAGGER_UI_ENABLED=false\n");
         sb.append("SECURITY_EVENT_HASH_SECRET=").append(eventHashSecret).append("\n");
+        if (commentCaptchaSecret != null && !commentCaptchaSecret.isBlank()) {
+            sb.append("WINDBLOG_COMMENT_CAPTCHA_SECRET=").append(commentCaptchaSecret.trim()).append("\n");
+        }
         sb.append("WINDBLOG_OUTBOX_ENABLED=false\n");
         sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED=false\n");
         sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED=false\n");

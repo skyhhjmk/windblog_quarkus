@@ -63,6 +63,10 @@ public class CommentApiController {
     @GET
     @Path("/captcha")
     public Response captcha(@Context io.vertx.ext.web.RoutingContext context) {
+        if (!configManager.getBoolean("feature_toggles", "enable_comment", true)) {
+            return Response.status(Response.Status.FORBIDDEN)
+                    .entity(Map.of("success", false, "message", "评论功能已关闭")).build();
+        }
         checkRate(context, "captcha", 30);
         return Response.ok(Map.of("success", true, "data", captchaService.issue()))
                 .header("Cache-Control", "no-store").build();
@@ -157,7 +161,7 @@ public class CommentApiController {
         final String userAgent = headers.getHeaderString("User-Agent");
         final String clientOs = com.biliwind.blog.common.helper.CommentClientHelper.operatingSystem(userAgent);
         final String clientBrowser = com.biliwind.blog.common.helper.CommentClientHelper.browser(userAgent);
-        captchaService.verify(request.captchaId(), request.captchaAnswer());
+        captchaService.verify(request.captchaId(), request.powNonce());
 
         final Post post = findPublicPost(request.postSlug());
         final Comment parent = resolveParent(post, request.parentId());
@@ -393,7 +397,7 @@ public class CommentApiController {
             @Size(max = 255) String guestEmail,
             @Size(max = 2048) String guestWebsite,
             String captchaId,
-            String captchaAnswer) {
+            String powNonce) {
     }
 
     @RegisterForReflection

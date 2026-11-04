@@ -9,9 +9,14 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @ApplicationScoped
 public class ClientIpResolver {
+
+    public static final String SOURCE_AUTO = "auto";
+    public static final String SOURCE_NETWORK = "network";
+    public static final String SOURCE_HEADER = "header";
 
     private static final String CONFIG_KEY = "security_network";
     private static final String DEFAULT_TRUSTED_CIDRS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
@@ -31,6 +36,20 @@ public class ClientIpResolver {
 
     public ClientIpResolution resolve(String remoteAddress, String headerValue) {
         boolean trustedProxy = isTrustedProxy(remoteAddress);
+        String source = resolveSource();
+        if (SOURCE_NETWORK.equals(source)) {
+            return new ClientIpResolution(remoteAddress, remoteAddress, headerValue, trustedProxy,
+                    "系统设置要求仅使用网络连接地址");
+        }
+        if (SOURCE_HEADER.equals(source)) {
+            String headerAddress = firstValidAddress(headerValue);
+            if (headerAddress == null) {
+                return new ClientIpResolution(remoteAddress, remoteAddress, headerValue, trustedProxy,
+                        "系统设置要求使用请求头，但请求头没有有效客户端 IP");
+            }
+            return new ClientIpResolution(headerAddress, remoteAddress, headerValue, trustedProxy,
+                    "系统设置要求使用请求头客户端 IP");
+        }
         if (!trustedProxy) {
             return new ClientIpResolution(remoteAddress, remoteAddress, headerValue, false, "直连来源不在可信代理网段");
         }
@@ -39,6 +58,18 @@ public class ClientIpResolver {
             return new ClientIpResolution(remoteAddress, remoteAddress, headerValue, true, "可信代理未提供有效客户端 IP");
         }
         return new ClientIpResolution(headerAddress, remoteAddress, headerValue, true, "已使用可信代理客户端 IP 头");
+    }
+
+    public String resolveSource() {
+        String configuredSource = configManager.getString(CONFIG_KEY, "client_ip_source", SOURCE_AUTO);
+        if (configuredSource == null || configuredSource.isBlank()) {
+            return SOURCE_AUTO;
+        }
+        String normalized = configuredSource.trim().toLowerCase(Locale.ROOT);
+        if (SOURCE_NETWORK.equals(normalized) || SOURCE_HEADER.equals(normalized)) {
+            return normalized;
+        }
+        return SOURCE_AUTO;
     }
 
     public String resolveHeaderName() {
