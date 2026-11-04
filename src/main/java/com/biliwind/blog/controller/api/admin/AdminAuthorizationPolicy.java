@@ -68,9 +68,6 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/settings") && riskLevel == RiskLevel.HIGH) {
             return true;
         }
-        if (path.startsWith("/api/admin/codex-creator/config") && riskLevel == RiskLevel.HIGH) {
-            return true;
-        }
         if (path.startsWith("/api/admin/permissions/roles") && !"GET".equals(method)) {
             return true;
         }
@@ -104,12 +101,6 @@ public final class AdminAuthorizationPolicy {
                 || path.startsWith("/api/admin/edge-nodes")
                 || path.startsWith("/api/admin/storage/edge-nodes")
                 || path.startsWith("/api/admin/permissions/roles")) {
-            return !"GET".equals(method);
-        }
-        if (path.startsWith("/api/admin/codex-creator/config")) {
-            return !"GET".equals(method);
-        }
-        if (path.startsWith("/api/admin/codex-creator/test-servers")) {
             return !"GET".equals(method);
         }
         if (path.startsWith("/api/admin/settings/") && !"GET".equals(method)) {
@@ -148,10 +139,12 @@ public final class AdminAuthorizationPolicy {
         if (riskLevel == RiskLevel.HIGH) {
             return true;
         }
+        if (path.startsWith("/api/admin/ai/topics/") && path.endsWith("/runs")) {
+            return true;
+        }
         return path.endsWith("/publish") || path.contains("/replay") || path.endsWith("/retry")
                 || path.endsWith("/batch-retry") || path.endsWith("/test")
-                || path.endsWith("/topic-runs") || path.endsWith("/draft")
-                || path.endsWith("/draft/regenerate");
+                || path.endsWith("/draft") || path.endsWith("/draft/regenerate");
     }
 
     private static boolean isSensitiveSettingKey(String path) {
@@ -318,9 +311,6 @@ public final class AdminAuthorizationPolicy {
         }
         if (path.startsWith("/api/admin/settings")) {
             return "GET".equals(method) ? "settings.read" : "settings.write";
-        }
-        if (path.startsWith("/api/admin/codex-creator")) {
-            return "GET".equals(method) ? "codex_creator.read" : "codex_creator.write";
         }
         if ("GET".equals(method)) {
             return resource + ".read";

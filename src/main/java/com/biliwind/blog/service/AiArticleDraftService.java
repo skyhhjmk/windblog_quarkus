@@ -5,7 +5,6 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostHelper;
 import com.biliwind.blog.common.helper.SlugHelper;
 import com.biliwind.blog.context.AdminRequestContext;
-import com.biliwind.blog.model.CodexCreatorDraftAssignment;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.PostRevision;
@@ -13,7 +12,7 @@ import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ai.AiManager;
 import com.biliwind.blog.service.ai.AiResult;
-import com.biliwind.blog.service.ai.TopicAutomationGateway;
+import com.biliwind.blog.service.ai.LocalAiTopicService;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
 import com.biliwind.blog.service.link.ArticleExternalLinkService;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
@@ -33,11 +32,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 
 /**
- * API-provider article drafting for the topics module. The Codex Creator path
- * remains the default; this service lets an administrator switch a single
- * topic to a configured AI provider or polling group and receive a normal
- * WindBlog draft. The generated draft is linked back to the Codex Creator
- * topic pool so the assigned-tasks view stays consistent.
+ * AI-provider article drafting for the topic module. The admin request only
+ * creates a draft run; generation runs in the background so a slow provider
+ * cannot trip the public edge timeout.
  */
 @ApplicationScoped
 public class AiArticleDraftService {
@@ -49,7 +46,13 @@ public class AiArticleDraftService {
     AiManager aiManager;
 
     @Inject
-    TopicAutomationGateway topicGateway;
+    LocalAiTopicService topicService;
+
+    @Inject
+    com.biliwind.blog.service.ai.AiArticleDraftRunService runService;
+
+    @Inject
+    com.biliwind.blog.service.ai.AiArticleDraftRunner runner;
 
     @Inject
     AdminRequestContext adminRequestContext;
@@ -72,19 +75,57 @@ public class AiArticleDraftService {
     @Inject
     Event<PostSyncedEvent> postSyncedEvent;
 
-    @Transactional
-    public DraftResult generate(Long topicId, Long providerId, String language,
-                                String instructions, String repostPolicyCode) {
+    /** Creates an asynchronous draft run and returns it immediately. */
+    public Map<String, Object> start(Long topicId, Long providerId, String language, String instructions,
+                                     String repostPolicyCode, boolean regenerate) {
         if (topicId == null) {
             throw new BadRequestException("话题 ID 不能为空");
         }
-        JsonNode topic = readTopic(topicId);
-        String topicTitle = topic.path("title").asText("").trim();
-        if (topicTitle.isBlank()) {
+        Long operatorId = adminRequestContext.getUserId();
+        JsonNode topic = readTopic(topicId, operatorId);
+        if (topic.path("title").asText("").isBlank()) {
             throw new BadRequestException("话题标题为空");
         }
+        if (regenerate && !topic.path("postId").canConvertToLong()) {
+            throw new BadRequestException("该话题还没有可重新生成的草稿");
+        }
+        Map<String, Object> active = runService.activeForTopic(topicId);
+        if (active != null) return active;
+
         String effectiveLanguage = canonicalLanguage(language);
-        String prompt = buildPrompt(topic, effectiveLanguage, instructions);
+        String policy = repostPolicyCatalog.require(repostPolicyCode).code();
+        Map<String, Object> run = runService.create(topicId, providerId, effectiveLanguage,
+                truncate(instructions, 4000), policy, regenerate, operatorId);
+        Long runId = run.get("id") instanceof Number number ? number.longValue() : null;
+        if (runId == null) throw new IllegalStateException("draft run id missing");
+        runner.start(runId, topicId, providerId, effectiveLanguage,
+                truncate(instructions, 4000), policy, regenerate, operatorId);
+        return run;
+    }
+
+    public Map<String, Object> job(Long runId) {
+        return runService.view(runId);
+    }
+
+    public JsonNode readTopic(Long topicId, Long operatorId) {
+        try {
+            Map<String, Object> topic = dispatchTopic("topics.read", Map.of("id", topicId), operatorId);
+            JsonNode node = objectMapper.valueToTree(topic);
+            if (node == null || node.isNull() || node.isEmpty()) {
+                throw new BadRequestException("话题不存在");
+            }
+            return node;
+        } catch (BadRequestException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            throw new BadRequestException("读取话题失败: " + safeMessage(cause));
+        }
+    }
+
+    /** Calls the configured AI provider. Runs outside any database transaction. */
+    public DraftPayload generateContent(JsonNode topic, Long providerId, String language, String instructions) {
+        String prompt = buildPrompt(topic, language, instructions);
         AiResult result;
         try {
             result = aiManager.complete(providerId, "topic", SYSTEM_PROMPT, prompt)
@@ -97,11 +138,18 @@ public class AiArticleDraftService {
         String text = result == null || result.contents == null ? "" : result.contents.get("text");
         com.biliwind.blog.service.ai.AiArticleResponseParser.Article parsed =
                 com.biliwind.blog.service.ai.AiArticleResponseParser.parse(objectMapper, text);
-        String title = parsed.title();
-        String summary = parsed.summary();
-        String content = parsed.contentMarkdown();
+        return new DraftPayload(parsed.title(), parsed.summary(), parsed.contentMarkdown(), language, result);
+    }
 
-        User operator = currentOperator();
+    /** Persists the generated draft and links it back to the topic. */
+    @Transactional
+    public DraftSaved persist(Long topicId, JsonNode topic, DraftPayload draft, String repostPolicyCode,
+                              boolean regenerate, Long operatorId) {
+        String title = draft.title();
+        String summary = draft.summary();
+        String content = draft.contentMarkdown();
+        String effectiveLanguage = draft.language();
+        User operator = currentOperator(operatorId);
         OffsetDateTime now = OffsetDateTime.now();
         String slug = uniqueSlug(title, topicId);
         Map<String, String> titleMap = Map.of(effectiveLanguage, title);
@@ -109,30 +157,24 @@ public class AiArticleDraftService {
         Map<String, String> contentMap = PostHelper.injectBlockIds(
                 Map.of(effectiveLanguage, content));
 
-        // Check if a draft post already exists for this topic (regeneration case)
         Long existingPostId = topic.path("postId").canConvertToLong() ? topic.path("postId").asLong(0) : 0;
         Post post = null;
         if (existingPostId > 0) {
             post = Post.find("id = ?1", existingPostId)
                     .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
         }
-        if (post == null) {
-            CodexCreatorDraftAssignment assignment = CodexCreatorDraftAssignment.<CodexCreatorDraftAssignment>find(
-                    "topicId = ?1 order by createdAt desc", topicId).firstResult();
-            if (assignment != null && assignment.postId != null) {
-                post = Post.find("id = ?1", assignment.postId)
-                        .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
-            }
-        }
 
         boolean isRegeneration = post != null;
+        String effectivePolicy = (repostPolicyCode == null || repostPolicyCode.isBlank()) && post != null
+                ? post.repostPolicyCode
+                : repostPolicyCatalog.require(repostPolicyCode).code();
         if (isRegeneration) {
             if (post.status != PostStatus.DRAFT) {
                 throw new BadRequestException("原文章已不再是草稿，拒绝覆盖其当前修订");
             }
             post.title = titleMap;
             post.summary = summaryMap;
-            post.repostPolicyCode = repostPolicyCatalog.require(repostPolicyCode).code();
+            post.repostPolicyCode = effectivePolicy;
             post.updatedAt = now;
             post.persist();
 
@@ -158,7 +200,7 @@ public class AiArticleDraftService {
             post.renderType = PostRenderType.MARKDOWN;
             post.aiSummaryStatus = 2;
             post.user = operator;
-            post.repostPolicyCode = repostPolicyCatalog.require(repostPolicyCode).code();
+            post.repostPolicyCode = effectivePolicy;
             post.createdAt = now;
             post.updatedAt = now;
             post.persist();
@@ -176,54 +218,42 @@ public class AiArticleDraftService {
         }
 
         articleExternalLinkService.syncMarkdownLinks(post, contentMap);
-        auditService.log("post", post.id, isRegeneration ? "ai_article_draft_regenerate" : "ai_article_draft", null,
+        auditService.log("post", post.id,
+                regenerate || isRegeneration ? "ai_article_draft_regenerate" : "ai_article_draft",
+                null, null,
                 Map.of("topicId", topicId, "language", effectiveLanguage,
-                        "provider", result == null || result.provider == null ? "AI_MANAGER" : result.provider));
-        if (result != null && post.currentRevision != null) {
-            result.generationMode = isRegeneration ? "MANUAL_REGENERATION" : "MANUAL_ASSIGNMENT";
-            postAiMetadataService.record(post.id, post.currentRevision.id, "article", result, "DRAFT");
+                        "provider", draft.aiResult() == null || draft.aiResult().provider == null
+                                ? "AI_MANAGER" : draft.aiResult().provider),
+                operatorId);
+        if (draft.aiResult() != null && post.currentRevision != null) {
+            draft.aiResult().generationMode = regenerate || isRegeneration
+                    ? "MANUAL_REGENERATION" : "MANUAL_ASSIGNMENT";
+            postAiMetadataService.record(post.id, post.currentRevision.id, "article",
+                    draft.aiResult(), "DRAFT");
         }
         postSyncedEvent.fire(new PostSyncedEvent(post.id));
 
-        String warning = null;
-        try {
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("topicId", topicId);
-            payload.put("postId", post.id);
-            payload.put("language", effectiveLanguage);
-            payload.put("instructions", instructions == null ? "" : truncate(instructions, 4000));
-            payload.put("repostPolicyCode", post.repostPolicyCode);
-            payload.put("modelName", result == null || result.modelId == null ? "" : result.modelId);
-            payload.put("provider", result == null || result.provider == null ? "AI_MANAGER" : result.provider);
-            topicGateway.command("topics.bindDraft", payload,
-                            "windblog-admin:" + operator.id, UUID.randomUUID().toString())
-                    .toCompletableFuture()
-                    .join();
-        } catch (RuntimeException exception) {
-            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
-            warning = "草稿已创建，但回写话题状态失败: " + safeMessage(cause);
-        }
+        Map<String, Object> bindPayload = new LinkedHashMap<>();
+        bindPayload.put("topicId", topicId);
+        bindPayload.put("postId", post.id);
+        bindPayload.put("language", effectiveLanguage);
+        bindPayload.put("repostPolicyCode", post.repostPolicyCode);
+        bindPayload.put("modelName", draft.aiResult() == null || draft.aiResult().modelId == null
+                ? "" : draft.aiResult().modelId);
+        bindPayload.put("provider", draft.aiResult() == null || draft.aiResult().provider == null
+                ? "AI_MANAGER" : draft.aiResult().provider);
+        dispatchTopic("topics.bindDraft", bindPayload, operatorId);
 
-        return new DraftResult(post.id, slug, title, summary, content, effectiveLanguage, warning);
+        return new DraftSaved(post.id, slug, title, summary);
     }
 
-    private JsonNode readTopic(Long topicId) {
-        try {
-            JsonNode response = topicGateway.command("topics.read", Map.of("id", topicId),
-                            "windblog-admin:" + actorId(), UUID.randomUUID().toString())
-                    .toCompletableFuture()
-                    .join();
-            JsonNode data = response.path("data");
-            if (data.isMissingNode() || data.isNull() || data.isEmpty()) {
-                throw new BadRequestException("话题不存在");
-            }
-            return data;
-        } catch (BadRequestException exception) {
-            throw exception;
-        } catch (RuntimeException exception) {
-            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
-            throw new BadRequestException("读取话题失败: " + safeMessage(cause));
-        }
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> dispatchTopic(String command, Map<String, Object> payload, Long operatorId) {
+        long actor = operatorId == null ? 0L : operatorId;
+        Object result = topicService.dispatch(command, objectMapper.valueToTree(payload),
+                "windblog-admin:" + actor, UUID.randomUUID().toString());
+        if (result instanceof Map<?, ?> map) return (Map<String, Object>) map;
+        return Map.of();
     }
 
     private String buildPrompt(JsonNode topic, String language, String instructions) {
@@ -282,19 +312,13 @@ public class AiArticleDraftService {
         return slug;
     }
 
-    private User currentOperator() {
-        Long userId = adminRequestContext.getUserId();
-        User user = userId == null ? null
-                : User.find("id = ?1 and status = 1 and deletedAt is null", userId).firstResult();
+    private User currentOperator(Long operatorId) {
+        User user = operatorId == null ? null
+                : User.find("id = ?1 and status = 1 and deletedAt is null", operatorId).firstResult();
         if (user == null) {
             throw new BadRequestException("当前管理员不存在或已禁用");
         }
         return user;
-    }
-
-    private Long actorId() {
-        Long userId = adminRequestContext.getUserId();
-        return userId == null ? 0L : userId;
     }
 
     private String canonicalLanguage(String language) {
@@ -325,7 +349,10 @@ public class AiArticleDraftService {
         return message.length() > 300 ? message.substring(0, 300) : message;
     }
 
-    public record DraftResult(Long postId, String slug, String title, String summary,
-                              String contentMarkdown, String language, String warning) {
+    public record DraftPayload(String title, String summary, String contentMarkdown,
+                               String language, AiResult aiResult) {
+    }
+
+    public record DraftSaved(Long postId, String slug, String title, String summary) {
     }
 }

@@ -28,11 +28,11 @@ class LocalAiTopicServiceTest {
 
     @Test
     @Transactional
-    void importsListsAndReviewsTopicsWithoutCodex() throws Exception {
+    void importsListsAndReviewsTopicsFromProviders() throws Exception {
         String title = "本地话题 " + UUID.randomUUID();
         JsonNode payload = objectMapper.valueToTree(Map.of("topics", List.of(Map.of(
                 "title", title,
-                "rationale", "验证本地话题池不依赖 Codex Creator。",
+                "rationale", "验证话题池由普通 AI 提供商维护。",
                 "seedId", 7,
                 "keywords", List.of("quarkus", "topic"),
                 "recommendation", "WRITE",

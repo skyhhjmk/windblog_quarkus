@@ -42,9 +42,6 @@ public class CommentApiController {
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
 
     @Inject
-    com.biliwind.blog.service.CodexCreatorEventPublisher codexCreatorEventPublisher;
-
-    @Inject
     com.biliwind.blog.common.CacheService cacheService;
 
     @Inject
@@ -226,8 +223,6 @@ public class CommentApiController {
             reliableAiTaskService.enqueueAudit(
                     new com.biliwind.blog.service.ai.AiAuditTask(result.id, result.content));
         }
-        codexCreatorEventPublisher.commentCreated(result.id, post.id, result.content, null);
-
         // 清理侧边栏统计
         cacheService.delete(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_STATS);
 

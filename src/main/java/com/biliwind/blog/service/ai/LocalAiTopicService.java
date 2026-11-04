@@ -25,9 +25,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * WindBlog-owned topic pool used when a normal AI provider serves the topic
- * operation. It mirrors the subset of the Codex Creator topic-automation
- * commands consumed by the admin UI, so the same page works without Codex.
+ * WindBlog-owned AI topic pool. Topic discovery, review and draft linking are
+ * all served by a configured AI provider (or polling group); no external
+ * Codex Creator service is involved.
  */
 @ApplicationScoped
 public class LocalAiTopicService {
@@ -43,9 +43,6 @@ public class LocalAiTopicService {
 
     @Inject
     AiTopicRunner runner;
-
-    @Inject
-    AiTopicModeService modeService;
 
     @Transactional
     public Object dispatch(String command, JsonNode payload, String actorId, String traceId) {
@@ -69,11 +66,7 @@ public class LocalAiTopicService {
             case "runs.read" -> runService.view(requiredId(payload, "id"));
             case "runs.list" -> runService.list(integer(payload, "page", 1),
                     integer(payload, "pageSize", 20));
-            case "models.list" -> Map.of("topic", List.of(), "article", List.of());
-            case "test-servers.list" -> Map.of("items", List.of());
-            case "test-servers.setup-guide" -> Map.of();
-            case "quota.read" -> Map.of("mode", "LOCAL", "unlimited", true);
-            default -> throw new IllegalArgumentException("本地话题模式不支持命令: " + command);
+            default -> throw new IllegalArgumentException("不支持的话题命令: " + command);
         };
     }
 
@@ -88,9 +81,6 @@ public class LocalAiTopicService {
         AiTopicPoolSettings settings = settings();
         Long providerId = payload != null && payload.hasNonNull("providerId")
                 ? payload.path("providerId").asLong() : null;
-        if (modeService.localMode() && modeService.isCodexProvider(providerId)) {
-            providerId = null;
-        }
         int maxTopics = Math.max(1, Math.min(50,
                 integer(payload, "maxTopics", settings.maxTopicsPerRun)));
         String language = text(payload, "language", "zh-CN");

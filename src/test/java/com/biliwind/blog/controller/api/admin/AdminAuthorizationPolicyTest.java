@@ -170,10 +170,10 @@ class AdminAuthorizationPolicyTest {
         assertEquals("system.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/system/monitor").action());
         assertEquals("system.read", AdminAuthorizationPolicy.decide(
                 "GET", "/api/admin/system/observability/grafana-embed-url").action());
-        assertEquals("codex_creator.read", AdminAuthorizationPolicy.decide(
-                "GET", "/api/admin/codex-creator/config").action());
-        assertEquals("codex_creator.write", AdminAuthorizationPolicy.decide(
-                "PUT", "/api/admin/codex-creator/config").action());
+        assertEquals("ai.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/ai/topics").action());
+        assertEquals("ai.write", AdminAuthorizationPolicy.decide(
+                "PUT", "/api/admin/ai/topics/automation").action());
         assertEquals("user.write", AdminAuthorizationPolicy.decide("PUT", "/api/admin/users/7").action());
         assertEquals("outbox.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/outbox").action());
         assertEquals("outbox.replay", AdminAuthorizationPolicy.decide(
@@ -183,21 +183,19 @@ class AdminAuthorizationPolicyTest {
     @Test
     void shouldKeepSensitiveResourceWritesBehindExplicitStepUpOrSuperAdmin() {
         assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/settings/site.confirm").superAdminOnly());
-        assertTrue(AdminAuthorizationPolicy.decide("PUT", "/api/admin/codex-creator/config").superAdminOnly());
-        assertTrue(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/codex-creator/config"));
-        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/codex-creator/config"));
-        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-runs"));
-        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/codex-creator/topic-runs"));
-        assertFalse(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/codex-creator/topic-automation"));
-        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/codex-creator/topic-automation"));
-        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topic-seeds"));
-        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/codex-creator/topic-seeds/7"));
-        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/codex-creator/topics/7/review"));
-        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/codex-creator/topics/7/draft"));
+        assertFalse(AdminAuthorizationPolicy.decide("PUT", "/api/admin/ai/topics/automation").superAdminOnly());
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("PUT", "/api/admin/ai/topics/automation"));
+        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("PUT", "/api/admin/ai/topics/automation"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/ai/topics/runs"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/ai/topics/runs"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/ai/topics/seeds"));
+        assertFalse(AdminAuthorizationPolicy.requiresIdempotencyKey("DELETE", "/api/admin/ai/topics/seeds/7"));
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/ai/topics/7/review"));
+        assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", "/api/admin/ai/topics/7/draft"));
         assertFalse(AdminAuthorizationPolicy.requiresStepUp(
-                "POST", "/api/admin/codex-creator/topics/7/draft/regenerate"));
+                "POST", "/api/admin/ai/topics/7/draft/regenerate"));
         assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey(
-                "POST", "/api/admin/codex-creator/topics/7/draft/regenerate"));
+                "POST", "/api/admin/ai/topics/7/draft/regenerate"));
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/permissions/roles/ADMIN").superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/database/seed").superAdminOnly());
         assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/dead-letters/7/retry").superAdminOnly());
@@ -228,8 +226,6 @@ class AdminAuthorizationPolicyTest {
     void shouldClassifyCredentialsAndIrreversibleChangesAsHighRisk() {
         assertEquals(AdminAuthorizationPolicy.RiskLevel.HIGH,
                 AdminAuthorizationPolicy.decide("PUT", "/api/admin/settings/elasticsearch").riskLevel());
-        assertEquals(AdminAuthorizationPolicy.RiskLevel.HIGH,
-                AdminAuthorizationPolicy.decide("POST", "/api/admin/codex-creator/test-servers").riskLevel());
         assertEquals(AdminAuthorizationPolicy.RiskLevel.HIGH,
                 AdminAuthorizationPolicy.decide("POST", "/api/admin/repost/tokens/7/revoke").riskLevel());
         assertEquals(AdminAuthorizationPolicy.RiskLevel.LOW,

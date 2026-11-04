@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Root Maven module: the Java 21 / Quarkus application — public blog pages, public content APIs, user APIs, admin APIs, gRPC edge sync.
 - `admin-flutter/`: Flutter admin UI (git submodule, separate repo).
-- `codex-creator/`: independent Quarkus AI-orchestration service with its own `codex_creator` database (git submodule, separate repo).
+- `codex-creator/`: retired AI-orchestration submodule. It is no longer deployed, called, or imported by WindBlog; all AI work uses configured AI providers.
 - `src/main/resources/templates/`: Qute templates; `src/main/resources/META-INF/resources/assets/`: public CSS/JS/vendor; `src/main/resources/db/migration/`: Liquibase changesets.
 - Deployment: `docker-compose.yml` (full stack), `docker-compose.local-test.yml`, `docker-compose.edge.yml`, `k8s/`, `deploy/nginx/`, `observability/`.
 - `AGENTS.md` holds the mandatory `bt-main` release procedure; follow it exactly when asked to release.
@@ -32,16 +32,15 @@ The local multi-container stack (isolated names, Podman or Docker):
 
 ```bash
 bash scripts/local-test.sh up|status|down
-bash scripts/local-test.sh logs 200 codex-creator
+bash scripts/local-test.sh logs 200 windblog
 ```
 
-Entry points: `http://127.0.0.1:58080` (same-origin edge), `58081` (direct WindBlog), `59000` (gRPC), `58091` (Codex Creator). See `docs/local-test-environment.md`. `.env` may pin `WINDBLOG_IMAGE=localhost/windblog:local-native` with `WINDBLOG_PULL_POLICY=never`; rebuild before expecting container behavior to change.
+Entry points: `http://127.0.0.1:58080` (same-origin edge), `58081` (direct WindBlog), `59000` (gRPC). See `docs/local-test-environment.md`. `.env` may pin `WINDBLOG_IMAGE=localhost/windblog:local-native` with `WINDBLOG_PULL_POLICY=never`; rebuild before expecting container behavior to change.
 
 Submodules use their own build:
 
 ```bash
 cd admin-flutter && flutter pub get && flutter analyze && flutter test
-cd codex-creator && bash mvnw test
 ```
 
 ## Architecture
@@ -92,7 +91,7 @@ Native builds freeze channel topology, so the Quarkus profile (`prod` for primar
 
 ### AI integration
 
-`AiService` adapters (OpenAI, ChatGLM, Cerebras, Ollama, mock) are selected by `AiManager`/`AiSelectionService` from DB-backed provider configs, with `AiRateLimiter` and reliable task retries. Codex Creator is a separate service with its own database; WindBlog touches it only through `CodexCreatorHttpClient` and `CodexCreatorEventPublisher` with HMAC-signed requests (`X-Codex-*` headers). Never import Codex Creator Java types or share tables. Contract: `docs/codex-creator-integration.md`.
+`AiService` adapters (OpenAI, ChatGLM, Cerebras, Ollama, mock) are selected by `AiManager`/`AiSelectionService` from DB-backed provider configs, with `AiRateLimiter` and reliable task retries. Topic discovery, the topic pool, review and article drafting all run through this AI provider layer; the retired Codex Creator service must not be reintroduced. Topic and draft runs are asynchronous, recover stale `QUEUED`/`RUNNING` rows on a schedule, and store their state in `ai_topic_pool_runs` / `ai_article_draft_runs`. See `docs/ai-topic-automation.md`.
 
 ### Database
 
@@ -114,6 +113,6 @@ Errors use stable `WB-*` codes from `ErrorCodeCatalog`, returned as JSON `errorC
 - `docs/2026-08-02-windblog-home-cloud-runbook.md` — production/security requirements
 - `docs/observability-gateway.md` — production Grafana/observability stack and APISIX embed route
 - `docs/edge-sync-protocol-design.md` — WESP multi-node design and status
-- `docs/codex-creator-integration.md`, `docs/fake-ai-api.md` — AI service boundary and test double
+- `docs/ai-topic-automation.md`, `docs/fake-ai-api.md` — AI topic/draft automation and test double
 - `docs/admin-api.md` — admin API overview and Swagger/OpenAPI locations
 - `docs/error-codes.md`, `docs/markdown-negotiation.md`, `docs/regional-canonical.md`, `docs/seo-management.md`, `docs/structured-data-seo.md`, `docs/article-reference-cards.md`

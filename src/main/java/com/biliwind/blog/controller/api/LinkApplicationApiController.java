@@ -51,9 +51,6 @@ public class LinkApplicationApiController {
     @Inject
     ClientIpResolver clientIpResolver;
 
-    @Inject
-    com.biliwind.blog.service.CodexCreatorEventPublisher codexCreatorEventPublisher;
-
     @POST
     @Transactional
     public Response apply(LinkApplicationRequest request) {
@@ -80,7 +77,6 @@ public class LinkApplicationApiController {
 
         Link application = createApplication(request, normalizedUrl, probeResult);
         application.persist();
-        codexCreatorEventPublisher.linkApplicationCreated(application.id, application.url, application.name, null);
 
         return Response.status(Response.Status.CREATED)
                 .entity(Map.of(

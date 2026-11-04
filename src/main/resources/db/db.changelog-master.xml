@@ -154,4 +154,6 @@
     <include file="db/migration/153-create-local-ai-topic-pool.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/154-create-ai-topic-pool-runs.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/155-add-ai-provider-concurrency-limit.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/156-create-ai-article-draft-runs.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/157-remove-codex-creator-integration.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

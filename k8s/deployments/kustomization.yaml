@@ -15,4 +15,3 @@ resources:
   - clamav-pvc.yaml
   - clamav-deployment.yaml
   - windblog-deployment.yaml
-  - codex-creator-deployment.yaml

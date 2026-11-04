@@ -49,9 +49,6 @@ public class AdminPostApiController {
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
 
     @Inject
-    com.biliwind.blog.service.CodexCreatorEventPublisher codexCreatorEventPublisher;
-
-    @Inject
     com.biliwind.blog.service.ai.AiManager aiManager;
 
     @Inject
@@ -286,11 +283,6 @@ public class AdminPostApiController {
         }
 
         esSyncEvent.fire(new PostSyncedEvent(post.id));
-        codexCreatorEventPublisher.postRevisionUpdated(post.id, revision.id,
-                Map.of("title", request.title(), "contentMarkdown", request.contentMarkdown() == null ? "" : request.contentMarkdown()), null);
-        if (requestedStatus == PostStatus.PUBLISHED) {
-            codexCreatorEventPublisher.postPublished(post.id, Map.of("postId", post.id, "title", request.title()), null);
-        }
 
         return toDetail(post);
     }
@@ -345,12 +337,6 @@ public class AdminPostApiController {
         }
 
         esSyncEvent.fire(new PostSyncedEvent(post.id));
-        if (post.currentRevision != null) {
-            Map<String, Object> revisionInput = new LinkedHashMap<>();
-            revisionInput.put("title", post.currentRevision.title == null ? "" : post.currentRevision.title);
-            revisionInput.put("contentMarkdown", post.currentRevision.contentMarkdown == null ? "" : post.currentRevision.contentMarkdown);
-            codexCreatorEventPublisher.postRevisionUpdated(post.id, post.currentRevision.id, revisionInput, null);
-        }
         return toDetail(post);
     }
 
@@ -376,8 +362,6 @@ public class AdminPostApiController {
         }
         articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
-        codexCreatorEventPublisher.postPublished(post.id, Map.of("postId", post.id,
-                "revisionId", post.publishedRevision == null ? 0L : post.publishedRevision.id), null);
         return toDetail(post);
     }
 

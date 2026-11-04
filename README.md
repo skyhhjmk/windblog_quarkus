@@ -7,8 +7,8 @@ If you want to learn more about Quarkus, please visit its website: <https://quar
 ## 生产部署 Quick Start（Docker Compose）
 
 下面的流程适用于使用仓库已经发布的 native 镜像启动 WindBlog。服务器不需要上传
-`admin-flutter/`、`codex-creator/` 源码、Maven `target/` 或 Flutter `build/`；Compose
-会拉取 WindBlog 和 Codex Creator 镜像，Elasticsearch 的 IK 镜像则在服务器本地构建。
+`admin-flutter/` 源码、Maven `target/` 或 Flutter `build/`；Compose
+会拉取 WindBlog 镜像，Elasticsearch 的 IK 镜像则在服务器本地构建。
 
 ### 1. 服务器要求
 
@@ -63,23 +63,16 @@ docker login ghcr.io
     ├── windblog-logs/
     ├── uploads/
     ├── wesp-blocks/
-    ├── wesp-config/
-    ├── codex-creator-data/
-    └── codex-creator-logs/
+    └── wesp-config/
 ```
 
 `.env` 应从 `.env.example` 复制后在服务器生成或填写，不能上传真实的 `.env.example`
-占位值作为生产配置。不要上传 `.git/`、日志、数据库目录、上传文件、私钥或本机的
-`codex-auth/`；已有实例迁移时，`postgres-data/`、`uploads/`、`certs/` 和其他持久化目录
+占位值作为生产配置。不要上传 `.git/`、日志、数据库目录、上传文件或私钥；已有实例迁移时，`postgres-data/`、`uploads/`、`certs/` 和其他持久化目录
 必须单独备份并原样迁移。
 
 数据库结构不通过额外的 PostgreSQL init SQL 文件维护。WindBlog 的业务表由
 `src/main/resources/db/migration/` 下的 Liquibase changeset 在 WindBlog 启动时迁移；
-Codex Creator 的独立数据库表由
-`codex-creator/src/main/resources/db/changelog/` 下的 Liquibase changeset 在
-Codex Creator 启动时迁移。当前 `docker-compose.yml` 的 `codex-creator-db-init` 服务会在
-PostgreSQL healthy 后幂等地创建 `codex_creator` 数据库并启用 `vector` 扩展，然后由
-Codex Creator 自己执行 Liquibase 迁移；因此不再需要额外上传或手工执行数据库 init SQL。
+数据库镜像仍保留 pgvector 以兼容既有卷，但不再创建独立的 `codex_creator` 数据库。
 
 可用下面的命令从本地仓库制作不包含运行数据和密钥的上传包：
 
@@ -89,14 +82,11 @@ tar --exclude='.git' \
     --exclude='target' \
     --exclude='admin-flutter/build' \
     --exclude='admin-flutter/.dart_tool' \
-    --exclude='codex-creator/target' \
-    --exclude='codex-auth' \
     --exclude='postgres-data' --exclude='redis-data' \
     --exclude='rabbitmq_data' --exclude='elasticsearch-data' \
     --exclude='kibana-data' --exclude='prometheus-data' --exclude='grafana-data' --exclude='clamav-data' \
     --exclude='windblog-logs' --exclude='uploads' \
     --exclude='wesp-blocks' --exclude='wesp-config' \
-    --exclude='codex-creator-data' --exclude='codex-creator-logs' \
     -czf windblog-compose.tar.gz \
     README.md AGENTS.md .env.example admin.sh docker-compose.yml filebeat.docker.yml \
     docker/elasticsearch observability src/main/resources/elasticsearch deploy/nginx
@@ -201,7 +191,6 @@ Grafana Ingress 使用 ingress-nginx 的 `configuration-snippet` 将 15 分钟 J
 ```text
 docker compose 项目
 ├── windblog          # 主博客、后台 API，HTTP 8080，gRPC 9000
-├── codex-creator     # AI 编排服务，容器网络内 8681
 ├── db                # PostgreSQL + pgvector
 ├── redis             # 缓存和限流
 ├── rabbitmq          # 异步任务队列
@@ -216,7 +205,7 @@ docker compose 项目
 └── clamav            # security profile，媒体病毒扫描
 ```
 
-`postgres-data/`、`uploads/`、`windblog-logs/`、`wesp-*`、`codex-creator-*`、`prometheus-data/`、`grafana-data/` 和证书目录
+`postgres-data/`、`uploads/`、`windblog-logs/`、`wesp-*`、`prometheus-data/`、`grafana-data/` 和证书目录
 都是运行数据。升级镜像或重新上传代码时只替换代码/编排文件，不能删除这些目录，也不要执行
 带 `-v` 的 `docker compose down`，否则会删除数据库和其他服务数据。
 

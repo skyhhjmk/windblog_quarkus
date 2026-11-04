@@ -40,7 +40,7 @@ scripts/wesp-two-node-test.sh up
 | home | 家中主动连接主节点 | `127.0.0.1:58181` | `127.0.0.1:59181` | `wesp_home` |
 
 `public` 使用 `primary` 角色，`home` 使用轻量 `edge` 角色；两者都运行同一
-native-micro 镜像，但 home 不启用 Elasticsearch、RabbitMQ、Codex Creator、ClamAV
+native-micro 镜像，但 home 不启用 Elasticsearch、RabbitMQ、ClamAV
 和后台日志/指标任务，模拟实际家用宽带节点。
 这里的轻量化指运行时依赖与资源上限收敛，代码仍复用 WindBlog native runner；不是另拆
 一个完全独立的 edge-agent 二进制。
@@ -65,7 +65,7 @@ scripts/wesp-two-node-test.sh up
 2. 创建隔离数据库 `wesp_public` 和 `wesp_home`（只在不存在时创建）；
 3. 以 `edge` profile 构建当前源码，并使用 `native-micro` 运行时生成
    `localhost/windblog:wesp-two-node-edge` 轻量镜像（不部署 RabbitMQ、Elasticsearch、
-   Codex Creator 或 ClamAV）；
+   ClamAV）；
 4. 生成 32 字节随机共享令牌（64 个十六进制字符）；
 5. 写出两个权限为 `0600` 的 env 文件；
 6. 以持久化 Podman 容器启动两个实例。

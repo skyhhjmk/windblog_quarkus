@@ -4,7 +4,7 @@
 
 WindBlog uses Java 21 and Quarkus. Backend code lives in `src/main/java/com/biliwind/blog/`, organized into controllers, services, repositories, models, and configuration. Tests mirror these packages under `src/test/java/`. Qute templates live in `src/main/resources/templates/`; public assets are under `src/main/resources/META-INF/resources/`; database migrations are under `src/main/resources/db/`.
 
-`admin-flutter/` is the Flutter administration UI, with code in `lib/`, assets in `assets/`, and tests in `test/`. `codex-creator/` is an independent Quarkus AI orchestration service with its own database. Both are Git submodules, not parent Maven modules. Deployment resources live in `docker/`, `deploy/`, and `k8s/`; operational guidance lives in `docs/`.
+`admin-flutter/` is the Flutter administration UI, with code in `lib/`, assets in `assets/`, and tests in `test/`. `codex-creator/` is a retired Git submodule; it is not deployed or called by WindBlog. Deployment resources live in `docker/`, `deploy/`, and `k8s/`; operational guidance lives in `docs/`.
 
 ## Build, Test, and Development Commands
 
@@ -18,7 +18,7 @@ Run backend commands from the repository root:
 - `bash mvnw test -Pcoverage`: generate coverage reports and enforce thresholds.
 - `bash scripts/local-test.sh up`: start the isolated container stack; see `docs/local-test-environment.md` for prerequisites and endpoints.
 
-Run `bash mvnw test` inside `codex-creator/` separately. Inside `admin-flutter/`, use `flutter pub get`, `flutter analyze`, and `flutter test`.
+Inside `admin-flutter/`, use `flutter pub get`, `flutter analyze`, and `flutter test`. Do not run or extend the retired `codex-creator/` service.
 
 After any code update, update the corresponding local development environment before considering the work complete. For Quarkus services, rebuild or restart the affected service/container and verify its health or startup logs; for Flutter, restart or hot-reload the active development app and verify that the changed behavior is loaded. Do not report a code change as completed while the local runtime is still using stale artifacts.
 
@@ -50,4 +50,4 @@ For a user-requested release to `bt-main`, follow this order:
 
 ## Security & Configuration
 
-Use `.env.example` as a configuration reference. Never commit credentials, `.env`, private keys, uploads, logs, or database volumes. Keep Codex Creator's database separate from WindBlog's.
+Use `.env.example` as a configuration reference. Never commit credentials, `.env`, private keys, uploads, logs, or database volumes.

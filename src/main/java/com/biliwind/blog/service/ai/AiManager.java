@@ -193,8 +193,7 @@ public class AiManager {
             selected = selectionService.select(op, configs);
             if (selected == null && selectionService.configuredId(op) != null) {
                 // An explicit selection that is disabled or does not allow this
-                // operation must not silently fall back to another provider
-                // (which could be the Codex Creator interface).
+                // operation must not silently fall back to another provider.
                 return CompletableFuture.failedFuture(new RuntimeException(
                         "功能配置的 AI 提供商不存在、已禁用或不支持该操作: " + op));
             }

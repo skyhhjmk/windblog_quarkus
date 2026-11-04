@@ -1,13 +1,8 @@
 # Local-only test overlay.
 # Keep the base Compose file unchanged for the normal deployment topology.
-# An isolated Codex auth directory is supplied at runtime through
-# CODEX_CREATOR_HOST_CODEX_DIR; the helper script prepares it from auth.json.
 services:
   db:
     container_name: windblog-codex-test-db
-
-  codex-creator-db-init:
-    container_name: windblog-codex-test-db-init
 
   windblog:
     container_name: windblog-codex-test-windblog
@@ -40,29 +35,6 @@ services:
       timeout: 5s
       retries: 8
       start_period: 10s
-
-  codex-creator:
-    container_name: windblog-codex-test-codex-creator
-    environment:
-      # Optional host proxy for environments where the container network cannot
-      # reach the Codex service directly. Production Compose remains unchanged.
-      HTTP_PROXY: "${CODEX_CREATOR_HTTP_PROXY:-}"
-      HTTPS_PROXY: "${CODEX_CREATOR_HTTPS_PROXY:-}"
-      ALL_PROXY: "${CODEX_CREATOR_ALL_PROXY:-}"
-      NO_PROXY: "${CODEX_CREATOR_NO_PROXY:-localhost,127.0.0.1,windblog,db,redis}"
-      # Some base images carry lower-case proxy variables. Set both spellings
-      # explicitly so an image-level loopback proxy cannot leak into the test
-      # container when the host proxy is disabled or translated by the helper.
-      http_proxy: "${CODEX_CREATOR_HTTP_PROXY:-}"
-      https_proxy: "${CODEX_CREATOR_HTTPS_PROXY:-}"
-      all_proxy: "${CODEX_CREATOR_ALL_PROXY:-}"
-      no_proxy: "${CODEX_CREATOR_NO_PROXY:-localhost,127.0.0.1,windblog,db,redis}"
-    ports:
-      - target: 8681
-        published: "${CODEX_CREATOR_HOST_PORT:-58091}"
-        host_ip: "127.0.0.1"
-    volumes:
-      - ${CODEX_CREATOR_HOST_CODEX_DIR:?CODEX_CREATOR_HOST_CODEX_DIR must point to an isolated local Codex auth directory}:/data/codex-creator/.codex:rw
 
   redis:
     container_name: windblog-codex-test-redis

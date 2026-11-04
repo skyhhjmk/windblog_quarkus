@@ -6,17 +6,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
 import java.util.List;
 
 @ApplicationScoped
 public class AiSelectionService {
     @Inject
     ObjectMapper objectMapper;
-
-    @ConfigProperty(name = "windblog.ai.codex-creator.prefer", defaultValue = "false")
-    boolean preferCodexCreator;
 
     public AiProviderConfig select(String operation, List<AiProviderConfig> configs) {
         if (configs == null || configs.isEmpty()) return null;
@@ -34,17 +29,6 @@ public class AiSelectionService {
             }
             return null;
         }
-        if (preferCodexCreator) {
-            for (AiProviderConfig config : configs) {
-                if (config.enabled && "CODEX_CREATOR".equalsIgnoreCase(config.provider)
-                        && allows(config, operation)) return config;
-            }
-        }
-        // Prefer normal/standard AI providers over CODEX_CREATOR
-        for (AiProviderConfig config : configs) {
-            if (config.enabled && !"CODEX_CREATOR".equalsIgnoreCase(config.provider)
-                    && allows(config, operation)) return config;
-        }
         for (AiProviderConfig config : configs) {
             if (config.enabled && allows(config, operation)) return config;
         }
@@ -58,7 +42,6 @@ public class AiSelectionService {
         if (configs == null) return null;
         for (AiProviderConfig config : configs) {
             if (config != primary && config.enabled
-                    && !"CODEX_CREATOR".equalsIgnoreCase(config.provider)
                     && allows(config, operation)) return config;
         }
         return null;

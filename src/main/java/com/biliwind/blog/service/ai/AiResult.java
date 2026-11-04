@@ -53,7 +53,7 @@ public class AiResult {
      */
     public String rawResponse;
 
-    /** Optional provider provenance populated by the Codex Creator adapter. */
+    /** Optional provider provenance populated by AI provider adapters. */
     public String provider;
     public String modelId;
     public String reasoningEffort;

@@ -3,8 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="${WINDBLOG_DATA_DIR:-${ROOT_DIR}/.codex-test-data}"
-AUTH_SOURCE_DIR="${CODEX_SOURCE_DIR:-${HOME}/.codex}"
-AUTH_DIR="${DATA_DIR}/codex-auth"
 
 cd "${ROOT_DIR}"
 
@@ -26,27 +24,8 @@ if [[ -z "${WINDBLOG_PULL_POLICY:-}" ]]; then
   WINDBLOG_PULL_POLICY="$(dotenv_value WINDBLOG_PULL_POLICY)"
 fi
 
-prepare_auth_cache() {
-  if [[ ! -r "${AUTH_SOURCE_DIR}/auth.json" ]]; then
-    echo "Missing readable Codex auth cache: ${AUTH_SOURCE_DIR}/auth.json" >&2
-    echo "Run 'codex login' on the host, then retry." >&2
-    exit 1
-  fi
-
-  mkdir -p "${AUTH_DIR}"
-  if ! podman unshare test -s "${AUTH_DIR}/auth.json"; then
-    cp --preserve=mode,timestamps "${AUTH_SOURCE_DIR}/auth.json" "${AUTH_DIR}/auth.json"
-  fi
-  podman unshare chown -R "${CODEX_CONTAINER_UID}:${CODEX_CONTAINER_UID}" "${AUTH_DIR}"
-  podman unshare chmod 700 "${AUTH_DIR}"
-  podman unshare chmod 600 "${AUTH_DIR}/auth.json"
-}
-
-export CODEX_CREATOR_HOST_CODEX_DIR="${CODEX_CREATOR_HOST_CODEX_DIR:-${AUTH_DIR}}"
 export WINDBLOG_IMAGE="${WINDBLOG_IMAGE:-docker.io/hhjmk/windblog_quarkus:latest-native}"
 export WINDBLOG_PULL_POLICY="${WINDBLOG_PULL_POLICY:-always}"
-export CODEX_CREATOR_IMAGE="${CODEX_CREATOR_IMAGE:-localhost/codex-creator:native-codex-0.150.1-final}"
-export CODEX_CREATOR_PULL_POLICY="${CODEX_CREATOR_PULL_POLICY:-never}"
 # Keep the runtime profile and Cookie flag aligned with the native image's
 # build profile. A local dev-profile native image can therefore use plain HTTP
 # (COOKIE_SECURE=false), while a prod-profile image still defaults to secure
@@ -64,8 +43,6 @@ if [[ "${WINDBLOG_IMAGE}" == *native* ]]; then
     export COOKIE_SECURE=true
   fi
 fi
-CODEX_CONTAINER_UID="${CODEX_CONTAINER_UID:-$(podman image inspect "${CODEX_CREATOR_IMAGE}" --format '{{.Config.User}}' | cut -d: -f1)}"
-CODEX_CONTAINER_UID="${CODEX_CONTAINER_UID:-1001}"
 export WINDBLOG_DATA_DIR="${DATA_DIR}"
 export WINDBLOG_SITE_PUBLIC_URL="${WINDBLOG_SITE_PUBLIC_URL:-http://127.0.0.1:58080}"
 export CORS_ORIGINS="${CORS_ORIGINS:-http://127.0.0.1:58080}"
@@ -82,11 +59,6 @@ export RABBITMQ_MANAGEMENT_HOST_PORT="${RABBITMQ_MANAGEMENT_HOST_PORT:-55673}"
 export ELASTICSEARCH_HOST_PORT="${ELASTICSEARCH_HOST_PORT:-59200}"
 export KIBANA_HOST_PORT="${KIBANA_HOST_PORT:-55601}"
 export CLAMAV_HOST_PORT="${CLAMAV_HOST_PORT:-55310}"
-export CODEX_CREATOR_HOST_PORT="${CODEX_CREATOR_HOST_PORT:-58091}"
-export CODEX_APP_SERVER_ENABLED="${CODEX_APP_SERVER_ENABLED:-true}"
-export CODEX_COMMAND="${CODEX_COMMAND:-codex}"
-export WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED="${WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED:-true}"
-export WINDBLOG_CODEX_CREATOR_PREFER="${WINDBLOG_CODEX_CREATOR_PREFER:-false}"
 export KIBANA_SERVICE_ACCOUNT_TOKEN="${KIBANA_SERVICE_ACCOUNT_TOKEN:-local-test-bootstrap-token}"
 export OTEL_DEPLOYMENT_ENVIRONMENT="${OTEL_DEPLOYMENT_ENVIRONMENT:-local-test}"
 if [[ -z "${GRAFANA_JWT_SECRET:-}" ]]; then
@@ -106,65 +78,6 @@ if [[ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
     openssl rand -hex 32 >"${grafana_password_file}"
   fi
   export GRAFANA_ADMIN_PASSWORD="$(<"${grafana_password_file}")"
-fi
-
-# The Codex process runs inside a container. A host proxy advertised as
-# 127.0.0.1/localhost therefore points back to the container itself. Translate
-# only the host-loopback part and keep an explicitly supplied CODEX_* value
-# authoritative. The host proxy is optional; direct egress remains supported.
-translate_host_proxy() {
-  local proxy="${1:-}"
-  if [[ "${proxy}" =~ ^([^:/]+://)(127\.0\.0\.1|localhost)(:.*)$ ]]; then
-    printf '%s%s%s' "${BASH_REMATCH[1]}" "${CODEX_CREATOR_PROXY_HOSTNAME:-host.containers.internal}" "${BASH_REMATCH[3]}"
-  else
-    printf '%s' "${proxy}"
-  fi
-}
-
-if [[ -z "${CODEX_CREATOR_HTTP_PROXY:-}" && -n "${HTTP_PROXY:-}" ]]; then
-  export CODEX_CREATOR_HTTP_PROXY="$(translate_host_proxy "${HTTP_PROXY}")"
-fi
-if [[ -z "${CODEX_CREATOR_HTTPS_PROXY:-}" && -n "${HTTPS_PROXY:-}" ]]; then
-  export CODEX_CREATOR_HTTPS_PROXY="$(translate_host_proxy "${HTTPS_PROXY}")"
-fi
-if [[ -z "${CODEX_CREATOR_ALL_PROXY:-}" && -n "${ALL_PROXY:-}" ]]; then
-  export CODEX_CREATOR_ALL_PROXY="$(translate_host_proxy "${ALL_PROXY}")"
-fi
-if [[ -z "${CODEX_CREATOR_NO_PROXY:-}" && -n "${NO_PROXY:-}" ]]; then
-  export CODEX_CREATOR_NO_PROXY="${NO_PROXY}"
-fi
-
-if [[ -z "${CODEX_CREATOR_INTERNAL_SHARED_SECRET:-}" ]]; then
-  secret_file="${DATA_DIR}/codex-integration-secret"
-  if [[ ! -s "${secret_file}" ]]; then
-    mkdir -p "${DATA_DIR}"
-    umask 077
-    openssl rand -hex 32 >"${secret_file}"
-  fi
-  export CODEX_CREATOR_INTERNAL_SHARED_SECRET="$(<"${secret_file}")"
-fi
-
-# Both the app-server client and MCP endpoint need the same persistent token.
-if [[ -z "${CODEX_CREATOR_MCP_BEARER_TOKEN:-}" ]]; then
-  mcp_token_file="${DATA_DIR}/mcp-bearer-token"
-  if [[ ! -s "${mcp_token_file}" ]]; then
-    mkdir -p "${DATA_DIR}"
-    umask 077
-    openssl rand -hex 32 >"${mcp_token_file}"
-  fi
-  export CODEX_CREATOR_MCP_BEARER_TOKEN="$(<"${mcp_token_file}")"
-fi
-
-# Keep the test-server key encryption secret in the isolated test data directory;
-# it must survive container recreation but never be committed to the repository.
-if [[ -z "${CODEX_CREATOR_TEST_SERVER_ENCRYPTION_SECRET:-}" ]]; then
-  test_server_secret_file="${DATA_DIR}/test-server-encryption-secret"
-  if [[ ! -s "${test_server_secret_file}" ]]; then
-    mkdir -p "${DATA_DIR}"
-    umask 077
-    openssl rand -hex 32 >"${test_server_secret_file}"
-  fi
-  export CODEX_CREATOR_TEST_SERVER_ENCRYPTION_SECRET="$(<"${test_server_secret_file}")"
 fi
 
 compose_args=(
@@ -217,7 +130,6 @@ case "${1:-up}" in
       podman "${compose_args[@]}" up -d --no-deps --force-recreate edge
     ;;
   up)
-    prepare_auth_cache
     up_core_services
     env -u ALL_PROXY -u HTTP_PROXY -u HTTPS_PROXY -u all_proxy -u http_proxy -u https_proxy \
       podman "${compose_args[@]}" up -d
@@ -232,10 +144,9 @@ case "${1:-up}" in
     podman "${compose_args[@]}" ps
     ;;
   logs)
-    podman "${compose_args[@]}" logs --tail="${2:-120}" "${3:-codex-creator}"
+    podman "${compose_args[@]}" logs --tail="${2:-120}" "${3:-windblog}"
     ;;
   config)
-    prepare_auth_cache
     podman "${compose_args[@]}" config --quiet
     ;;
   *)

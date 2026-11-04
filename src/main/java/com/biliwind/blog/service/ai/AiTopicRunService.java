@@ -2,19 +2,36 @@ package com.biliwind.blog.service.ai;
 
 import com.biliwind.blog.model.AiTopicPoolRun;
 import com.biliwind.blog.model.AiTopicPoolSettings;
+import com.biliwind.blog.service.edge.NodeRoleService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
+import io.quarkus.runtime.StartupEvent;
+import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Persistence and status transitions for asynchronous local topic discovery runs. */
+/** Persistence and status transitions for asynchronous topic discovery runs. */
 @ApplicationScoped
 public class AiTopicRunService {
+
+    /** A discovery run that never reached the provider is stale much sooner than a running one. */
+    private static final Duration QUEUED_TIMEOUT = Duration.ofMinutes(10);
+    private static final Duration RUNNING_TIMEOUT = Duration.ofMinutes(30);
+
+    @Inject
+    Instance<AiTopicRunService> self;
+
+    @Inject
+    NodeRoleService nodeRoleService;
 
     /**
      * Creates and commits the run before the asynchronous worker starts, so the
@@ -79,24 +96,60 @@ public class AiTopicRunService {
         }
     }
 
+    /** Returns the active run, if any. Stale runs are handled by the recovery scheduler. */
     @Transactional
     public Map<String, Object> activeRun() {
-        OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime staleBefore = now.minusMinutes(30);
-        List<AiTopicPoolRun> stale = AiTopicPoolRun.find(
-                "status in ?1 and coalesce(startedAt, createdAt) < ?2",
-                List.of("QUEUED", "RUNNING"), staleBefore).list();
-        for (AiTopicPoolRun run : stale) {
-            // A restart or crash can leave a run behind; do not let it block
-            // every future manual run forever.
-            run.status = "FAILED";
-            run.errorMessage = "任务超时或服务重启";
-            run.completedAt = now;
-            run.persist();
-        }
         AiTopicPoolRun run = AiTopicPoolRun.find(
                 "status in ?1 order by id desc", List.of("QUEUED", "RUNNING")).firstResult();
         return run == null ? null : view(run);
+    }
+
+    /**
+     * Fails runs whose in-process worker died (deployment/restart) or whose
+     * provider call never returned. Without this an orphaned run keeps the UI
+     * polling forever and blocks every future manual run.
+     */
+    @Transactional
+    public int recoverStaleRuns() {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<AiTopicPoolRun> stale = AiTopicPoolRun.<AiTopicPoolRun>find(
+                "status = ?1 or status = ?2", "QUEUED", "RUNNING").page(0, 100).list();
+        int recovered = 0;
+        for (AiTopicPoolRun run : stale) {
+            boolean queued = "QUEUED".equals(run.status);
+            OffsetDateTime anchor = run.startedAt == null ? run.createdAt : run.startedAt;
+            if (anchor == null) anchor = now;
+            Duration timeout = queued ? QUEUED_TIMEOUT : RUNNING_TIMEOUT;
+            if (anchor.plus(timeout).isAfter(now)) continue;
+            run.status = "FAILED";
+            run.errorMessage = queued
+                    ? "任务未被消费（服务重启或调度失败），请重新发起"
+                    : "任务超时，请重新发起";
+            run.completedAt = now;
+            run.persist();
+            AiTopicPoolSettings settings = AiTopicPoolSettings.findById(1L);
+            if (settings != null) {
+                settings.lastRunAt = now;
+                settings.lastError = run.errorMessage;
+                settings.updatedAt = now;
+                settings.persist();
+            }
+            recovered++;
+        }
+        return recovered;
+    }
+
+    @Scheduled(every = "1m", identity = "ai-topic-run-recovery")
+    void scheduledRecovery() {
+        if (!nodeRoleService.isPrimaryNode()) return;
+        self.get().recoverStaleRuns();
+    }
+
+    void onStart(@Observes StartupEvent event) {
+        if (!nodeRoleService.isPrimaryNode()) return;
+        // A run can only be executed by the process that created it. Anything
+        // left non-terminal at boot is therefore dead.
+        self.get().recoverStaleRuns();
     }
 
     @Transactional

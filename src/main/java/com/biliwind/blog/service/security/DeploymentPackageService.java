@@ -200,7 +200,6 @@ public class DeploymentPackageService {
         sb.append("SWAGGER_UI_ENABLED=false\n");
         sb.append("SECURITY_EVENT_HASH_SECRET=").append(eventHashSecret).append("\n");
         sb.append("WINDBLOG_OUTBOX_ENABLED=false\n");
-        sb.append("WINDBLOG_CODEX_CREATOR_EVENTS_ENABLED=false\n");
         sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_ENABLED=false\n");
         sb.append("WIND_BLOG_MEDIA_VIRUS_SCAN_REQUIRED=false\n");
         sb.append("WINDBLOG_STORAGE_METRICS_ENABLED=false\n");
@@ -486,7 +485,7 @@ public class DeploymentPackageService {
         sb.append("（证书到期前主节点会自动签发新证书，需要重新部署更新）\n");
         sb.append("注意: 从节点启动时会自动生成自签名证书到 certs/ 目录\n");
         sb.append("       主节点签发的证书用于 mTLS 身份验证\n");
-        sb.append("       使用 native-micro edge 镜像；不部署 RabbitMQ、Elasticsearch、Codex Creator 或 ClamAV。\n");
+        sb.append("       使用 native-micro edge 镜像；不部署 RabbitMQ、Elasticsearch 或 ClamAV。\n");
         sb.append("       仅保留本地 PostgreSQL、Redis、WESP 同步、缓存和公开读服务。\n");
         sb.append("       deploy.sh 会创建 data/uploads、data/wesp-blocks、data/wesp-config、data/rsa-keys 并持久化。\n");
         sb.append("\n");
