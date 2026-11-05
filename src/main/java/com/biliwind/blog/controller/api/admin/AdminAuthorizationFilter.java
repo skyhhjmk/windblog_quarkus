@@ -37,17 +37,15 @@ public class AdminAuthorizationFilter implements ContainerRequestFilter {
             return;
         }
 
-        String path = requestContext.getUriInfo().getPath();
-        if (path == null || path.isBlank()) {
+        String rawPath = requestContext.getUriInfo().getPath();
+        if (rawPath == null || rawPath.isBlank()) {
             return;
         }
-        if (!path.startsWith("/")) {
-            path = "/" + path;
-        }
+        String path = AdminAuthorizationPolicy.canonicalPath(rawPath);
         if (!path.startsWith("/api/admin")) {
             return;
         }
-        if (path.endsWith("/auth/login") || path.endsWith("/auth/logout")
+        if (path.equals("/api/admin/auth/login") || path.equals("/api/admin/auth/logout")
                 || path.equals("/api/admin/auth/step-up")
                 || path.equals("/api/admin/install") || path.equals("/api/admin/install/status")
                 || path.startsWith("/api/admin/docs") || path.startsWith("/api/admin/openapi")) {

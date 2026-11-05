@@ -449,13 +449,14 @@ public class ConfigInitializer {
         securityNetworkSchema.put("type", "object");
         com.fasterxml.jackson.databind.node.ArrayNode securityNetworkFields = securityNetworkSchema.putArray("fields");
         securityNetworkFields.addObject().put("key", "trusted_proxy_cidrs").put("label", "可信代理 CIDR").put("widget", "textarea").put("required", true);
-        securityNetworkFields.addObject().put("key", "client_ip_header").put("label", "客户端 IP 请求头").put("widget", "input").put("required", true);
+        securityNetworkFields.addObject().put("key", "client_ip_header").put("label", "客户端 IP 请求头").put("widget", "input").put("required", true)
+                .put("hint", "支持任意自定义请求头，例如 X-Forwarded-For、Forwarded、X-Real-IP、EO-Connecting-IP（EdgeOne）、CF-Connecting-IP（Cloudflare）。多值头按逗号分隔，可带端口。名称不合法时回退为 X-Forwarded-For。");
         ObjectNode clientIpSourceField = securityNetworkFields.addObject();
         clientIpSourceField.put("key", "client_ip_source");
         clientIpSourceField.put("label", "客户端 IP 获取方式");
         clientIpSourceField.put("widget", "select");
         clientIpSourceField.put("required", true);
-        clientIpSourceField.put("hint", "自动：直连来源在可信代理 CIDR 内时读取请求头；网络连接：始终使用 TCP 连接地址；HTTP 头：始终使用请求头中第一个有效地址，仅在源站只接受可信代理回源时使用，否则请求头可被伪造。");
+        clientIpSourceField.put("hint", "自动：直连来源在可信代理 CIDR 内时读取请求头；网络连接：始终使用 TCP 连接地址；HTTP 头：始终读取请求头，仅在源站只接受可信代理回源时使用，否则请求头可被伪造。读取请求头时从右向左跳过可信代理 CIDR 内的地址，取第一个不可信地址作为访客 IP，因此 CDN 回源地址需加入可信 CIDR，或改用 CDN 提供的单值头。");
         com.fasterxml.jackson.databind.node.ArrayNode clientIpSourceOptions = clientIpSourceField.putArray("options");
         clientIpSourceOptions.addObject().put("label", "自动（可信代理时读请求头）").put("value", "auto");
         clientIpSourceOptions.addObject().put("label", "仅网络连接地址").put("value", "network");

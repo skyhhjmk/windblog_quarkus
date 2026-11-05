@@ -50,6 +50,10 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
         if (!path.startsWith("/api/admin")) {
             return;
         }
+        if (AdminAuthorizationPolicy.isAmbiguousRawPath(requestContext.getUriInfo().getRequestUri().getRawPath())) {
+            abort(requestContext, Response.Status.BAD_REQUEST, "管理端请求路径不合法", "ADMIN_PATH_INVALID");
+            return;
+        }
         if (path.equals("/api/admin/auth/login") || path.equals("/api/admin/install")
                 || path.equals("/api/admin/install/status")) {
             return;
@@ -145,12 +149,6 @@ public class AdminJwtAuthFilter implements ContainerRequestFilter {
     }
 
     private String normalizePath(String path) {
-        if (path == null || path.isBlank()) {
-            return "/";
-        }
-        if (path.startsWith("/")) {
-            return path;
-        }
-        return "/" + path;
+        return AdminAuthorizationPolicy.canonicalPath(path);
     }
 }

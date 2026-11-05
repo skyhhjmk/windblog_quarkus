@@ -28,6 +28,19 @@ public class PrimaryRoutedHttpExecutor {
     long maxRoutedBodyBytes;
 
     public RoutedHttpExchange.Response execute(RoutedHttpExchange.Request routedRequest) {
+        String rejection = routedRequest == null ? "ROUTED_REQUEST_INVALID"
+                : RoutedRequestPolicy.rejectionReason(routedRequest.method(), routedRequest.path(), routedRequest.query());
+        if (rejection != null) {
+            LOGGER.warn("拒绝执行从节点回源请求: {} {} ({})",
+                    routedRequest == null ? "" : SensitiveMessageSanitizer.sanitize(routedRequest.method()),
+                    routedRequest == null ? "" : SensitiveMessageSanitizer.sanitize(routedRequest.path()), rejection);
+            return new RoutedHttpExchange.Response(
+                    403,
+                    Map.of("Content-Type", "application/json"),
+                    ("{\"success\":false,\"message\":\"该路径不允许经边缘节点回源\",\"code\":\"" + rejection + "\"}")
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    rejection);
+        }
         try {
             URI uri = buildUri(routedRequest);
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri)
@@ -110,17 +123,28 @@ public class PrimaryRoutedHttpExecutor {
             return false;
         }
 
-        String lowerName = headerName.toLowerCase();
-        if ("host".equals(lowerName)) {
+        return isForwardableHeader(headerName);
+    }
+
+    /**
+     * Client-controlled forwarding and internal marker headers are dropped:
+     * the replay arrives from loopback, so a forged X-Forwarded-For or
+     * X-WindBlog-* value would otherwise be judged as if a proxy set it.
+     */
+    static boolean isForwardableHeader(String headerName) {
+        String lowerName = headerName.trim().toLowerCase(java.util.Locale.ROOT);
+        if ("host".equals(lowerName) || "content-length".equals(lowerName) || "connection".equals(lowerName)
+                || "transfer-encoding".equals(lowerName) || "upgrade".equals(lowerName)
+                || "expect".equals(lowerName) || "te".equals(lowerName) || "keep-alive".equals(lowerName)
+                || "proxy-authorization".equals(lowerName)) {
             return false;
         }
-        if ("content-length".equals(lowerName)) {
+        if ("forwarded".equals(lowerName) || lowerName.startsWith("x-forwarded-")
+                || "x-real-ip".equals(lowerName) || lowerName.endsWith("-connecting-ip")
+                || "true-client-ip".equals(lowerName) || "x-client-ip".equals(lowerName)) {
             return false;
         }
-        if ("connection".equals(lowerName)) {
-            return false;
-        }
-        return true;
+        return !lowerName.startsWith("x-windblog-") && !lowerName.startsWith("x-wesp-");
     }
 
     private Map<String, String> collectHeaders(HttpResponse<byte[]> response) {

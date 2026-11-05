@@ -20,6 +20,7 @@ public class ClientIpResolver {
 
     private static final String CONFIG_KEY = "security_network";
     private static final String DEFAULT_TRUSTED_CIDRS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
+    private static final String DEFAULT_HEADER = "X-Forwarded-For";
 
     @Inject
     ConfigManager configManager;
@@ -28,8 +29,15 @@ public class ClientIpResolver {
         String remoteAddress = "unknown";
         String headerValue = null;
         if (routingContext != null && routingContext.request() != null) {
-            remoteAddress = routingContext.request().remoteAddress().hostAddress();
-            headerValue = routingContext.request().getHeader(resolveHeaderName());
+            if (routingContext.request().remoteAddress() != null) {
+                remoteAddress = routingContext.request().remoteAddress().hostAddress();
+            }
+            // A client can send the same header several times; proxies append
+            // to the last line, so every line must be considered in order.
+            List<String> values = routingContext.request().headers().getAll(resolveHeaderName());
+            if (values != null && !values.isEmpty()) {
+                headerValue = String.join(",", values);
+            }
         }
         return resolve(remoteAddress, headerValue);
     }
@@ -42,7 +50,7 @@ public class ClientIpResolver {
                     "系统设置要求仅使用网络连接地址");
         }
         if (SOURCE_HEADER.equals(source)) {
-            String headerAddress = firstValidAddress(headerValue);
+            String headerAddress = clientAddressFromHeader(headerValue);
             if (headerAddress == null) {
                 return new ClientIpResolution(remoteAddress, remoteAddress, headerValue, trustedProxy,
                         "系统设置要求使用请求头，但请求头没有有效客户端 IP");
@@ -53,7 +61,7 @@ public class ClientIpResolver {
         if (!trustedProxy) {
             return new ClientIpResolution(remoteAddress, remoteAddress, headerValue, false, "直连来源不在可信代理网段");
         }
-        String headerAddress = firstValidAddress(headerValue);
+        String headerAddress = clientAddressFromHeader(headerValue);
         if (headerAddress == null) {
             return new ClientIpResolution(remoteAddress, remoteAddress, headerValue, true, "可信代理未提供有效客户端 IP");
         }
@@ -72,12 +80,33 @@ public class ClientIpResolver {
         return SOURCE_AUTO;
     }
 
+    /**
+     * The header that carries the visitor address. Any RFC 7230 token is
+     * accepted, so CDN-specific single-value headers such as EO-Connecting-IP,
+     * CF-Connecting-IP or X-Real-IP work as well as X-Forwarded-For/Forwarded.
+     */
     public String resolveHeaderName() {
-        String configuredHeader = configManager.getString(CONFIG_KEY, "client_ip_header", "X-Forwarded-For");
+        String configuredHeader = configManager.getString(CONFIG_KEY, "client_ip_header", DEFAULT_HEADER);
         if (configuredHeader == null || configuredHeader.isBlank()) {
-            return "X-Forwarded-For";
+            return DEFAULT_HEADER;
         }
-        return configuredHeader.trim();
+        String trimmed = configuredHeader.trim();
+        return isHeaderToken(trimmed) ? trimmed : DEFAULT_HEADER;
+    }
+
+    static boolean isHeaderToken(String name) {
+        if (name == null || name.isEmpty() || name.length() > 100) {
+            return false;
+        }
+        for (int index = 0; index < name.length(); index = index + 1) {
+            char current = name.charAt(index);
+            boolean allowed = current >= 'a' && current <= 'z' || current >= 'A' && current <= 'Z'
+                    || current >= '0' && current <= '9' || "!#$%&'*+-.^_`|~".indexOf(current) >= 0;
+            if (!allowed) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isTrustedProxy(String remoteAddress) {
@@ -85,20 +114,7 @@ public class ClientIpResolver {
         if (address == null) {
             return false;
         }
-        List<String> cidrs = new ArrayList<>();
-        String configuredCidrs = configManager.getString(CONFIG_KEY, "trusted_proxy_cidrs", DEFAULT_TRUSTED_CIDRS);
-        String[] parts = configuredCidrs.split(",");
-        for (String part : parts) {
-            if (part != null && !part.isBlank()) {
-                cidrs.add(part.trim());
-            }
-        }
-        for (String cidr : cidrs) {
-            if (matchesCidr(address, cidr)) {
-                return true;
-            }
-        }
-        return false;
+        return matchesAny(address, trustedCidrs());
     }
 
     private boolean matchesCidr(InetAddress address, String cidr) {
@@ -137,18 +153,104 @@ public class ClientIpResolver {
         return true;
     }
 
-    private String firstValidAddress(String headerValue) {
-        if (headerValue == null || headerValue.isBlank()) {
+    /**
+     * Picks the visitor address from a forwarding header.
+     *
+     * Proxies append the address they saw to the right, and anything to the
+     * left of that can be written by the client. The value is therefore read
+     * from right to left, skipping hops inside the trusted proxy CIDRs; the
+     * first address outside them is the client. When every hop is trusted
+     * (an all-internal chain), the leftmost address is used. An unparsable
+     * entry stops the walk, because nothing to its left can be attributed to
+     * a trusted proxy. Single-value headers (X-Real-IP, EO-Connecting-IP, …)
+     * yield that one address.
+     */
+    String clientAddressFromHeader(String headerValue) {
+        List<String> candidates = headerCandidates(headerValue);
+        if (candidates.isEmpty()) {
             return null;
         }
-        String[] parts = headerValue.split(",");
-        for (String part : parts) {
-            String candidate = part.trim();
-            if (parseAddress(candidate) != null) {
+        List<String> cidrs = trustedCidrs();
+        String leftmostTrusted = null;
+        for (int index = candidates.size() - 1; index >= 0; index = index - 1) {
+            String candidate = normalizeCandidate(candidates.get(index));
+            InetAddress address = parseAddress(candidate);
+            if (address == null) {
+                return leftmostTrusted;
+            }
+            if (!matchesAny(address, cidrs)) {
                 return candidate;
             }
+            leftmostTrusted = candidate;
         }
-        return null;
+        return leftmostTrusted;
+    }
+
+    private static List<String> headerCandidates(String headerValue) {
+        List<String> candidates = new ArrayList<>();
+        if (headerValue == null || headerValue.isBlank()) {
+            return candidates;
+        }
+        for (String element : headerValue.split(",")) {
+            String trimmed = element.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            // RFC 7239 Forwarded: for=192.0.2.60;proto=http;by=203.0.113.43
+            String forwardedFor = null;
+            for (String pair : trimmed.split(";")) {
+                String[] keyValue = pair.trim().split("=", 2);
+                if (keyValue.length == 2 && "for".equalsIgnoreCase(keyValue[0].trim())) {
+                    forwardedFor = keyValue[1].trim();
+                }
+            }
+            if (forwardedFor != null) {
+                candidates.add(forwardedFor);
+            } else if (trimmed.indexOf('=') < 0) {
+                candidates.add(trimmed);
+            }
+        }
+        return candidates;
+    }
+
+    /** Strips quotes, IPv6 brackets and a trailing port ("203.0.113.5:4711", "[2001:db8::1]:443"). */
+    static String normalizeCandidate(String value) {
+        String candidate = value.trim();
+        if (candidate.length() >= 2 && candidate.startsWith("\"") && candidate.endsWith("\"")) {
+            candidate = candidate.substring(1, candidate.length() - 1).trim();
+        }
+        if (candidate.startsWith("[")) {
+            int close = candidate.indexOf(']');
+            return close > 0 ? candidate.substring(1, close) : candidate;
+        }
+        int colon = candidate.indexOf(':');
+        if (colon > 0 && colon == candidate.lastIndexOf(':') && candidate.indexOf('.') > 0) {
+            return candidate.substring(0, colon);
+        }
+        return candidate;
+    }
+
+    private List<String> trustedCidrs() {
+        List<String> cidrs = new ArrayList<>();
+        String configuredCidrs = configManager.getString(CONFIG_KEY, "trusted_proxy_cidrs", DEFAULT_TRUSTED_CIDRS);
+        if (configuredCidrs == null) {
+            return cidrs;
+        }
+        for (String part : configuredCidrs.split("[,\\s]+")) {
+            if (!part.isBlank()) {
+                cidrs.add(part.trim());
+            }
+        }
+        return cidrs;
+    }
+
+    private boolean matchesAny(InetAddress address, List<String> cidrs) {
+        for (String cidr : cidrs) {
+            if (matchesCidr(address, cidr)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private InetAddress parseAddress(String value) {

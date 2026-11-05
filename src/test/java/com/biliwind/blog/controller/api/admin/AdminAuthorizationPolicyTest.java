@@ -231,4 +231,43 @@ class AdminAuthorizationPolicyTest {
         assertEquals(AdminAuthorizationPolicy.RiskLevel.LOW,
                 AdminAuthorizationPolicy.decide("GET", "/api/admin/posts").riskLevel());
     }
+
+    @Test
+    void shouldApplyHighRiskRulesToTrailingSlashAndDuplicateSlashVariants() {
+        for (String path : new String[]{
+                "/api/admin/system/decrypt-error/",
+                "/api/admin/system//decrypt-error",
+                "//api/admin/system/decrypt-error//"}) {
+            assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", path), path);
+            assertTrue(AdminAuthorizationPolicy.requiresIdempotencyKey("POST", path), path);
+        }
+        AdminAuthorizationPolicy.Decision zip = AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/edge-nodes/node-a/deployment-zip/");
+        assertTrue(zip.superAdminOnly());
+        assertTrue(zip.stepUpRequired());
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/users/5/wallet/adjust/"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/users/5/inventory/grant/"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/email-campaigns/"));
+        assertTrue(AdminAuthorizationPolicy.requiresStepUp("POST", "/api/admin/system/sync-cluster-keys/"));
+    }
+
+    @Test
+    void shouldCanonicalizeAdminPaths() {
+        assertEquals("/api/admin/posts", AdminAuthorizationPolicy.canonicalPath("api/admin/posts/"));
+        assertEquals("/api/admin/posts", AdminAuthorizationPolicy.canonicalPath("/api//admin///posts//"));
+        assertEquals("/", AdminAuthorizationPolicy.canonicalPath("///"));
+        assertEquals("/", AdminAuthorizationPolicy.canonicalPath(null));
+    }
+
+    @Test
+    void shouldRejectAmbiguousRawAdminPaths() {
+        assertTrue(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/system/decrypt-error;x=1"));
+        assertTrue(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/system%2Fdecrypt-error"));
+        assertTrue(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/posts/../system/decrypt-error"));
+        assertTrue(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/%2e%2e/system"));
+        assertTrue(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/posts/%252f"));
+        assertFalse(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/posts/12"));
+        assertFalse(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/posts/"));
+        assertFalse(AdminAuthorizationPolicy.isAmbiguousRawPath(null));
+    }
 }

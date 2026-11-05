@@ -97,6 +97,89 @@ class ClientIpResolverTest {
         assertEquals("203.0.113.5", resolution.clientIp());
     }
 
+    @Test
+    void shouldIgnoreClientSuppliedLeftmostForwardedForEntries() {
+        ClientIpResolver resolver = resolverWithSource("auto");
+
+        // Client sent "X-Forwarded-For: 1.2.3.4"; nginx appended the real peer.
+        ClientIpResolver.ClientIpResolution resolution = resolver.resolve("172.18.0.5", "1.2.3.4, 198.51.100.7");
+
+        assertEquals("198.51.100.7", resolution.clientIp());
+    }
+
+    @Test
+    void shouldSkipTrustedHopsFromTheRight() {
+        ClientIpResolver resolver = resolverWithSource("auto");
+
+        ClientIpResolver.ClientIpResolution resolution = resolver.resolve(
+                "10.0.0.100", "6.6.6.6, 198.51.100.7, 10.0.0.2, 192.168.1.1");
+
+        assertEquals("198.51.100.7", resolution.clientIp());
+    }
+
+    @Test
+    void shouldUseLeftmostAddressWhenEveryHopIsTrusted() {
+        ClientIpResolver resolver = resolverWithSource("auto");
+
+        assertEquals("192.168.1.20", resolver.resolve("10.0.0.100", "192.168.1.20, 10.0.0.2").clientIp());
+    }
+
+    @Test
+    void shouldStopAtGarbageBecauseEntriesLeftOfItAreUntrusted() {
+        ClientIpResolver resolver = resolverWithSource("auto");
+
+        assertEquals("10.0.0.2", resolver.resolve("10.0.0.100", "6.6.6.6, unknown, 10.0.0.2").clientIp());
+        assertEquals("10.0.0.100", resolver.resolve("10.0.0.100", "unknown").clientIp());
+    }
+
+    @Test
+    void shouldApplyRightToLeftRuleInHeaderMode() {
+        ClientIpResolver resolver = resolverWithSource("header");
+
+        assertEquals("198.51.100.7", resolver.resolve("198.51.100.20", "1.2.3.4, 198.51.100.7").clientIp());
+    }
+
+    @Test
+    void shouldReadCustomSingleValueHeaderWithPortsAndBrackets() {
+        ClientIpResolver resolver = resolver("auto", "EO-Connecting-IP");
+
+        assertEquals("EO-Connecting-IP", resolver.resolveHeaderName());
+        assertEquals("203.0.113.9", resolver.resolve("10.0.0.100", "203.0.113.9:51234").clientIp());
+        assertEquals("2001:db8::9", resolver.resolve("10.0.0.100", "[2001:db8::9]:443").clientIp());
+    }
+
+    @Test
+    void shouldParseRfc7239ForwardedHeader() {
+        ClientIpResolver resolver = resolver("auto", "Forwarded");
+
+        assertEquals("198.51.100.7", resolver.resolve("10.0.0.100",
+                "for=1.2.3.4, for=\"198.51.100.7:8443\";proto=https, for=10.0.0.2;by=10.0.0.100").clientIp());
+    }
+
+    @Test
+    void shouldFallBackToDefaultHeaderForInvalidCustomHeaderName() {
+        assertEquals("X-Forwarded-For", resolver("auto", "Bad Header\r\nX").resolveHeaderName());
+        assertEquals("X-Forwarded-For", resolver("auto", "  ").resolveHeaderName());
+        assertEquals("CF-Connecting-IP", resolver("auto", " CF-Connecting-IP ").resolveHeaderName());
+    }
+
+    private static ClientIpResolver resolver(String source, String header) {
+        ClientIpResolver resolver = new ClientIpResolver();
+        resolver.configManager = new ConfigManager() {
+            @Override
+            public String getString(String key, String field, String defaultValue) {
+                if ("client_ip_source".equals(field)) {
+                    return source;
+                }
+                if ("client_ip_header".equals(field)) {
+                    return header;
+                }
+                return defaultValue;
+            }
+        };
+        return resolver;
+    }
+
     private static ClientIpResolver resolverWithSource(String source) {
         ClientIpResolver resolver = new ClientIpResolver();
         resolver.configManager = new ConfigManager() {

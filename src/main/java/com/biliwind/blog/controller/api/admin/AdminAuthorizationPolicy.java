@@ -337,10 +337,46 @@ public final class AdminAuthorizationPolicy {
     }
 
     private static String normalizePath(String path) {
+        return canonicalPath(path);
+    }
+
+    /**
+     * Canonical form used by every admin authentication and authorization
+     * check. JAX-RS still routes "/x/" and "//x" to "/x", so string rules must
+     * see the same path the router matched or a trailing slash skips them.
+     */
+    public static String canonicalPath(String path) {
         if (path == null || path.isBlank()) {
             return "/";
         }
-        return path.startsWith("/") ? path : "/" + path;
+        String collapsed = ("/" + path).replaceAll("/{2,}", "/");
+        while (collapsed.length() > 1 && collapsed.endsWith("/")) {
+            collapsed = collapsed.substring(0, collapsed.length() - 1);
+        }
+        return collapsed;
+    }
+
+    /**
+     * Raw request paths the admin boundary refuses outright: matrix parameters,
+     * encoded separators or dots, backslashes and dot segments can make the
+     * routed resource differ from the string the policy inspects.
+     */
+    public static boolean isAmbiguousRawPath(String rawPath) {
+        if (rawPath == null) {
+            return false;
+        }
+        String lower = rawPath.toLowerCase(Locale.ROOT);
+        if (lower.indexOf(';') >= 0 || lower.indexOf('\\') >= 0
+                || lower.contains("%2f") || lower.contains("%5c") || lower.contains("%2e")
+                || lower.contains("%3b") || lower.contains("%25")) {
+            return true;
+        }
+        for (String segment : lower.split("/", -1)) {
+            if (".".equals(segment) || "..".equals(segment)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public record Decision(String resource, String action, RiskLevel riskLevel, boolean superAdminOnly,

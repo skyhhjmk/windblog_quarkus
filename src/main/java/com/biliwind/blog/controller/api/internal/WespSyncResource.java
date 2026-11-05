@@ -44,6 +44,7 @@ public class WespSyncResource {
     @Inject WespActivePollChannel activePoll;
     @Inject NodeRoleService nodeRoleService;
     @Inject PrimaryRoutedHttpExecutor primaryRoutedHttpExecutor;
+    @Inject com.biliwind.blog.service.security.SecurityRateLimitService securityRateLimitService;
     @Inject ObjectMapper mapper;
     @Context HttpHeaders requestHeaders;
 
@@ -138,6 +139,16 @@ public class WespSyncResource {
                                   @HeaderParam("X-WESP-Request-Id") String requestId) {
         Response auth = authorize(authorization, nodeId, requestId, body);
         if (auth != null) return auth;
+        // Routed requests are replayed against the primary's own listener, so
+        // the body digest is mandatory here and each request id is single-use.
+        String digest = requestHeaders == null ? null : requestHeaders.getHeaderString("X-WESP-Body-SHA256");
+        if (digest == null || digest.isBlank()) {
+            return error(Response.Status.BAD_REQUEST, requestId, "BODY_HASH_REQUIRED", false);
+        }
+        if (!securityRateLimitService.tryAcquire("wesp-routed-request-id:" + requestId.toLowerCase(java.util.Locale.ROOT),
+                1, java.time.Duration.ofMinutes(30))) {
+            return error(Response.Status.CONFLICT, requestId, "REQUEST_REPLAYED", false);
+        }
         if (activePoll.isEnabled()) {
             return error(Response.Status.CONFLICT, requestId, "ACTIVE_POLL_REQUIRES_PRIMARY_OUTBOUND", false);
         }

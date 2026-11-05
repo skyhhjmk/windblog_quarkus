@@ -60,6 +60,24 @@ public class UserPostContentController {
     @Inject
     com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
+    @Inject
+    com.biliwind.blog.service.security.SecurityRateLimitService securityRateLimitService;
+
+    @Inject
+    com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
+
+    @Inject
+    io.vertx.ext.web.RoutingContext routingContext;
+
+    /** Per visitor and post: a reader who mistypes a few times is unaffected. */
+    static final int PASSWORD_ATTEMPTS_PER_POST_AND_IP = 10;
+    /** Per visitor across posts: stops one client walking every protected post. */
+    static final int PASSWORD_ATTEMPTS_PER_IP = 30;
+    /** Per post across visitors: caps distributed guessing on one post. */
+    static final int PASSWORD_ATTEMPTS_PER_POST = 200;
+    static final java.time.Duration PASSWORD_ATTEMPT_WINDOW = java.time.Duration.ofMinutes(15);
+    private static final String PASSWORD_RATE_LIMIT_MESSAGE = "密码尝试过于频繁，请15分钟后重试";
+
     /**
      * 安全获取文章完整内容（含付费内容）
      * <p>
@@ -373,9 +391,19 @@ public class UserPostContentController {
             return postNotFound();
         }
         String password = request == null ? null : request.password();
-        if (post.visibility != 2 || !postAccessPolicy.evaluate(post, null, password, null).allowed()) {
+        if (post.visibility != 2) {
             return Response.status(Response.Status.FORBIDDEN).entity(Map.of("success", false, "message", "密码错误")).build();
         }
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        if (!tryAcquirePasswordAttempt(postId, clientIp)) {
+            return Response.status(Response.Status.TOO_MANY_REQUESTS)
+                    .header("Retry-After", String.valueOf(PASSWORD_ATTEMPT_WINDOW.toSeconds()))
+                    .entity(Map.of("success", false, "message", PASSWORD_RATE_LIMIT_MESSAGE)).build();
+        }
+        if (!postAccessPolicy.evaluate(post, null, password, null).allowed()) {
+            return Response.status(Response.Status.FORBIDDEN).entity(Map.of("success", false, "message", "密码错误")).build();
+        }
+        securityRateLimitService.clear(passwordAttemptKey(postId, clientIp));
 
         com.biliwind.blog.service.ContentAccessTicketService.IssuedTicket issued =
                 contentAccessTicketService.issuePasswordTicket(postId, java.time.Duration.ofMinutes(15),
@@ -412,9 +440,19 @@ public class UserPostContentController {
         if (!postAccessPolicy.isVisibleInRegion(post, regionContext.getCurrentRegion())) {
             return Response.status(Response.Status.NOT_FOUND).entity("文章不存在").type(MediaType.TEXT_HTML).build();
         }
-        if (post.visibility != 2 || !postAccessPolicy.evaluate(post, null, password, null).allowed()) {
+        if (post.visibility != 2) {
             return Response.status(Response.Status.UNAUTHORIZED).entity("密码错误").type(MediaType.TEXT_HTML).build();
         }
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        if (!tryAcquirePasswordAttempt(postId, clientIp)) {
+            return Response.status(Response.Status.TOO_MANY_REQUESTS)
+                    .header("Retry-After", String.valueOf(PASSWORD_ATTEMPT_WINDOW.toSeconds()))
+                    .entity(PASSWORD_RATE_LIMIT_MESSAGE).type(MediaType.TEXT_HTML).build();
+        }
+        if (!postAccessPolicy.evaluate(post, null, password, null).allowed()) {
+            return Response.status(Response.Status.UNAUTHORIZED).entity("密码错误").type(MediaType.TEXT_HTML).build();
+        }
+        securityRateLimitService.clear(passwordAttemptKey(postId, clientIp));
         com.biliwind.blog.service.ContentAccessTicketService.IssuedTicket issued =
                 contentAccessTicketService.issuePasswordTicket(postId, java.time.Duration.ofMinutes(15), null);
         NewCookie cookie = new NewCookie.Builder("post_access_ticket_" + postId)
@@ -425,6 +463,23 @@ public class UserPostContentController {
     }
 
     // ==================== 私有辅助方法 ====================
+
+    /**
+     * Counts every attempt before the PBKDF2 check runs, so the limit also
+     * bounds the CPU an anonymous client can spend on password hashing.
+     */
+    boolean tryAcquirePasswordAttempt(Long postId, String clientIp) {
+        return securityRateLimitService.tryAcquire(passwordAttemptKey(postId, clientIp),
+                PASSWORD_ATTEMPTS_PER_POST_AND_IP, PASSWORD_ATTEMPT_WINDOW)
+                && securityRateLimitService.tryAcquire("post-password-ip:" + clientIp,
+                PASSWORD_ATTEMPTS_PER_IP, PASSWORD_ATTEMPT_WINDOW)
+                && securityRateLimitService.tryAcquire("post-password-post:" + postId,
+                PASSWORD_ATTEMPTS_PER_POST, PASSWORD_ATTEMPT_WINDOW);
+    }
+
+    static String passwordAttemptKey(Long postId, String clientIp) {
+        return "post-password:" + postId + ":" + clientIp;
+    }
 
     /**
      * 校验请求方是否通过了密码保护验证。
