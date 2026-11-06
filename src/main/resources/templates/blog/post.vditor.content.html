@@ -14,10 +14,7 @@
     </div>
 
     <article class="space-y-4" data-article-transition-slug="{postSlug}">
-        <header class="post-title-stage space-y-3">
-            <h1 class="post-header-title text-3xl font-bold relative z-[2]"
-                data-article-transition-part="title"
-                data-article-transition-slug="{postSlug}">{postTitle ?: '文章详情'}</h1>
+        <header class="post-title-stage {#if postCoverImageUrl.or(null)}has-cover{#else}space-y-3{/if}">
             {#if postCoverImageUrl.or(null)}
                 <div class="post-header-cover"
                      data-article-transition-part="cover"
@@ -27,7 +24,12 @@
                     <div class="post-header-cover-gradient" aria-hidden="true"></div>
                 </div>
             {/if}
-            <p class="text-sm opacity-80">Slug: {postSlug}</p>
+            <div class="post-title-stage-content space-y-3">
+                <h1 class="post-header-title text-3xl font-bold"
+                    data-article-transition-part="title"
+                    data-article-transition-slug="{postSlug}">{postTitle ?: '文章详情'}</h1>
+                <p class="text-sm opacity-80">Slug: {postSlug}</p>
+            </div>
         </header>
 
         <section class="border border-[var(--border)] p-4 bg-[var(--panel-bg)]">

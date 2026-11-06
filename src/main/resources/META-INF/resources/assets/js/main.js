@@ -1003,11 +1003,6 @@
             element.style.textTransform = styleSnapshot.textTransform;
         }
 
-        function parseFontSizePx(fontSizeValue) {
-            const parsed = parseFloat(fontSizeValue);
-            return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
-        }
-
         function getArticleTransitionContainerOffset(container) {
             if (!container) {
                 return { x: 0, y: 0 };
@@ -1090,13 +1085,8 @@
             if (!preparedItems || preparedItems.length === 0 || document.visibilityState === 'hidden') {
                 return;
             }
-            // Flush microtasks (such as MutationObserver callbacks from runtime
-            // style compilers) and take an initial geometry signature before
-            // the first animation frame so already-settled pages only wait 1
-            // frame instead of 2+.
-            await Promise.resolve();
             const deadline = performance.now() + 180;
-            let previousSignature = getArticleTransitionTargetSignature(preparedItems, container);
+            let previousSignature = null;
             let stableFrames = 0;
             while (performance.now() < deadline) {
                 await nextArticleTransitionFrame();
@@ -1197,12 +1187,16 @@
 
                 let coverNodes = null;
                 if (capturedItem.partName === 'cover') {
+                    cloneElement.style.zIndex = '9998';
                     coverNodes = prepareCoverTransitionClone(cloneElement, capturedItem);
                 } else if (capturedItem.partName === 'summary') {
+                    cloneElement.style.zIndex = '9999';
                     const clampedParagraph = cloneElement.querySelector('.line-clamp-2');
                     if (clampedParagraph) {
                         clampedParagraph.classList.remove('line-clamp-2');
                     }
+                } else if (capturedItem.partName === 'title') {
+                    cloneElement.style.zIndex = '10001';
                 }
 
                 // Park the clone where the source element was visible while the
@@ -1287,25 +1281,28 @@
             const sourceStyle = preparedItem.sourceStyle;
             const targetStyle = preparedItem.targetStyle;
 
-            const sourceFontPx = parseFontSizePx(sourceStyle.fontSize);
-            const targetFontPx = parseFontSizePx(targetStyle.fontSize);
-            const rawScale = sourceFontPx / targetFontPx;
-            const startScale = Math.min(1.85, Math.max(0.45, rawScale));
-
-            // Lock the clone to the destination typography and width so the
-            // browser never recomputes line breaks or snaps font-weight mid-flight.
+            // Lock discrete font properties (fontWeight, fontFamily) to targetStyle
+            // up front, then smoothly interpolate rect and font metrics to the
+            // exact destination box on top of the cover image.
             applyArticleTransitionStyleSnapshot(cloneElement, targetStyle);
-            cloneElement.style.width = Math.max(targetRect.width, sourceRect.width / startScale) + 'px';
+            cloneElement.style.width = targetRect.width + 'px';
             cloneElement.style.height = 'auto';
-            cloneElement.style.transformOrigin = '0 0';
 
             return cloneElement.animate([
                 {
-                    transform: 'translate3d(' + sourceRect.left + 'px, ' + sourceRect.top + 'px, 0) scale(' + startScale.toFixed(4) + ')',
+                    transform: 'translate3d(' + sourceRect.left + 'px, ' + sourceRect.top + 'px, 0)',
+                    width: sourceRect.width + 'px',
+                    fontSize: sourceStyle.fontSize,
+                    lineHeight: sourceStyle.lineHeight,
+                    letterSpacing: sourceStyle.letterSpacing,
                     color: sourceStyle.color
                 },
                 {
-                    transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0) scale(1)',
+                    transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0)',
+                    width: targetRect.width + 'px',
+                    fontSize: targetStyle.fontSize,
+                    lineHeight: targetStyle.lineHeight,
+                    letterSpacing: targetStyle.letterSpacing,
                     color: targetStyle.color
                 }
             ], {
@@ -1490,10 +1487,12 @@
                 if (preparedItem.partName === 'title') {
                     corrections.push(preparedItem.cloneElement.animate([
                         {
-                            transform: 'translate3d(' + preparedItem.targetRect.left + 'px, ' + preparedItem.targetRect.top + 'px, 0) scale(1)'
+                            transform: 'translate3d(' + preparedItem.targetRect.left + 'px, ' + preparedItem.targetRect.top + 'px, 0)',
+                            width: preparedItem.targetRect.width + 'px'
                         },
                         {
-                            transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0) scale(1)'
+                            transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0)',
+                            width: targetRect.width + 'px'
                         }
                     ], {
                         duration: 120,

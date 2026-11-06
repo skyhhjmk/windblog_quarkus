@@ -368,6 +368,8 @@ class PublicSeoPagesTest {
                 .body(containsString("/uploads/test-cover.webp"));
 
         given().get("/post/" + bilingualSlug).then().statusCode(200)
+                .body(containsString("class=\"post-title-stage has-cover\""))
+                .body(containsString("class=\"post-title-stage-content space-y-4\""))
                 .body(containsString("class=\"post-header-cover\""))
                 .body(containsString("data-article-transition-part=\"cover\""))
                 .body(containsString("data-article-transition-slug=\"" + bilingualSlug + "\""))

@@ -374,24 +374,56 @@ h1, h2, h3, h4, h5, h6 {
     object-position: center 15%;
 }
 
-/* Article Detail Header Cover: Compact region under the title with opacity gradient */
+/* Article Detail Header Cover: Full-width stage behind the title with opacity gradient */
 .post-title-stage {
     position: relative;
     isolation: isolate;
+    width: 100%;
+}
+
+.post-title-stage.has-cover {
+    min-height: 7.75rem;
+    padding: 1.25rem 1.35rem;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+@media (min-width: 640px) {
+    .post-title-stage.has-cover {
+        min-height: 8.5rem;
+        padding: 1.45rem 1.6rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .post-title-stage.has-cover {
+        min-height: 9.25rem;
+        padding: 1.65rem 1.85rem;
+    }
+}
+
+.post-title-stage-content {
+    position: relative;
+    z-index: 2;
+    width: 100%;
 }
 
 .post-header-title {
     position: relative;
     z-index: 2;
-    text-shadow: 0 2px 16px var(--card-bg);
+    text-shadow: 0 2px 18px var(--card-bg), 0 1px 4px var(--card-bg);
 }
 
 .post-header-cover {
-    position: relative;
+    position: absolute;
+    inset: 0;
     z-index: 1;
-    width: min(100%, 34rem);
-    height: 5.25rem;
-    margin-top: -1.15rem !important;
+    width: 100%;
+    height: 100%;
+    margin: 0 !important;
     border-radius: var(--radius-lg);
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
@@ -401,27 +433,13 @@ h1, h2, h3, h4, h5, h6 {
     contain: paint;
 }
 
-@media (min-width: 640px) {
-    .post-header-cover {
-        height: 5.75rem;
-        margin-top: -1.25rem !important;
-    }
-}
-
-@media (min-width: 768px) {
-    .post-header-cover {
-        height: 6.25rem;
-        margin-top: -1.35rem !important;
-    }
-}
-
 .post-header-cover-img {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
     object-position: center center;
-    opacity: 0.84;
+    opacity: 0.78;
     transform: translateZ(0);
 }
 
@@ -431,15 +449,15 @@ h1, h2, h3, h4, h5, h6 {
     background:
         linear-gradient(
             180deg,
-            color-mix(in srgb, var(--card-bg) 92%, transparent) 0%,
-            color-mix(in srgb, var(--card-bg) 52%, transparent) 46%,
-            color-mix(in srgb, var(--card-bg) 12%, transparent) 100%
+            color-mix(in srgb, var(--card-bg) 42%, transparent) 0%,
+            color-mix(in srgb, var(--card-bg) 68%, transparent) 52%,
+            color-mix(in srgb, var(--card-bg) 90%, transparent) 100%
         ),
         linear-gradient(
             90deg,
-            transparent 0%,
-            transparent 58%,
-            color-mix(in srgb, var(--card-bg) 68%, transparent) 100%
+            color-mix(in srgb, var(--card-bg) 82%, transparent) 0%,
+            color-mix(in srgb, var(--card-bg) 48%, transparent) 58%,
+            color-mix(in srgb, var(--card-bg) 20%, transparent) 100%
         );
     pointer-events: none;
 }

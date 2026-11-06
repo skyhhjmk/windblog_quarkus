@@ -173,7 +173,7 @@ public class PostController {
         long epoch = lastUpdated.toEpochSecond();
         String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion
                 + (pjaxRequest ? "_pjax" : "_full")
-                + "_cover1"
+                + "_cover2"
                 // The attachment widget and content gate depend on the reader,
                 // so a cached anonymous body must not satisfy a logged-in request.
                 + (requestUserId == null ? "_anon" : "_u" + requestUserId)

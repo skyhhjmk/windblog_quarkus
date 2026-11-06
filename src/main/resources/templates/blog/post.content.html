@@ -45,22 +45,7 @@
         </nav>
         <article class="space-y-8 md:space-y-12" data-article-transition-slug="{postSlug}">
             <header class="space-y-6 md:space-y-8 mb-8 md:mb-12">
-                <div class="post-title-stage space-y-4">
-                    <div class="flex items-center gap-3 relative z-[2]">
-                        {#for category in postCategories}
-                            <a href="{languagePrefix}/category/{category.slug}" class="badge-category">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
-                                     stroke-linejoin="round">
-                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                                </svg>
-                                {category.name}
-                            </a>
-                        {/for}
-                    </div>
-                    <h1 class="post-header-title text-3xl sm:text-4xl md:text-5xl font-black text-main tracking-tight leading-[1.18] relative z-[2]"
-                        data-article-transition-part="title"
-                        data-article-transition-slug="{postSlug}">{postTitle ?: i18n.t('post.page_title_default')}</h1>
+                <div class="post-title-stage {#if postCoverImageUrl.or(null)}has-cover{#else}space-y-4{/if}">
                     {#if postCoverImageUrl.or(null)}
                         <div class="post-header-cover"
                              data-article-transition-part="cover"
@@ -70,6 +55,23 @@
                             <div class="post-header-cover-gradient" aria-hidden="true"></div>
                         </div>
                     {/if}
+                    <div class="post-title-stage-content space-y-4">
+                        <div class="flex items-center gap-3">
+                            {#for category in postCategories}
+                                <a href="{languagePrefix}/category/{category.slug}" class="badge-category">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                                         fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                                         stroke-linejoin="round">
+                                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                    {category.name}
+                                </a>
+                            {/for}
+                        </div>
+                        <h1 class="post-header-title text-3xl sm:text-4xl md:text-5xl font-black text-main tracking-tight leading-[1.18]"
+                            data-article-transition-part="title"
+                            data-article-transition-slug="{postSlug}">{postTitle ?: i18n.t('post.page_title_default')}</h1>
+                    </div>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-4 sm:gap-8 py-4 sm:py-5 border-y border-border/50 text-xs font-mono">
