@@ -28,6 +28,10 @@ public class CommentApiController {
     private static final short STATUS_PENDING = 0;
     private static final short STATUS_APPROVED = 1;
     private static final int MAX_COMMENT_LENGTH = 4000;
+    private static final int MAX_PAGE_SIZE = 50;
+    private static final int MAX_PAGE_INDEX = 1000;
+    private static final int MAX_REPLY_DEPTH = 50;
+    private static final int MAX_COMMENT_NODES = 2000;
 
     @Inject
     ObjectMapper objectMapper;
@@ -80,12 +84,14 @@ public class CommentApiController {
             @QueryParam("page") @DefaultValue("0") int page,
             @QueryParam("size") @DefaultValue("10") int size) {
         Post post = findPublicPost(slug);
+        int safePage = Math.min(MAX_PAGE_INDEX, Math.max(0, page));
+        int safeSize = Math.min(MAX_PAGE_SIZE, Math.max(1, size));
 
         // 1. 分页查询根评论
         io.quarkus.hibernate.orm.panache.PanacheQuery<Comment> rootQuery = Comment.find(
                 "post = ?1 and parent is null and status = ?2 and deletedAt is null order by createdAt desc",
                 post, STATUS_APPROVED);
-        List<Comment> roots = rootQuery.page(page, size).list();
+        List<Comment> roots = rootQuery.page(safePage, safeSize).list();
         long totalRoots = rootQuery.count();
 
         if (roots.isEmpty()) {
@@ -93,53 +99,66 @@ public class CommentApiController {
                     "success", true,
                     "data", List.of(),
                     "total", 0,
-                    "page", page,
-                    "size", size
+                    "page", safePage,
+                    "size", safeSize
             )).build();
         }
 
-        // 2. 为了构建树，我们需要获取这些根评论的所有后代。
-        // 由于评论通常按时间排序且量级在文章维度受限，我们查出文章下所有通过的评论并在内存构建树。
-        // 但为了性能，我们只返回选定的根评论。
-        List<Comment> allApproved = Comment.list(
-                "post = ?1 and status = ?2 and deletedAt is null order by createdAt asc",
-                post, STATUS_APPROVED);
-
-        Map<Long, CommentNode> nodeIndex = new HashMap<>();
+        // 2. 只加载当前页根评论的后代，避免每次请求都扫描整篇文章的评论。
+        Map<Long, CommentNode> nodeIndex = new LinkedHashMap<>();
         List<CommentNode> resultRoots = new ArrayList<>();
-        Set<Long> targetRootIds = new HashSet<>();
-        for (Comment r : roots) {
-            targetRootIds.add(r.id);
+        Set<Long> rootIds = new LinkedHashSet<>();
+        for (Comment root : roots) {
+            CommentNode rootNode = toNode(root);
+            nodeIndex.put(root.id, rootNode);
+            resultRoots.add(rootNode);
+            rootIds.add(root.id);
         }
-
-        for (Comment comment : allApproved) {
-            CommentNode node = toNode(comment);
-            nodeIndex.put(comment.id, node);
-
-            Long parentId = comment.parent != null ? comment.parent.id : null;
-            if (parentId != null) {
-                CommentNode parentNode = nodeIndex.get(parentId);
-                if (parentNode != null) {
-                    parentNode.replies().add(node);
-                }
-            }
-        }
-
-        // 按分页查询出的 roots 顺序（desc）组装结果
-        for (Comment r : roots) {
-            CommentNode rootNode = nodeIndex.get(r.id);
-            if (rootNode != null) {
-                resultRoots.add(rootNode);
-            }
-        }
+        loadReplies(post, rootIds, nodeIndex);
 
         return Response.ok(Map.of(
                 "success", true,
                 "data", resultRoots,
                 "total", totalRoots,
-                "page", page,
-                "size", size
+                "page", safePage,
+                "size", safeSize
         )).build();
+    }
+
+    /**
+     * Breadth-first walk over the replies of the already selected roots. Bounding
+     * depth and node count keeps a crafted thread from turning one list request
+     * into an unbounded query.
+     */
+    private void loadReplies(Post post, Set<Long> rootIds, Map<Long, CommentNode> nodeIndex) {
+        Set<Long> frontier = new LinkedHashSet<>(rootIds);
+        int depth = 0;
+        while (!frontier.isEmpty() && depth < MAX_REPLY_DEPTH && nodeIndex.size() < MAX_COMMENT_NODES) {
+            List<Comment> children = Comment.find(
+                    "post = ?1 and status = ?2 and deletedAt is null and parent.id in ?3 order by createdAt asc",
+                    post, STATUS_APPROVED, new ArrayList<>(frontier)).list();
+            if (children.isEmpty()) {
+                return;
+            }
+            Set<Long> nextFrontier = new LinkedHashSet<>();
+            for (Comment child : children) {
+                CommentNode parentNode = child.parent == null ? null : nodeIndex.get(child.parent.id);
+                // Orphans (parent pending or outside this page's roots) can never
+                // appear in the response, so don't index or traverse them.
+                if (parentNode == null || nodeIndex.containsKey(child.id)) {
+                    continue;
+                }
+                CommentNode node = toNode(child);
+                nodeIndex.put(child.id, node);
+                parentNode.replies().add(node);
+                nextFrontier.add(child.id);
+                if (nodeIndex.size() >= MAX_COMMENT_NODES) {
+                    return;
+                }
+            }
+            frontier = nextFrontier;
+            depth++;
+        }
     }
 
     @POST

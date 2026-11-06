@@ -85,6 +85,7 @@ spec:
             - {name: GF_AUTH_JWT_USERNAME_CLAIM, value: username}
             - {name: GF_AUTH_JWT_EMAIL_CLAIM, value: email}
             - {name: GF_AUTH_JWT_ROLE_ATTRIBUTE_PATH, value: role}
+            - {name: GF_AUTH_JWT_EXPECT_CLAIMS, value: '{"iss":"windblog-observability","aud":"grafana"}'}
             - {name: GF_SECURITY_ADMIN_PASSWORD, value: "$(GRAFANA_ADMIN_PASSWORD)"}
           envFrom: [{secretRef: {name: observability-secrets}}]
           ports: [{name: http, containerPort: 3000}]

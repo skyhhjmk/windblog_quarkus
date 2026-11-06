@@ -73,9 +73,9 @@ public final class ExternalHttpEndpointPolicy {
                     && (bytes[2] & 255) == 13 && (bytes[3] & 255) == 184)) {
                 return false;
             }
-            if (isIpv4MappedAddress(bytes)) {
-                byte[] mappedIpv4 = new byte[]{bytes[12], bytes[13], bytes[14], bytes[15]};
-                return !isSpecialIpv4Address(mappedIpv4);
+            byte[] embeddedIpv4 = embeddedIpv4Address(bytes);
+            if (embeddedIpv4 != null) {
+                return !isSpecialIpv4Address(embeddedIpv4);
             }
         }
         if (address instanceof Inet4Address) {
@@ -129,5 +129,58 @@ public final class ExternalHttpEndpointPolicy {
             }
         }
         return true;
+    }
+
+    /**
+     * Returns the IPv4 address carried inside an IPv6 transition address, or
+     * null when the address does not embed one. NAT64 (64:ff9b::/96 and the
+     * local-use 64:ff9b:1::/48) and 6to4 (2002::/16) otherwise hide a private
+     * IPv4 target behind an address that looks like a global IPv6 literal.
+     */
+    private static byte[] embeddedIpv4Address(byte[] bytes) {
+        if (bytes == null || bytes.length != 16) {
+            return null;
+        }
+        if (isIpv4MappedAddress(bytes) || isIpv4CompatibleAddress(bytes)) {
+            return new byte[]{bytes[12], bytes[13], bytes[14], bytes[15]};
+        }
+        if (isNat64WellKnownPrefix(bytes)) {
+            return new byte[]{bytes[12], bytes[13], bytes[14], bytes[15]};
+        }
+        if (isNat64LocalUsePrefix(bytes)) {
+            return new byte[]{bytes[6], bytes[7], bytes[8], bytes[9]};
+        }
+        if ((bytes[0] & 255) == 0x20 && (bytes[1] & 255) == 0x02) {
+            return new byte[]{bytes[2], bytes[3], bytes[4], bytes[5]};
+        }
+        return null;
+    }
+
+    private static boolean isIpv4CompatibleAddress(byte[] bytes) {
+        for (int index = 0; index < 12; index++) {
+            if (bytes[index] != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isNat64WellKnownPrefix(byte[] bytes) {
+        if ((bytes[0] & 255) != 0 || (bytes[1] & 255) != 0x64
+                || (bytes[2] & 255) != 0xff || (bytes[3] & 255) != 0x9b) {
+            return false;
+        }
+        for (int index = 4; index < 12; index++) {
+            if (bytes[index] != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isNat64LocalUsePrefix(byte[] bytes) {
+        return (bytes[0] & 255) == 0 && (bytes[1] & 255) == 0x64
+                && (bytes[2] & 255) == 0xff && (bytes[3] & 255) == 0x9b
+                && (bytes[4] & 255) == 0 && (bytes[5] & 255) == 1;
     }
 }

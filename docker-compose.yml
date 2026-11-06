@@ -460,6 +460,9 @@ services:
       GF_AUTH_JWT_EMAIL_CLAIM: email
       GF_AUTH_JWT_ROLE_ATTRIBUTE_PATH: role
       GF_AUTH_JWT_AUTO_SIGN_UP: "true"
+      # Pin the issuer/audience WindBlog actually signs. Without this a token
+      # signed with the same secret for any other purpose would be accepted.
+      GF_AUTH_JWT_EXPECT_CLAIMS: '{"iss":"windblog-observability","aud":"grafana"}'
       ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}
     volumes:
@@ -481,7 +484,14 @@ services:
     container_name: cadvisor
     image: ${CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:v0.52.1}
     restart: unless-stopped
-    privileged: true
+    # cadvisor only scrapes container metrics here; a full privileged container
+    # exposes every host device and capability to it. Keep the narrow mounts
+    # below and drop privileges that are not needed for --docker_only.
+    privileged: false
+    security_opt:
+      - no-new-privileges:true
+    devices:
+      - /dev/kmsg
     networks:
       - app-network
     volumes:

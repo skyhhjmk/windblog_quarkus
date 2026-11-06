@@ -285,17 +285,12 @@ public class UserController {
             return rateLimitedResponse("注册尝试过于频繁，请一小时后重试", 3600);
         }
 
-        // 检查用户名是否已存在
-        if (User.find("username = ?1 and deletedAt is null", normalizedUsername).firstResult() != null) {
+        // 用户名与邮箱分开提示会形成账号枚举接口；两者统一返回同一条信息。
+        boolean usernameTaken = User.find("username = ?1 and deletedAt is null", normalizedUsername).firstResult() != null;
+        boolean emailTaken = User.find("email = ?1 and deletedAt is null", normalizedEmail).firstResult() != null;
+        if (usernameTaken || emailTaken) {
             return Response.status(Response.Status.CONFLICT)
-                    .entity(Map.of("success", false, "message", "用户名已被使用"))
-                    .build();
-        }
-
-        // 检查邮箱是否已存在
-        if (User.find("email = ?1 and deletedAt is null", normalizedEmail).firstResult() != null) {
-            return Response.status(Response.Status.CONFLICT)
-                    .entity(Map.of("success", false, "message", "邮箱已被注册"))
+                    .entity(Map.of("success", false, "message", "用户名或邮箱已被使用，请更换后重试"))
                     .build();
         }
 

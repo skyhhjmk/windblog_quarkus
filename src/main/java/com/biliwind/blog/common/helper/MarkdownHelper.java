@@ -33,12 +33,14 @@ public final class MarkdownHelper {
             Pattern.compile("^/uploads/import-placeholder/(\\d+)$");
 
     // 文章内容允许的标签；脚本、内联样式和 SVG 不属于文章数据，避免内容域承担主动内容。
+    // id 属性与购买按钮（data-price/data-post-ref）由页面模板生成，不接受作者内容注入：
+    // id 可造成 DOM clobbering，伪造的购买按钮可误导用户与前端脚本。
     private static final Safelist POST_SAFE_LIST = Safelist.relaxed()
-            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "button", "picture", "source")
+            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "picture", "source")
             .addAttributes("code", "class")
             .addAttributes("pre", "class")
             .addAttributes("span", "class")
-            .addAttributes("div", "class", "id", "data-name", "data-group", "data-title", "data-block-id")
+            .addAttributes("div", "class", "data-name", "data-group", "data-title", "data-block-id")
             .addAttributes("img", "width", "height", "loading", "decoding", "class")
             .addAttributes("picture", "class")
             .addAttributes("source", "type", "srcset", "media")
@@ -48,9 +50,6 @@ public final class MarkdownHelper {
             .addAttributes("table", "class")
             .addAttributes("th", "align")
             .addAttributes("td", "align")
-            // 允许卡片购买按钮属性
-            .addAttributes("button", "class", "data-post-id", "data-post-ref", "data-price",
-                    "data-block-id", "data-login-required")
             .addProtocols("a", "href", "http", "https", "mailto")
             .addProtocols("img", "src", "http", "https");
 

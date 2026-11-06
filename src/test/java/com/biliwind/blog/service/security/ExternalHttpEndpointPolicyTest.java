@@ -7,6 +7,7 @@ import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExternalHttpEndpointPolicyTest {
 
@@ -35,6 +36,27 @@ class ExternalHttpEndpointPolicyTest {
         assertFalsePublic("fe80::1");
         assertFalsePublic("ff02::1");
         assertFalsePublic("2001:db8::1");
+    }
+
+    @Test
+    void shouldUnwrapTransitionAddressesBeforeClassification() throws Exception {
+        // NAT64 well-known prefix (64:ff9b::/96) and local-use prefix (64:ff9b:1::/48)
+        assertFalsePublic("64:ff9b::7f00:1");
+        assertFalsePublic("64:ff9b::a00:1");
+        assertFalsePublic("64:ff9b:1:7f00:1::");
+        assertFalsePublic("64:ff9b:1:c0a8:1::");
+        // 6to4 (2002::/16) embeds the IPv4 address in hextets 2 and 3
+        assertFalsePublic("2002:7f00:1::1");
+        assertFalsePublic("2002:c0a8:1::1");
+        assertFalsePublic("2002:a9fe:1::1");
+
+        assertTrue(isPublic("64:ff9b::808:808"));
+        assertTrue(isPublic("2002:808:808::1"));
+        assertTrue(isPublic("2606:4700::1111"));
+    }
+
+    private boolean isPublic(String addressText) throws Exception {
+        return ExternalHttpEndpointPolicy.isPublicAddress(InetAddress.getByName(addressText));
     }
 
     private void assertFalsePublic(String addressText) throws Exception {

@@ -42,6 +42,8 @@ GRAFANA_HOST_PORT=13000
 
 默认值是 `127.0.0.1:13000`，即不对外暴露。Grafana 关闭了匿名访问和登录表单，只接受 WindBlog 签发的 JWT，因此该端口只应交给网关使用。
 
+Grafana 的 JWT 校验除签名和过期时间外，还通过 `GF_AUTH_JWT_EXPECT_CLAIMS` 固定 `iss=windblog-observability` 与 `aud=grafana`；只更换密钥但签发给其他用途的令牌不会被接受。
+
 ## 2. 配置 APISIX 路由
 
 路由定义在 `deploy/apisix/windblog-grafana-route.json`（id `00000000000000000210`，优先级 100）：

@@ -77,4 +77,29 @@ public final class RoutedRequestPolicy {
         }
         return true;
     }
+
+    /**
+     * Headers an edge node may replay towards the primary. Client-controlled
+     * forwarding and internal marker headers are dropped on both sides: the
+     * replay arrives from loopback, so a forged X-Forwarded-For or X-WindBlog-*
+     * value would otherwise be judged as if a trusted proxy set it.
+     */
+    public static boolean isForwardableHeader(String headerName) {
+        if (headerName == null || headerName.isBlank()) {
+            return false;
+        }
+        String lowerName = headerName.trim().toLowerCase(Locale.ROOT);
+        if ("host".equals(lowerName) || "content-length".equals(lowerName) || "connection".equals(lowerName)
+                || "transfer-encoding".equals(lowerName) || "upgrade".equals(lowerName)
+                || "expect".equals(lowerName) || "te".equals(lowerName) || "keep-alive".equals(lowerName)
+                || "proxy-authorization".equals(lowerName) || "proxy-connection".equals(lowerName)) {
+            return false;
+        }
+        if ("forwarded".equals(lowerName) || lowerName.startsWith("x-forwarded-")
+                || "x-real-ip".equals(lowerName) || lowerName.endsWith("-connecting-ip")
+                || "true-client-ip".equals(lowerName) || "x-client-ip".equals(lowerName)) {
+            return false;
+        }
+        return !lowerName.startsWith("x-windblog-") && !lowerName.startsWith("x-wesp-");
+    }
 }

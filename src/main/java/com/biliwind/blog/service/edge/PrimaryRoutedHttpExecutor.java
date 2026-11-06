@@ -132,19 +132,7 @@ public class PrimaryRoutedHttpExecutor {
      * X-WindBlog-* value would otherwise be judged as if a proxy set it.
      */
     static boolean isForwardableHeader(String headerName) {
-        String lowerName = headerName.trim().toLowerCase(java.util.Locale.ROOT);
-        if ("host".equals(lowerName) || "content-length".equals(lowerName) || "connection".equals(lowerName)
-                || "transfer-encoding".equals(lowerName) || "upgrade".equals(lowerName)
-                || "expect".equals(lowerName) || "te".equals(lowerName) || "keep-alive".equals(lowerName)
-                || "proxy-authorization".equals(lowerName)) {
-            return false;
-        }
-        if ("forwarded".equals(lowerName) || lowerName.startsWith("x-forwarded-")
-                || "x-real-ip".equals(lowerName) || lowerName.endsWith("-connecting-ip")
-                || "true-client-ip".equals(lowerName) || "x-client-ip".equals(lowerName)) {
-            return false;
-        }
-        return !lowerName.startsWith("x-windblog-") && !lowerName.startsWith("x-wesp-");
+        return RoutedRequestPolicy.isForwardableHeader(headerName);
     }
 
     private Map<String, String> collectHeaders(HttpResponse<byte[]> response) {

@@ -261,4 +261,19 @@ class MarkdownHelperTest {
         assertTrue(html.contains("srcset=\"/uploads/test_webp.webp\""));
         assertTrue(html.contains("<img"));
     }
+
+    @Test
+    void shouldStripAuthorControlledIdsAndPurchaseButtons() {
+        String html = MarkdownHelper.toHtml(
+                "<div id=\"pjax-container\" class=\"custom-block\">正文</div>"
+                        + "<button class=\"buy-post-btn\" data-price=\"0\" data-post-ref=\"1\""
+                        + " data-block-id=\"block-1\">购买</button>");
+
+        assertTrue(html.contains("class=\"custom-block\""));
+        assertTrue(html.contains("正文"));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("id=\"pjax-container\""));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("<button"));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("data-price"));
+        org.junit.jupiter.api.Assertions.assertFalse(html.contains("data-post-ref"));
+    }
 }

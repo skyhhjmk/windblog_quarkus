@@ -33,6 +33,19 @@ class AmpContentRendererTest {
         assertFalse(result.html().contains("button"));
         assertFalse(result.html().contains("iframe"));
         assertTrue(result.imageCount() == 1);
+    }
+
+    @Test
+    void shouldCountAndRemoveInteractiveElementsFromRawHtml() {
+        renderer.publicContentSanitizer = new PublicContentSanitizer();
+
+        AmpContentRenderer.RenderedContent result = renderer.render(
+                PostRenderType.HTML,
+                "<script>alert(1)</script><button>buy</button><iframe src=\"https://evil.example\"></iframe>");
+
+        assertFalse(result.html().contains("<script"));
+        assertFalse(result.html().contains("<button"));
+        assertFalse(result.html().contains("<iframe"));
         assertTrue(result.removedElementCount() >= 1);
     }
 

@@ -66,6 +66,9 @@ public final class ErrorCodeCatalog {
             if (containsAny(normalizedMessage, "两次输入的密码不一致")) {
                 return "WB-AUTH-REGISTER-003";
             }
+            if (containsAny(normalizedMessage, "用户名或邮箱已被使用", "注册信息已被占用")) {
+                return "WB-AUTH-REGISTER-009";
+            }
             if (containsAny(normalizedMessage, "用户名已被使用")) {
                 return "WB-AUTH-REGISTER-004";
             }

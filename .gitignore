@@ -43,6 +43,10 @@ nb-configuration.xml
 
 # Plugin directory
 /.quarkus/cli/plugins/
+# Local agent and Codex Creator state (may contain credentials)
+/codex-auth/
+/.codex/
+/skills/
 # TLS Certificates & Secrets
 .certs/
 /k8s/secrets/codex-creator-secrets.env

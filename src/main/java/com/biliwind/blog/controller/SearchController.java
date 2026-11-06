@@ -268,11 +268,15 @@ public class SearchController {
                                          @QueryParam("date") @DefaultValue("") String date,
                                          @QueryParam("page") @DefaultValue("1") Integer page,
                                          @QueryParam("lang") @DefaultValue("zh-cn") String lang,
-                                         @HeaderParam("X-WindBlog-Routed-From-Edge") String routedFromEdge) {
+                                         @HeaderParam("X-WindBlog-Routed-From-Edge") String routedFromEdge,
+                                         @Context io.vertx.ext.web.RoutingContext routingContext) {
         if (!nodeRoleService.isPrimaryNode()) {
             throw new NotFoundException();
         }
-        if (!"true".equalsIgnoreCase(routedFromEdge)) {
+        // The marker header alone is client-controlled. The only legitimate
+        // caller is PrimaryRoutedHttpExecutor replaying an edge request to the
+        // primary's own loopback listener, so require that peer as well.
+        if (!"true".equalsIgnoreCase(routedFromEdge) || !isLoopbackReplay(routingContext)) {
             throw new NotFoundException();
         }
 
@@ -288,6 +292,28 @@ public class SearchController {
                 result.usedElasticsearch(),
                 result.degraded()
         );
+    }
+
+    static boolean isLoopbackReplay(io.vertx.ext.web.RoutingContext routingContext) {
+        if (routingContext == null || routingContext.request() == null) {
+            return false;
+        }
+        return isLoopbackAddress(routingContext.request().remoteAddress());
+    }
+
+    static boolean isLoopbackAddress(io.vertx.core.net.SocketAddress remoteAddress) {
+        if (remoteAddress == null || !remoteAddress.isInetSocket()) {
+            return false;
+        }
+        String host = remoteAddress.hostAddress() == null ? remoteAddress.host() : remoteAddress.hostAddress();
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        try {
+            return java.net.InetAddress.getByName(host).isLoopbackAddress();
+        } catch (java.net.UnknownHostException exception) {
+            return false;
+        }
     }
 
     /**

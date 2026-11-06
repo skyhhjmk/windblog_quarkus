@@ -4,6 +4,7 @@ import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
 import com.biliwind.blog.service.edge.EdgeReadOnlyState;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.RoutedHttpExchange;
+import com.biliwind.blog.service.edge.RoutedRequestPolicy;
 import com.biliwind.blog.service.edge.WespSyncService;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -196,17 +197,7 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
     }
 
     private boolean canForwardHeader(String headerName) {
-        if (headerName == null || headerName.isBlank()) {
-            return false;
-        }
-        String lowerName = headerName.toLowerCase();
-        if ("host".equals(lowerName)) {
-            return false;
-        }
-        if ("content-length".equals(lowerName)) {
-            return false;
-        }
-        return !"connection".equals(lowerName);
+        return RoutedRequestPolicy.isForwardableHeader(headerName);
     }
 
     private Response buildResponse(RoutedHttpExchange.Response routedResponse) {
