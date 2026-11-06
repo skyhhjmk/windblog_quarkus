@@ -330,6 +330,8 @@ h1, h2, h3, h4, h5, h6 {
     aspect-ratio: 16 / 10;
     overflow: hidden;
     background-color: var(--input-bg);
+    contain: paint;
+    transform: translateZ(0);
 }
 
 @media (min-width: 640px) {
@@ -363,10 +365,83 @@ h1, h2, h3, h4, h5, h6 {
     max-height: 100%;
     object-fit: cover;
     object-position: center center;
+    backface-visibility: hidden;
+    transform: translateZ(0);
 }
 
-.post-list-cover-img.is-tall-crop {
+.post-list-cover-img.is-tall-crop,
+.post-header-cover-img.is-tall-crop {
     object-position: center 15%;
+}
+
+/* Article Detail Header Cover: Compact region under the title with opacity gradient */
+.post-title-stage {
+    position: relative;
+    isolation: isolate;
+}
+
+.post-header-title {
+    position: relative;
+    z-index: 2;
+    text-shadow: 0 2px 16px var(--card-bg);
+}
+
+.post-header-cover {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 34rem);
+    height: 5.25rem;
+    margin-top: -1.15rem !important;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background-color: var(--card-bg);
+    pointer-events: none;
+    user-select: none;
+    contain: paint;
+}
+
+@media (min-width: 640px) {
+    .post-header-cover {
+        height: 5.75rem;
+        margin-top: -1.25rem !important;
+    }
+}
+
+@media (min-width: 768px) {
+    .post-header-cover {
+        height: 6.25rem;
+        margin-top: -1.35rem !important;
+    }
+}
+
+.post-header-cover-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    opacity: 0.84;
+    transform: translateZ(0);
+}
+
+.post-header-cover-gradient {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--card-bg) 92%, transparent) 0%,
+            color-mix(in srgb, var(--card-bg) 52%, transparent) 46%,
+            color-mix(in srgb, var(--card-bg) 12%, transparent) 100%
+        ),
+        linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 58%,
+            color-mix(in srgb, var(--card-bg) 68%, transparent) 100%
+        );
+    pointer-events: none;
 }
 
 .link-application-input {

@@ -8,6 +8,7 @@ import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.PublicCacheRefreshService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostIndexRepository;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -44,8 +45,12 @@ class PublicSeoPagesTest {
     @Inject
     ElasticsearchPostIndexRepository postIndexRepository;
 
+    @Inject
+    PublicCacheRefreshService publicCacheRefreshService;
+
     private String chineseOnlySlug;
     private String bilingualSlug;
+    private Long bilingualPostId;
     private String categorySlug;
     private String tagSlug;
     private String seededUsername;
@@ -142,8 +147,8 @@ class PublicSeoPagesTest {
             secondRevision.post = second;
             secondRevision.title = second.title;
             secondRevision.contentMarkdown = Map.of(
-                    "zh-cn", "这是中文正文。",
-                    "en-US", "This is the English body.");
+                    "zh-cn", "这是中文正文。\n\n![cover](/uploads/test-cover.webp)",
+                    "en-US", "This is the English body.\n\n![cover](/uploads/test-cover.webp)");
             secondRevision.editorType = 0;
             secondRevision.revisionNumber = 1;
             secondRevision.createdBy = user;
@@ -152,7 +157,9 @@ class PublicSeoPagesTest {
 
             second.currentRevision = secondRevision;
             second.publishedRevision = secondRevision;
+            bilingualPostId = second.id;
         });
+        publicCacheRefreshService.refreshPostCaches(bilingualPostId);
     }
 
     @Test
@@ -351,5 +358,20 @@ class PublicSeoPagesTest {
     void linkInterstitialIsNoindex() {
         given().get("/link/go/missing-token").then()
                 .header("X-Robots-Tag", "noindex,follow");
+    }
+
+    @Test
+    void articleCoverTransitionHooksRenderOnHomepageAndDetailPage() {
+        given().get("/").then().statusCode(200)
+                .body(containsString("data-article-transition-part=\"cover\""))
+                .body(containsString("data-article-transition-slug=\"" + bilingualSlug + "\""))
+                .body(containsString("/uploads/test-cover.webp"));
+
+        given().get("/post/" + bilingualSlug).then().statusCode(200)
+                .body(containsString("class=\"post-header-cover\""))
+                .body(containsString("data-article-transition-part=\"cover\""))
+                .body(containsString("data-article-transition-slug=\"" + bilingualSlug + "\""))
+                .body(containsString("class=\"post-header-cover-gradient\""))
+                .body(containsString("/uploads/test-cover.webp"));
     }
 }

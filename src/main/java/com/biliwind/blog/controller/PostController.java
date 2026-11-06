@@ -173,6 +173,7 @@ public class PostController {
         long epoch = lastUpdated.toEpochSecond();
         String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion
                 + (pjaxRequest ? "_pjax" : "_full")
+                + "_cover1"
                 // The attachment widget and content gate depend on the reader,
                 // so a cached anonymous body must not satisfy a logged-in request.
                 + (requestUserId == null ? "_anon" : "_u" + requestUserId)
@@ -345,11 +346,22 @@ public class PostController {
                 ? ""
                 : repostPolicyCatalog.buildDirectCopyText(repostPolicy, displayTitle, repostOriginalUrl, resolvedLang);
 
+        String featuredImageUrl = postEntity == null ? null
+                : com.biliwind.blog.common.helper.PostCoverImageHelper
+                        .findFeaturedImageUrls(List.of(postEntity.id))
+                        .get(postEntity.id);
+        String postCoverImageUrl = postEntity != null
+                ? com.biliwind.blog.common.helper.PostCoverImageHelper
+                        .resolveCoverImage(postEntity, resolvedLang, featuredImageUrl)
+                : com.biliwind.blog.common.helper.PostCoverImageHelper
+                        .firstImageUrl(snapshot.previewContent(), resolvedLang);
+
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
                 .data("pjaxRequest", pjaxRequest)
                 .data("contentLanguage", contentLanguage)
                 .data("postSlug", slug)
+                .data("postCoverImageUrl", postCoverImageUrl)
                 .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())
                 .data("postTitle", displayTitle)
                 .data("pageTitle", seoTitle)

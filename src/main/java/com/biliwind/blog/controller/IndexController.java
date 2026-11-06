@@ -54,6 +54,10 @@ public class IndexController {
     private static final long RENDERED_PAGE_CACHE_TTL_MILLIS = 1000L;
     private static final ConcurrentHashMap<String, RenderedPageCache> RENDERED_PAGE_CACHE = new ConcurrentHashMap<>();
 
+    public static void clearRenderedPageCache() {
+        RENDERED_PAGE_CACHE.clear();
+    }
+
     @Inject
     @Location("blog/index.html")
     Template index;
@@ -116,7 +120,7 @@ public class IndexController {
         String currentRegion = regionContext.getCurrentRegion().getCode();
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
         String renderedPageCacheKey = buildRenderedPageCacheKey(
-                "index:v2:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
+                "index:v3:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
 
         com.biliwind.blog.service.PublicCacheRefreshService.PublicIndexPageSnapshot pageCache =
                 publicCacheRefreshService.findPublishedIndexPage(subPage, PAGE_SIZE, language, currentRegion);

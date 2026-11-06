@@ -599,6 +599,8 @@
             return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         }
 
+        const ARTICLE_TRANSITION_PARTS = ['cover', 'title', 'summary'];
+
         function getArticleTransitionSelector(slug, partName) {
             if (!slug || !partName) {
                 return '';
@@ -613,17 +615,35 @@
                 return elements;
             }
 
-            const titleElement = root.querySelector(getArticleTransitionSelector(slug, 'title'));
-            if (titleElement) {
-                elements.push(titleElement);
-            }
-
-            const summaryElement = root.querySelector(getArticleTransitionSelector(slug, 'summary'));
-            if (summaryElement) {
-                elements.push(summaryElement);
-            }
+            ARTICLE_TRANSITION_PARTS.forEach(function (partName) {
+                const element = root.querySelector(getArticleTransitionSelector(slug, partName));
+                if (element) {
+                    elements.push(element);
+                }
+            });
 
             return elements;
+        }
+
+        function findArticleTransitionCardElement(root, slug) {
+            if (!root || !slug) {
+                return null;
+            }
+
+            const safeSlug = getCssSafeSelectorValue(slug);
+            const cardCandidate = root.querySelector('article[data-article-transition-slug="' + safeSlug + '"]');
+            if (cardCandidate) {
+                return cardCandidate.classList.contains('card')
+                    ? cardCandidate
+                    : (cardCandidate.closest('.card') || cardCandidate);
+            }
+
+            const firstTransitionElement = getArticleTransitionElements(root, slug)[0];
+            if (!firstTransitionElement || typeof firstTransitionElement.closest !== 'function') {
+                return null;
+            }
+
+            return firstTransitionElement.closest('article.card, .card');
         }
 
         function hasArticleTransitionSource(root, slug) {
@@ -844,14 +864,36 @@
             document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url } }));
         }
 
+        function clampRectToViewport(rect) {
+            if (!rect) {
+                return null;
+            }
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+            const top = Math.max(-24, rect.top);
+            const bottom = Math.min(viewportHeight + 24, rect.top + rect.height);
+            return {
+                left: rect.left,
+                top: top,
+                width: rect.width,
+                height: Math.max(96, bottom - top)
+            };
+        }
+
         function captureArticleTransitionItems(slug) {
             const capturedItems = [];
             if (!slug) {
                 return capturedItems;
             }
 
-            const articleTransitionParts = ['title', 'summary'];
-            articleTransitionParts.forEach(function (partName) {
+            const cardElement = findArticleTransitionCardElement(document, slug);
+            if (cardElement) {
+                const rawCardRect = cardElement.getBoundingClientRect();
+                if (rawCardRect.width > 0 && rawCardRect.height > 0) {
+                    capturedItems.cardSourceRect = clampRectToViewport(rawCardRect);
+                }
+            }
+
+            ARTICLE_TRANSITION_PARTS.forEach(function (partName) {
                 const sourceElement = document.querySelector(getArticleTransitionSelector(slug, partName));
                 if (!sourceElement) {
                     return;
@@ -862,10 +904,30 @@
                     return;
                 }
 
+                let coverState = null;
+                if (partName === 'cover') {
+                    const imgElement = sourceElement.querySelector('img');
+                    coverState = {
+                        imgSrc: imgElement ? (imgElement.currentSrc || imgElement.getAttribute('src') || '') : '',
+                        imgAlt: imgElement ? (imgElement.getAttribute('alt') || '') : '',
+                        isTallCrop: Boolean(imgElement && imgElement.classList.contains('is-tall-crop')),
+                        imgOpacity: imgElement
+                            ? (parseFloat(window.getComputedStyle(imgElement).opacity) || 1)
+                            : 1,
+                        gradientOpacity: sourceElement.querySelector('.post-header-cover-gradient') ? 1 : 0
+                    };
+                }
+
                 capturedItems.push({
                     partName: partName,
-                    sourceRect: sourceRect,
-                    sourceStyle: getArticleTransitionStyleSnapshot(sourceElement)
+                    sourceRect: {
+                        left: sourceRect.left,
+                        top: sourceRect.top,
+                        width: sourceRect.width,
+                        height: sourceRect.height
+                    },
+                    sourceStyle: getArticleTransitionStyleSnapshot(sourceElement),
+                    coverState: coverState
                 });
             });
 
@@ -877,6 +939,8 @@
             return {
                 backgroundColor: computedStyle.backgroundColor,
                 borderBottomColor: computedStyle.borderBottomColor,
+                borderBottomLeftRadius: computedStyle.borderBottomLeftRadius,
+                borderBottomRightRadius: computedStyle.borderBottomRightRadius,
                 borderBottomStyle: computedStyle.borderBottomStyle,
                 borderBottomWidth: computedStyle.borderBottomWidth,
                 borderLeftColor: computedStyle.borderLeftColor,
@@ -886,6 +950,8 @@
                 borderRightStyle: computedStyle.borderRightStyle,
                 borderRightWidth: computedStyle.borderRightWidth,
                 borderTopColor: computedStyle.borderTopColor,
+                borderTopLeftRadius: computedStyle.borderTopLeftRadius,
+                borderTopRightRadius: computedStyle.borderTopRightRadius,
                 borderTopStyle: computedStyle.borderTopStyle,
                 borderTopWidth: computedStyle.borderTopWidth,
                 color: computedStyle.color,
@@ -907,6 +973,8 @@
         function applyArticleTransitionStyleSnapshot(element, styleSnapshot) {
             element.style.backgroundColor = styleSnapshot.backgroundColor;
             element.style.borderBottomColor = styleSnapshot.borderBottomColor;
+            element.style.borderBottomLeftRadius = styleSnapshot.borderBottomLeftRadius;
+            element.style.borderBottomRightRadius = styleSnapshot.borderBottomRightRadius;
             element.style.borderBottomStyle = styleSnapshot.borderBottomStyle;
             element.style.borderBottomWidth = styleSnapshot.borderBottomWidth;
             element.style.borderLeftColor = styleSnapshot.borderLeftColor;
@@ -916,6 +984,8 @@
             element.style.borderRightStyle = styleSnapshot.borderRightStyle;
             element.style.borderRightWidth = styleSnapshot.borderRightWidth;
             element.style.borderTopColor = styleSnapshot.borderTopColor;
+            element.style.borderTopLeftRadius = styleSnapshot.borderTopLeftRadius;
+            element.style.borderTopRightRadius = styleSnapshot.borderTopRightRadius;
             element.style.borderTopStyle = styleSnapshot.borderTopStyle;
             element.style.borderTopWidth = styleSnapshot.borderTopWidth;
             element.style.color = styleSnapshot.color;
@@ -933,38 +1003,9 @@
             element.style.textTransform = styleSnapshot.textTransform;
         }
 
-        function buildArticleTransitionKeyframe(rect, styleSnapshot) {
-            return {
-                backgroundColor: styleSnapshot.backgroundColor,
-                borderBottomColor: styleSnapshot.borderBottomColor,
-                borderBottomStyle: styleSnapshot.borderBottomStyle,
-                borderBottomWidth: styleSnapshot.borderBottomWidth,
-                borderLeftColor: styleSnapshot.borderLeftColor,
-                borderLeftStyle: styleSnapshot.borderLeftStyle,
-                borderLeftWidth: styleSnapshot.borderLeftWidth,
-                borderRightColor: styleSnapshot.borderRightColor,
-                borderRightStyle: styleSnapshot.borderRightStyle,
-                borderRightWidth: styleSnapshot.borderRightWidth,
-                borderTopColor: styleSnapshot.borderTopColor,
-                borderTopStyle: styleSnapshot.borderTopStyle,
-                borderTopWidth: styleSnapshot.borderTopWidth,
-                color: styleSnapshot.color,
-                fontFamily: styleSnapshot.fontFamily,
-                fontSize: styleSnapshot.fontSize,
-                fontStyle: styleSnapshot.fontStyle,
-                fontWeight: styleSnapshot.fontWeight,
-                height: rect.height + 'px',
-                letterSpacing: styleSnapshot.letterSpacing,
-                lineHeight: styleSnapshot.lineHeight,
-                paddingBottom: styleSnapshot.paddingBottom,
-                paddingLeft: styleSnapshot.paddingLeft,
-                paddingRight: styleSnapshot.paddingRight,
-                paddingTop: styleSnapshot.paddingTop,
-                textAlign: styleSnapshot.textAlign,
-                textTransform: styleSnapshot.textTransform,
-                transform: 'translate3d(' + rect.left + 'px, ' + rect.top + 'px, 0)',
-                width: rect.width + 'px'
-            };
+        function parseFontSizePx(fontSizeValue) {
+            const parsed = parseFloat(fontSizeValue);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
         }
 
         function getArticleTransitionContainerOffset(container) {
@@ -1036,7 +1077,7 @@
                 };
                 // Fallback for browsers/tabs where requestAnimationFrame is
                 // throttled; the caller always has a hard deadline anyway.
-                const timer = window.setTimeout(finish, 64);
+                const timer = window.setTimeout(finish, 48);
                 if (typeof window.requestAnimationFrame === 'function') {
                     window.requestAnimationFrame(finish);
                 } else {
@@ -1049,15 +1090,13 @@
             if (!preparedItems || preparedItems.length === 0 || document.visibilityState === 'hidden') {
                 return;
             }
-            // The Tailwind runtime compiles classes for freshly injected PJAX
-            // markup in a follow-up task. Measuring synchronously returns the
-            // pre-compile geometry, so on the first visit to a layout the clone
-            // would land at the wrong size/position and the real element would
-            // snap into place afterwards. Wait until the destination geometry is
-            // stable across two consecutive frames, with a hard cap so the
-            // navigation can never stall on a missing style.
-            const deadline = performance.now() + 240;
-            let previousSignature = null;
+            // Flush microtasks (such as MutationObserver callbacks from runtime
+            // style compilers) and take an initial geometry signature before
+            // the first animation frame so already-settled pages only wait 1
+            // frame instead of 2+.
+            await Promise.resolve();
+            const deadline = performance.now() + 180;
+            let previousSignature = getArticleTransitionTargetSignature(preparedItems, container);
             let stableFrames = 0;
             while (performance.now() < deadline) {
                 await nextArticleTransitionFrame();
@@ -1074,26 +1113,70 @@
             }
         }
 
-        function measureArticleTransitionTargets(preparedItems, container) {
-            const measuredItems = [];
-            preparedItems.forEach(function (preparedItem) {
-                const targetRect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
-                if (targetRect.width <= 0 || targetRect.height <= 0) {
-                    cleanupArticleTransitionItems([preparedItem]);
-                    return;
-                }
-                preparedItem.targetRect = targetRect;
-                preparedItem.targetStyle = getArticleTransitionStyleSnapshot(preparedItem.targetElement);
-                measuredItems.push(preparedItem);
-            });
+        function prepareCoverTransitionClone(cloneElement, capturedItem) {
+            cloneElement.classList.remove('post-list-cover', 'post-header-cover');
+            cloneElement.style.minHeight = '0';
+            cloneElement.style.maxHeight = 'none';
+            cloneElement.style.margin = '0';
 
-            return measuredItems;
+            const sourceCover = capturedItem.coverState || {};
+            let imgElement = cloneElement.querySelector('img');
+            if (!imgElement && sourceCover.imgSrc) {
+                imgElement = document.createElement('img');
+                imgElement.src = sourceCover.imgSrc;
+                imgElement.alt = sourceCover.imgAlt || '';
+                cloneElement.insertBefore(imgElement, cloneElement.firstChild);
+            }
+            if (imgElement) {
+                imgElement.classList.remove('post-header-cover-img');
+                imgElement.classList.add('post-list-cover-img');
+                if (sourceCover.isTallCrop) {
+                    imgElement.classList.add('is-tall-crop');
+                }
+                imgElement.loading = 'eager';
+                imgElement.decoding = 'async';
+                imgElement.style.opacity = String(sourceCover.imgOpacity != null ? sourceCover.imgOpacity : 1);
+            }
+
+            let gradientElement = cloneElement.querySelector('.post-header-cover-gradient');
+            if (!gradientElement) {
+                gradientElement = document.createElement('div');
+                gradientElement.className = 'post-header-cover-gradient';
+                gradientElement.setAttribute('aria-hidden', 'true');
+                cloneElement.appendChild(gradientElement);
+            }
+            gradientElement.style.opacity = String(sourceCover.gradientOpacity != null ? sourceCover.gradientOpacity : 0);
+
+            return {
+                imgElement: imgElement,
+                gradientElement: gradientElement
+            };
         }
 
         function prepareArticleTransitionTargets(slug, capturedItems) {
             const preparedItems = [];
             if (!slug || !capturedItems || capturedItems.length === 0) {
                 return preparedItems;
+            }
+
+            const targetCardElement = findArticleTransitionCardElement(document, slug);
+            if (capturedItems.cardSourceRect && targetCardElement) {
+                const backdropElement = document.createElement('div');
+                backdropElement.className = 'pjax-article-transition-backdrop';
+                backdropElement.setAttribute('aria-hidden', 'true');
+                backdropElement.style.transform = 'translate3d('
+                    + capturedItems.cardSourceRect.left + 'px, '
+                    + capturedItems.cardSourceRect.top + 'px, 0)';
+                backdropElement.style.width = capturedItems.cardSourceRect.width + 'px';
+                backdropElement.style.height = capturedItems.cardSourceRect.height + 'px';
+                backdropElement.style.opacity = '0.94';
+                document.body.appendChild(backdropElement);
+                preparedItems.backdropItem = {
+                    element: backdropElement,
+                    sourceRect: capturedItems.cardSourceRect,
+                    targetElement: targetCardElement,
+                    targetRect: null
+                };
             }
 
             capturedItems.forEach(function (capturedItem) {
@@ -1103,15 +1186,27 @@
                 }
 
                 const cloneElement = targetElement.cloneNode(true);
-                cloneElement.classList.add('pjax-article-transition-clone');
+                cloneElement.classList.add(
+                    'pjax-article-transition-clone',
+                    'pjax-article-transition-clone-' + capturedItem.partName
+                );
                 cloneElement.classList.remove('pjax-article-transition-target-hidden');
                 cloneElement.removeAttribute('data-article-transition-part');
                 cloneElement.removeAttribute('data-article-transition-slug');
                 targetElement.classList.add('pjax-article-transition-target-hidden');
 
-                // Park the clone where the source element was visible until the
-                // destination geometry is known. The target is measured later,
-                // once the runtime stylesheet has caught up with the fragment.
+                let coverNodes = null;
+                if (capturedItem.partName === 'cover') {
+                    coverNodes = prepareCoverTransitionClone(cloneElement, capturedItem);
+                } else if (capturedItem.partName === 'summary') {
+                    const clampedParagraph = cloneElement.querySelector('.line-clamp-2');
+                    if (clampedParagraph) {
+                        clampedParagraph.classList.remove('line-clamp-2');
+                    }
+                }
+
+                // Park the clone where the source element was visible while the
+                // destination geometry settles in the hidden container.
                 cloneElement.style.transform = 'translate3d(' + capturedItem.sourceRect.left + 'px, ' + capturedItem.sourceRect.top + 'px, 0)';
                 cloneElement.style.width = capturedItem.sourceRect.width + 'px';
                 cloneElement.style.height = capturedItem.sourceRect.height + 'px';
@@ -1122,6 +1217,8 @@
                     partName: capturedItem.partName,
                     sourceRect: capturedItem.sourceRect,
                     sourceStyle: capturedItem.sourceStyle,
+                    coverState: capturedItem.coverState,
+                    coverNodes: coverNodes,
                     targetRect: null,
                     targetStyle: null,
                     cloneElement: cloneElement,
@@ -1129,7 +1226,190 @@
                 });
             });
 
+            if (preparedItems.length === 0 && preparedItems.backdropItem) {
+                preparedItems.backdropItem.element.remove();
+                preparedItems.backdropItem = null;
+            }
+
             return preparedItems;
+        }
+
+        function measureArticleTransitionTargets(preparedItems, container) {
+            const measuredItems = [];
+            if (preparedItems && preparedItems.backdropItem) {
+                const rawTargetCardRect = getArticleTransitionTargetRect(
+                    preparedItems.backdropItem.targetElement,
+                    container
+                );
+                if (rawTargetCardRect.width > 0 && rawTargetCardRect.height > 0) {
+                    preparedItems.backdropItem.targetRect = clampRectToViewport(rawTargetCardRect);
+                    measuredItems.backdropItem = preparedItems.backdropItem;
+                } else {
+                    preparedItems.backdropItem.element.remove();
+                }
+            }
+
+            preparedItems.forEach(function (preparedItem) {
+                const targetRect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
+                if (targetRect.width <= 0 || targetRect.height <= 0) {
+                    cleanupArticleTransitionItems([preparedItem]);
+                    return;
+                }
+                preparedItem.targetRect = targetRect;
+                preparedItem.targetStyle = getArticleTransitionStyleSnapshot(preparedItem.targetElement);
+                if (preparedItem.partName === 'cover') {
+                    const targetImg = preparedItem.targetElement.querySelector('img');
+                    if (targetImg && targetImg.classList.contains('is-tall-crop') && preparedItem.coverNodes && preparedItem.coverNodes.imgElement) {
+                        preparedItem.coverNodes.imgElement.classList.add('is-tall-crop');
+                    }
+                    preparedItem.targetCoverState = {
+                        imgOpacity: targetImg
+                            ? (parseFloat(window.getComputedStyle(targetImg).opacity) || 1)
+                            : 1,
+                        gradientOpacity: preparedItem.targetElement.querySelector('.post-header-cover-gradient') ? 1 : 0
+                    };
+                }
+                measuredItems.push(preparedItem);
+            });
+
+            if (measuredItems.length === 0 && measuredItems.backdropItem) {
+                measuredItems.backdropItem.element.remove();
+                measuredItems.backdropItem = null;
+            }
+
+            return measuredItems;
+        }
+
+        function animateTitleTransitionItem(preparedItem, duration, easing) {
+            const cloneElement = preparedItem.cloneElement;
+            const sourceRect = preparedItem.sourceRect;
+            const targetRect = preparedItem.targetRect;
+            const sourceStyle = preparedItem.sourceStyle;
+            const targetStyle = preparedItem.targetStyle;
+
+            const sourceFontPx = parseFontSizePx(sourceStyle.fontSize);
+            const targetFontPx = parseFontSizePx(targetStyle.fontSize);
+            const rawScale = sourceFontPx / targetFontPx;
+            const startScale = Math.min(1.85, Math.max(0.45, rawScale));
+
+            // Lock the clone to the destination typography and width so the
+            // browser never recomputes line breaks or snaps font-weight mid-flight.
+            applyArticleTransitionStyleSnapshot(cloneElement, targetStyle);
+            cloneElement.style.width = Math.max(targetRect.width, sourceRect.width / startScale) + 'px';
+            cloneElement.style.height = 'auto';
+            cloneElement.style.transformOrigin = '0 0';
+
+            return cloneElement.animate([
+                {
+                    transform: 'translate3d(' + sourceRect.left + 'px, ' + sourceRect.top + 'px, 0) scale(' + startScale.toFixed(4) + ')',
+                    color: sourceStyle.color
+                },
+                {
+                    transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0) scale(1)',
+                    color: targetStyle.color
+                }
+            ], {
+                duration: duration,
+                easing: easing,
+                fill: 'forwards'
+            }).finished;
+        }
+
+        function animateCoverTransitionItem(preparedItem, duration, easing) {
+            const cloneElement = preparedItem.cloneElement;
+            const sourceRect = preparedItem.sourceRect;
+            const targetRect = preparedItem.targetRect;
+            const sourceStyle = preparedItem.sourceStyle;
+            const targetStyle = preparedItem.targetStyle;
+            const sourceCover = preparedItem.coverState || { imgOpacity: 1, gradientOpacity: 0 };
+            const targetCover = preparedItem.targetCoverState || { imgOpacity: 1, gradientOpacity: 0 };
+            const promises = [];
+
+            promises.push(cloneElement.animate([
+                {
+                    transform: 'translate3d(' + sourceRect.left + 'px, ' + sourceRect.top + 'px, 0)',
+                    width: sourceRect.width + 'px',
+                    height: sourceRect.height + 'px',
+                    borderTopLeftRadius: sourceStyle.borderTopLeftRadius,
+                    borderTopRightRadius: sourceStyle.borderTopRightRadius,
+                    borderBottomRightRadius: sourceStyle.borderBottomRightRadius,
+                    borderBottomLeftRadius: sourceStyle.borderBottomLeftRadius
+                },
+                {
+                    transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0)',
+                    width: targetRect.width + 'px',
+                    height: targetRect.height + 'px',
+                    borderTopLeftRadius: targetStyle.borderTopLeftRadius,
+                    borderTopRightRadius: targetStyle.borderTopRightRadius,
+                    borderBottomRightRadius: targetStyle.borderBottomRightRadius,
+                    borderBottomLeftRadius: targetStyle.borderBottomLeftRadius
+                }
+            ], {
+                duration: duration,
+                easing: easing,
+                fill: 'forwards'
+            }).finished);
+
+            if (preparedItem.coverNodes && preparedItem.coverNodes.imgElement) {
+                promises.push(preparedItem.coverNodes.imgElement.animate([
+                    { opacity: sourceCover.imgOpacity, transform: 'scale(1.03)' },
+                    { opacity: targetCover.imgOpacity, transform: 'scale(1)' }
+                ], {
+                    duration: duration,
+                    easing: easing,
+                    fill: 'forwards'
+                }).finished);
+            }
+
+            if (preparedItem.coverNodes && preparedItem.coverNodes.gradientElement) {
+                promises.push(preparedItem.coverNodes.gradientElement.animate([
+                    { opacity: sourceCover.gradientOpacity },
+                    { opacity: targetCover.gradientOpacity }
+                ], {
+                    duration: duration,
+                    easing: easing,
+                    fill: 'forwards'
+                }).finished);
+            }
+
+            return Promise.all(promises);
+        }
+
+        function animateSummaryTransitionItem(preparedItem, duration, easing) {
+            const cloneElement = preparedItem.cloneElement;
+            const sourceRect = preparedItem.sourceRect;
+            const targetRect = preparedItem.targetRect;
+            const sourceStyle = preparedItem.sourceStyle;
+            const targetStyle = preparedItem.targetStyle;
+
+            applyArticleTransitionStyleSnapshot(cloneElement, targetStyle);
+
+            return cloneElement.animate([
+                {
+                    transform: 'translate3d(' + sourceRect.left + 'px, ' + sourceRect.top + 'px, 0)',
+                    width: sourceRect.width + 'px',
+                    height: sourceRect.height + 'px',
+                    backgroundColor: sourceStyle.backgroundColor,
+                    borderTopLeftRadius: sourceStyle.borderTopLeftRadius,
+                    borderTopRightRadius: sourceStyle.borderTopRightRadius,
+                    borderBottomRightRadius: sourceStyle.borderBottomRightRadius,
+                    borderBottomLeftRadius: sourceStyle.borderBottomLeftRadius
+                },
+                {
+                    transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0)',
+                    width: targetRect.width + 'px',
+                    height: targetRect.height + 'px',
+                    backgroundColor: targetStyle.backgroundColor,
+                    borderTopLeftRadius: targetStyle.borderTopLeftRadius,
+                    borderTopRightRadius: targetStyle.borderTopRightRadius,
+                    borderBottomRightRadius: targetStyle.borderBottomRightRadius,
+                    borderBottomLeftRadius: targetStyle.borderBottomLeftRadius
+                }
+            ], {
+                duration: duration,
+                easing: easing,
+                fill: 'forwards'
+            }).finished;
         }
 
         function animateArticleTransitionItems(preparedItems, container) {
@@ -1141,18 +1421,47 @@
                 return Promise.resolve();
             }
 
+            const duration = 380;
+            const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
             const animationPromises = [];
 
-            preparedItems.forEach(function (preparedItem) {
-                const animation = preparedItem.cloneElement.animate([
-                    buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
-                    buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
+            if (preparedItems.backdropItem && preparedItems.backdropItem.targetRect) {
+                const backdrop = preparedItems.backdropItem;
+                animationPromises.push(backdrop.element.animate([
+                    {
+                        transform: 'translate3d(' + backdrop.sourceRect.left + 'px, ' + backdrop.sourceRect.top + 'px, 0)',
+                        width: backdrop.sourceRect.width + 'px',
+                        height: backdrop.sourceRect.height + 'px',
+                        opacity: 0.94
+                    },
+                    {
+                        transform: 'translate3d(' + backdrop.targetRect.left + 'px, ' + backdrop.targetRect.top + 'px, 0)',
+                        width: backdrop.targetRect.width + 'px',
+                        height: backdrop.targetRect.height + 'px',
+                        opacity: 0.32,
+                        offset: 0.68
+                    },
+                    {
+                        transform: 'translate3d(' + backdrop.targetRect.left + 'px, ' + backdrop.targetRect.top + 'px, 0)',
+                        width: backdrop.targetRect.width + 'px',
+                        height: backdrop.targetRect.height + 'px',
+                        opacity: 0
+                    }
                 ], {
-                    duration: 320,
-                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                    duration: duration,
+                    easing: easing,
                     fill: 'forwards'
-                });
-                animationPromises.push(animation.finished);
+                }).finished);
+            }
+
+            preparedItems.forEach(function (preparedItem) {
+                if (preparedItem.partName === 'title') {
+                    animationPromises.push(animateTitleTransitionItem(preparedItem, duration, easing));
+                } else if (preparedItem.partName === 'cover') {
+                    animationPromises.push(animateCoverTransitionItem(preparedItem, duration, easing));
+                } else {
+                    animationPromises.push(animateSummaryTransitionItem(preparedItem, duration, easing));
+                }
             });
 
             return Promise.all(animationPromises).then(function () {
@@ -1178,12 +1487,34 @@
                 if (!moved) {
                     return;
                 }
-                const targetStyle = getArticleTransitionStyleSnapshot(preparedItem.targetElement);
+                if (preparedItem.partName === 'title') {
+                    corrections.push(preparedItem.cloneElement.animate([
+                        {
+                            transform: 'translate3d(' + preparedItem.targetRect.left + 'px, ' + preparedItem.targetRect.top + 'px, 0) scale(1)'
+                        },
+                        {
+                            transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0) scale(1)'
+                        }
+                    ], {
+                        duration: 120,
+                        easing: 'ease-out',
+                        fill: 'forwards'
+                    }).finished);
+                    return;
+                }
                 corrections.push(preparedItem.cloneElement.animate([
-                    buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle),
-                    buildArticleTransitionKeyframe(targetRect, targetStyle)
+                    {
+                        transform: 'translate3d(' + preparedItem.targetRect.left + 'px, ' + preparedItem.targetRect.top + 'px, 0)',
+                        width: preparedItem.targetRect.width + 'px',
+                        height: preparedItem.targetRect.height + 'px'
+                    },
+                    {
+                        transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0)',
+                        width: targetRect.width + 'px',
+                        height: targetRect.height + 'px'
+                    }
                 ], {
-                    duration: 140,
+                    duration: 120,
                     easing: 'ease-out',
                     fill: 'forwards'
                 }).finished);
@@ -1193,9 +1524,20 @@
         }
 
         function cleanupArticleTransitionItems(preparedItems) {
+            if (!preparedItems) {
+                return;
+            }
+            if (preparedItems.backdropItem && preparedItems.backdropItem.element) {
+                preparedItems.backdropItem.element.remove();
+                preparedItems.backdropItem = null;
+            }
             preparedItems.forEach(function (preparedItem) {
-                preparedItem.targetElement.classList.remove('pjax-article-transition-target-hidden');
-                preparedItem.cloneElement.remove();
+                if (preparedItem.targetElement) {
+                    preparedItem.targetElement.classList.remove('pjax-article-transition-target-hidden');
+                }
+                if (preparedItem.cloneElement) {
+                    preparedItem.cloneElement.remove();
+                }
             });
         }
 
@@ -1259,6 +1601,7 @@
             cleanupArticleTransitionItems(activeTransitionItems);
             activeTransitionItems = [];
             container.getAnimations?.().forEach(animation => animation.cancel());
+            container.style.opacity = '';
             const requestController = new AbortController();
             activePjaxController = requestController;
             document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
@@ -1294,10 +1637,14 @@
 
                 const html = await response.text();
                 if (activePjaxController !== requestController || requestController.signal.aborted) return;
-                const hasArticleTransitionSourceOnCurrentPage = transitionSlug && hasArticleTransitionSource(document, transitionSlug);
-                const extractedHtml = extractPjaxHtml(html, transitionSlug);
+                const hasArticleTransitionSourceOnCurrentPage = Boolean(
+                    transitionSlug && hasArticleTransitionSource(document, transitionSlug)
+                );
+                const capturedItems = hasArticleTransitionSourceOnCurrentPage
+                    ? captureArticleTransitionItems(transitionSlug)
+                    : [];
+                const extractedHtml = extractPjaxHtml(html, transitionSlug, capturedItems);
 
-                const capturedItems = hasArticleTransitionSourceOnCurrentPage ? captureArticleTransitionItems(transitionSlug) : [];
                 try {
                     analyticsBeginNavigation();
                     updatePjaxContainerState(container, extractedHtml, url, pushState, pjaxUpdateOptions);
@@ -1331,29 +1678,42 @@
                         activeTransitionItems = preparedItems;
                         if (preparedItems.length > 0) {
                             logArticleTransitionMode(url, transitionSlug, true, '');
+                            const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                            if (!reducedMotion) {
+                                // Keep the destination container transparent while its
+                                // geometry settles for 1 frame so the user only sees the
+                                // parked clones and card backdrop until the synchronized
+                                // morph and fade-in start together.
+                                container.style.opacity = '0';
+                            }
                             // Page-level init (ad slots, comments, ...) may insert
                             // content above the title. Complete it before pinning
                             // the destination so the morph ends where the title
                             // actually lands.
                             finalizeNavigation();
-                            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                            if (reducedMotion) {
+                                container.style.opacity = '';
                                 cleanupArticleTransitionItems(preparedItems);
                             } else {
-                                if (container.animate) {
-                                    container.animate([
-                                        { opacity: 0.72, transform: 'translateY(6px)' },
-                                        { opacity: 1, transform: 'translateY(0)' }
-                                    ], {
-                                        duration: 320,
-                                        easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
-                                    });
-                                }
                                 await settleArticleTransitionTargets(preparedItems, container);
                                 if (!isCurrentNavigation()) {
+                                    container.style.opacity = '';
                                     cleanupArticleTransitionItems(preparedItems);
                                     return;
                                 }
                                 const measuredItems = measureArticleTransitionTargets(preparedItems, container);
+                                activeTransitionItems = measuredItems;
+                                container.style.opacity = '';
+                                if (container.animate) {
+                                    container.animate([
+                                        { opacity: 0, transform: 'translate3d(0, 8px, 0)' },
+                                        { opacity: 0.28, transform: 'translate3d(0, 5px, 0)', offset: 0.26 },
+                                        { opacity: 1, transform: 'translate3d(0, 0, 0)' }
+                                    ], {
+                                        duration: 380,
+                                        easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+                                    });
+                                }
                                 await animateArticleTransitionItems(measuredItems, container);
                             }
                         } else {
@@ -1366,10 +1726,12 @@
                         }
                     }
                 } catch (animationError) {
+                    container.style.opacity = '';
                     if (isCurrentNavigation()) cleanupArticleTransitionItems(activeTransitionItems);
                 }
                 if (isCurrentNavigation()) finalizeNavigation();
             } catch (error) {
+                container.style.opacity = '';
                 if (activePjaxController !== requestController || requestController.signal.aborted) {
                     return;
                 }
@@ -1385,7 +1747,7 @@
             }
         }
 
-        function extractPjaxHtml(html, transitionSlug) {
+        function extractPjaxHtml(html, transitionSlug, capturedItems) {
             if (!html) {
                 throw new Error('Empty PJAX response');
             }
@@ -1393,15 +1755,15 @@
             const parser = new DOMParser();
             const documentSnapshot = parser.parseFromString(html, 'text/html');
 
-            if (transitionSlug) {
-                const titleTarget = documentSnapshot.querySelector(getArticleTransitionSelector(transitionSlug, 'title'));
-                if (titleTarget) {
-                    titleTarget.classList.add('pjax-article-transition-target-hidden');
-                }
-                const summaryTarget = documentSnapshot.querySelector(getArticleTransitionSelector(transitionSlug, 'summary'));
-                if (summaryTarget) {
-                    summaryTarget.classList.add('pjax-article-transition-target-hidden');
-                }
+            if (transitionSlug && Array.isArray(capturedItems) && capturedItems.length > 0) {
+                capturedItems.forEach(function (capturedItem) {
+                    const targetNode = documentSnapshot.querySelector(
+                        getArticleTransitionSelector(transitionSlug, capturedItem.partName)
+                    );
+                    if (targetNode) {
+                        targetNode.classList.add('pjax-article-transition-target-hidden');
+                    }
+                });
             }
 
             const contentRoot = documentSnapshot.querySelector('#pjax-content-root');

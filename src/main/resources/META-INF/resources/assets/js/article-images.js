@@ -85,12 +85,12 @@
         if (root.matches && root.matches('.prose img[src]')) {
             prepareImage(root);
         }
-        if (root.matches && root.matches('.post-list-cover-img[src]')) {
+        if (root.matches && root.matches('.post-list-cover-img[src], .post-header-cover-img[src]')) {
             prepareCoverImage(root);
         }
         if (root.querySelectorAll) {
             root.querySelectorAll('.prose img[src]').forEach(prepareImage);
-            root.querySelectorAll('.post-list-cover-img[src]').forEach(prepareCoverImage);
+            root.querySelectorAll('.post-list-cover-img[src], .post-header-cover-img[src]').forEach(prepareCoverImage);
         }
     }
 

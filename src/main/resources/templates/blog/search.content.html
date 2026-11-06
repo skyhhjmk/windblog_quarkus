@@ -117,7 +117,9 @@
 
                             <!-- AI Summary (Priority) or Fallback Summary -->
                             {#if hit.aiSummary && ! hit.aiSummary.isEmpty}
-                                <div class="my-1 p-3.5 rounded-xl bg-accent/[0.04] border border-accent/15 space-y-1.5">
+                                <div class="my-1 p-3.5 rounded-xl bg-accent/[0.04] border border-accent/15 space-y-1.5"
+                                     data-article-transition-part="summary"
+                                     data-article-transition-slug="{hit.slug}">
                                     <div class="flex items-center gap-2">
                                         <span class="badge-ai">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"
@@ -130,9 +132,7 @@
                                             {i18n.t('common.ai_summary')}
                                         </span>
                                     </div>
-                                    <p class="text-xs sm:text-sm text-body line-clamp-2 leading-relaxed"
-                                       data-article-transition-part="summary"
-                                       data-article-transition-slug="{hit.slug}">
+                                    <p class="text-xs sm:text-sm text-body line-clamp-2 leading-relaxed">
                                         {hit.aiSummary}
                                     </p>
                                 </div>

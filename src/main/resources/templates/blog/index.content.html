@@ -43,8 +43,10 @@
                     <article class="group card p-5 sm:p-6 md:p-7 relative rounded-2xl border border-border bg-card" data-article-transition-slug="{post.slug}">
                         <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
                             {#if post.coverImageUrl}
-                                <div class="post-list-cover relative w-full shrink-0 overflow-hidden rounded-xl border border-border/40 bg-bg sm:w-44 md:w-52 lg:w-60">
-                                    <img src="{post.coverImageUrl}" alt="{post.title}" loading="lazy" decoding="async"
+                                <div class="post-list-cover relative w-full shrink-0 overflow-hidden rounded-xl border border-border/40 bg-bg sm:w-44 md:w-52 lg:w-60"
+                                     data-article-transition-part="cover"
+                                     data-article-transition-slug="{post.slug}">
+                                    <img src="{post.coverImageUrl}" alt="{post.title}" loading="{post_index < 2 ? 'eager' : 'lazy'}" decoding="async"
                                          class="post-list-cover-img h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.03]"/>
                                 </div>
                             {/if}
@@ -70,7 +72,9 @@
 
                                 <!-- AI Summary (Priority) or Fallback Summary -->
                                 {#if post.aiSummaryStatus != 2 && post.aiSummary && ! post.aiSummary.isEmpty}
-                                    <div class="my-1 p-3.5 rounded-xl bg-accent/[0.04] border border-accent/15 space-y-1.5">
+                                    <div class="my-1 p-3.5 rounded-xl bg-accent/[0.04] border border-accent/15 space-y-1.5"
+                                         data-article-transition-part="summary"
+                                         data-article-transition-slug="{post.slug}">
                                         <div class="flex items-center gap-2">
                                             <span class="badge-ai">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"
@@ -83,9 +87,7 @@
                                                 {i18n.t('common.ai_summary')}
                                             </span>
                                         </div>
-                                        <p class="text-xs sm:text-sm text-body line-clamp-2 leading-relaxed"
-                                           data-article-transition-part="summary"
-                                           data-article-transition-slug="{post.slug}">
+                                        <p class="text-xs sm:text-sm text-body line-clamp-2 leading-relaxed">
                                             {LanguageHelper.resolveLocalizedValue(post.aiSummary, language)}
                                         </p>
                                     </div>

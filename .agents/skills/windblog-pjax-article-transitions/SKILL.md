@@ -26,8 +26,9 @@ WindBlog 采用自研轻量级 PJAX 结合原生 Web Animations API (WAAPI) 实�
 ### 2.1 HTML 标记规范 (Qute 模板)
 在模板中，文章卡片与文章详情页通过特定的 `data-*` 属性进行配对：
 - `data-article-transition-slug="{post.slug}"`：标识目标文章唯一 slug。
+- `data-article-transition-part="cover"`：标识文章封面缩略图/详情页标题下方渐变封面条（`.post-list-cover` <-> `.post-header-cover`）。
 - `data-article-transition-part="title"`：标识文章标题部分。
-- `data-article-transition-part="summary"`：标识文章摘要部分（可选）。
+- `data-article-transition-part="summary"`：标识文章 AI 摘要卡片外层容器（可选）。
 
 **代码位置：**
 - 列表/分类/标签/搜索模板：
@@ -103,38 +104,22 @@ sequenceDiagram
 
 ## 4. 关键实现细节与样式管理
 
-### 4.1 样式快照 (`getArticleTransitionStyleSnapshot`)
-克隆元素必须能够精准过渡文本排版与尺寸，WindBlog 快照了以下属性：
-- **尺寸与排版**：`fontSize`, `lineHeight`, `fontFamily`, `fontWeight`, `fontStyle`, `letterSpacing`, `textAlign`, `textTransform`
-- **盒模型**：`width`, `height`, `paddingTop/Bottom/Left/Right`
-- **颜色与边框**：`color`, `backgroundColor`, 四边边框的 `Color/Style/Width`
+### 4.1 部件化高性能动画策略
+为消除逐帧修改 `fontSize`/`lineHeight`/`fontWeight` 引发的 CPU 文本重排（Layout Thrashing）、文字中途折行跳变与字重突变，WindBlog 按部件类型采用针对性的 GPU 加速合成策略：
+- **标题 (`title`, `.pjax-article-transition-clone-title`)**：在测量完目标 `targetStyle` 后将克隆体直接锁定为目标字号、字重与宽度，通过 `transform: translate3d(x, y, 0) scale(sourceFontPx / targetFontPx)` 到 `translate3d(targetX, targetY, 0) scale(1)` 以及 `color` 进行纯 GPU 合成插值。
+- **封面 (`cover`, `.pjax-article-transition-clone-cover`)**：列表页左侧缩略图 `.post-list-cover` 与文章详情页标题下方紧凑封面区域 `.post-header-cover` 配对，同步过渡 `transform`、`width`、`height`、`borderRadius`，并同步插值内部图片透明度与 `.post-header-cover-gradient` 遮罩透明度（`0 <-> 1`），确保详情页标题在亮/暗主题下均清晰可读。
+- **摘要卡片 (`summary`, `.pjax-article-transition-clone-summary`)**：作用于整个 AI 摘要卡片容器（`overflow: hidden`），平滑插值 `transform`、`width`、`height` 与圆角，避免目标页在动画开始时露出空心边框。
+- **卡片背景共享遮罩 (`.pjax-article-transition-backdrop`)**：捕获来源卡片 `.card` 视口边界并向目标文章卡片过渡同时渐隐，且在 `settleArticleTransitionTargets()` 等待期间保持 `#pjax-container` 透明（`opacity: 0`），确保背景容器淡入与克隆体 FLIP 动画在同一帧同步启动。
 
 ### 4.2 动效参数与 CSS 配合
-- **时长**：`320ms`
-- **缓动曲线**：`cubic-bezier(0.16, 1, 0.3, 1)`（超平滑的减速曲线，类似于 iOS / Material Design 物理弹性）
-- **CSS 类定义** (`src/main/resources/META-INF/resources/assets/css/ui.css`)：
-  ```css
-  .pjax-article-transition-clone {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      z-index: 10000;
-      box-sizing: border-box;
-      margin: 0 !important;
-      overflow: visible;
-      pointer-events: none;
-      transform-origin: left top;
-      will-change: transform, width, height, font-size, line-height;
-      word-break: break-word;
-  }
-  .pjax-article-transition-clone::before,
-  .pjax-article-transition-clone::after {
-      display: none !important;
-  }
-  .pjax-article-transition-target-hidden {
-      visibility: hidden !important;
-  }
-  ```
+- **时长**：`380ms`
+- **缓动曲线**：`cubic-bezier(0.22, 1, 0.36, 1)`
+- **CSS 类定义** (`src/main/resources/META-INF/resources/assets/css/ui.css` 与 `theme.css`)：
+  - `.pjax-article-transition-backdrop` (`z-index: 9997`)
+  - `.pjax-article-transition-clone-cover` (`z-index: 9998`, `overflow: hidden`)
+  - `.pjax-article-transition-clone-summary` (`z-index: 9999`, `overflow: hidden`)
+  - `.pjax-article-transition-clone-title` (`z-index: 10000`)
+  - `.post-title-stage` / `.post-header-cover` / `.post-header-cover-gradient`：详情页标题下方紧凑封面条与 `--card-bg` 多向透明度渐变遮罩。
 
 ### 4.3 滚动与回退位置处理
 - 从列表页进入文章页时：

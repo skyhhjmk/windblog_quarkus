@@ -283,6 +283,23 @@
     line-height: 1.5;
 }
 
+.pjax-article-transition-backdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    z-index: 9997;
+    box-sizing: border-box;
+    margin: 0 !important;
+    pointer-events: none;
+    transform-origin: left top;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow);
+    will-change: transform, opacity;
+    contain: layout paint style;
+}
+
 .pjax-article-transition-clone {
     position: fixed !important;
     top: 0 !important;
@@ -293,16 +310,33 @@
     overflow: visible;
     pointer-events: none;
     transform-origin: left top;
-    /* Only transform is composited; the layout properties still change per
-       frame, so contain keeps the reflow inside the clone instead of
-       promoting five properties to their own layer. */
-    will-change: transform;
+    will-change: transform, opacity;
     contain: layout paint style;
     word-break: break-word;
 }
 
+.pjax-article-transition-clone-cover {
+    z-index: 9998;
+    overflow: hidden !important;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background-color: var(--input-bg);
+}
+
+.pjax-article-transition-clone-summary {
+    z-index: 9999;
+    overflow: hidden !important;
+}
+
+.pjax-article-transition-clone-title {
+    z-index: 10000;
+    overflow: visible;
+    contain: style;
+}
+
 .pjax-article-transition-clone::before,
-.pjax-article-transition-clone::after {
+.pjax-article-transition-clone::after,
+.pjax-article-transition-clone a::before,
+.pjax-article-transition-clone a::after {
     display: none !important;
 }
 

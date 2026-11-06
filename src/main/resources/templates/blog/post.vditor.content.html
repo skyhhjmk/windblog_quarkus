@@ -1,4 +1,4 @@
-﻿<div id="pjax-content-root" data-page-canonical="{defaultCanonicalUrl}" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{postTitle ?: '文章详情'}">
+<div id="pjax-content-root" data-page-canonical="{defaultCanonicalUrl}" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{postTitle ?: '文章详情'}">
     <div id="pjax-nav-path" class="hidden">
         {config:siteNavRoot} / post / {postSlug ?: 'unknown'}
     </div>
@@ -14,10 +14,19 @@
     </div>
 
     <article class="space-y-4" data-article-transition-slug="{postSlug}">
-        <header>
-            <h1 class="text-3xl font-bold"
+        <header class="post-title-stage space-y-3">
+            <h1 class="post-header-title text-3xl font-bold relative z-[2]"
                 data-article-transition-part="title"
                 data-article-transition-slug="{postSlug}">{postTitle ?: '文章详情'}</h1>
+            {#if postCoverImageUrl.or(null)}
+                <div class="post-header-cover"
+                     data-article-transition-part="cover"
+                     data-article-transition-slug="{postSlug}">
+                    <img src="{postCoverImageUrl}" alt="{postTitle ?: '文章详情'}" decoding="async"
+                         class="post-header-cover-img"/>
+                    <div class="post-header-cover-gradient" aria-hidden="true"></div>
+                </div>
+            {/if}
             <p class="text-sm opacity-80">Slug: {postSlug}</p>
         </header>
 
