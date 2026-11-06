@@ -249,10 +249,13 @@ public class CacheService {
     }
 
     public static class Keys {
-        public static final String SIDEBAR_RECENT_POSTS = "sidebar:v2:recentPosts:";
-        public static final String SIDEBAR_CATEGORIES = "sidebar:v2:categories:";
-        public static final String SIDEBAR_TAGS = "sidebar:v2:tags:";
-        public static final String SIDEBAR_STATS = "sidebar:v2:stats";
+        // v3: earlier native builds serialized the sidebar view records without
+        // reflection metadata as empty objects, so the version bump discards
+        // those poisoned entries instead of deserializing them into null fields.
+        public static final String SIDEBAR_RECENT_POSTS = "sidebar:v3:recentPosts:";
+        public static final String SIDEBAR_CATEGORIES = "sidebar:v3:categories:";
+        public static final String SIDEBAR_TAGS = "sidebar:v3:tags:";
+        public static final String SIDEBAR_STATS = "sidebar:v3:stats";
         // Versioned after moving the homepage to a public list read model.
         public static final String INDEX_PAGE_PREFIX = "index:v2:page:";
         public static final String PUBLIC_FEED_PREFIX = "feed:v2:";
