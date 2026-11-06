@@ -140,7 +140,8 @@
         if (!el || !(el instanceof HTMLElement)) return false;
         if (el.hidden || el.classList.contains('hidden') || el.classList.contains('block-hidden')) return false;
         const style = window.getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (style.display === 'none') return false;
+        if (style.visibility === 'hidden' && !el.classList.contains('pjax-article-transition-target-hidden')) return false;
         const rect = el.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
     }
@@ -407,6 +408,7 @@
     let ghostLineEl = null;
     let poolTopEl = null;
     let poolBottomEl = null;
+    let exitHudEl = null;
     let hudEl = null;
 
     let tickData = [];
@@ -449,7 +451,10 @@
         armed: true,
         jumping: false,
         rafId: 0,
-        lastFrameTime: 0
+        lastFrameTime: 0,
+        currentSectionsSignature: '',
+        pendingNavigationEntrance: true,
+        exitAnimEndTime: 0
     };
 
     const railOccupancySpans = [];
@@ -611,12 +616,17 @@
         ghostWrapEl.appendChild(ghostLineEl);
 
         // 4. Section Letters & Interactive Hit HUD
+        exitHudEl = document.createElement('div');
+        exitHudEl.className = 'wb-ruler-hud-exit';
+        exitHudEl.setAttribute('aria-hidden', 'true');
+
         hudEl = document.createElement('div');
         hudEl.className = 'wb-ruler-hud';
 
         rootEl.appendChild(poolsWrap);
         rootEl.appendChild(railEl);
         rootEl.appendChild(ghostWrapEl);
+        rootEl.appendChild(exitHudEl);
         rootEl.appendChild(hudEl);
         document.body.appendChild(rootEl);
 
@@ -788,10 +798,108 @@
         state.introDone = reducedMotionMedia.matches;
     }
 
-    // Build section letter spans and interactive hit targets
-    function buildSectionDom() {
-        if (!hudEl) return;
+    function updateTicksGeometry() {
+        if (!ticksTrackEl || !state.docH || tickData.length === 0) {
+            buildTicks();
+            return;
+        }
+        ticksTrackEl.style.height = state.docH + 'px';
+        for (let i = 0; i < tickData.length; i++) {
+            const docY = (tickData[i].pct / 100) * state.docH;
+            tickData[i].docY = docY;
+            if (tickRowEls[i]) {
+                tickRowEls[i].style.top = docY.toFixed(1) + 'px';
+            }
+        }
+    }
+
+    function getSectionsSignature(mode, list) {
+        if (!mode || !list || !list.length) return '';
+        return mode + '::' + (window.location.pathname || '/') + '::' + list.map(s => s.label).join('|');
+    }
+
+    // Elastic exit animation for outgoing section markers:
+    // Pulls slightly left (-20px) first, then whips out to the right (+156px).
+    function startSectionsExit() {
+        if (!hudEl || !sectionNodes.length) {
+            if (hudEl) hudEl.replaceChildren();
+            sectionNodes = [];
+            return;
+        }
+
+        if (reducedMotionMedia.matches || !exitHudEl) {
+            hudEl.replaceChildren();
+            sectionNodes = [];
+            return;
+        }
+
+        const outgoingCount = sectionNodes.length;
+        const duration = 340;
+        const maxStagger = Math.min(Math.max(0, outgoingCount - 1) * 18, 126);
+        state.exitAnimEndTime = performance.now() + duration + maxStagger;
+
+        sectionNodes.forEach((node, idx) => {
+            if (node.hit) {
+                node.hit.remove();
+            }
+            const groupEl = node.groupEl;
+            if (!groupEl) return;
+
+            if (node.enterAnim) {
+                try {
+                    node.enterAnim.cancel();
+                } catch (_) {}
+                node.enterAnim = null;
+            }
+
+            exitHudEl.appendChild(groupEl);
+            if (typeof groupEl.animate === 'function') {
+                const delay = Math.min(idx * 18, 126);
+                const anim = groupEl.animate([
+                    {
+                        transform: 'translate3d(0px, 0, 0) scaleX(1)',
+                        opacity: 1,
+                        offset: 0,
+                        easing: 'cubic-bezier(0.33, 1, 0.68, 1)'
+                    },
+                    {
+                        transform: 'translate3d(-20px, 0, 0) scaleX(1.05)',
+                        opacity: 1,
+                        offset: 0.34,
+                        easing: 'cubic-bezier(0.32, 0, 0.67, 0)'
+                    },
+                    {
+                        transform: 'translate3d(156px, 0, 0) scaleX(0.95)',
+                        opacity: 0,
+                        offset: 1
+                    }
+                ], {
+                    duration: duration,
+                    delay: delay,
+                    fill: 'forwards'
+                });
+                anim.finished.then(() => {
+                    groupEl.remove();
+                }).catch(() => {
+                    groupEl.remove();
+                });
+            } else {
+                groupEl.remove();
+            }
+        });
+
         hudEl.replaceChildren();
+        sectionNodes = [];
+    }
+
+    // Build section letter spans and interactive hit targets
+    function buildSectionDom(animateEntrance) {
+        if (!hudEl) return;
+        if (sectionNodes.length > 0) {
+            startSectionsExit();
+        } else {
+            hudEl.replaceChildren();
+        }
         sectionNodes = [];
         hoverWeights = new Float32Array(sections.length);
         flashUntil = new Float32Array(sections.length);
@@ -893,6 +1001,11 @@
 
             hudEl.appendChild(hit);
 
+            const groupEl = document.createElement('div');
+            groupEl.className = 'wb-ruler-section-group';
+            groupEl.setAttribute('aria-hidden', 'true');
+            hudEl.appendChild(groupEl);
+
             const letters = [];
             const letterCache = [];
             for (let c = 0; c < sec.chars.length; c++) {
@@ -902,18 +1015,70 @@
                 chSpan.style.fontSize = LAYOUT.headingPx + 'px';
                 chSpan.style.opacity = '1';
                 chSpan.textContent = sec.chars[c];
-                hudEl.appendChild(chSpan);
+                groupEl.appendChild(chSpan);
                 letters.push(chSpan);
                 letterCache.push({ tf: '', color: '' });
             }
 
             sectionNodes.push({
                 hit: hit,
+                groupEl: groupEl,
                 letters: letters,
                 letterCache: letterCache,
-                hitBox: { l: '', t: '', w: '', h: '', pe: '' }
+                hitBox: { l: '', t: '', w: '', h: '', pe: '' },
+                enterAnim: null
             });
         });
+
+        // Position characters immediately so they are already in their layout slots on frame 0
+        tickFrame(performance.now());
+
+        if (animateEntrance && !reducedMotionMedia.matches) {
+            const now = performance.now();
+            const waitForExit = state.exitAnimEndTime > now
+                ? Math.max(0, Math.min(180, state.exitAnimEndTime - now - 110))
+                : 0;
+
+            sectionNodes.forEach((node, idx) => {
+                if (!node.groupEl || typeof node.groupEl.animate !== 'function') return;
+                const delay = waitForExit + Math.min(idx * 24, 192);
+                const anim = node.groupEl.animate([
+                    {
+                        transform: 'translate3d(148px, 0, 0) scaleX(0.95)',
+                        opacity: 0,
+                        offset: 0,
+                        easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+                    },
+                    {
+                        transform: 'translate3d(-20px, 0, 0) scaleX(1.05)',
+                        opacity: 1,
+                        offset: 0.54,
+                        easing: 'cubic-bezier(0.33, 1, 0.68, 1)'
+                    },
+                    {
+                        transform: 'translate3d(6px, 0, 0) scaleX(0.99)',
+                        opacity: 1,
+                        offset: 0.78,
+                        easing: 'cubic-bezier(0.33, 1, 0.68, 1)'
+                    },
+                    {
+                        transform: 'translate3d(0px, 0, 0) scaleX(1)',
+                        opacity: 1,
+                        offset: 1
+                    }
+                ], {
+                    duration: 520,
+                    delay: delay,
+                    fill: 'backwards'
+                });
+                node.enterAnim = anim;
+                anim.finished.then(() => {
+                    if (node.enterAnim === anim) {
+                        node.enterAnim = null;
+                    }
+                }).catch(() => {});
+            });
+        }
     }
 
     function pulseTargetElement(sec) {
@@ -960,13 +1125,36 @@
         state.vw = vw;
         state.navH = navH;
 
-        if (geomChanged || tickData.length === 0) {
+        if (tickData.length === 0) {
             buildTicks();
+        } else if (geomChanged) {
+            updateTicksGeometry();
         }
 
-        sections = collectSections(mode);
+        const nextSections = collectSections(mode);
+        const nextSignature = getSectionsSignature(mode, nextSections);
+        if (
+            !state.pendingNavigationEntrance &&
+            nextSignature &&
+            nextSignature === state.currentSectionsSignature &&
+            sectionNodes.length === nextSections.length
+        ) {
+            for (let i = 0; i < sections.length; i++) {
+                sections[i].el = nextSections[i].el;
+                sections[i].anchor = nextSections[i].anchor;
+                sections[i].bottom = nextSections[i].bottom;
+                sections[i].rawTrigger = nextSections[i].rawTrigger;
+                sections[i].triggerScroll = nextSections[i].triggerScroll;
+            }
+            requestTick();
+            return;
+        }
+
+        state.currentSectionsSignature = nextSignature;
+        state.pendingNavigationEntrance = false;
+        sections = nextSections;
         labelMetrics = measureLabels(sections);
-        buildSectionDom();
+        buildSectionDom(true);
         requestTick();
     }
 
@@ -1527,11 +1715,20 @@
     }
 
     let refreshTimer = 0;
+    let refreshDueTime = Infinity;
     function scheduleRefresh(delayMs) {
+        const wait = typeof delayMs === 'number' ? delayMs : 60;
+        const due = performance.now() + wait;
+        if (refreshTimer && due >= refreshDueTime - 4) {
+            return;
+        }
         window.clearTimeout(refreshTimer);
+        refreshDueTime = due;
         refreshTimer = window.setTimeout(() => {
+            refreshTimer = 0;
+            refreshDueTime = Infinity;
             refreshLayoutAndSections();
-        }, delayMs || 60);
+        }, wait);
     }
 
     function init() {
@@ -1554,13 +1751,24 @@
         reducedMotionMedia.addEventListener?.('change', () => scheduleRefresh(20));
 
         // PJAX & dynamic content hooks
+        document.addEventListener('pjax:start', () => {
+            state.pendingNavigationEntrance = true;
+            state.currentSectionsSignature = '';
+            startSectionsExit();
+        });
         document.addEventListener('page:ready', () => {
             state.virtualScroll = 0;
             state.prevPct = -1;
             state.prevDigits = [-1, -1, -1];
-            scheduleRefresh(40);
+            state.pendingNavigationEntrance = true;
+            scheduleRefresh(16);
         });
-        document.addEventListener('pjax:complete', () => scheduleRefresh(60));
+        document.addEventListener('pjax:complete', () => scheduleRefresh(40));
+        document.addEventListener('pjax:end', () => {
+            if (sectionNodes.length === 0) {
+                scheduleRefresh(20);
+            }
+        });
         document.addEventListener('sidebar:updated', () => scheduleRefresh(60));
 
         if (document.fonts && document.fonts.ready) {

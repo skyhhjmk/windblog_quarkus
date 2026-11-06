@@ -305,12 +305,21 @@ html[data-ruler="static"] {
 }
 
 /* Section Letters & Interactive Hit Targets */
-.wb-ruler-hud {
+.wb-ruler-hud,
+.wb-ruler-hud-exit {
     position: fixed;
     inset: 0;
     z-index: 40;
     pointer-events: none;
     overflow: hidden;
+}
+
+.wb-ruler-section-group {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    transform-origin: calc(100% - 28px) center;
+    will-change: transform, opacity;
 }
 
 .wb-ruler-hit {

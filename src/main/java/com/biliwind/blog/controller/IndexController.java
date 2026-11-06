@@ -120,7 +120,7 @@ public class IndexController {
         String currentRegion = regionContext.getCurrentRegion().getCode();
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
         String renderedPageCacheKey = buildRenderedPageCacheKey(
-                "index:v4:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
+                "index:v5:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
 
         com.biliwind.blog.service.PublicCacheRefreshService.PublicIndexPageSnapshot pageCache =
                 publicCacheRefreshService.findPublishedIndexPage(subPage, PAGE_SIZE, language, currentRegion);
