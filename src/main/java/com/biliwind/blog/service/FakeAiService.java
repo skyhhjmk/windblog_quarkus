@@ -21,7 +21,7 @@ import java.util.UUID;
 public class FakeAiService {
     public static final String OPENAI_MODEL = "GPT-100";
     public static final String CLAUDE_MODEL = "Claude Opus 100";
-    public static final long THINKING_MILLIS = 5000;
+    public static final long THINKING_MILLIS = 0;
     public static final String ART = buildArt();
     @Inject
     ObjectMapper mapper;
