@@ -26,4 +26,14 @@ class AiStreamTextTest {
         assertThrows(IllegalStateException.class,
                 () -> AiStreamText.join(List.of("{\"type\":\"error\",\"content\":\"boom\"}")));
     }
+
+    @Test
+    void ignoresStartPingAndReasoningEnvelopes() {
+        assertEquals("Hello world", AiStreamText.join(List.of(
+                "{\"type\":\"start\"}",
+                "{\"type\":\"ping\"}",
+                "{\"type\":\"reasoning\",\"content\":\"thinking...\"}",
+                "{\"type\":\"content\",\"content\":\"Hello \"}",
+                "{\"type\":\"content\",\"content\":\"world\"}")));
+    }
 }

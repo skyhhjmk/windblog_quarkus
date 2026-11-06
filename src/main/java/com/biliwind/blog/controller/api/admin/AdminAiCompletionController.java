@@ -19,23 +19,56 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
 
+import io.smallrye.mutiny.Multi;
+import org.jboss.resteasy.reactive.RestStreamElementType;
+
 /**
- * Generic, non-streaming completion endpoint used by the Flutter writing
- * assistant in API-provider mode. Provider selection goes through
- * {@link AiManager}, so polling groups are supported automatically.
+ * Completion endpoint used by the Flutter writing assistant.
+ * Supports both streaming (SSE) to prevent public edge timeouts (HTTP 554)
+ * and non-streaming fallback. Provider selection goes through {@link AiManager},
+ * so polling groups and fallbacks are supported automatically.
  */
 @Path("/api/admin/ai/complete")
-@Produces(MediaType.APPLICATION_JSON)
-@Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "AdminAI")
 @SecurityRequirement(name = "adminBearerAuth")
-@Blocking
 public class AdminAiCompletionController {
 
     @Inject
-    AiManager aiManager;
+    public AiManager aiManager;
 
     @POST
+    @Path("/stream")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.TEXT_PLAIN)
+    @Operation(summary = "使用指定或默认 AI 提供商流式完成写作任务")
+    public Multi<String> completeStreamPath(CompletionRequest request) {
+        return handleStream(request);
+    }
+
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.TEXT_PLAIN)
+    @Operation(summary = "使用指定或默认 AI 提供商流式完成写作任务")
+    public Multi<String> completeStream(CompletionRequest request) {
+        return handleStream(request);
+    }
+
+    private Multi<String> handleStream(CompletionRequest request) {
+        if (request == null || request.prompt() == null || request.prompt().isBlank()) {
+            return Multi.createFrom().failure(new BadRequestException("prompt 不能为空"));
+        }
+        Multi<String> stream = aiManager.completeStream(request.providerId(), request.systemPrompt(),
+                request.prompt());
+        Multi<String> start = Multi.createFrom().item("{\"type\":\"start\"}");
+        return Multi.createBy().concatenating().streams(start, stream);
+    }
+
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Blocking
     @Operation(summary = "使用指定或默认 AI 提供商完成写作任务")
     public Response complete(CompletionRequest request) {
         if (request == null || request.prompt() == null || request.prompt().isBlank()) {

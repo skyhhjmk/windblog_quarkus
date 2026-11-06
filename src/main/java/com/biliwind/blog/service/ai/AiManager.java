@@ -252,6 +252,92 @@ public class AiManager {
         }
     }
 
+    public io.smallrye.mutiny.Multi<String> completeStream(Long providerId, String systemPrompt, String prompt) {
+        return completeStream(providerId, "assistant", systemPrompt, prompt);
+    }
+
+    public io.smallrye.mutiny.Multi<String> completeStream(Long providerId, String operation, String systemPrompt, String prompt) {
+        List<AiProviderConfig> configs = new ArrayList<>(configService.listAll());
+        if (configs.isEmpty()) {
+            return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("当前没有任何已启用的 AI 配置"));
+        }
+        AiProviderConfig selected = null;
+        if (providerId != null) {
+            selected = configs.stream()
+                    .filter(config -> config.id != null && config.id.equals(providerId) && config.enabled)
+                    .findFirst().orElse(null);
+            if (selected == null) {
+                return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("指定的 AI 配置不存在或已禁用"));
+            }
+        } else {
+            String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
+            selected = selectionService.select(op, configs);
+            if (selected == null && selectionService.configuredId(op) != null) {
+                return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException(
+                        "功能配置的 AI 提供商不存在、已禁用或不支持该操作: " + op));
+            }
+            if (selected == null && !"assistant".equals(op)) {
+                selected = selectionService.select("assistant", configs);
+            }
+            if (selected == null) {
+                selected = selectionService.select("writing", configs);
+            }
+            if (selected == null) {
+                selected = configs.stream().filter(config -> config.enabled).findFirst().orElse(null);
+            }
+        }
+        if (selected == null) {
+            return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("没有可用的 AI 配置"));
+        }
+        final AiProviderConfig primary = selected;
+        String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
+        AiProviderConfig fallback = selectionService.fallback(op, configs, primary);
+        if (fallback == null && !"assistant".equals(op)) {
+            fallback = selectionService.fallback("assistant", configs, primary);
+        }
+        if (fallback == null) {
+            fallback = selectionService.fallback("writing", configs, primary);
+        }
+        final AiProviderConfig fallbackConfig = fallback;
+        log.info("[AI] 开始完成调用（流式），使用配置={}, provider={}, operation={}", primary.name, primary.provider, op);
+        return executeCompleteStream(primary, systemPrompt, prompt).onFailure().recoverWithMulti(error ->
+                fallbackConfig == null ? io.smallrye.mutiny.Multi.createFrom().failure(error)
+                        : executeCompleteStream(fallbackConfig, systemPrompt, prompt));
+    }
+
+    public io.smallrye.mutiny.Multi<String> executeCompleteStream(AiProviderConfig config, String systemPrompt, String prompt) {
+        AiRateLimiter.Result rateResult = rateLimiter.tryAcquire(config);
+        if (!rateResult.allowed()) {
+            return io.smallrye.mutiny.Multi.createFrom().failure(new AiRateLimitException(
+                    config == null || config.name == null ? "unknown" : config.name,
+                    rateResult.retryAfterSeconds()));
+        }
+        if (!concurrencyLimiter.tryAcquire(config)) {
+            return io.smallrye.mutiny.Multi.createFrom().failure(new AiConcurrencyLimitException(
+                    config == null || config.name == null ? "unknown" : config.name,
+                    config != null && config.concurrencyLimit != null ? config.concurrencyLimit : 0));
+        }
+        try {
+            io.smallrye.mutiny.Multi<String> stage;
+            if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                stage = pollingService.get().completeStream(config, systemPrompt, prompt);
+            } else {
+                AiService service = findService(config);
+                if (service == null) {
+                    concurrencyLimiter.release(config);
+                    return io.smallrye.mutiny.Multi.createFrom().failure(
+                            new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
+                }
+                stage = service.testStream(config, new com.biliwind.blog.controller.api.admin.dto.AiTestRequest(
+                        prompt, systemPrompt, true, null, false));
+            }
+            return stage.onTermination().invoke(() -> concurrencyLimiter.release(config));
+        } catch (Throwable t) {
+            concurrencyLimiter.release(config);
+            return io.smallrye.mutiny.Multi.createFrom().failure(t);
+        }
+    }
+
     private CompletionStage<AiResult> rateLimited(AiProviderConfig config) {
         AiRateLimiter.Result result = rateLimiter.tryAcquire(config);
         if (result.allowed()) {

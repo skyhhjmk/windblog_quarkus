@@ -116,6 +116,20 @@ public class AiPollingService {
         return tryNodesForComplete(providers, startIndex(providers, selected), 0, systemPrompt, prompt);
     }
 
+    public io.smallrye.mutiny.Multi<String> completeStream(AiProviderConfig groupConfig, String systemPrompt, String prompt) {
+        List<NodeInfo> nodes = extractNodes(groupConfig);
+        AiPollingAlgorithm algorithm = extractAlgorithm(groupConfig);
+        if (nodes.isEmpty()) {
+            return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("轮询组中配置的节点列表为空"));
+        }
+        NodeInfo selected = pickNext(nodes, algorithm, groupConfig.id);
+        List<AiProviderConfig> providers = resolveProviders(nodes);
+        if (providers.isEmpty()) {
+            return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("轮询组中没有可用的节点配置"));
+        }
+        return tryNodesForCompleteStream(providers, startIndex(providers, selected), 0, systemPrompt, prompt);
+    }
+
     public CompletionStage<AiResult> moderate(AiProviderConfig groupConfig, String prompt, String content) {
         List<NodeInfo> nodes = extractNodes(groupConfig);
         AiPollingAlgorithm alg = extractAlgorithm(groupConfig);
@@ -256,6 +270,20 @@ public class AiPollingService {
                     }
                     return CompletableFuture.completedStage(result);
                 }).thenCompose(stage -> stage);
+    }
+
+    private io.smallrye.mutiny.Multi<String> tryNodesForCompleteStream(List<AiProviderConfig> providers, int startIndex,
+            int retryCount, String systemPrompt, String prompt) {
+        if (providers.isEmpty() || retryCount >= providers.size()) {
+            return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("轮询组中所有节点写作调用失败"));
+        }
+        AiProviderConfig config = providers.get((startIndex + retryCount) % providers.size());
+        return aiManager.executeCompleteStream(config, systemPrompt, prompt)
+                .onFailure().recoverWithMulti(error -> {
+                    log.warn("轮询节点 {} 写作流式调用失败: {}", config.name,
+                            SensitiveMessageSanitizer.sanitize(error.getMessage()));
+                    return tryNodesForCompleteStream(providers, startIndex, retryCount + 1, systemPrompt, prompt);
+                });
     }
 
     private CompletionStage<AiResult> tryNodesForModerate(List<AiProviderConfig> providers, int startIdx,

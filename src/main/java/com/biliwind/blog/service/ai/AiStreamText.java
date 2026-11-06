@@ -35,6 +35,12 @@ public final class AiStreamText {
                     if (node.has("type") && "error".equalsIgnoreCase(node.path("type").asText())) {
                         throw new IllegalStateException(node.path("content").asText("AI 提供商返回错误"));
                     }
+                    if (node.has("type") && ("ping".equalsIgnoreCase(node.path("type").asText())
+                            || "start".equalsIgnoreCase(node.path("type").asText())
+                            || "reasoning".equalsIgnoreCase(node.path("type").asText())
+                            || "heartbeat".equalsIgnoreCase(node.path("type").asText()))) {
+                        continue;
+                    }
                     if (node.has("content") && node.get("content").isTextual()) {
                         text.append(node.get("content").asText());
                         continue;
