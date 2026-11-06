@@ -379,6 +379,33 @@ public final class AdminAuthorizationPolicy {
         return false;
     }
 
+    /**
+     * True when an admin request carrying an ambiguous raw path must be
+     * refused before routing. The check runs on the raw, still percent-encoded
+     * path from Vert.x: JAX-RS normalises the request URI, so an encoded dot
+     * segment would otherwise be resolved (and routed) before any filter sees
+     * it. Both the raw and the decoded spelling are inspected so that a
+     * percent-encoded "/api/%61dmin" cannot slip past the prefix test.
+     */
+    public static boolean rejectsAmbiguousAdminPath(String rawPath) {
+        if (rawPath == null || rawPath.isBlank() || !isAmbiguousRawPath(rawPath)) {
+            return false;
+        }
+        if (isAdminRawPath(rawPath)) {
+            return true;
+        }
+        try {
+            return isAdminRawPath(java.net.URLDecoder.decode(rawPath, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private static boolean isAdminRawPath(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.equals("/api/admin") || lower.startsWith("/api/admin/");
+    }
+
     public record Decision(String resource, String action, RiskLevel riskLevel, boolean superAdminOnly,
                            boolean stepUpRequired, boolean idempotencyRequired) {
     }

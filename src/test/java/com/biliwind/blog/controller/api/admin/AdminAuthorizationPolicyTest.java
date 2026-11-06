@@ -270,4 +270,17 @@ class AdminAuthorizationPolicyTest {
         assertFalse(AdminAuthorizationPolicy.isAmbiguousRawPath("/api/admin/posts/"));
         assertFalse(AdminAuthorizationPolicy.isAmbiguousRawPath(null));
     }
+
+    @Test
+    void shouldOnlyRefuseAmbiguousAdminPathsBeforeRouting() {
+        assertTrue(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath("/api/admin/posts/%2e%2e/system/sync-cluster-keys"));
+        assertTrue(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath("/api/admin/posts%2f..%2fsystem/sync-cluster-keys"));
+        assertTrue(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath("/api/%61dmin/posts/%2e%2e/system"));
+        assertTrue(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath("/api/admin/system/decrypt-error;x=1"));
+        // Ambiguity outside the admin boundary stays with the other filters.
+        assertFalse(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath("/api/posts/%2e%2e/x"));
+        assertFalse(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath("/search?q=a%2eb"));
+        assertFalse(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath("/api/admin/posts/12"));
+        assertFalse(AdminAuthorizationPolicy.rejectsAmbiguousAdminPath(null));
+    }
 }
