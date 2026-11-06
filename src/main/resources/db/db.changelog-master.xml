@@ -156,4 +156,5 @@
     <include file="db/migration/155-add-ai-provider-concurrency-limit.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/156-create-ai-article-draft-runs.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/157-remove-codex-creator-integration.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/158-add-user-token-version.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

@@ -88,6 +88,8 @@ public class PasswordResetService {
         }
 
         user.password = passwordHasher.hash(newPassword);
+        // 密码重置等同于改密：使此前签发的所有用户 token 失效。
+        user.tokenVersion = user.tokenVersion + 1;
         if (user.mustResetPassword) {
             user.mustResetPassword = false;
             user.status = 1;

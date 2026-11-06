@@ -178,6 +178,31 @@ public class CertificateService {
         }
     }
 
+    /**
+     * CN of the certificate this primary presents when it connects to an edge.
+     * Edge deployment packages pin this value so the edge only accepts the
+     * primary as its gRPC client.
+     */
+    public String clientCertificateCommonName() {
+        File clientCertFile = new File(CERT_DIRECTORY + "/client.crt");
+        try {
+            byte[] certBytes = Files.readAllBytes(clientCertFile.toPath());
+            java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) cf.generateCertificate(new java.io.ByteArrayInputStream(certBytes));
+            String principal = cert.getSubjectX500Principal().getName();
+            String[] parts = principal.split(",");
+            for (String part : parts) {
+                String trimmed = part.trim();
+                if (trimmed.startsWith("CN=")) {
+                    return trimmed.substring(3);
+                }
+            }
+        } catch (Exception exception) {
+            LOGGER.warn("读取主节点客户端证书 CN 失败，使用默认值: {}", exception.getMessage());
+        }
+        return "main-node-client";
+    }
+
     private void loadCA(File keyFile, File certFile) throws Exception {
         byte[] certBytes = Files.readAllBytes(certFile.toPath());
 

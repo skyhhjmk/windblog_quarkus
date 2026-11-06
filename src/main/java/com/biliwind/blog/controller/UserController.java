@@ -340,7 +340,9 @@ public class UserController {
 
         String normalizedAccount = account.trim().toLowerCase(Locale.ROOT);
         String clientIp = clientIpResolver.resolve(routingContext).clientIp();
-        String accountLimitKey = "user-login-account:" + normalizedAccount;
+        // Keep the account bucket per source address so a third party cannot
+        // lock a real user out by repeatedly failing the same username.
+        String accountLimitKey = "user-login-account:" + normalizedAccount + ":ip:" + clientIp;
         String ipLimitKey = "user-login-ip:" + clientIp;
         Duration loginLimitWindow = Duration.ofMinutes(15);
         if (!securityRateLimitService.tryAcquire(accountLimitKey, 10, loginLimitWindow)
@@ -495,6 +497,8 @@ public class UserController {
         }
 
         user.password = passwordHasher.hash(request.newPassword());
+        // 密码变更后所有已签发的 token 立即失效。
+        user.tokenVersion = user.tokenVersion + 1;
         return Response.ok(Map.of("success", true, "message", "密码修改成功")).build();
     }
 
@@ -503,8 +507,18 @@ public class UserController {
      */
     @POST
     @Path("/api/logout")
+    @Transactional
     @Produces(MediaType.APPLICATION_JSON)
-    public Response logout() {
+    public Response logout(@Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile != null) {
+            User user = User.findById(profile.id());
+            if (user != null) {
+                // 递增代次，使该账号此前签发的所有 token（含可能被盗的 token）失效。
+                user.tokenVersion = user.tokenVersion + 1;
+            }
+        }
+
         // 清除Cookie
         NewCookie clearCookie = new NewCookie.Builder("user_token")
                 .value("")
@@ -527,6 +541,7 @@ public class UserController {
                 .upn(user.username)
                 .groups(Set.of(RoleConstant.USER))
                 .claim("uid", user.id)
+                .claim("ver", user.tokenVersion)
                 .claim("is_user", true)
                 .claim("role_name", user.roleName != null ? user.roleName : RoleConstant.USER)
                 .expiresAt(expiresAt)

@@ -30,6 +30,17 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
+    /** CN of the certificate the primary presents when it connects to an edge. */
+    @org.eclipse.microprofile.config.inject.ConfigProperty(
+            name = "windblog.grpc.server.expected-client-common-name",
+            defaultValue = "main-node-client")
+    String expectedPrimaryClientCommonName;
+
+    /** Node id the primary stamps on messages sent to an edge. */
+    @org.eclipse.microprofile.config.inject.ConfigProperty(
+            name = "windblog.primary.node-id", defaultValue = "main")
+    String primaryNodeId;
+
     /**
      * 从当前 gRPC Context 中获取已通过 mTLS 认证的节点 ID。
      * 如果当前请求没有经过 mTLS 认证，返回 null。
@@ -45,10 +56,7 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
             ServerCallHandler<ReqT, RespT> next) {
 
         java.net.SocketAddress remoteAddress = call.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-
-        if (nodeRoleService != null && nodeRoleService.isEdgeNode()) {
-            return next.startCall(call, headers);
-        }
+        boolean edgeNode = nodeRoleService != null && nodeRoleService.isEdgeNode();
 
         SSLSession sslSession = call.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
         if (sslSession == null) {
@@ -71,7 +79,13 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
             String serialNumber = clientCert.getSerialNumber().toString();
             String subjectCN = extractCN(clientCert.getSubjectX500Principal().getName());
 
-            CertificateValidationResult validationResult = validateCertificateInDb(serialNumber, subjectCN);
+            // An edge node only accepts the primary's client certificate. The
+            // primary validates edge certificates against the EdgeNode table;
+            // the reverse direction is pinned by the configured CN because the
+            // primary has no EdgeNode row of its own.
+            CertificateValidationResult validationResult = edgeNode
+                    ? validatePrimaryClientCertificate(subjectCN)
+                    : validateCertificateInDb(serialNumber, subjectCN);
             if (!validationResult.valid) {
                 LOGGER.warn("Certificate validation failed from {}: Serial={}, Reason={}",
                         remoteAddress, serialNumber, validationResult.reason);
@@ -114,6 +128,32 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
             }
         }
         return "";
+    }
+
+    /**
+     * Edge-side validation: the only legitimate gRPC client is the primary.
+     * The CA trust store already verified the signature; pinning the client CN
+     * stops another edge node's CA-signed certificate from injecting data.
+     */
+    CertificateValidationResult validatePrimaryClientCertificate(String subjectCN) {
+        String configured = expectedPrimaryClientCommonName == null
+                ? "" : expectedPrimaryClientCommonName.trim();
+        if (configured.isEmpty()) {
+            return CertificateValidationResult.failed("未配置主节点客户端证书 CN");
+        }
+        boolean matched = false;
+        for (String candidate : configured.split(",")) {
+            String expected = candidate.trim();
+            if (!expected.isEmpty() && expected.equals(subjectCN)) {
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            return CertificateValidationResult.failed("客户端证书不是主节点证书");
+        }
+        String nodeId = primaryNodeId == null || primaryNodeId.isBlank() ? "main" : primaryNodeId.trim();
+        return CertificateValidationResult.passed(nodeId);
     }
 
     /**
@@ -161,7 +201,7 @@ public class GrpcMtlsInterceptor implements ServerInterceptor {
     /**
      * 证书校验结果
      */
-    private static class CertificateValidationResult {
+    static class CertificateValidationResult {
         final boolean valid;
         final String reason;
         final String nodeId;

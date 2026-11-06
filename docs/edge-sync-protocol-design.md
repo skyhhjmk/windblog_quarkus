@@ -174,7 +174,7 @@ P 新增内容不绕行 H；H 上传一次至 P，P 分发到 E。双主模式�
 | 接口 | 请求/结果 | 正确性要求 |
 | --- | --- | --- |
 | `POST /sync/v1/sessions` | 身份证明、能力、游标；返回会话、限额和服务端水位 | 会话可重建，不承载唯一恢复状态 |
-| `POST /api/admin/edge-nodes/connection/bootstrap` | 已登录目标管理员写入本地 WESP 运行配置 | 仅接受目标 Admin JWT + step-up；响应不得返回 token |
+| `POST /api/admin/edge-nodes/connection/bootstrap` | 已登录目标超级管理员写入本地 WESP 运行配置 | 仅接受目标 Super Admin JWT + step-up；响应不得返回 token |
 | `POST /sync/v1/inventory` | 分页清单和对象摘要；返回准确缺失列表 | 库存结果只是提示，提交时重新检查 |
 | `PUT /sync/v1/blocks/{hash}` | 上传一个完整块 | 哈希、长度和租户授权校验；幂等 |
 | `GET /sync/v1/blocks/{hash}` | 下载块，可使用 Range | 强 ETag 绑定字节表示；范围错配则重取 |
@@ -495,7 +495,7 @@ TLS 负责传输保护，独立操作签名负责经过多个接入节点转存�
 
 仓库当前已提供 WESP v1 的持久化 outbox/inbox、双向批次交换、游标、内容寻址块存储、附件库存、回执和 HTTP 接收资源。`WINDBLOG_WESP_ENABLED=true` 时，`EdgeDataSyncService` 不再调用旧 gRPC 广播，而是把公开实体事件写入 `wesp_sync_operations`；节点在配置 `WINDBLOG_WESP_PEER_URL` 后每 30 秒主动发送和拉取。接收端需要配置相同的 `WINDBLOG_WESP_AUTH_TOKEN`，否则请求按 401 拒绝。空 peer URL 只会积压本地 outbox，不会自动回退到旧 gRPC。快照端点在尚无签名检查点时明确返回 410，避免把操作日志误报成可恢复快照。
 
-节点登记已切换到“新增节点”连接引导：主节点先探测目标 `/q/health/ready`，再用目标管理员账号登录并取得短时 step-up，最后调用目标 `/api/admin/edge-nodes/connection/bootstrap` 写入 peer、租户/数据集、随机 incarnation 和共享 token。密码、JWT 和共享 token 都不出现在响应或日志中；目标随后只通过主动 HTTPS 会话访问公网主节点。WESP 节点的“全量同步”不再调用旧 gRPC，而是写入 `SYNC_REQUEST` 操作；目标家庭节点主动拉到后重置对应 peer 游标并幂等重放完整操作日志。主节点可登记多个家庭或公网目标节点。
+节点登记已切换到“新增节点”连接引导：主节点先探测目标 `/q/health/ready`，再用目标超级管理员账号登录并取得短时 step-up，最后调用目标 `/api/admin/edge-nodes/connection/bootstrap` 写入 peer、租户/数据集、随机 incarnation 和共享 token。密码、JWT 和共享 token 都不出现在响应或日志中；目标随后只通过主动 HTTPS 会话访问公网主节点。WESP 节点的“全量同步”不再调用旧 gRPC，而是写入 `SYNC_REQUEST` 操作；目标家庭节点主动拉到后重置对应 peer 游标并幂等重放完整操作日志。主节点可登记多个家庭或公网目标节点。
 
 当前实现的基础认证是 HTTPS 服务端证书校验加共享 Bearer token；操作载荷校验 SHA-256、批次和 op_id 幂等，并用共享 token 对 signed 操作做 HMAC-SHA256 校验。基线对同一实体、同一数据集、同一序号的不同节点写入报告冲突，跨节点后续序号可继续应用；需要严格因果合并时应升级到带版本向量的实现，并可用 FORCE_UPSERT 走人工确认。mTLS、Ed25519 独立操作签名和正式快照恢复属于下一阶段增强，不能把当前实现描述成已具备这些能力。启用 mTLS 时应在反向代理或 Quarkus TLS 层完成客户端证书校验，并继续保留 token/操作授权。
 

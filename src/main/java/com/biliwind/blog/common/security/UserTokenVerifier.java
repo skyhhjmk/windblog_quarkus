@@ -81,10 +81,22 @@ public class UserTokenVerifier {
             return null;
         }
 
-        String username = (String) claims.get("upn");
-        String roleName = (String) claims.get("role_name");
+        // 6. 校验账号状态与 token 代次：登出/改密/重置密码会递增 tokenVersion。
+        // 旧 token 没有 ver 声明时按 0 处理，升级后仍可使用到下一次失效动作。
+        Long tokenVersion = toLong(claims.get("ver"));
+        com.biliwind.blog.model.User user = com.biliwind.blog.model.User
+                .find("id = ?1 and deletedAt is null", uid).firstResult();
+        if (user == null || user.status != 1
+                || !isCurrentTokenVersion(tokenVersion, user.tokenVersion)) {
+            return null;
+        }
 
-        return new VerifiedToken(uid, username, roleName);
+        String username = user.username;
+        String roleName = user.roleName != null && !user.roleName.isBlank()
+                ? user.roleName
+                : com.biliwind.blog.common.constant.RoleConstant.USER;
+
+        return new VerifiedToken(user.id, username, roleName);
     }
 
     private String calculateHmac(String data, String secret) {
@@ -113,6 +125,15 @@ public class UserTokenVerifier {
             return number.longValue();
         }
         return null;
+    }
+
+    /**
+     * Legacy tokens issued before the token-version column existed have no
+     * {@code ver} claim and are treated as generation 0. Any logout, password
+     * change or reset increments the user's counter and invalidates them.
+     */
+    static boolean isCurrentTokenVersion(Long claimVersion, long currentVersion) {
+        return (claimVersion == null ? 0L : claimVersion) == currentVersion;
     }
 
     /**

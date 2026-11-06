@@ -10,11 +10,14 @@ CDN -> 固定公网边缘节点/WAF -> 主节点反向代理 -> Quarkus
 对 `/q/` 和 `/api/admin/` 使用管理网 allowlist，对受保护下载禁用缓存，并只信任配置的 CDN/边缘代理网段
 解析真实客户端 IP。模板中的 `${...}` 必须由部署平台注入，不能原样暴露到公网。
 
-主节点基础服务按需映射到宿主机，默认绑定 `0.0.0.0`，端口为 PostgreSQL 5432、Redis 6379、RabbitMQ 5672、
+主节点基础服务按需映射到宿主机，端口为 PostgreSQL 5432、Redis 6379、RabbitMQ 5672、
 RabbitMQ 管理端 15672、Elasticsearch 9200 和 Kibana 5601；可用 `*_HOST_PORT` 覆盖宿主机端口。
-可用 `WINDBLOG_HOST_BIND_IP` 改为指定宿主机地址（例如 IPv6 的 `::`）。即使绑定到 `0.0.0.0`，这些端口也必须由宿主机防火墙限制到管理网/VPN
-或明确的内网来源，不能直接暴露到公网。`docker-compose.yml`
-仍使用服务网络、健康检查、CPU/内存上限和 JSON 日志轮转；应用容器由部署平台单独编排，并加入同样的限制。
+这些数据存储默认只绑定 `127.0.0.1`（`POSTGRES_HOST_BIND_IP`、`REDIS_HOST_BIND_IP`、
+`RABBITMQ_HOST_BIND_IP`、`ELASTICSEARCH_HOST_BIND_IP`、`KIBANA_HOST_BIND_IP`），不再跟随
+`WINDBLOG_HOST_BIND_IP`。Docker 发布的端口会绕过系统防火墙，因此只在确有独立主机访问需求时改为
+明确的内网/VPN 地址，不能直接暴露到公网。`WINDBLOG_HOST_BIND_IP` 现在只用于应用 HTTP/gRPC 端口。
+`docker-compose.yml` 仍使用服务网络、健康检查、CPU/内存上限和 JSON 日志轮转；应用容器由部署平台
+单独编排，并加入同样的限制。
 
 PostgreSQL 镜像可通过 `POSTGRES_IMAGE` 配置，示例默认是包含 `pgvector` 的 `pgvector/pgvector:pg18`。
 已有数据卷若安装了 `pgvector` 等扩展，必须先完成备份并选择包含相同扩展的镜像，再在维护窗口执行

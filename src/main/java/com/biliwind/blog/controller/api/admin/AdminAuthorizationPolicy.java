@@ -43,9 +43,6 @@ public final class AdminAuthorizationPolicy {
         if (path.startsWith("/api/admin/security/honeypot")) {
             return true;
         }
-        if (path.equals("/api/admin/edge-nodes/connection/bootstrap")) {
-            return false;
-        }
         if (path.startsWith("/api/admin/security/content-access-tickets")) {
             return true;
         }

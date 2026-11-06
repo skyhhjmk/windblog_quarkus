@@ -87,7 +87,10 @@ public class AdminAuthApiController {
         }
         String normalizedAccount = request.account().trim().toLowerCase();
         String clientIp = clientIpResolver.resolve(routingContext).clientIp();
-        String accountLimitKey = "admin-login-account:" + normalizedAccount;
+        // Scope the account counter to the client address. A shared
+        // account-only bucket lets anyone who knows an admin username lock the
+        // real administrator out of every source address.
+        String accountLimitKey = "admin-login-account:" + normalizedAccount + ":ip:" + clientIp;
         String ipLimitKey = "admin-login-ip:" + clientIp;
         Duration limitWindow = Duration.ofMinutes(15);
         if (!securityRateLimitService.tryAcquire(accountLimitKey, 5, limitWindow)

@@ -23,7 +23,9 @@ services:
     ports:
       - target: 5432
         published: "${POSTGRES_HOST_PORT:-5432}"
-        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+        # Data stores are loopback-only by default. Bind them explicitly with
+        # POSTGRES_HOST_BIND_IP when a separate host must reach them.
+        host_ip: "${POSTGRES_HOST_BIND_IP:-127.0.0.1}"
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_USER: ${POSTGRES_USER:-windblog}
@@ -188,7 +190,7 @@ services:
     ports:
       - target: 6379
         published: "${REDIS_HOST_PORT:-6379}"
-        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+        host_ip: "${REDIS_HOST_BIND_IP:-127.0.0.1}"
     expose:
       - "6379"
     environment:
@@ -217,10 +219,10 @@ services:
     ports:
       - target: 5672
         published: "${RABBITMQ_HOST_PORT:-5672}"
-        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+        host_ip: "${RABBITMQ_HOST_BIND_IP:-127.0.0.1}"
       - target: 15672
         published: "${RABBITMQ_MANAGEMENT_HOST_PORT:-15672}"
-        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+        host_ip: "${RABBITMQ_HOST_BIND_IP:-127.0.0.1}"
     networks:
       - app-network
     volumes:
@@ -266,7 +268,7 @@ services:
     ports:
       - target: 9200
         published: "${ELASTICSEARCH_HOST_PORT:-9200}"
-        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+        host_ip: "${ELASTICSEARCH_HOST_BIND_IP:-127.0.0.1}"
     networks:
       - app-network
     volumes:
@@ -312,7 +314,7 @@ services:
     ports:
       - target: 5601
         published: "${KIBANA_HOST_PORT:-5601}"
-        host_ip: "${WINDBLOG_HOST_BIND_IP:-0.0.0.0}"
+        host_ip: "${KIBANA_HOST_BIND_IP:-127.0.0.1}"
     networks:
       - app-network
     volumes:

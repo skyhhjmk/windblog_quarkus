@@ -19,7 +19,7 @@ class AdminAuthorizationPolicyTest {
                 "POST", "/api/admin/edge-nodes/connect"));
         assertEquals("edge.connection.bootstrap",
                 AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/connection/bootstrap").action());
-        assertFalse(AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/connection/bootstrap")
+        assertTrue(AdminAuthorizationPolicy.decide("POST", "/api/admin/edge-nodes/connection/bootstrap")
                 .superAdminOnly());
         assertTrue(AdminAuthorizationPolicy.requiresStepUp(
                 "POST", "/api/admin/edge-nodes/connection/bootstrap"));

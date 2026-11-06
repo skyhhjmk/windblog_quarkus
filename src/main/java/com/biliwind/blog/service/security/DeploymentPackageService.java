@@ -196,6 +196,9 @@ public class DeploymentPackageService {
         sb.append("GRPC_SERVER_TRUST_STORE=certs/ca/truststore.p12\n");
         sb.append("GRPC_SERVER_TRUST_STORE_PASSWORD=").append(trustStorePassword).append("\n");
         sb.append("GRPC_SERVER_CLIENT_AUTH=required\n");
+        // Pin the primary's client certificate on the edge's gRPC server.
+        sb.append("GRPC_SERVER_EXPECTED_CLIENT_CN=")
+                .append(certificateService.clientCertificateCommonName()).append("\n");
         sb.append("COOKIE_SECURE=true\n");
         sb.append("WINDBLOG_SITE_PUBLIC_URL=").append(blogUrl).append("\n");
         sb.append("CORS_ORIGINS=").append(blogUrl).append("\n");

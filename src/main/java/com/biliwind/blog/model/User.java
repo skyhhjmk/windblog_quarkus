@@ -54,6 +54,13 @@ public class User extends PanacheEntityBase {
     public boolean mustResetPassword;
 
     /**
+     * 用户 JWT 代次。登出、修改密码或重置密码时递增，旧 token 随即失效。
+     */
+    @JsonIgnore
+    @Column(name = "token_version", nullable = false)
+    public long tokenVersion;
+
+    /**
      * 用户角色
      */
     @Column(name = "role_name", length = 64)
