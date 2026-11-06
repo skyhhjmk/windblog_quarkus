@@ -10,6 +10,7 @@ import com.biliwind.blog.model.Tag;
 import io.quarkus.panache.common.Sort;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateExtension;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -217,19 +218,23 @@ public class SidebarTemplateData {
     }
 
     @TemplateData
+    @RegisterForReflection
     public record PostView(String title, String titleInitial, String slug, java.time.OffsetDateTime publishedAt,
                            java.time.OffsetDateTime createdAt) {
     }
 
     @TemplateData
+    @RegisterForReflection
     public record CategoryView(String name, String slug, Long count) {
     }
 
     @TemplateData
+    @RegisterForReflection
     public record TagView(String name, String slug) {
     }
 
     @TemplateData
+    @RegisterForReflection
     public record StatsView(long posts, long categories, long tags, long comments) {
     }
 

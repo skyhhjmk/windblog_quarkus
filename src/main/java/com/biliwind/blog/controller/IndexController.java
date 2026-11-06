@@ -10,6 +10,7 @@ import com.biliwind.blog.i18n.I18n;
 import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.service.ConfigTemplateData;
 import io.quarkus.qute.TemplateData;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
@@ -304,9 +305,11 @@ public class IndexController {
     }
 
     @TemplateData
+    @RegisterForReflection
     public record TagItem(String name, String slug) {}
 
     @TemplateData
+    @RegisterForReflection
     public record CategoryItem(String name, String slug) {}
 
     @TemplateData

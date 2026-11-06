@@ -22,6 +22,7 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.persistence.EntityManager;
@@ -1391,6 +1392,7 @@ public class SearchController {
     }
 
     @TemplateData
+    @RegisterForReflection
     public record SearchHit(
             String type,
             String typeLabel,
@@ -1443,6 +1445,7 @@ public class SearchController {
     public record FilterLink(String label, String url, String cssClass) {
     }
 
+    @RegisterForReflection
     public record SearchCacheResult(
             List<SearchHit> hits,
             long totalCount,
