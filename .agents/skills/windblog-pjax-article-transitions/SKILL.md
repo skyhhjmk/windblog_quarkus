@@ -74,18 +74,29 @@ sequenceDiagram
     Doc->>Doc: 瞬时重置滚动位置 (scrollToTopInstantly)
     Doc->>Doc: 更新 document.title、meta 头信息、面包屑等
 
-    Note over Pjax,Clone: 【Last 阶段：目标定位与克隆】
+    Note over Pjax,Clone: 【克隆就位阶段：先占位，后测量】
     Doc->>Doc: prepareArticleTransitionTargets(slug, capturedItems)
-    Note right of Doc: 1. 测量目标页对应元素的 Rect 和样式<br/>2. 克隆目标元素为 cloneElement<br/>3. 给目标元素添加 .pjax-article-transition-target-hidden 隐藏原元素<br/>4. 将 cloneElement 加入 body，定位于 fixed 浮层
+    Note right of Doc: 1. 克隆目标元素为 cloneElement<br/>2. 给目标元素添加 .pjax-article-transition-target-hidden 隐藏原元素<br/>3. 用源元素的快照把 clone 定位/排版在其原来的屏幕位置并加入 body 占位
+
+    Note over Pjax: 【页面初始化完成】
+    Doc->>Doc: dispatch('pjax:complete')
+    Note right of Doc: 广告位、评论等初始化可能在标题上方插入内容，必须先完成再测量目标
+
+    Note over Doc: 【Last 阶段：等待样式稳定并测量目标】
+    Doc->>Doc: settleArticleTransitionTargets()
+    Note right of Doc: 逐帧比对目标元素的 Rect 与字体度量，连续两帧一致才进入测量（上限 240ms）<br/>Tailwind 运行时对 PJAX 新注入 class 的编译是异步的：同步 getBoundingClientRect() 拿到的是未应用样式的几何
 
     Note over Clone: 【Invert & Play 阶段：动画运行】
     Doc->>Clone: clone.animate([sourceState, targetState], { duration: 320, easing: cubic-bezier })
     Clone-->>Doc: 动画结束 Promise.all()
 
+    Note over Clone: 【Reconcile 阶段】
+    Doc->>Doc: reconcileArticleTransitionTargets()
+    Note right of Doc: 动画结束后重新测量目标；若位移/尺寸变化超过 0.5px，用 140ms 把 clone 平滑补到新位置，避免真实元素显现时跳一下
+
     Note over Doc,Clone: 【Cleanup 阶段：清理与呈现】
     Doc->>Clone: 销毁 cloneElement 浮层
     Doc->>Pjax: 移除目标元素的 target-hidden，无缝显示真实元素
-    Doc->>Doc: dispatch('pjax:complete')
 ```
 
 ---
@@ -131,6 +142,18 @@ sequenceDiagram
   2. 记住列表来源 URL（`windblog:last-article-list-url`），用于文章详情页的“返回”按钮。
   3. 执行 `instantScroll: true` 立即重置视口到顶部，**确保新页面测量目标元素的 `getBoundingClientRect()` 是静止且准确的**，避免测量期间视口发生滚动抖动。
 
+### 4.4 异步样式与布局稳定（首次进入/退出的错位来源）
+Tailwind 在本项目中是**运行时**加载的（`assets/vendor/tailwind/tailwind-cdn.min.js`），它通过 `MutationObserver` 扫描 `[class]` 并在**后续任务**中编译新出现的 class。PJAX 注入的 fragment 里往往包含当前文档从未出现过的 class（尤其是首次从列表进入文章页、或直接打开文章页后首次返回列表），因此：
+
+- 在 `updatePjaxContainerState()` 之后**同步**调用 `getBoundingClientRect()` 会拿到未应用样式的几何。实测文章标题会从 `24px/40px`（默认 h1）变成 `60px/180px`，克隆会停在错误位置，真实元素随后“跳”到正确位置，表现为文字错位。
+- 修复方式：先把克隆**停在源位置**（不测量目标），再执行 `settleArticleTransitionTargets()`：
+  - 逐帧读取目标元素的 rect 与 `fontSize/lineHeight/fontWeight/letterSpacing`；
+  - 连续两帧签名一致才认为布局已稳定（签名数值取 1 位小数，消除 rect 与容器 transform 相减产生的亚像素抖动）；
+  - 最长等待 240ms，避免样式缺失时导航卡住；
+  - 测量时必须扣掉 `#pjax-container` 入场动画（`translateY(6px)`）的当前位移（`getArticleTransitionContainerOffset`），否则目标坐标会带上动画中的偏移。
+- `pjax:complete` 会在动画开始前派发，让广告位等“标题上方”的初始化内容先就位，再锁定目标坐标。
+- 动画结束后 `reconcileArticleTransitionTargets()` 会再测一次；若目标仍有超过 0.5px 的位移，用 140ms 把克隆平滑补位后再显示真实元素（惰性图片、晚到的布局初始化等兜底）。
+
 ---
 
 ## 5. 开发与扩展维护 Checklist
@@ -144,6 +167,7 @@ sequenceDiagram
    - 目标页对应的 `h1` 和摘要块必须有相同的 `slug` 和 `part`。
 
 2. **注意点**：
+   - **不要在 DOM 替换后的同步任务里测量目标元素**：Tailwind 运行时的 class 编译是异步的，必须先经过 `settleArticleTransitionTargets()`（详见 4.4）。
    - 保证目标元素是可见的（`rect.width > 0 && rect.height > 0`），否则会自动取消过渡并降级。
    - 避免在克隆元素或过渡元素上使用高开销的复杂嵌套 shadow DOM 或即时计算的动态伪类，因为快照仅抓取 CSS 计算样式。
    - PJAX 加载错误或请求被中途中断（`AbortController`）时，确保 `cleanupArticleTransitionItems` 被调用，防止残留 `visibility: hidden`。

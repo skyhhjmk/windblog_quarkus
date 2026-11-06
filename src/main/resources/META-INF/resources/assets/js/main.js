@@ -967,6 +967,129 @@
             };
         }
 
+        function getArticleTransitionContainerOffset(container) {
+            if (!container) {
+                return { x: 0, y: 0 };
+            }
+            const transform = window.getComputedStyle(container).transform;
+            if (!transform || transform === 'none') {
+                return { x: 0, y: 0 };
+            }
+            const match = transform.match(/^matrix(3d)?\((.*)\)$/);
+            if (!match) {
+                return { x: 0, y: 0 };
+            }
+            const values = match[2].split(',').map(Number);
+            if (values.some(function (value) { return !Number.isFinite(value); })) {
+                return { x: 0, y: 0 };
+            }
+            if (match[1]) {
+                return { x: values[12], y: values[13] };
+            }
+            return { x: values[4], y: values[5] };
+        }
+
+        function getArticleTransitionTargetRect(targetElement, container) {
+            const rect = targetElement.getBoundingClientRect();
+            // The PJAX container fades in with a slight translate. The clone
+            // lives on document.body, outside that transform, so compensate for
+            // it to keep the destination in final (settled) page coordinates.
+            const offset = getArticleTransitionContainerOffset(container);
+            return {
+                left: rect.left - offset.x,
+                top: rect.top - offset.y,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+
+        function getArticleTransitionTargetSignature(preparedItems, container) {
+            return preparedItems.map(function (preparedItem) {
+                const rect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
+                const computedStyle = window.getComputedStyle(preparedItem.targetElement);
+                // Round away sub-pixel float noise: the container transform is
+                // interpolated per frame, and rect minus matrix would otherwise
+                // differ by ~0.005px forever and never count as stable.
+                return [
+                    rect.left.toFixed(1),
+                    rect.top.toFixed(1),
+                    rect.width.toFixed(1),
+                    rect.height.toFixed(1),
+                    computedStyle.fontSize,
+                    computedStyle.lineHeight,
+                    computedStyle.fontWeight,
+                    computedStyle.letterSpacing
+                ].join('|');
+            }).join('~');
+        }
+
+        function nextArticleTransitionFrame() {
+            return new Promise(function (resolve) {
+                let settled = false;
+                const finish = function () {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    window.clearTimeout(timer);
+                    resolve();
+                };
+                // Fallback for browsers/tabs where requestAnimationFrame is
+                // throttled; the caller always has a hard deadline anyway.
+                const timer = window.setTimeout(finish, 64);
+                if (typeof window.requestAnimationFrame === 'function') {
+                    window.requestAnimationFrame(finish);
+                } else {
+                    finish();
+                }
+            });
+        }
+
+        async function settleArticleTransitionTargets(preparedItems, container) {
+            if (!preparedItems || preparedItems.length === 0 || document.visibilityState === 'hidden') {
+                return;
+            }
+            // The Tailwind runtime compiles classes for freshly injected PJAX
+            // markup in a follow-up task. Measuring synchronously returns the
+            // pre-compile geometry, so on the first visit to a layout the clone
+            // would land at the wrong size/position and the real element would
+            // snap into place afterwards. Wait until the destination geometry is
+            // stable across two consecutive frames, with a hard cap so the
+            // navigation can never stall on a missing style.
+            const deadline = performance.now() + 240;
+            let previousSignature = null;
+            let stableFrames = 0;
+            while (performance.now() < deadline) {
+                await nextArticleTransitionFrame();
+                const signature = getArticleTransitionTargetSignature(preparedItems, container);
+                if (signature === previousSignature) {
+                    stableFrames += 1;
+                    if (stableFrames >= 1) {
+                        return;
+                    }
+                } else {
+                    previousSignature = signature;
+                    stableFrames = 0;
+                }
+            }
+        }
+
+        function measureArticleTransitionTargets(preparedItems, container) {
+            const measuredItems = [];
+            preparedItems.forEach(function (preparedItem) {
+                const targetRect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
+                if (targetRect.width <= 0 || targetRect.height <= 0) {
+                    cleanupArticleTransitionItems([preparedItem]);
+                    return;
+                }
+                preparedItem.targetRect = targetRect;
+                preparedItem.targetStyle = getArticleTransitionStyleSnapshot(preparedItem.targetElement);
+                measuredItems.push(preparedItem);
+            });
+
+            return measuredItems;
+        }
+
         function prepareArticleTransitionTargets(slug, capturedItems) {
             const preparedItems = [];
             if (!slug || !capturedItems || capturedItems.length === 0) {
@@ -979,11 +1102,6 @@
                     return;
                 }
 
-                const targetRect = targetElement.getBoundingClientRect();
-                if (targetRect.width <= 0 || targetRect.height <= 0) {
-                    return;
-                }
-
                 const cloneElement = targetElement.cloneNode(true);
                 cloneElement.classList.add('pjax-article-transition-clone');
                 cloneElement.classList.remove('pjax-article-transition-target-hidden');
@@ -991,12 +1109,21 @@
                 cloneElement.removeAttribute('data-article-transition-slug');
                 targetElement.classList.add('pjax-article-transition-target-hidden');
 
+                // Park the clone where the source element was visible until the
+                // destination geometry is known. The target is measured later,
+                // once the runtime stylesheet has caught up with the fragment.
+                cloneElement.style.transform = 'translate3d(' + capturedItem.sourceRect.left + 'px, ' + capturedItem.sourceRect.top + 'px, 0)';
+                cloneElement.style.width = capturedItem.sourceRect.width + 'px';
+                cloneElement.style.height = capturedItem.sourceRect.height + 'px';
+                applyArticleTransitionStyleSnapshot(cloneElement, capturedItem.sourceStyle);
+                document.body.appendChild(cloneElement);
+
                 preparedItems.push({
                     partName: capturedItem.partName,
                     sourceRect: capturedItem.sourceRect,
                     sourceStyle: capturedItem.sourceStyle,
-                    targetRect: targetRect,
-                    targetStyle: getArticleTransitionStyleSnapshot(targetElement),
+                    targetRect: null,
+                    targetStyle: null,
                     cloneElement: cloneElement,
                     targetElement: targetElement
                 });
@@ -1005,7 +1132,7 @@
             return preparedItems;
         }
 
-        function animateArticleTransitionItems(preparedItems) {
+        function animateArticleTransitionItems(preparedItems, container) {
             if (!preparedItems || preparedItems.length === 0) {
                 return Promise.resolve();
             }
@@ -1017,14 +1144,7 @@
             const animationPromises = [];
 
             preparedItems.forEach(function (preparedItem) {
-                const cloneElement = preparedItem.cloneElement;
-                cloneElement.style.transform = 'translate3d(' + preparedItem.sourceRect.left + 'px, ' + preparedItem.sourceRect.top + 'px, 0)';
-                cloneElement.style.width = preparedItem.sourceRect.width + 'px';
-                cloneElement.style.height = preparedItem.sourceRect.height + 'px';
-                applyArticleTransitionStyleSnapshot(cloneElement, preparedItem.sourceStyle);
-                document.body.appendChild(cloneElement);
-
-                const animation = cloneElement.animate([
+                const animation = preparedItem.cloneElement.animate([
                     buildArticleTransitionKeyframe(preparedItem.sourceRect, preparedItem.sourceStyle),
                     buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle)
                 ], {
@@ -1036,10 +1156,40 @@
             });
 
             return Promise.all(animationPromises).then(function () {
+                return reconcileArticleTransitionTargets(preparedItems, container);
+            }).then(function () {
                 cleanupArticleTransitionItems(preparedItems);
             }).catch(function () {
                 cleanupArticleTransitionItems(preparedItems);
             });
+        }
+
+        function reconcileArticleTransitionTargets(preparedItems, container) {
+            // Content above the title (lazy images, ad slots, late layout init)
+            // may still settle while the morph runs. Glide the clone to the
+            // final rect instead of snapping when the real element is revealed.
+            const corrections = [];
+            preparedItems.forEach(function (preparedItem) {
+                const targetRect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
+                const moved = Math.abs(targetRect.left - preparedItem.targetRect.left) > 0.5
+                    || Math.abs(targetRect.top - preparedItem.targetRect.top) > 0.5
+                    || Math.abs(targetRect.width - preparedItem.targetRect.width) > 0.5
+                    || Math.abs(targetRect.height - preparedItem.targetRect.height) > 0.5;
+                if (!moved) {
+                    return;
+                }
+                const targetStyle = getArticleTransitionStyleSnapshot(preparedItem.targetElement);
+                corrections.push(preparedItem.cloneElement.animate([
+                    buildArticleTransitionKeyframe(preparedItem.targetRect, preparedItem.targetStyle),
+                    buildArticleTransitionKeyframe(targetRect, targetStyle)
+                ], {
+                    duration: 140,
+                    easing: 'ease-out',
+                    fill: 'forwards'
+                }).finished);
+            });
+
+            return Promise.all(corrections);
         }
 
         function cleanupArticleTransitionItems(preparedItems) {
@@ -1164,22 +1314,48 @@
                     throw error;
                 }
                 // Animation failures must never invalidate successful navigation.
+                let navigationFinalized = false;
+                const finalizeNavigation = function () {
+                    if (navigationFinalized) {
+                        return;
+                    }
+                    navigationFinalized = true;
+                    finalizePjaxLoad(url);
+                };
+                const isCurrentNavigation = function () {
+                    return activePjaxController === requestController && !requestController.signal.aborted;
+                };
                 try {
                     if (hasArticleTransitionSourceOnCurrentPage) {
                         const preparedItems = prepareArticleTransitionTargets(transitionSlug, capturedItems);
                         activeTransitionItems = preparedItems;
                         if (preparedItems.length > 0) {
                             logArticleTransitionMode(url, transitionSlug, true, '');
-                            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && container.animate) {
-                                container.animate([
-                                    { opacity: 0.72, transform: 'translateY(6px)' },
-                                    { opacity: 1, transform: 'translateY(0)' }
-                                ], {
-                                    duration: 320,
-                                    easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
-                                });
+                            // Page-level init (ad slots, comments, ...) may insert
+                            // content above the title. Complete it before pinning
+                            // the destination so the morph ends where the title
+                            // actually lands.
+                            finalizeNavigation();
+                            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                                cleanupArticleTransitionItems(preparedItems);
+                            } else {
+                                if (container.animate) {
+                                    container.animate([
+                                        { opacity: 0.72, transform: 'translateY(6px)' },
+                                        { opacity: 1, transform: 'translateY(0)' }
+                                    ], {
+                                        duration: 320,
+                                        easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
+                                    });
+                                }
+                                await settleArticleTransitionTargets(preparedItems, container);
+                                if (!isCurrentNavigation()) {
+                                    cleanupArticleTransitionItems(preparedItems);
+                                    return;
+                                }
+                                const measuredItems = measureArticleTransitionTargets(preparedItems, container);
+                                await animateArticleTransitionItems(measuredItems, container);
                             }
-                            await animateArticleTransitionItems(preparedItems);
                         } else {
                             logArticleTransitionMode(url, transitionSlug, false, 'target page does not expose a matching article transition target');
                         }
@@ -1190,9 +1366,9 @@
                         }
                     }
                 } catch (animationError) {
-                    if (activePjaxController === requestController) cleanupArticleTransitionItems(activeTransitionItems);
+                    if (isCurrentNavigation()) cleanupArticleTransitionItems(activeTransitionItems);
                 }
-                if (activePjaxController === requestController) finalizePjaxLoad(url);
+                if (isCurrentNavigation()) finalizeNavigation();
             } catch (error) {
                 if (activePjaxController !== requestController || requestController.signal.aborted) {
                     return;
