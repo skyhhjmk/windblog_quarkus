@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,5 +117,17 @@ class PwaServiceWorkerTest {
         SeoManagementService seoService = new SeoManagementService();
         assertThrows(BadRequestException.class, () -> seoService.validatePath("/sw.js"));
         assertThrows(BadRequestException.class, () -> seoService.validatePath("/manifest.webmanifest"));
+    }
+
+    @Test
+    void rulerHudFlipAutoSnapUsesPerSectionScaleWithoutUndefinedTravelScale() throws IOException {
+        String rulerHudJs = Files.readString(
+                Path.of("src/main/resources/META-INF/resources/assets/js/ruler-hud.js"),
+                StandardCharsets.UTF_8);
+
+        assertFalse(rulerHudJs.contains("travelScale"),
+                "ruler-hud.js must not reference removed travelScale variable");
+        assertTrue(rulerHudJs.contains("secScale: secScale") && rulerHudJs.contains("st.secScale"),
+                "ruler-hud.js must persist per-section secScale and use it during flip auto-snap");
     }
 }

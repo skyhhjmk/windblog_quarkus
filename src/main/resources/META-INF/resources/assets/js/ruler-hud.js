@@ -1267,12 +1267,13 @@
             let flipP = 1;
             let detachP = 1;
             let triggerY = 0;
+            let secScale = 1;
 
             if (idx > 0) {
                 triggerY = useVirtual
                     ? ((idx / Math.max(1, sections.length - 1)) * effMaxScroll)
                     : (sec.triggerScroll || 0);
-                const secScale = triggerY < spanToQueue
+                secScale = triggerY < spanToQueue
                     ? (spanToQueue / Math.max(60, triggerY))
                     : 1;
                 v = flipLineY + (triggerY - scrollY) * secScale;
@@ -1286,7 +1287,8 @@
                 flipP: flipP,
                 detachP: detachP,
                 yq: bottomBaseY,
-                triggerY: triggerY
+                triggerY: triggerY,
+                secScale: secScale
             };
         });
 
@@ -1522,10 +1524,11 @@
                 needsMoreFrames = true;
             } else if (now - state.snapSince > MOTION.snapDelay) {
                 const st = secStates[midFlipIdx];
+                const snapScale = st.secScale || 1;
                 const snapComplete = st.flipP >= 0.5;
                 const targetTriggerOffset = snapComplete
-                    ? -4 / travelScale
-                    : (MOTION.flipZone + 6) / travelScale;
+                    ? -4 / snapScale
+                    : (MOTION.flipZone + 6) / snapScale;
                 const snapTargetY = Math.max(0, Math.min(effMaxScroll, st.triggerY - targetTriggerOffset));
                 state.snapping = true;
                 state.armed = false;
