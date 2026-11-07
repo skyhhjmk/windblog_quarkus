@@ -1,0 +1,50 @@
+<div id="pjax-content-root" data-page-canonical="{defaultCanonicalUrl}" data-page-robots="noindex,follow" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{pageTitle}" data-page-description="{pageDescription ?: ''}">
+    <div id="pjax-nav-path" class="hidden">
+        {config:siteNavRoot} / {i18n.t('offline.title')}
+    </div>
+
+    <section class="space-y-8">
+        <div class="card card-static p-6 sm:p-8 md:p-10 rounded-2xl border border-border bg-card shadow-sm space-y-6">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+                <div class="flex items-center gap-2 text-xs font-mono text-accent">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span>{i18n.t('offline.badge')}</span>
+                </div>
+                <span data-sw-network-status class="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-bg border border-border text-meta">OFFLINE</span>
+            </div>
+
+            <div class="space-y-3">
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-main tracking-tight">{i18n.t('offline.heading')}</h1>
+                <p class="text-sm sm:text-base text-body leading-relaxed">{i18n.t('offline.description')}</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 pt-1">
+                <button type="button" data-sw-offline-retry="true"
+                        class="px-4 py-2.5 rounded-xl bg-accent text-[var(--accent-foreground)] text-xs font-bold hover:opacity-90 transition-all cursor-pointer shadow-sm">
+                    {i18n.t('offline.retry')}
+                </button>
+                <a href="{languagePrefix}/"
+                   class="px-4 py-2.5 rounded-xl border border-border bg-bg text-main text-xs font-semibold hover:border-accent hover:text-accent transition-all">
+                    {i18n.t('offline.back_home')}
+                </a>
+            </div>
+
+            <div class="pt-6 border-t border-border/60 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                    <h2 class="text-xs sm:text-sm font-bold text-main uppercase tracking-wider font-mono">{i18n.t('offline.cached_heading')}</h2>
+                </div>
+                <div data-offline-cached-list="true" data-empty-text="{i18n.t('offline.cached_empty')}" class="grid grid-cols-1 gap-3">
+                    <p class="text-xs text-meta font-mono py-2">{i18n.t('offline.cached_loading')}</p>
+                </div>
+            </div>
+
+            <div class="pt-5 border-t border-border/40 space-y-2">
+                <h3 class="text-xs font-mono uppercase tracking-wider text-meta">{i18n.t('offline.tips_heading')}</h3>
+                <ul class="space-y-1.5 text-xs text-meta list-disc list-inside leading-relaxed">
+                    <li>{i18n.t('offline.tip_1')}</li>
+                    <li>{i18n.t('offline.tip_2')}</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+</div>

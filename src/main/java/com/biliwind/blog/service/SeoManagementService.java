@@ -17,7 +17,7 @@ public class SeoManagementService {
     public String robots(String path) {
         boolean noindex = !config.getBoolean("seo", "index_enabled", true);
         boolean nofollow = !config.getBoolean("seo", "follow_enabled", true);
-        if (path.matches("(?i)(/zh-cn|/en-us)?/search(/.*)?") || path.startsWith("/admin")
+        if (path.matches("(?i)(/zh-cn|/en-us)?/(search|offline)(/.*)?") || path.startsWith("/admin")
                 || path.startsWith("/api/") || path.startsWith("/user/")
                 || path.startsWith("/link/go/")) noindex = true;
         String plain = path.replaceFirst("^/(?i:zh-cn|en-us)(?=/|$)", "").replace("/amp/post/", "/post/");
@@ -41,7 +41,8 @@ public class SeoManagementService {
         try { uri = URI.create(path); } catch (IllegalArgumentException e) { throw new BadRequestException("路径格式无效"); }
         if (!uri.normalize().getPath().equals(path) || path.startsWith("/api") || path.startsWith("/admin")
                 || path.startsWith("/q/") || path.startsWith("/assets/") || path.startsWith("/uploads/")
-                || path.startsWith("/sitemap") || path.equals("/robots.txt")) throw new BadRequestException("不能重定向系统路径或包含点段的路径");
+                || path.startsWith("/sitemap") || path.equals("/robots.txt")
+                || path.equals("/sw.js") || path.equals("/manifest.webmanifest")) throw new BadRequestException("不能重定向系统路径或包含点段的路径");
         return path;
     }
 

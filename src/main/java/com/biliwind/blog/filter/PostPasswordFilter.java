@@ -101,6 +101,7 @@ public class PostPasswordFilter implements ContainerRequestFilter {
                 .header("Cache-Control", "no-store")
                 .header("Pragma", "no-cache")
                 .header("Vary", "Cookie")
+                .header("X-WindBlog-Private", "true")
                 .build();
 
         ctx.abortWith(response);

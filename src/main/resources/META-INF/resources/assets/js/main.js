@@ -859,9 +859,10 @@
             }
         }
 
-        function finalizePjaxLoad(url) {
-            document.dispatchEvent(new CustomEvent('pjax:complete', { detail: { url: url } }));
-            document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url } }));
+        function finalizePjaxLoad(url, swSource) {
+            const eventDetail = { url: url, swSource: swSource || '' };
+            document.dispatchEvent(new CustomEvent('pjax:complete', { detail: eventDetail }));
+            document.dispatchEvent(new CustomEvent('pjax:end', { detail: eventDetail }));
         }
 
         function clampRectToViewport(rect) {
@@ -1627,10 +1628,12 @@
                 if (!response.headers.get('content-type')?.includes('text/html')) {
                     throw new Error('PJAX response is not HTML');
                 }
-                if (new URL(response.url).origin !== window.location.origin) {
+                const swSource = response.headers.get('X-WindBlog-SW-Source') || '';
+                const effectiveResponseUrl = response.headers.get('X-WindBlog-Resolved-Url') || response.url || url;
+                const resolvedUrl = new URL(effectiveResponseUrl, window.location.href);
+                if (resolvedUrl.origin !== window.location.origin) {
                     throw new Error('PJAX redirect leaves this site');
                 }
-                const resolvedUrl = new URL(response.url);
                 resolvedUrl.hash = new URL(url, window.location.href).hash;
                 url = resolvedUrl.href;
 
@@ -1666,7 +1669,7 @@
                         return;
                     }
                     navigationFinalized = true;
-                    finalizePjaxLoad(url);
+                    finalizePjaxLoad(url, swSource);
                 };
                 const isCurrentNavigation = function () {
                     return activePjaxController === requestController && !requestController.signal.aborted;

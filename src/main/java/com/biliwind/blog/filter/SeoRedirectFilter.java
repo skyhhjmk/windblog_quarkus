@@ -20,7 +20,8 @@ public class SeoRedirectFilter {
         if (!"GET".equals(request.getMethod()) && !"HEAD".equals(request.getMethod())) return Uni.createFrom().nullItem();
         String path = request.getUriInfo().getRequestUri().getPath();
         if (path.startsWith("/api/") || path.startsWith("/q/") || path.startsWith("/assets/")
-                || path.startsWith("/uploads/")) return Uni.createFrom().nullItem();
+                || path.startsWith("/uploads/") || path.equals("/sw.js")
+                || path.equals("/manifest.webmanifest")) return Uni.createFrom().nullItem();
         return Uni.createFrom().item(() -> {
             SeoRedirect rule = SeoRedirect.find("source = ?1 and enabled = true", path).firstResult();
             if (rule == null) return (Response) null;

@@ -40,7 +40,8 @@ public class LanguageRouteFilter {
                 || path.startsWith("/uploads/") || path.startsWith("/static/")
                 || path.startsWith("/.well-known/") || path.startsWith("/favicon")
                 || path.startsWith("/robots.txt") || path.startsWith("/sitemap")
-                || path.startsWith("/feed") || path.startsWith("/ads.txt")) {
+                || path.startsWith("/feed") || path.startsWith("/ads.txt")
+                || path.equals("/sw.js") || path.equals("/manifest.webmanifest")) {
             return;
         }
         String host = context.request().getHeader("Host");

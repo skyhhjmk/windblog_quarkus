@@ -407,6 +407,9 @@ public class PostController {
 
         Response.ResponseBuilder responseBuilder = Response.ok(templateInstance)
                 .header("Vary", "Accept-Language, Cookie");
+        if (protectedPage || trackedReferral || requestUserId != null || hasPurchased) {
+            responseBuilder.header("X-WindBlog-Private", "true");
+        }
         if (protectedPage || trackedReferral) {
             responseBuilder.header("Cache-Control", "no-store")
                     .header("Pragma", "no-cache")
