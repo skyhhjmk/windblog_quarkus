@@ -158,6 +158,7 @@
         svg.setAttribute('stroke-linecap', 'round');
         svg.setAttribute('stroke-linejoin', 'round');
         svg.setAttribute('aria-hidden', 'true');
+        svg.style.pointerEvents = 'none';
         [['M18 6 6 18'], ['m6 6 12 12']].forEach(function (pathData) {
             var path = document.createElementNS(namespace, 'path');
             path.setAttribute('d', pathData[0]);
@@ -225,8 +226,15 @@
         var sourceRect = source.getBoundingClientRect();
         var targetRect = image.getBoundingClientRect();
 
+        closeButton.addEventListener('click', function (event) {
+            event.preventDefault();
+            closeLightbox(false);
+        });
+
         overlay.addEventListener('click', function (event) {
-            if (event.target === stage || event.target === backdrop || event.target === closeButton) {
+            var isClose = event.target === closeButton
+                || Boolean(event.target && event.target.closest && event.target.closest('.article-lightbox-close'));
+            if (event.target === stage || event.target === backdrop || isClose) {
                 event.preventDefault();
                 closeLightbox(false);
             }

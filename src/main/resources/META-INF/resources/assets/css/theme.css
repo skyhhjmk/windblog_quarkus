@@ -984,6 +984,10 @@ input::placeholder {
     transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
+.article-lightbox-close svg {
+    pointer-events: none;
+}
+
 .article-lightbox-close:hover {
     background: rgba(30, 41, 59, 0.92);
     transform: scale(1.05);
