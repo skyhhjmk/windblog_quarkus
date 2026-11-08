@@ -372,12 +372,17 @@ public class PostController {
                 : com.biliwind.blog.common.helper.PostCoverImageHelper
                         .firstImageUrl(snapshot.previewContent(), resolvedLang);
 
+        int wordCount = com.biliwind.blog.common.helper.PostHelper.calculateWordCount(postBody.body());
+        int readingTimeMinutes = com.biliwind.blog.common.helper.PostHelper.calculateReadingTimeMinutes(wordCount);
+
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
                 .data("pjaxRequest", pjaxRequest)
                 .data("contentLanguage", contentLanguage)
                 .data("postSlug", slug)
                 .data("postCoverImageUrl", postCoverImageUrl)
+                .data("wordCount", wordCount)
+                .data("readingTimeMinutes", readingTimeMinutes)
                 .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())
                 .data("isTranslationOutdated", isTranslationOutdated)
                 .data("postTitle", displayTitle)

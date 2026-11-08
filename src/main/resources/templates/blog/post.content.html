@@ -88,6 +88,14 @@
                         <time class="timestamp post-meta-value text-xs" data-timestamp="{publishedAt}">{publishedAt}</time>
                     </div>
                     <div class="post-meta-item">
+                        <span class="post-meta-label">{i18n.t('post.word_count')}</span>
+                        <span class="post-meta-value text-xs">{wordCount ?: 0}</span>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">{i18n.t('post.reading_time')}</span>
+                        <span class="post-meta-value text-xs">{readingTimeMinutes ?: 1} {i18n.t('post.minutes')}</span>
+                    </div>
+                    <div class="post-meta-item">
                         <span class="post-meta-label">{i18n.t('post.status')}</span>
                         <span class="post-meta-value text-xs flex items-center gap-1.5" data-purchase-status="true">
                             {#if postPrice > 0}

@@ -176,4 +176,55 @@ public class PostHelper {
 
         return sb.toString();
     }
+
+    /**
+     * 计算文章字数（中日韩统一表意文字数 + 英文/西文字词数）
+     */
+    public static int calculateWordCount(String text) {
+        if (text == null || text.isBlank()) {
+            return 0;
+        }
+        String clean = text
+                .replaceAll("```[\\s\\S]*?```", " ")
+                .replaceAll("`.*?`", " ")
+                .replaceAll("!\\[.*?\\]\\(.*?\\)", " ")
+                .replaceAll("\\[.*?\\]\\(.*?\\)", " ")
+                .replaceAll("<[^>]+>", " ")
+                .replaceAll("[#*~_>|\\-+=]", " ");
+
+        int cjkCount = 0;
+        for (int i = 0; i < clean.length(); i++) {
+            char ch = clean.charAt(i);
+            Character.UnicodeScript script = Character.UnicodeScript.of(ch);
+            if (script == Character.UnicodeScript.HAN
+                    || script == Character.UnicodeScript.HIRAGANA
+                    || script == Character.UnicodeScript.KATAKANA
+                    || script == Character.UnicodeScript.HANGUL) {
+                cjkCount++;
+            }
+        }
+
+        String nonCjk = clean
+                .replaceAll("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]", " ")
+                .replaceAll("[^a-zA-Z0-9_\\-\\s]", " ")
+                .trim();
+        int wordCount = 0;
+        if (!nonCjk.isBlank()) {
+            String[] tokens = nonCjk.split("\\s+");
+            wordCount = tokens.length;
+        }
+
+        int total = cjkCount + wordCount;
+        return Math.max(1, total);
+    }
+
+    /**
+     * 估算阅读时间（以每分钟 300 字/词为基准，向上取整至分钟）
+     */
+    public static int calculateReadingTimeMinutes(int wordCount) {
+        if (wordCount <= 0) {
+            return 1;
+        }
+        return Math.max(1, (int) Math.ceil((double) wordCount / 300.0));
+    }
 }
