@@ -164,11 +164,11 @@ public class TagController {
 
         List<Post> posts = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
         java.util.Map<Long, List<TagItem>> tagsByPost = loadTagsByPost(posts, lang);
-        java.util.Map<Long, String> featuredImages = PostCoverImageHelper.findFeaturedImageUrls(
+        java.util.Map<Long, PostCoverImageHelper.CoverImageInfo> featuredInfos = PostCoverImageHelper.findFeaturedImageInfos(
                 posts.stream().map(post -> post.id).toList());
         List<TagPostItem> postItems = posts.stream()
                 .map(post -> toTagPostItem(post, lang, tagsByPost.getOrDefault(post.id, List.of()),
-                        featuredImages.get(post.id)))
+                        featuredInfos.get(post.id)))
                 .toList();
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
@@ -235,7 +235,7 @@ public class TagController {
     }
 
     private TagPostItem toTagPostItem(Post post, String lang, List<TagItem> tags,
-                                      String featuredImageUrl) {
+                                      PostCoverImageHelper.CoverImageInfo featuredInfo) {
         String title = LanguageHelper.resolveLocalizedValue(post.title, lang);
         String summary = LanguageHelper.resolveLocalizedValue(post.summary, lang);
 
@@ -256,9 +256,11 @@ public class TagController {
             categories = List.of(new CategoryItem(
                     LanguageHelper.resolveLocalizedValue(post.category.name, lang), post.category.slug));
         }
+        PostCoverImageHelper.CoverImageInfo coverInfo =
+                PostCoverImageHelper.resolveCoverImageInfo(post, lang, featuredInfo);
         return new TagPostItem(post.slug, title, summary, formatDate(date),
                 post.category != null ? LanguageHelper.resolveLocalizedValue(post.category.name, lang) : "未分类", categories, tags,
-                PostCoverImageHelper.resolveCoverImage(post, lang, featuredImageUrl));
+                coverInfo.url(), coverInfo.thumbhash());
     }
 
     @TemplateData
@@ -384,6 +386,9 @@ public class TagController {
     }
 
     @TemplateData
-    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags, String coverImageUrl) {
+    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags, String coverImageUrl, String coverThumbhash) {
+        public TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags, String coverImageUrl) {
+            this(slug, title, summary, publishedAtText, categoryName, categories, tags, coverImageUrl, null);
+        }
     }
 }

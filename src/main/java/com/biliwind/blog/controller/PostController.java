@@ -5,6 +5,7 @@ import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.MarkdownHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
@@ -362,15 +363,18 @@ public class PostController {
                 ? ""
                 : repostPolicyCatalog.buildDirectCopyText(repostPolicy, displayTitle, repostOriginalUrl, resolvedLang);
 
-        String featuredImageUrl = postEntity == null ? null
+        PostCoverImageHelper.CoverImageInfo featuredInfo = postEntity == null ? null
                 : com.biliwind.blog.common.helper.PostCoverImageHelper
-                        .findFeaturedImageUrls(List.of(postEntity.id))
+                        .findFeaturedImageInfos(List.of(postEntity.id))
                         .get(postEntity.id);
-        String postCoverImageUrl = postEntity != null
+        PostCoverImageHelper.CoverImageInfo coverInfo = postEntity != null
                 ? com.biliwind.blog.common.helper.PostCoverImageHelper
-                        .resolveCoverImage(postEntity, resolvedLang, featuredImageUrl)
-                : com.biliwind.blog.common.helper.PostCoverImageHelper
-                        .firstImageUrl(snapshot.previewContent(), resolvedLang);
+                        .resolveCoverImageInfo(postEntity, resolvedLang, featuredInfo)
+                : new PostCoverImageHelper.CoverImageInfo(
+                        com.biliwind.blog.common.helper.PostCoverImageHelper.firstImageUrl(snapshot.previewContent(), resolvedLang),
+                        null);
+        String postCoverImageUrl = coverInfo.url();
+        String postCoverThumbhash = coverInfo.thumbhash();
 
         int wordCount = com.biliwind.blog.common.helper.PostHelper.calculateWordCount(postBody.body());
         int readingTimeMinutes = com.biliwind.blog.common.helper.PostHelper.calculateReadingTimeMinutes(wordCount);
@@ -381,6 +385,7 @@ public class PostController {
                 .data("contentLanguage", contentLanguage)
                 .data("postSlug", slug)
                 .data("postCoverImageUrl", postCoverImageUrl)
+                .data("postCoverThumbhash", postCoverThumbhash)
                 .data("wordCount", wordCount)
                 .data("readingTimeMinutes", readingTimeMinutes)
                 .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())

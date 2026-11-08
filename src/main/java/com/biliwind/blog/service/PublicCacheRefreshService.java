@@ -356,7 +356,7 @@ public class PublicCacheRefreshService {
                     .add(new PublicTagSnapshot(copyMap(postTag.tag.name), postTag.tag.slug));
         }
 
-        Map<Long, String> featuredImages = PostCoverImageHelper.findFeaturedImageUrls(postIds);
+        Map<Long, PostCoverImageHelper.CoverImageInfo> featuredInfos = PostCoverImageHelper.findFeaturedImageInfos(postIds);
         List<PublicPostListSnapshot> result = new ArrayList<>();
         for (Post post : posts) {
             Map<String, String> categoryName = post.category == null
@@ -368,6 +368,8 @@ public class PublicCacheRefreshService {
             if (categories.isEmpty() && post.category != null && post.category.enabled) {
                 categories = List.of(new PublicCategorySnapshot(categoryName, categorySlug));
             }
+            PostCoverImageHelper.CoverImageInfo coverInfo =
+                    PostCoverImageHelper.resolveCoverImageInfo(post, language, featuredInfos.get(post.id));
             result.add(new PublicPostListSnapshot(
                     post.slug,
                     copyMap(post.title),
@@ -383,7 +385,8 @@ public class PublicCacheRefreshService {
                     resolveAuthorName(post),
                     tagsByPost.getOrDefault(post.id, List.of()),
                     copyList(post.visibilityRegions),
-                    PostCoverImageHelper.resolveCoverImage(post, language, featuredImages.get(post.id))));
+                    coverInfo.url(),
+                    coverInfo.thumbhash()));
         }
         return result;
     }
@@ -564,7 +567,27 @@ public class PublicCacheRefreshService {
             String authorName,
             List<PublicTagSnapshot> tags,
             List<String> visibilityRegions,
-            String coverImageUrl) {
+            String coverImageUrl,
+            String coverThumbhash) {
+        public PublicPostListSnapshot(
+                String slug,
+                Map<String, String> title,
+                Map<String, String> summary,
+                Map<String, String> aiSummary,
+                Short aiSummaryStatus,
+                OffsetDateTime publishedAt,
+                OffsetDateTime updatedAt,
+                OffsetDateTime createdAt,
+                Map<String, String> categoryName,
+                String categorySlug,
+                List<PublicCategorySnapshot> categories,
+                String authorName,
+                List<PublicTagSnapshot> tags,
+                List<String> visibilityRegions,
+                String coverImageUrl) {
+            this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, updatedAt, createdAt,
+                    categoryName, categorySlug, categories, authorName, tags, visibilityRegions, coverImageUrl, null);
+        }
     }
 
     @RegisterForReflection

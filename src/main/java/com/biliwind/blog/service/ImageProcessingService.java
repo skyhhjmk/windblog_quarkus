@@ -1,6 +1,7 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.helper.ImageDimensionReader;
+import com.biliwind.blog.common.helper.ThumbHashHelper;
 import com.biliwind.blog.model.ImageProcessingConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -150,6 +151,82 @@ public class ImageProcessingService {
         }
     }
 
+    public String generateThumbHash(Path originalImagePath, int[] knownDimensions) throws IOException {
+        Path input = originalImagePath.toAbsolutePath().normalize();
+        if (!Files.isRegularFile(input)) {
+            throw new IOException("原图片文件不存在或不可读: " + input);
+        }
+
+        int[] dimensions = knownDimensions;
+        if (dimensions == null || dimensions.length < 2 || dimensions[0] <= 0 || dimensions[1] <= 0) {
+            dimensions = extractDimensions(input);
+        }
+        if (dimensions == null || dimensions[0] <= 0 || dimensions[1] <= 0) {
+            throw new IOException("无法获取图片尺寸以生成 ThumbHash: " + input);
+        }
+
+        int origW = dimensions[0];
+        int origH = dimensions[1];
+        float scale = Math.min(100.0f / origW, 100.0f / origH);
+        if (scale > 1.0f) {
+            scale = 1.0f;
+        }
+        int targetW = Math.max(1, Math.round(origW * scale));
+        int targetH = Math.max(1, Math.round(origH * scale));
+
+        String ffmpegPath = getConfigValue("ffmpeg_path", "/usr/bin/ffmpeg");
+        ExternalToolResolver.ToolResolution ffmpegResolution = resolveFfmpeg(ffmpegPath);
+        externalToolResolver.requireAvailable(ffmpegResolution, "FFmpeg");
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                ffmpegResolution.resolvedPath(),
+                "-hide_banner",
+                "-loglevel", "error",
+                "-nostdin",
+                "-y",
+                "-noautorotate",
+                "-i", input.toString(),
+                "-frames:v", "1",
+                "-vf", "scale=" + targetW + ":" + targetH,
+                "-f", "rawvideo",
+                "-pix_fmt", "rgba",
+                "-"
+        );
+
+        Process process = processBuilder.start();
+        byte[] rgbaBytes;
+        try (var in = process.getInputStream()) {
+            rgbaBytes = in.readAllBytes();
+        }
+
+        boolean finished;
+        try {
+            finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+            throw new IOException("FFmpeg ThumbHash 抽取被中断", e);
+        }
+        if (!finished) {
+            process.destroyForcibly();
+            throw new IOException("FFmpeg ThumbHash 抽取超时(30s)");
+        }
+
+        int exitCode = process.exitValue();
+        if (exitCode != 0) {
+            String stderr = new String(process.getErrorStream().readAllBytes());
+            throw new IOException("FFmpeg ThumbHash 抽取失败, 退出码: " + exitCode
+                    + (stderr.isBlank() ? "" : ", 错误: " + stderr.strip()));
+        }
+
+        int expectedLength = targetW * targetH * 4;
+        if (rgbaBytes.length < expectedLength) {
+            throw new IOException("FFmpeg 抽取的 RGBA 数据长度不足: 期望 " + expectedLength + ", 实际 " + rgbaBytes.length);
+        }
+
+        return ThumbHashHelper.rgbaToThumbHashBase64(targetW, targetH, rgbaBytes);
+    }
+
     public int[] extractDimensions(Path imagePath) throws IOException {
         int[] headerDimensions = ImageDimensionReader.read(imagePath);
         if (headerDimensions != null) {
@@ -178,9 +255,13 @@ public class ImageProcessingService {
     }
 
     private String getConfigValue(String key, String defaultValue) {
-        ImageProcessingConfig config = ImageProcessingConfig.find("configKey", key).firstResult();
-        if (config != null) {
-            return config.configValue;
+        try {
+            ImageProcessingConfig config = ImageProcessingConfig.find("configKey", key).firstResult();
+            if (config != null && config.configValue != null && !config.configValue.isBlank()) {
+                return config.configValue.trim();
+            }
+        } catch (Exception ignored) {
+            // 在无数据库连接或测试环境下回退到默认值
         }
         return defaultValue;
     }

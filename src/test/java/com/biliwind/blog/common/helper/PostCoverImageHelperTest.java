@@ -52,4 +52,14 @@ class PostCoverImageHelperTest {
         assertNull(PostCoverImageHelper.firstImageUrl("plain text only"));
         assertNull(PostCoverImageHelper.firstImageUrl(Map.of(), "zh-cn"));
     }
+
+    @Test
+    void shouldResolveCoverImageInfoWithFallback() {
+        PostCoverImageHelper.CoverImageInfo info =
+                new PostCoverImageHelper.CoverImageInfo("/uploads/a.webp", "someThumbHash");
+        PostCoverImageHelper.CoverImageInfo resolved =
+                PostCoverImageHelper.resolveCoverImageInfo(null, "zh-cn", info);
+        assertEquals("/uploads/a.webp", resolved.url());
+        assertEquals("someThumbHash", resolved.thumbhash());
+    }
 }

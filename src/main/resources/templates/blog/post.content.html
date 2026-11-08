@@ -50,6 +50,9 @@
                         <div class="post-header-cover"
                              data-article-transition-part="cover"
                              data-article-transition-slug="{postSlug}">
+                            {#if postCoverThumbhash.or(null)}
+                                <canvas class="placeholder post-header-cover-placeholder" data-thumbhash="{postCoverThumbhash}"></canvas>
+                            {/if}
                             <img src="{postCoverImageUrl}" alt="{postTitle ?: i18n.t('post.page_title_default')}" decoding="async"
                                  class="post-header-cover-img"/>
                             <div class="post-header-cover-gradient" aria-hidden="true"></div>

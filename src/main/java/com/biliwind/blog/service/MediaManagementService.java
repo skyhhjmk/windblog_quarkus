@@ -1149,6 +1149,9 @@ public class MediaManagementService {
         media.width = width;
         media.height = height;
         media.metadata = metadata;
+        if (metadata != null && metadata.get("thumbhash") instanceof String th && !th.isBlank()) {
+            media.thumbhash = th.trim();
+        }
         if (isImportPlaceholder(media)) {
             Map<String, Object> completedMetadata = new LinkedHashMap<>(media.metadata);
             completedMetadata.put("importStatus", "completed");
@@ -1248,6 +1251,51 @@ public class MediaManagementService {
             recordProcessingWarning(metadata, "WebP", exception);
             Log.warn("WebP 变体生成失败，保留原图: " + exception.getMessage());
         }
+
+        try {
+            int[] dims = (media.width != null && media.height != null)
+                    ? new int[]{media.width, media.height}
+                    : null;
+            String thumbhash = imageProcessingService.generateThumbHash(target, dims);
+            if (thumbhash != null && !thumbhash.isBlank()) {
+                media.thumbhash = thumbhash;
+                metadata.put("thumbhash", thumbhash);
+            }
+        } catch (Exception exception) {
+            recordProcessingWarning(metadata, "ThumbHash", exception);
+            Log.warn("ThumbHash 生成失败: " + exception.getMessage());
+        }
+    }
+
+    @Transactional
+    public int backfillThumbHashBatch(int limit) {
+        List<Media> list = Media.find("mediaType = 0 and deletedAt is null and (thumbhash is null or thumbhash = '') order by id asc")
+                .page(0, Math.min(limit, 100))
+                .list();
+        int count = 0;
+        for (Media media : list) {
+            Path target = uploadRoot.resolve(media.storageKey);
+            if (!Files.isRegularFile(target)) {
+                continue;
+            }
+            try {
+                int[] dims = (media.width != null && media.height != null)
+                        ? new int[]{media.width, media.height}
+                        : null;
+                String thumbhash = imageProcessingService.generateThumbHash(target, dims);
+                if (thumbhash != null && !thumbhash.isBlank()) {
+                    media.thumbhash = thumbhash;
+                    if (media.metadata == null) {
+                        media.metadata = new LinkedHashMap<>();
+                    }
+                    media.metadata.put("thumbhash", thumbhash);
+                    count++;
+                }
+            } catch (Exception e) {
+                Log.warn("存量媒体 ThumbHash 补齐失败: " + media.id, e);
+            }
+        }
+        return count;
     }
 
     private void applyHeaderDimensions(Media media, Path target, Map<String, Object> metadata) {

@@ -968,9 +968,11 @@
                 let coverState = null;
                 if (partName === 'cover') {
                     const imgElement = sourceElement.querySelector('img');
+                    const canvasElement = sourceElement.querySelector('canvas[data-thumbhash]');
                     coverState = {
                         imgSrc: imgElement ? (imgElement.currentSrc || imgElement.getAttribute('src') || '') : '',
                         imgAlt: imgElement ? (imgElement.getAttribute('alt') || '') : '',
+                        thumbhash: canvasElement ? canvasElement.getAttribute('data-thumbhash') : '',
                         isTallCrop: Boolean(imgElement && imgElement.classList.contains('is-tall-crop')),
                         imgOpacity: imgElement
                             ? (parseFloat(window.getComputedStyle(imgElement).opacity) || 1)
@@ -1171,6 +1173,17 @@
             cloneElement.style.margin = '0';
 
             const sourceCover = capturedItem.coverState || {};
+            let canvasElement = cloneElement.querySelector('canvas[data-thumbhash]');
+            if (!canvasElement && sourceCover.thumbhash) {
+                canvasElement = document.createElement('canvas');
+                canvasElement.className = 'placeholder post-list-cover-placeholder';
+                canvasElement.setAttribute('data-thumbhash', sourceCover.thumbhash);
+                cloneElement.insertBefore(canvasElement, cloneElement.firstChild);
+            }
+            if (canvasElement && window.renderThumbHash) {
+                window.renderThumbHash(canvasElement);
+            }
+
             let imgElement = cloneElement.querySelector('img');
             if (!imgElement && sourceCover.imgSrc) {
                 imgElement = document.createElement('img');

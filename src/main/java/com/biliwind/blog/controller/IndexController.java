@@ -303,7 +303,7 @@ public class IndexController {
             result.add(new IndexPostItem(
                     snapshot.slug(), title, summary, snapshot.aiSummary(), aiSummaryStatusValue,
                     snapshot.publishedAt(), snapshot.createdAt(), categoryName, categorySlug,
-                    categories, snapshot.authorName(), tags, snapshot.coverImageUrl()));
+                    categories, snapshot.authorName(), tags, snapshot.coverImageUrl(), snapshot.coverThumbhash()));
         }
         return result;
     }
@@ -330,8 +330,27 @@ public class IndexController {
             List<CategoryItem> categories,
             String authorName,
             List<TagItem> tags,
-            String coverImageUrl
+            String coverImageUrl,
+            String coverThumbhash
     ) {
+        public IndexPostItem(
+                String slug,
+                String title,
+                String summary,
+                Map<String, String> aiSummary,
+                Integer aiSummaryStatus,
+                OffsetDateTime publishedAt,
+                OffsetDateTime createdAt,
+                String categoryName,
+                String categorySlug,
+                List<CategoryItem> categories,
+                String authorName,
+                List<TagItem> tags,
+                String coverImageUrl
+        ) {
+            this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, createdAt,
+                    categoryName, categorySlug, categories, authorName, tags, coverImageUrl, null);
+        }
     }
 
     private record RenderedPageCache(

@@ -36,11 +36,12 @@ public final class MarkdownHelper {
     // id 属性与购买按钮（data-price/data-post-ref）由页面模板生成，不接受作者内容注入：
     // id 可造成 DOM clobbering，伪造的购买按钮可误导用户与前端脚本。
     private static final Safelist POST_SAFE_LIST = Safelist.relaxed()
-            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "picture", "source")
+            .addTags("hr", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "picture", "source", "canvas")
             .addAttributes("code", "class")
             .addAttributes("pre", "class")
             .addAttributes("span", "class")
             .addAttributes("div", "class", "data-name", "data-group", "data-title", "data-block-id", "data-translation-status")
+            .addAttributes("canvas", "class", "data-thumbhash")
             .addAttributes("img", "width", "height", "loading", "decoding", "class")
             .addAttributes("picture", "class")
             .addAttributes("source", "type", "srcset", "media")
@@ -168,12 +169,62 @@ public final class MarkdownHelper {
                     image.attr("decoding", "async");
                 }
                 attachWebpVariant(image, media);
+                attachThumbHashPlaceholder(image, media, dimensions);
             }
         } catch (RuntimeException exception) {
             // Non-request render paths (for example search indexing) may not have a
             // Hibernate session. Rendering remains safe; it simply omits dimensions.
             log.debug("无法为 Markdown 图片补充媒体尺寸与变体", exception);
         }
+    }
+
+    private static void attachThumbHashPlaceholder(org.jsoup.nodes.Element image, Media media, int[] dimensions) {
+        String thumbhash = mediaThumbhash(media);
+        if (thumbhash == null || thumbhash.isBlank()) {
+            return;
+        }
+        org.jsoup.nodes.Element targetToWrap = image;
+        org.jsoup.nodes.Element parent = image.parent();
+        if (parent != null && "picture".equalsIgnoreCase(parent.tagName())) {
+            targetToWrap = parent;
+        }
+
+        org.jsoup.nodes.Element existingWrapper = targetToWrap.parent();
+        if (existingWrapper != null && existingWrapper.hasClass("image-wrapper")) {
+            return;
+        }
+
+        org.jsoup.nodes.Element wrapper = new org.jsoup.nodes.Element("div");
+        wrapper.addClass("image-wrapper");
+        if (dimensions != null && dimensions[0] > 0 && dimensions[1] > 0) {
+            wrapper.attr("style", "position: relative; aspect-ratio: " + dimensions[0] + " / " + dimensions[1] + "; max-width: min(100%, " + dimensions[0] + "px); overflow: hidden;");
+        } else {
+            wrapper.attr("style", "position: relative; overflow: hidden;");
+        }
+
+        org.jsoup.nodes.Element canvas = new org.jsoup.nodes.Element("canvas");
+        canvas.addClass("placeholder");
+        canvas.attr("data-thumbhash", thumbhash);
+
+        targetToWrap.before(wrapper);
+        wrapper.appendChild(canvas);
+        wrapper.appendChild(targetToWrap);
+    }
+
+    private static String mediaThumbhash(Media media) {
+        if (media == null) {
+            return null;
+        }
+        if (media.thumbhash != null && !media.thumbhash.isBlank()) {
+            return media.thumbhash.trim();
+        }
+        if (media.metadata != null) {
+            Object th = media.metadata.get("thumbhash");
+            if (th instanceof String str && !str.isBlank()) {
+                return str.trim();
+            }
+        }
+        return null;
     }
 
     private static void attachWebpVariant(org.jsoup.nodes.Element image, Media media) {

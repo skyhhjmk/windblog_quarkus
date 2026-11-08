@@ -263,6 +263,14 @@ class MarkdownHelperTest {
     }
 
     @Test
+    void shouldAllowCanvasWithThumbhash() {
+        String markdown = "<canvas class=\"placeholder\" data-thumbhash=\"12345\"></canvas>";
+        String html = MarkdownHelper.toHtml(markdown);
+        assertTrue(html.contains("<canvas"));
+        assertTrue(html.contains("data-thumbhash=\"12345\""));
+    }
+
+    @Test
     void shouldStripAuthorControlledIdsAndPurchaseButtons() {
         String html = MarkdownHelper.toHtml(
                 "<div id=\"pjax-container\" class=\"custom-block\">正文</div>"

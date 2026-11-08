@@ -43,11 +43,14 @@ public final class PostCoverImageHelper {
     private PostCoverImageHelper() {
     }
 
+    public record CoverImageInfo(String url, String thumbhash) {
+        public static final CoverImageInfo EMPTY = new CoverImageInfo(null, null);
+    }
+
     /**
-     * Resolves featured-image URLs for a batch of posts in one query.
-     * The result is keyed by post id and only contains posts with a usable image.
+     * Resolves featured-image infos (URL and ThumbHash) for a batch of posts in one query.
      */
-    public static Map<Long, String> findFeaturedImageUrls(Collection<Long> postIds) {
+    public static Map<Long, CoverImageInfo> findFeaturedImageInfos(Collection<Long> postIds) {
         if (postIds == null || postIds.isEmpty()) {
             return Map.of();
         }
@@ -56,7 +59,7 @@ public final class PostCoverImageHelper {
                         + "where pm.post.id in ?1 and pm.usageType = 1 and media.deletedAt is null "
                         + "order by pm.position asc, pm.createdAt asc",
                 new ArrayList<>(postIds)).list();
-        Map<Long, String> result = new LinkedHashMap<>();
+        Map<Long, CoverImageInfo> result = new LinkedHashMap<>();
         for (PostMedia reference : references) {
             Long postId = reference.id == null ? null : reference.id.postId;
             if (postId == null || result.containsKey(postId)) {
@@ -64,9 +67,20 @@ public final class PostCoverImageHelper {
             }
             String url = mediaImageUrl(reference.media);
             if (url != null) {
-                result.put(postId, url);
+                result.put(postId, new CoverImageInfo(url, mediaThumbhash(reference.media)));
             }
         }
+        return result;
+    }
+
+    /**
+     * Resolves featured-image URLs for a batch of posts in one query.
+     * The result is keyed by post id and only contains posts with a usable image.
+     */
+    public static Map<Long, String> findFeaturedImageUrls(Collection<Long> postIds) {
+        Map<Long, CoverImageInfo> infos = findFeaturedImageInfos(postIds);
+        Map<Long, String> result = new LinkedHashMap<>();
+        infos.forEach((k, v) -> result.put(k, v.url()));
         return result;
     }
 
@@ -75,13 +89,30 @@ public final class PostCoverImageHelper {
      * image in the localized article body.
      */
     public static String resolveCoverImage(Post post, String language, String featuredImageUrl) {
-        if (featuredImageUrl != null && !featuredImageUrl.isBlank()) {
-            return featuredImageUrl;
+        CoverImageInfo featuredInfo = featuredImageUrl != null ? new CoverImageInfo(featuredImageUrl, null) : null;
+        return resolveCoverImageInfo(post, language, featuredInfo).url();
+    }
+
+    /**
+     * Resolves both cover image URL and ThumbHash for a post.
+     */
+    public static CoverImageInfo resolveCoverImageInfo(Post post, String language, CoverImageInfo featuredInfo) {
+        if (featuredInfo != null && featuredInfo.url() != null && !featuredInfo.url().isBlank()) {
+            if (featuredInfo.thumbhash() != null && !featuredInfo.thumbhash().isBlank()) {
+                return featuredInfo;
+            }
+            String th = resolveThumbhashForUrl(featuredInfo.url());
+            return new CoverImageInfo(featuredInfo.url(), th);
         }
         if (post == null || post.publishedRevision == null) {
-            return null;
+            return CoverImageInfo.EMPTY;
         }
-        return firstImageUrl(post.publishedRevision.contentMarkdown, language);
+        String firstUrl = firstImageUrl(post.publishedRevision.contentMarkdown, language);
+        if (firstUrl == null || firstUrl.isBlank()) {
+            return CoverImageInfo.EMPTY;
+        }
+        String th = resolveThumbhashForUrl(firstUrl);
+        return new CoverImageInfo(firstUrl, th);
     }
 
     /**
@@ -179,6 +210,53 @@ public final class PostCoverImageHelper {
             }
         }
         return usableUrl(media.url);
+    }
+
+    public static String mediaThumbhash(Media media) {
+        if (media == null || media.mediaType != 0 || media.deletedAt != null) {
+            return null;
+        }
+        if (media.thumbhash != null && !media.thumbhash.isBlank()) {
+            return media.thumbhash.trim();
+        }
+        if (media.metadata != null) {
+            Object value = media.metadata.get("thumbhash");
+            if (value instanceof String text && !text.isBlank()) {
+                return text.trim();
+            }
+        }
+        return null;
+    }
+
+    public static String resolveThumbhashForUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String path = url.trim();
+        try {
+            java.net.URI uri = java.net.URI.create(path);
+            if (uri.isAbsolute() && uri.getPath() != null) {
+                path = uri.getPath();
+            }
+        } catch (Exception ignored) {
+        }
+        if (path.startsWith("/uploads/")) {
+            String storageKey = path.substring("/uploads/".length());
+            if (!storageKey.isBlank() && !storageKey.contains("/")) {
+                int webpIdx = storageKey.indexOf("_webp.");
+                int placeholderIdx = storageKey.indexOf("_placeholder.");
+                String prefix = storageKey;
+                if (webpIdx > 0) {
+                    prefix = storageKey.substring(0, webpIdx);
+                } else if (placeholderIdx > 0) {
+                    prefix = storageKey.substring(0, placeholderIdx);
+                }
+                Media media = Media.<Media>find("storageKey = ?1 or storageKey like ?2",
+                        storageKey, prefix + ".%").firstResult();
+                return mediaThumbhash(media);
+            }
+        }
+        return null;
     }
 
     private static String usableUrl(String raw) {

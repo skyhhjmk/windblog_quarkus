@@ -1,6 +1,6 @@
 package com.biliwind.blog.service;
 
-import io.quarkus.test.junit.QuarkusTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,14 +14,18 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@QuarkusTest
 public class ImageProcessingServiceTest {
 
-    @jakarta.inject.Inject
     ImageProcessingService imageProcessingService;
 
     @TempDir
     Path tempDir;
+
+    @BeforeEach
+    void setUp() {
+        imageProcessingService = new ImageProcessingService();
+        imageProcessingService.externalToolResolver = new ExternalToolResolver();
+    }
 
     @Test
     void testExtractDimensions() throws IOException {
@@ -41,6 +45,17 @@ public class ImageProcessingServiceTest {
 
         BufferedImage placeholder = ImageIO.read(result.toFile());
         assertTrue(placeholder.getWidth() <= 360);
+    }
+
+    @Test
+    void testGenerateThumbHash() throws IOException {
+        Path testImage = createTestImage(400, 300);
+        String thumbhash = imageProcessingService.generateThumbHash(testImage, new int[]{400, 300});
+        org.junit.jupiter.api.Assertions.assertNotNull(thumbhash);
+        org.junit.jupiter.api.Assertions.assertFalse(thumbhash.isBlank());
+        byte[] bytes = com.biliwind.blog.common.helper.ThumbHashHelper.fromBase64(thumbhash);
+        org.junit.jupiter.api.Assertions.assertNotNull(bytes);
+        org.junit.jupiter.api.Assertions.assertTrue(bytes.length >= 20);
     }
 
     private Path createTestImage(int width, int height) throws IOException {

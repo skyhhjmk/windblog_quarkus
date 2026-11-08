@@ -45,6 +45,10 @@ public class Media extends PanacheEntityBase {
     @Column(name = "content_sha256", length = 64)
     public String contentSha256;
 
+    /** ThumbHash Base64 字符串 */
+    @Column(name = "thumbhash", length = 64)
+    public String thumbhash;
+
     /**
      * 文件大小（字节）
      */

@@ -85,6 +85,9 @@
                                         <div class="post-list-cover relative w-full shrink-0 overflow-hidden rounded-xl border border-border/40 bg-bg sm:w-44 md:w-52 lg:w-60"
                                              data-article-transition-part="cover"
                                              data-article-transition-slug="{post.slug}">
+                                            {#if post.coverThumbhash}
+                                                <canvas class="placeholder post-list-cover-placeholder" data-thumbhash="{post.coverThumbhash}"></canvas>
+                                            {/if}
                                             <img src="{post.coverImageUrl}" alt="{post.title}" loading="lazy" decoding="async"
                                                  class="post-list-cover-img h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.03]"/>
                                         </div>
