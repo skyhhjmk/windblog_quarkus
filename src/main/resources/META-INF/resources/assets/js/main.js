@@ -129,22 +129,73 @@
     ready(() => {
         const mobileBtn = document.getElementById('mobileMenuBtn');
         const mobileMenu = document.getElementById('mobileMenu');
+        const mobileBackdrop = document.getElementById('mobileDrawerBackdrop');
+        const mobileCloseBtn = document.getElementById('mobileDrawerCloseBtn');
         let restoreMobileFocusOnPageReady = false;
-        const closeMobileMenu = (restoreFocus = false) => {
-            if (!mobileBtn || !mobileMenu) return;
-            mobileMenu.classList.add('hidden');
-            mobileBtn.setAttribute('aria-expanded', 'false');
-            mobileBtn.setAttribute('aria-label', window.wbT('js.open_menu', '打开菜单'));
-            if (restoreFocus) {
-                mobileBtn.focus({preventScroll: true});
+
+        const isMobileMenuOpen = () => {
+            return !!(mobileMenu && mobileMenu.classList.contains('mobile-drawer-open'));
+        };
+
+        const openMobileMenu = () => {
+            if (!mobileMenu) return;
+            mobileMenu.classList.add('mobile-drawer-open');
+            mobileMenu.setAttribute('aria-hidden', 'false');
+            if (mobileBackdrop) {
+                mobileBackdrop.classList.add('mobile-backdrop-open');
+                mobileBackdrop.setAttribute('aria-hidden', 'false');
+            }
+            if (mobileBtn) {
+                mobileBtn.setAttribute('aria-expanded', 'true');
+                mobileBtn.setAttribute('aria-label', window.wbT('js.close_menu', '关闭菜单'));
+            }
+            document.documentElement.classList.add('drawer-open');
+            document.body.classList.add('drawer-open');
+            if (mobileCloseBtn) {
+                mobileCloseBtn.focus({preventScroll: true});
             }
         };
+
+        const closeMobileMenu = (restoreFocus = false) => {
+            if (!mobileMenu) return;
+            mobileMenu.classList.remove('mobile-drawer-open');
+            mobileMenu.setAttribute('aria-hidden', 'true');
+            if (mobileBackdrop) {
+                mobileBackdrop.classList.remove('mobile-backdrop-open');
+                mobileBackdrop.setAttribute('aria-hidden', 'true');
+            }
+            if (mobileBtn) {
+                mobileBtn.setAttribute('aria-expanded', 'false');
+                mobileBtn.setAttribute('aria-label', window.wbT('js.open_menu', '打开菜单'));
+                if (restoreFocus) {
+                    mobileBtn.focus({preventScroll: true});
+                }
+            }
+            document.documentElement.classList.remove('drawer-open');
+            document.body.classList.remove('drawer-open');
+        };
+
         if (mobileBtn && mobileMenu) {
-            mobileBtn.addEventListener('click', () => {
-                const isOpen = mobileMenu.classList.toggle('hidden') === false;
-                mobileBtn.setAttribute('aria-expanded', isOpen.toString());
-                mobileBtn.setAttribute('aria-label', isOpen ? window.wbT('js.close_menu', '关闭菜单') : window.wbT('js.open_menu', '打开菜单'));
+            mobileBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                if (isMobileMenuOpen()) {
+                    closeMobileMenu();
+                } else {
+                    openMobileMenu();
+                }
             });
+
+            if (mobileCloseBtn) {
+                mobileCloseBtn.addEventListener('click', () => {
+                    closeMobileMenu(true);
+                });
+            }
+
+            if (mobileBackdrop) {
+                mobileBackdrop.addEventListener('click', () => {
+                    closeMobileMenu();
+                });
+            }
 
             mobileMenu.addEventListener('click', (event) => {
                 const anchor = event.target.closest?.('a');
@@ -153,16 +204,15 @@
                 closeMobileMenu();
             });
 
-            document.addEventListener('click', (event) => {
-                if (!mobileMenu.classList.contains('hidden') &&
-                    !mobileMenu.contains(event.target) && !mobileBtn.contains(event.target)) {
-                    closeMobileMenu();
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && isMobileMenuOpen()) {
+                    closeMobileMenu(true);
                 }
             });
 
-            document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && !mobileMenu.classList.contains('hidden')) {
-                    closeMobileMenu(true);
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 1024 && isMobileMenuOpen()) {
+                    closeMobileMenu();
                 }
             });
         }

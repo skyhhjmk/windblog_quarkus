@@ -160,9 +160,87 @@
     }
 }
 
-#mobileMenu:not(.hidden),
-#userDropdown:not(.hidden) {
+#userDropdown:not(.hidden),
+#languageMenu:not(.hidden) {
     animation: windblog-panel-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   Navigation Bar Defenses & Mobile Side Drawer
+   ========================================================================== */
+
+/* 防止菜单栏与导航文字在异常宽度/缩放屏幕被挤压折行排成竖向字 */
+header nav,
+header nav a,
+header nav button,
+header nav span,
+header nav div,
+header .brand-title,
+header [data-shortcut-form="search"] {
+    white-space: nowrap !important;
+}
+
+header nav a,
+header nav button {
+    flex-shrink: 0 !important;
+}
+
+/* 抽屉激活时页面滚动锁定 */
+html.drawer-open,
+body.drawer-open {
+    overflow: hidden !important;
+    touch-action: none;
+}
+
+/* 移动端侧滑抽屉遮罩层 */
+.mobile-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mobile-drawer-backdrop.mobile-backdrop-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 移动端统一侧向滑出抽屉 */
+.mobile-side-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(340px, 85vw);
+    height: 100%;
+    height: 100dvh;
+    z-index: 9999;
+    background: var(--card-bg, #111418);
+    border-left: 1px solid var(--border);
+    box-shadow: -10px 0 35px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    transform: translate3d(100%, 0, 0);
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+}
+
+.mobile-side-drawer.mobile-drawer-open {
+    transform: translate3d(0, 0, 0) !important;
+    pointer-events: auto !important;
+}
+
+@media (min-width: 1024px) {
+    .mobile-side-drawer,
+    .mobile-drawer-backdrop {
+        display: none !important;
+    }
 }
 
 /* Button Loading State */
