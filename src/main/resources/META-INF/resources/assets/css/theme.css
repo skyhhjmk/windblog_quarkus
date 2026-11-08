@@ -1100,6 +1100,85 @@ input::placeholder {
     transform: scale(1.05);
 }
 
+/* Code Block Collapsible Styling */
+.code-block-wrapper.is-collapsible .code-block-body {
+    position: relative;
+    max-height: 340px;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.code-block-wrapper.is-collapsible.is-expanded .code-block-body {
+    max-height: none;
+}
+
+.code-block-expand-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 90px;
+    background: linear-gradient(to bottom, rgba(13, 17, 23, 0) 0%, rgba(13, 17, 23, 0.92) 75%, #0d1117 100%);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 0.75rem;
+    pointer-events: none;
+    z-index: 5;
+    transition: opacity 0.25s ease;
+}
+
+.light .code-block-expand-overlay {
+    background: linear-gradient(to bottom, rgba(248, 250, 252, 0) 0%, rgba(248, 250, 252, 0.92) 75%, #f8fafc 100%);
+}
+
+.code-block-wrapper.is-expanded .code-block-expand-overlay {
+    position: relative;
+    height: auto;
+    background: transparent;
+    padding: 0.5rem 0 0.75rem;
+}
+
+.code-block-expand-btn {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 9999px;
+    background: var(--card-bg, #161b22);
+    border: 1px solid var(--border);
+    color: var(--text-body);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    user-select: none;
+}
+
+.code-block-expand-btn:hover {
+    color: var(--accent);
+    border-color: rgba(var(--accent-rgb), 0.45);
+    box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.2);
+    transform: translateY(-1px);
+}
+
+.code-block-expand-btn:active {
+    transform: scale(0.96);
+}
+
+.code-block-expand-icon {
+    width: 0.85rem;
+    height: 0.85rem;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.code-block-wrapper.is-expanded .code-block-expand-icon {
+    transform: rotate(180deg);
+}
+
 .code-block-lang {
     font-family: var(--font-mono);
     font-size: 11px;

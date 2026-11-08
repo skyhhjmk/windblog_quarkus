@@ -2331,7 +2331,50 @@
                 if (pre.parentNode) {
                     pre.parentNode.insertBefore(wrapper, pre);
                     wrapper.appendChild(header);
-                    wrapper.appendChild(pre);
+
+                    const bodyWrapper = document.createElement('div');
+                    bodyWrapper.className = 'code-block-body';
+                    wrapper.appendChild(bodyWrapper);
+                    bodyWrapper.appendChild(pre);
+
+                    const isTall = pre.scrollHeight > 360 || (code && code.innerText.split('\n').length > 22);
+                    if (isTall) {
+                        wrapper.classList.add('is-collapsible', 'is-collapsed');
+                        const overlay = document.createElement('div');
+                        overlay.className = 'code-block-expand-overlay';
+                        const expandBtn = document.createElement('button');
+                        expandBtn.type = 'button';
+                        expandBtn.className = 'code-block-expand-btn';
+                        expandBtn.setAttribute('aria-expanded', 'false');
+                        expandBtn.innerHTML = `
+                            <span class="code-expand-text">${window.wbT('js.expand_code', '展开代码')}</span>
+                            <svg class="code-block-expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        `;
+                        expandBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const isCollapsed = wrapper.classList.contains('is-collapsed');
+                            if (isCollapsed) {
+                                wrapper.classList.remove('is-collapsed');
+                                wrapper.classList.add('is-expanded');
+                                expandBtn.setAttribute('aria-expanded', 'true');
+                                expandBtn.querySelector('.code-expand-text').textContent = window.wbT('js.collapse_code', '折叠代码');
+                            } else {
+                                wrapper.classList.remove('is-expanded');
+                                wrapper.classList.add('is-collapsed');
+                                expandBtn.setAttribute('aria-expanded', 'false');
+                                expandBtn.querySelector('.code-expand-text').textContent = window.wbT('js.expand_code', '展开代码');
+                                const rect = wrapper.getBoundingClientRect();
+                                if (rect.top < 80) {
+                                    wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                }
+                            }
+                        });
+                        overlay.appendChild(expandBtn);
+                        wrapper.appendChild(overlay);
+                    }
                 }
             });
         }
