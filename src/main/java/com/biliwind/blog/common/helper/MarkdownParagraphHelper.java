@@ -40,14 +40,27 @@ public final class MarkdownParagraphHelper {
             String sourceSeoKeywords
     ) {}
 
-    private static final Parser PARSER;
+    private static final class ParserHolder {
+        private static volatile Parser parser;
+    }
 
-    static {
-        MutableDataSet flexmarkOptions = new MutableDataSet();
-        flexmarkOptions.set(Parser.EXTENSIONS, List.of(
-                TablesExtension.create(),
-                MdProtocolExtension.create()));
-        PARSER = Parser.builder(flexmarkOptions).build();
+    private static Parser getParser() {
+        Parser parser = ParserHolder.parser;
+        if (parser != null) {
+            return parser;
+        }
+        synchronized (MarkdownParagraphHelper.class) {
+            if (ParserHolder.parser != null) {
+                return ParserHolder.parser;
+            }
+            MutableDataSet flexmarkOptions = new MutableDataSet();
+            flexmarkOptions.set(Parser.EXTENSIONS, List.of(
+                    TablesExtension.create(),
+                    MdProtocolExtension.create()));
+            Parser created = Parser.builder(flexmarkOptions).build();
+            ParserHolder.parser = created;
+            return created;
+        }
     }
 
     private MarkdownParagraphHelper() {}
@@ -59,7 +72,7 @@ public final class MarkdownParagraphHelper {
         if (markdown == null || markdown.isBlank()) {
             return List.of();
         }
-        Document doc = PARSER.parse(markdown);
+        Document doc = getParser().parse(markdown);
         List<SourceBlock> blocks = new ArrayList<>();
         int index = 0;
         for (Node child = doc.getFirstChild(); child != null; child = child.getNext()) {
