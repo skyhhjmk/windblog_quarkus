@@ -45,6 +45,9 @@ public class AiTaskConsumer {
     @Inject
     com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
+    @Inject
+    com.biliwind.blog.service.AdminPostEventService adminPostEventService;
+
     private volatile int maxRetries;
 
     @PostConstruct
@@ -374,6 +377,7 @@ public class AiTaskConsumer {
                 // 更新文章摘要
                 post.aiSummary = aiResult.contents;
                 post.persist();
+                adminPostEventService.broadcastPostUpdated(post, "AI_SUMMARY");
                 postAiMetadataService.record(postId, post.currentRevision == null ? null : post.currentRevision.id,
                         "summarize", aiResult, "DRAFT");
                 log.info("{} 已保存 AI 摘要并写入审计日志，postId={}", MQ_TAG, postId);

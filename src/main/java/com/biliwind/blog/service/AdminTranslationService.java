@@ -59,6 +59,9 @@ public class AdminTranslationService {
     MediaManagementService mediaService;
 
     @Inject
+    AdminPostEventService adminPostEventService;
+
+    @Inject
     ArticleExternalLinkService articleExternalLinkService;
 
     @Inject
@@ -352,6 +355,7 @@ public class AdminTranslationService {
         postAiMetadataService.record(post.id, nextRevision.id, "translate", translated.aiResult(),
                 publishNow ? "PUBLISHED" : "DRAFT");
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        adminPostEventService.broadcastPostUpdated(post, "AI_TRANSLATION");
 
         return new TranslatePostResult(post.id, post.slug, prepared.sourceLanguage(),
                 prepared.targetLanguage(), true, false, publishNow,

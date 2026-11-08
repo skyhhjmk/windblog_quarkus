@@ -66,7 +66,8 @@ public final class AdminPostDtos {
                         String repostPolicyCode,
                         Map<String, String> seoTitleTranslations,
                         Map<String, String> seoKeywordsTranslations,
-                        Map<String, String> seoDescriptionTranslations) {
+                        Map<String, String> seoDescriptionTranslations,
+                        Boolean force) {
         }
 
         public record PostTranslationRequest(

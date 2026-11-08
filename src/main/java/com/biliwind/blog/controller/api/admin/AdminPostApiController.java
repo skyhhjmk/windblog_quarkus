@@ -93,6 +93,17 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.service.UserNotificationService userNotificationService;
 
+    @Inject
+    com.biliwind.blog.service.AdminPostEventService adminPostEventService;
+
+    @GET
+    @Path("/{id}/events")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @Operation(summary = "文章实时更新事件流 (SSE)")
+    public io.smallrye.mutiny.Multi<String> postEvents(@PathParam("id") Long id) {
+        return adminPostEventService.getEventStream(id);
+    }
+
     @POST
     @Path("/{id}/ai-summary/trigger")
     @Transactional
@@ -297,7 +308,8 @@ public class AdminPostApiController {
     public AdminPostDetail update(@PathParam("id") Long id,
                                   @Valid PostUpdateRequest request) {
         Post post = mustFindPost(id);
-        if (!post.version.equals(request.version())) {
+        boolean isForce = Boolean.TRUE.equals(request.force());
+        if (!isForce && !post.version.equals(request.version())) {
             throw conflict("版本冲突，请刷新后重试");
         }
 
@@ -337,6 +349,7 @@ public class AdminPostApiController {
         }
 
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        adminPostEventService.broadcastPostUpdated(post, isForce ? "FORCE_OVERWRITE" : "ADMIN_UPDATE");
         return toDetail(post);
     }
 
@@ -362,6 +375,7 @@ public class AdminPostApiController {
         }
         articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        adminPostEventService.broadcastPostUpdated(post, "PUBLISH");
         return toDetail(post);
     }
 
@@ -543,6 +557,7 @@ public class AdminPostApiController {
         auditService.log("post", post.id, "save_translation", null,
                 Map.of("targetLanguage", targetLanguage, "revisionNumber", nextRevision.revisionNumber));
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        adminPostEventService.broadcastPostUpdated(post, "TRANSLATION");
         return toDetail(post);
     }
 
@@ -566,6 +581,7 @@ public class AdminPostApiController {
         }
         articleEmailNotificationService.queueArticleUpdate(post, emailDispatchRequest);
         esSyncEvent.fire(new PostSyncedEvent(post.id));
+        adminPostEventService.broadcastPostUpdated(post, "PUBLISH");
         return toDetail(post);
     }
 
