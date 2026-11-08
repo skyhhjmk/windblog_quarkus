@@ -60,4 +60,34 @@ class ReactionServiceTest {
         assertThrows(IllegalArgumentException.class, () ->
                 service.updateReaction("slug", "invalid_type", "react"));
     }
+
+    @Test
+    void shouldCorrectlyHandlePostReactionEntity() {
+        com.biliwind.blog.model.PostReaction reaction = new com.biliwind.blog.model.PostReaction();
+        reaction.postSlug = "demo-article";
+        reaction.likeCount = 20;
+        reaction.heartCount = 15;
+        reaction.rocketCount = 5;
+        reaction.celebrateCount = 3;
+        reaction.insightfulCount = 8;
+
+        assertEquals(20, reaction.getCount("like"));
+        assertEquals(15, reaction.getCount("heart"));
+
+        reaction.applyDelta("like", 1);
+        assertEquals(21, reaction.getCount("like"));
+
+        reaction.applyDelta("like", -5);
+        assertEquals(16, reaction.getCount("like"));
+
+        reaction.applyDelta("rocket", -10);
+        assertEquals(0, reaction.getCount("rocket"));
+
+        Map<String, Long> map = reaction.toMap();
+        assertEquals(16, map.get("like"));
+        assertEquals(15, map.get("heart"));
+        assertEquals(0, map.get("rocket"));
+        assertEquals(3, map.get("celebrate"));
+        assertEquals(8, map.get("insightful"));
+    }
 }

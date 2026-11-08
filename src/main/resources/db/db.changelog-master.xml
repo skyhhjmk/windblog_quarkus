@@ -158,4 +158,5 @@
     <include file="db/migration/157-remove-codex-creator-integration.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/158-add-user-token-version.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/159-add-post-revision-paragraph-translations.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/160-create-post-reactions.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

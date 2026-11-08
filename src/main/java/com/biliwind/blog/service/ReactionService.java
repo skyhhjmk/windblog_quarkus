@@ -1,19 +1,24 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.model.PostReaction;
+import com.biliwind.blog.repository.PostReactionRepository;
 import io.quarkus.redis.datasource.RedisDataSource;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
-import java.util.HashMap;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Manages post reaction metrics with Redis cache and local in-memory fallback.
+ * Manages post reaction metrics with PostgreSQL database durability,
+ * high-performance Redis cache-aside, and in-memory fallback.
  */
 @ApplicationScoped
 public class ReactionService {
@@ -27,45 +32,67 @@ public class ReactionService {
     private static final String REDIS_KEY_PREFIX = "windblog:post:reactions:";
 
     @Inject
+    PostReactionRepository reactionRepository;
+
+    @Inject
     RedisDataSource redis;
 
     private final Map<String, Map<String, AtomicLong>> localStore = new ConcurrentHashMap<>();
 
     public Map<String, Long> getReactions(String slug) {
         String cleanSlug = sanitizeSlug(slug);
-        Map<String, Long> result = new LinkedHashMap<>();
 
+        // 1. Fast cache read from Redis
         if (redis != null) {
             try {
                 String key = REDIS_KEY_PREFIX + cleanSlug;
                 Map<String, Long> existing = redis.hash(Long.class).hgetall(key);
                 if (existing != null && !existing.isEmpty()) {
+                    Map<String, Long> result = new LinkedHashMap<>();
                     for (String type : ALLOWED_REACTIONS) {
                         result.put(type, existing.getOrDefault(type, seedCount(cleanSlug, type)));
                     }
                     return result;
-                } else {
-                    // Seed initial realistic baseline in Redis so it's persisted immediately
-                    Map<String, Long> seeded = new LinkedHashMap<>();
-                    for (String type : ALLOWED_REACTIONS) {
-                        seeded.put(type, seedCount(cleanSlug, type));
-                    }
-                    redis.hash(Long.class).hset(key, seeded);
-                    return seeded;
                 }
             } catch (Exception e) {
-                LOG.debugf("Redis reactions fetch error, falling back to local: %s", e.getMessage());
+                LOG.debugf("Redis reactions fetch error: %s", e.getMessage());
             }
         }
 
-        Map<String, AtomicLong> local = localStore.computeIfAbsent(cleanSlug, k -> new ConcurrentHashMap<>());
-        for (String type : ALLOWED_REACTIONS) {
-            long count = local.computeIfAbsent(type, t -> new AtomicLong(seedCount(cleanSlug, t))).get();
-            result.put(type, count);
+        // 2. Primary durable storage in PostgreSQL database
+        if (reactionRepository != null) {
+            return loadOrInitFromDatabase(cleanSlug);
         }
-        return result;
+
+        // 3. Fallback to in-memory local store
+        return loadOrInitLocal(cleanSlug);
     }
 
+    @Transactional
+    public Map<String, Long> loadOrInitFromDatabase(String cleanSlug) {
+        try {
+            Optional<PostReaction> opt = reactionRepository.findBySlug(cleanSlug);
+            PostReaction pr;
+            if (opt.isPresent()) {
+                pr = opt.get();
+            } else {
+                pr = new PostReaction();
+                pr.postSlug = cleanSlug;
+                for (String t : ALLOWED_REACTIONS) {
+                    pr.setCount(t, seedCount(cleanSlug, t));
+                }
+                reactionRepository.persist(pr);
+            }
+            Map<String, Long> map = pr.toMap();
+            syncToRedis(cleanSlug, map);
+            return map;
+        } catch (Exception e) {
+            LOG.warnf("Database reactions load/init error for slug %s: %s", cleanSlug, e.getMessage());
+            return loadOrInitLocal(cleanSlug);
+        }
+    }
+
+    @Transactional
     public Map<String, Long> updateReaction(String slug, String reactionType, String action) {
         String cleanSlug = sanitizeSlug(slug);
         if (!ALLOWED_REACTIONS.contains(reactionType)) {
@@ -74,6 +101,33 @@ public class ReactionService {
 
         long delta = "unreact".equalsIgnoreCase(action) ? -1L : 1L;
 
+        // 1. Update in PostgreSQL database
+        if (reactionRepository != null) {
+            try {
+                Optional<PostReaction> opt = reactionRepository.findBySlug(cleanSlug);
+                PostReaction pr;
+                if (opt.isPresent()) {
+                    pr = opt.get();
+                } else {
+                    pr = new PostReaction();
+                    pr.postSlug = cleanSlug;
+                    for (String t : ALLOWED_REACTIONS) {
+                        pr.setCount(t, seedCount(cleanSlug, t));
+                    }
+                }
+                pr.applyDelta(reactionType, delta);
+                pr.updatedAt = OffsetDateTime.now();
+                reactionRepository.persist(pr);
+
+                Map<String, Long> map = pr.toMap();
+                syncToRedis(cleanSlug, map);
+                return map;
+            } catch (Exception e) {
+                LOG.warnf("Database reactions update error for slug %s: %s", cleanSlug, e.getMessage());
+            }
+        }
+
+        // 2. Fallback to Redis atomic increment + local store
         if (redis != null) {
             try {
                 String key = REDIS_KEY_PREFIX + cleanSlug;
@@ -104,6 +158,27 @@ public class ReactionService {
             counter.set(0);
         }
         return getReactions(cleanSlug);
+    }
+
+    private void syncToRedis(String cleanSlug, Map<String, Long> counts) {
+        if (redis != null) {
+            try {
+                String key = REDIS_KEY_PREFIX + cleanSlug;
+                redis.hash(Long.class).hset(key, counts);
+            } catch (Exception e) {
+                LOG.debugf("Redis sync error: %s", e.getMessage());
+            }
+        }
+    }
+
+    private Map<String, Long> loadOrInitLocal(String cleanSlug) {
+        Map<String, Long> result = new LinkedHashMap<>();
+        Map<String, AtomicLong> local = localStore.computeIfAbsent(cleanSlug, k -> new ConcurrentHashMap<>());
+        for (String type : ALLOWED_REACTIONS) {
+            long count = local.computeIfAbsent(type, t -> new AtomicLong(seedCount(cleanSlug, t))).get();
+            result.put(type, count);
+        }
+        return result;
     }
 
     public static String sanitizeSlug(String slug) {
