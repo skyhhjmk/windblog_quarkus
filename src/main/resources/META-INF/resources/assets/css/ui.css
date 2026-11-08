@@ -1263,3 +1263,104 @@ button:disabled {
         box-shadow: 0 0 0 4px rgba(239, 68, 68, .12);
     }
 }
+
+/* Post Reactions & Attitude Bar */
+.post-reaction-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--text-body);
+    background: var(--card);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+    position: relative;
+}
+
+.post-reaction-btn:hover {
+    border-color: rgba(var(--accent-rgb), 0.4);
+    background: rgba(var(--accent-rgb), 0.05);
+    transform: translateY(-1px);
+}
+
+.post-reaction-btn:active {
+    transform: scale(0.95);
+}
+
+.post-reaction-btn.is-active {
+    border-color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.12);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.15);
+}
+
+.post-reaction-btn.is-active .reaction-emoji {
+    transform: scale(1.15);
+}
+
+.reaction-emoji {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.reaction-count {
+    font-variant-numeric: tabular-nums;
+}
+
+.post-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: var(--text-meta);
+    background: var(--card);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.post-share-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.08);
+}
+
+.post-share-btn:active {
+    transform: scale(0.95);
+}
+
+.reaction-float-badge {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--accent);
+    pointer-events: none;
+    animation: reactionFloatUp 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes reactionFloatUp {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, 0) scale(0.6);
+    }
+    30% {
+        opacity: 1;
+        transform: translate(-50%, -8px) scale(1.1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -24px) scale(0.9);
+    }
+}

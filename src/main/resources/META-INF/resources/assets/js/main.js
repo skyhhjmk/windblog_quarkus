@@ -3546,22 +3546,145 @@
             }
         }, { passive: true });
 
+        // ==========================================
+        // Post Reactions & Article Share
+        // ==========================================
+        function initPostReactions(root = document) {
+            const container = root.querySelector?.('.post-reactions-container') ||
+                (root.matches?.('.post-reactions-container') ? root : null);
+            if (!container || container.dataset.reactionsBound === 'true') return;
+            container.dataset.reactionsBound = 'true';
+
+            const slug = container.dataset.postSlug;
+            if (!slug) return;
+
+            const storageReactionsKey = `windblog_reactions_${slug}`;
+            const storageCountsKey = `windblog_reaction_counts_${slug}`;
+
+            // Seed initial pseudo-counts based on slug hash so it feels alive
+            const seedCount = (type) => {
+                let hash = 0;
+                const str = slug + ':' + type;
+                for (let i = 0; i < str.length; i++) {
+                    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                    hash |= 0;
+                }
+                return Math.abs(hash % 16) + 3;
+            };
+
+            let userReactions = [];
+            try {
+                const stored = localStorage.getItem(storageReactionsKey);
+                if (stored) userReactions = JSON.parse(stored);
+            } catch {
+                userReactions = [];
+            }
+
+            let counts = {};
+            try {
+                const storedCounts = localStorage.getItem(storageCountsKey);
+                if (storedCounts) counts = JSON.parse(storedCounts);
+            } catch {
+                counts = {};
+            }
+
+            const buttons = container.querySelectorAll('.post-reaction-btn');
+            buttons.forEach(btn => {
+                const type = btn.dataset.reactionType;
+                if (!type) return;
+
+                if (typeof counts[type] !== 'number') {
+                    counts[type] = seedCount(type);
+                }
+
+                const isActive = userReactions.includes(type);
+                btn.classList.toggle('is-active', isActive);
+                btn.setAttribute('aria-pressed', isActive.toString());
+
+                const countEl = btn.querySelector('.reaction-count');
+                if (countEl) countEl.textContent = String(counts[type]);
+
+                btn.addEventListener('click', () => {
+                    const activeNow = btn.classList.contains('is-active');
+                    if (activeNow) {
+                        btn.classList.remove('is-active');
+                        btn.setAttribute('aria-pressed', 'false');
+                        counts[type] = Math.max(0, counts[type] - 1);
+                        userReactions = userReactions.filter(r => r !== type);
+                    } else {
+                        btn.classList.add('is-active');
+                        btn.setAttribute('aria-pressed', 'true');
+                        counts[type] = counts[type] + 1;
+                        if (!userReactions.includes(type)) {
+                            userReactions.push(type);
+                        }
+
+                        // Burst animation
+                        const badge = document.createElement('span');
+                        badge.className = 'reaction-float-badge';
+                        badge.textContent = '+1';
+                        btn.appendChild(badge);
+                        setTimeout(() => badge.remove(), 700);
+                    }
+
+                    if (countEl) countEl.textContent = String(counts[type]);
+
+                    try {
+                        localStorage.setItem(storageReactionsKey, JSON.stringify(userReactions));
+                        localStorage.setItem(storageCountsKey, JSON.stringify(counts));
+                    } catch {}
+                });
+            });
+
+            // Share button
+            const shareBtn = container.querySelector('#postShareBtn');
+            if (shareBtn && !shareBtn.dataset.bound) {
+                shareBtn.dataset.bound = 'true';
+                shareBtn.addEventListener('click', async () => {
+                    const url = window.location.href;
+                    try {
+                        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                            await navigator.clipboard.writeText(url);
+                        } else {
+                            const input = document.createElement('input');
+                            input.value = url;
+                            document.body.appendChild(input);
+                            input.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(input);
+                        }
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(window.wbT('post.share_copied', '文章链接已复制到剪贴板！'), 'success');
+                        }
+                    } catch {
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(url, 'info');
+                        }
+                    }
+                });
+            }
+        }
+
         document.addEventListener('page:ready', () => {
             initToc();
             updateScrollProgress();
+            initPostReactions(document);
         });
         document.addEventListener('pjax:complete', () => {
             initToc();
             closeMobileTocDrawer();
             updateScrollProgress();
+            initPostReactions(document);
         });
         document.addEventListener('sidebar:updated', initToc);
 
         bindSearchForms();
         decorateShortcutButtons();
+        initPostReactions(document);
         document.addEventListener('page:ready', () => {
             bindSearchForms();
             decorateShortcutButtons();
+            initPostReactions(document);
         });
     });
 })();

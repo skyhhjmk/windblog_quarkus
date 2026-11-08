@@ -244,6 +244,48 @@
                 {/for}
             </div>
 
+            <!-- Post Reactions & Feedback Section -->
+            <section class="post-reactions-container mt-10 pt-8 border-t border-border" data-post-slug="{postSlug}" aria-label="{i18n.t('post.reactions_title')}">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-sm font-bold text-main flex items-center gap-1.5">
+                            <span>✨</span>
+                            <span>{i18n.t('post.reactions_title')}</span>
+                        </h3>
+                        <p class="text-xs text-meta mt-0.5">{i18n.t('post.reactions_subtitle')}</p>
+                    </div>
+
+                    <!-- Reactions Buttons Group -->
+                    <div class="flex items-center flex-wrap gap-2" role="group" aria-label="{i18n.t('post.reactions_title')}">
+                        <button type="button" class="post-reaction-btn" data-reaction-type="like" title="{i18n.t('post.reaction_like')}" aria-label="{i18n.t('post.reaction_like')}">
+                            <span class="reaction-emoji">👍</span>
+                            <span class="reaction-count">0</span>
+                        </button>
+                        <button type="button" class="post-reaction-btn" data-reaction-type="heart" title="{i18n.t('post.reaction_heart')}" aria-label="{i18n.t('post.reaction_heart')}">
+                            <span class="reaction-emoji">❤️</span>
+                            <span class="reaction-count">0</span>
+                        </button>
+                        <button type="button" class="post-reaction-btn" data-reaction-type="rocket" title="{i18n.t('post.reaction_rocket')}" aria-label="{i18n.t('post.reaction_rocket')}">
+                            <span class="reaction-emoji">🚀</span>
+                            <span class="reaction-count">0</span>
+                        </button>
+                        <button type="button" class="post-reaction-btn" data-reaction-type="celebrate" title="{i18n.t('post.reaction_celebrate')}" aria-label="{i18n.t('post.reaction_celebrate')}">
+                            <span class="reaction-emoji">🎉</span>
+                            <span class="reaction-count">0</span>
+                        </button>
+                        <button type="button" class="post-reaction-btn" data-reaction-type="insightful" title="{i18n.t('post.reaction_insightful')}" aria-label="{i18n.t('post.reaction_insightful')}">
+                            <span class="reaction-emoji">💡</span>
+                            <span class="reaction-count">0</span>
+                        </button>
+
+                        <button type="button" id="postShareBtn" class="post-share-btn ml-1" title="{i18n.t('post.share_btn')}" aria-label="{i18n.t('post.share_btn')}">
+                            <svg class="w-3.5 h-3.5 text-meta transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                            <span class="text-xs font-semibold">{i18n.t('post.share_btn')}</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
         </article>
     </div>
 
