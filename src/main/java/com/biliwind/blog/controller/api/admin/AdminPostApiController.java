@@ -1071,12 +1071,37 @@ public class AdminPostApiController {
                 User operator = mustFindOperator();
                 PostRevision nextRevision = new PostRevision();
                 nextRevision.post = post;
-                nextRevision.title = nextTitle;
-                nextRevision.contentMarkdown = nextContent;
                 nextRevision.editorType = nextEditorType;
                 nextRevision.revisionNumber = nextRevisionNumber(post.id);
                 nextRevision.createdBy = operator;
                 nextRevision.createdAt = OffsetDateTime.now();
+
+                String defaultSourceLang = LanguageConstant.DEFAULT_LANG;
+                String sourceContent = LanguageHelper.resolveLocalizedValue(nextContent, defaultSourceLang);
+                if (sourceContent == null || sourceContent.isBlank()) {
+                    if (!nextContent.isEmpty()) {
+                        defaultSourceLang = nextContent.keySet().iterator().next();
+                        sourceContent = nextContent.get(defaultSourceLang);
+                    }
+                }
+
+                com.biliwind.blog.common.helper.MarkdownParagraphHelper.SyncResult syncResult =
+                        com.biliwind.blog.common.helper.MarkdownParagraphHelper.syncOnSourceUpdate(
+                                post,
+                                post.currentRevision,
+                                defaultSourceLang,
+                                sourceContent,
+                                nextTitle,
+                                post.summary,
+                                post.seoTitle,
+                                post.seoDescription,
+                                post.seoKeywords,
+                                nextContent
+                        );
+
+                nextRevision.title = nextTitle;
+                nextRevision.contentMarkdown = syncResult.contentMarkdown();
+                nextRevision.paragraphTranslations = syncResult.paragraphTranslations();
                 nextRevision.persist();
 
                 post.currentRevision = nextRevision;

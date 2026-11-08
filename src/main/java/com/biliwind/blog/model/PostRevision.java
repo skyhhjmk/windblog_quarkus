@@ -38,6 +38,11 @@ public class PostRevision extends PanacheEntityBase {
     @Column(name = "content_markdown", columnDefinition = "jsonb", nullable = false)
     public Map<String, String> contentMarkdown;
 
+    /** 各语言段落级翻译与源Hash映射 (JSONB) */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "paragraph_translations", columnDefinition = "jsonb")
+    public Map<String, com.biliwind.blog.model.translation.ParagraphTranslationMeta> paragraphTranslations;
+
 
     /** 编辑器类型：0Markdown，1HTML，2BlockEditor */
     @Column(name = "editor_type", nullable = false)

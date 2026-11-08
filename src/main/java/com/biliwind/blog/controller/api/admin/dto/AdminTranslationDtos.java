@@ -20,6 +20,9 @@ public final class AdminTranslationDtos {
             List<String> languages,
             String sourceLanguage,
             Boolean translated,
+            Boolean outdated,
+            Integer outdatedParagraphs,
+            Integer totalParagraphs,
             OffsetDateTime publishedAt,
             OffsetDateTime updatedAt) {
     }

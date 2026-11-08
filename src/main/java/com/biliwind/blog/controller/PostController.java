@@ -231,7 +231,23 @@ public class PostController {
         if (ampPageService.isEnabled() && snapshot.visibility() == 0 && postPrice <= 0) {
             ampUrl = buildAmpUrl(slug, contentLanguage);
         }
-        PostBodyView postBody = resolvePostBody(snapshot.renderType(), localizedContent);
+
+        com.biliwind.blog.model.translation.ParagraphTranslationMeta paragraphMeta = null;
+        if (postEntity != null && postEntity.publishedRevision != null
+                && postEntity.publishedRevision.paragraphTranslations != null) {
+            paragraphMeta = postEntity.publishedRevision.paragraphTranslations.get(resolvedLang);
+            if (paragraphMeta == null) {
+                for (var e : postEntity.publishedRevision.paragraphTranslations.entrySet()) {
+                    if (e.getKey().equalsIgnoreCase(resolvedLang)) {
+                        paragraphMeta = e.getValue();
+                        break;
+                    }
+                }
+            }
+        }
+        boolean isTranslationOutdated = paragraphMeta != null && paragraphMeta.outdated();
+
+        PostBodyView postBody = resolvePostBody(snapshot.renderType(), localizedContent, paragraphMeta);
         if (postBody.html()) {
             // Affiliate token issuance is intentionally kept off the public read model;
             // the source entity is loaded only when active commercial links exist.
@@ -299,7 +315,7 @@ public class PostController {
             displayTitle = slug;
         }
         String publicHtml = snapshot.postPrice() > 0 || protectedPage
-                ? resolvePostBody(snapshot.renderType(), publicPreview).body() : postBody.body();
+                ? resolvePostBody(snapshot.renderType(), publicPreview, paragraphMeta).body() : postBody.body();
         String seoTitle = resolveSeoTitle(snapshot, displayTitle, contentLanguage);
         String pageDescription = resolvePageDescription(
                 snapshot, localizedAiSummary, localizedContent, contentLanguage);
@@ -363,6 +379,7 @@ public class PostController {
                 .data("postSlug", slug)
                 .data("postCoverImageUrl", postCoverImageUrl)
                 .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())
+                .data("isTranslationOutdated", isTranslationOutdated)
                 .data("postTitle", displayTitle)
                 .data("pageTitle", seoTitle)
                 .data("pageDescription", pageDescription)
@@ -593,7 +610,8 @@ public class PostController {
     }
 
     private PostBodyView resolvePostBody(PostRenderType renderType,
-                                         String content) {
+                                         String content,
+                                         com.biliwind.blog.model.translation.ParagraphTranslationMeta meta) {
 
         if (content == null || content.isBlank()) {
             return new PostBodyView("", false, null);
@@ -606,7 +624,7 @@ public class PostController {
 
         return switch (effective) {
             case MARKDOWN, FLUTTER_MARKDOWN_PLUS ->
-                    new PostBodyView(MarkdownHelper.toHtml(content), true, effective);
+                    new PostBodyView(com.biliwind.blog.common.helper.MarkdownParagraphHelper.renderHtmlWithOutdatedMarkers(content, meta, null), true, effective);
             case VDITOR ->
                     new PostBodyView(publicContentSanitizer.sanitize(content), true, effective);
             case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL, TUTORIAL_BLOCK ->

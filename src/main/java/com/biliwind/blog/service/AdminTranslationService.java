@@ -3,6 +3,7 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.exception.BadRequestException;
 import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.MarkdownParagraphHelper;
 import com.biliwind.blog.common.helper.PostHelper;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslatePostResult;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.TranslationItem;
@@ -12,6 +13,7 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.model.translation.ParagraphTranslationMeta;
 import com.biliwind.blog.service.ai.AiManager;
 import com.biliwind.blog.service.ai.AiResult;
 import com.biliwind.blog.service.ai.MarkdownTranslationGuard;
@@ -99,8 +101,19 @@ public class AdminTranslationService {
                 + " nullif(btrim(p.title ->> :targetLanguageLower), ''), '') <> ''"
                 + " and coalesce(nullif(btrim(r.content_markdown ->> :targetLanguage), ''),"
                 + " nullif(btrim(r.content_markdown ->> :targetLanguageLower), ''), '') <> '')";
-        if ("translated".equalsIgnoreCase(translationStatus)) {
-            where.append(" and").append(translatedPredicate);
+        String outdatedPredicate = " (" + translatedPredicate + " and ("
+                + "coalesce(r.paragraph_translations -> :targetLanguage ->> 'outdated',"
+                + " r.paragraph_translations -> :targetLanguageLower ->> 'outdated') = 'true'))";
+        String strictlyTranslatedPredicate = " (" + translatedPredicate + " and not ("
+                + "coalesce(r.paragraph_translations -> :targetLanguage ->> 'outdated',"
+                + " r.paragraph_translations -> :targetLanguageLower ->> 'outdated') = 'true'))";
+
+        if ("outdated".equalsIgnoreCase(translationStatus)) {
+            where.append(" and").append(outdatedPredicate);
+            parameters.put("targetLanguage", target);
+            parameters.put("targetLanguageLower", target.toLowerCase(Locale.ROOT));
+        } else if ("translated".equalsIgnoreCase(translationStatus)) {
+            where.append(" and").append(strictlyTranslatedPredicate);
             parameters.put("targetLanguage", target);
             parameters.put("targetLanguageLower", target.toLowerCase(Locale.ROOT));
         } else if ("missing".equalsIgnoreCase(translationStatus)) {
@@ -169,11 +182,36 @@ public class AdminTranslationService {
         boolean alreadyTranslated = hasTranslation(post, target);
         boolean published = post.status == PostStatus.PUBLISHED
                 && sameRevision(post.publishedRevision, revision);
-        if (alreadyTranslated && !overwrite) {
+        ParagraphTranslationMeta existingMeta = null;
+        if (revision.paragraphTranslations != null) {
+            existingMeta = revision.paragraphTranslations.get(target);
+            if (existingMeta == null) {
+                for (Map.Entry<String, ParagraphTranslationMeta> entry : revision.paragraphTranslations.entrySet()) {
+                    if (entry.getKey().equalsIgnoreCase(target)) {
+                        existingMeta = entry.getValue();
+                        break;
+                    }
+                }
+            }
+        }
+        boolean isOutdated = false;
+        if (alreadyTranslated) {
+            if (existingMeta != null) {
+                isOutdated = existingMeta.outdated();
+            } else {
+                String sourceContentForCheck = LanguageHelper.resolveLocalizedValue(revision.contentMarkdown, sourceLanguage);
+                String targetContentForCheck = LanguageHelper.resolveLocalizedValue(revision.contentMarkdown, target);
+                var sBlocks = MarkdownParagraphHelper.splitBlocks(sourceContentForCheck);
+                var tBlocks = MarkdownParagraphHelper.splitBlocks(targetContentForCheck);
+                isOutdated = sBlocks.size() != tBlocks.size();
+            }
+        }
+
+        if (alreadyTranslated && !overwrite && !isOutdated) {
             return new PreparedTranslation(post.id, post.slug, null, target,
                     revision.id, revision.revisionNumber, post.version, true,
-                    "该文章已存在目标语言译本", published,
-                    null, null, null, null, null, null);
+                    "该文章已存在最新目标语言译本", published,
+                    null, null, null, null, null, null, null);
         }
 
         String source = resolveSourceLanguage(post, target, sourceLanguage);
@@ -194,45 +232,51 @@ public class AdminTranslationService {
         if (target.equalsIgnoreCase(source)) {
             throw new BadRequestException("源语言和目标语言不能相同");
         }
+
+        MarkdownParagraphHelper.IncrementalPrepResult prepResult =
+                MarkdownParagraphHelper.prepareTranslationFields(
+                        source, target, sourceTitle, sourceSummary == null ? "" : sourceSummary,
+                        sourceContent, sourceSeoTitle, sourceSeoDescription, sourceSeoKeywords,
+                        existingMeta, overwrite);
+
         return new PreparedTranslation(post.id, post.slug, source, target,
                 revision.id, revision.revisionNumber, post.version, false, null, published,
                 sourceTitle, sourceSummary == null ? "" : sourceSummary, sourceContent,
-                sourceSeoTitle, sourceSeoDescription, sourceSeoKeywords);
+                sourceSeoTitle, sourceSeoDescription, sourceSeoKeywords, prepResult);
     }
 
     private TranslatedFields translatePrepared(PreparedTranslation prepared) {
-        Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("title", prepared.sourceTitle());
-        fields.put("summary", prepared.sourceSummary());
-        fields.put("contentMarkdown", prepared.sourceContent());
-        putIfPresent(fields, "seoTitle", prepared.sourceSeoTitle());
-        putIfPresent(fields, "seoDescription", prepared.sourceSeoDescription());
-        putIfPresent(fields, "seoKeywords", prepared.sourceSeoKeywords());
-
+        Map<String, String> fields = prepared.prepResult().fieldsToTranslate();
         AiResult aiResult = requestTranslation(prepared.sourceLanguage(), prepared.targetLanguage(), fields);
-        String translatedTitle = required(aiResult, "title");
-        String translatedSummary = optional(aiResult, "summary");
-        String translatedContent = required(aiResult, "contentMarkdown");
-        String translatedSeoTitle = optional(aiResult, "seoTitle");
-        String translatedSeoDescription = optional(aiResult, "seoDescription");
-        String translatedSeoKeywords = optional(aiResult, "seoKeywords");
+        Map<String, String> result = aiResult.contents != null ? aiResult.contents : Map.of();
 
-        List<String> issues = MarkdownTranslationGuard.verify(prepared.sourceContent(), translatedContent);
-        if (!issues.isEmpty()) {
-            aiResult = requestTranslation(prepared.sourceLanguage(), prepared.targetLanguage(), fields, issues);
-            translatedTitle = required(aiResult, "title");
-            translatedSummary = optional(aiResult, "summary");
-            translatedContent = required(aiResult, "contentMarkdown");
-            translatedSeoTitle = optional(aiResult, "seoTitle");
-            translatedSeoDescription = optional(aiResult, "seoDescription");
-            translatedSeoKeywords = optional(aiResult, "seoKeywords");
-            issues = MarkdownTranslationGuard.verify(prepared.sourceContent(), translatedContent);
-            if (!issues.isEmpty()) {
-                throw new BadRequestException("AI 译文未保持原文 Markdown 结构: " + String.join("；", issues));
-            }
+        String translatedTitle = result.get("title");
+        if (translatedTitle == null || translatedTitle.isBlank()) {
+            translatedTitle = prepared.sourceTitle();
         }
+        String translatedSummary = result.get("summary");
+        if (translatedSummary == null) {
+            translatedSummary = "";
+        }
+        String translatedSeoTitle = result.get("seoTitle");
+        String translatedSeoDescription = result.get("seoDescription");
+        String translatedSeoKeywords = result.get("seoKeywords");
+
+        ParagraphTranslationMeta updatedMeta = MarkdownParagraphHelper.applyTranslationResult(
+                prepared.sourceLanguage(),
+                prepared.sourceTitle(),
+                prepared.sourceSummary(),
+                prepared.sourceSeoTitle(),
+                prepared.sourceSeoDescription(),
+                prepared.sourceSeoKeywords(),
+                prepared.prepResult().sourceBlocks(),
+                prepared.prepResult().currentParagraphs(),
+                result
+        );
+        String translatedContent = MarkdownParagraphHelper.assembleMarkdown(updatedMeta.paragraphs());
+
         return new TranslatedFields(translatedTitle, translatedSummary, translatedContent,
-                translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords, aiResult);
+                translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords, updatedMeta, aiResult);
     }
 
     private TranslatePostResult saveTranslation(PreparedTranslation prepared,
@@ -271,6 +315,14 @@ public class AdminTranslationService {
         nextRevision.post = post;
         nextRevision.title = nextTitle;
         nextRevision.contentMarkdown = nextContent;
+
+        Map<String, ParagraphTranslationMeta> nextTranslations = new LinkedHashMap<>();
+        if (revision.paragraphTranslations != null) {
+            nextTranslations.putAll(revision.paragraphTranslations);
+        }
+        nextTranslations.put(targetKey, translated.updatedMeta());
+        nextRevision.paragraphTranslations = nextTranslations;
+
         nextRevision.editorType = revision.editorType;
         nextRevision.revisionNumber = nextRevisionNumber(post.id);
         nextRevision.createdBy = operator;
@@ -313,7 +365,8 @@ public class AdminTranslationService {
                                        boolean skipped, String skipMessage, boolean published,
                                        String sourceTitle, String sourceSummary, String sourceContent,
                                        String sourceSeoTitle, String sourceSeoDescription,
-                                       String sourceSeoKeywords) {
+                                       String sourceSeoKeywords,
+                                       MarkdownParagraphHelper.IncrementalPrepResult prepResult) {
         TranslatePostResult skippedResult() {
             return new TranslatePostResult(postId, slug, null, targetLanguage, false, true,
                     published, revisionNumber, skipMessage, null, null, null);
@@ -322,6 +375,7 @@ public class AdminTranslationService {
 
     private record TranslatedFields(String title, String summary, String contentMarkdown,
                                     String seoTitle, String seoDescription, String seoKeywords,
+                                    ParagraphTranslationMeta updatedMeta,
                                     AiResult aiResult) {
     }
 
@@ -375,12 +429,31 @@ public class AdminTranslationService {
         List<String> sorted = new ArrayList<>(languages);
         sorted.sort(String::compareTo);
         String source = resolveSourceLanguage(post, target, null);
+
+        boolean translated = hasTranslation(post, target);
+        ParagraphTranslationMeta meta = null;
+        if (revision != null && revision.paragraphTranslations != null) {
+            meta = revision.paragraphTranslations.get(target);
+            if (meta == null) {
+                for (Map.Entry<String, ParagraphTranslationMeta> entry : revision.paragraphTranslations.entrySet()) {
+                    if (entry.getKey().equalsIgnoreCase(target)) {
+                        meta = entry.getValue();
+                        break;
+                    }
+                }
+            }
+        }
+        boolean outdated = meta != null && meta.outdated();
+        int outdatedParagraphs = meta != null ? meta.outdatedParagraphs() : 0;
+        int totalParagraphs = meta != null ? meta.totalParagraphs() : 0;
+
         return new TranslationItem(post.id, post.slug, post.title,
                 post.status == null ? PostStatus.DRAFT.getCode() : post.status.getCode(),
                 post.publishedRevision != null,
                 sameRevision(post.publishedRevision, revision),
                 revision == null ? 0 : revision.revisionNumber,
-                sorted, source, hasTranslation(post, target), post.publishedAt, post.updatedAt);
+                sorted, source, translated, outdated, outdatedParagraphs, totalParagraphs,
+                post.publishedAt, post.updatedAt);
     }
 
     private void addLanguages(Set<String> languages, Map<String, String> values) {
