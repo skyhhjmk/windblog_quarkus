@@ -68,6 +68,11 @@ public class CommentCaptchaService {
         return issue(Instant.now().getEpochSecond(), ttlSeconds(), difficulty());
     }
 
+    public Challenge issue(int difficulty) {
+        int boundedDifficulty = Math.clamp(difficulty, MIN_DIFFICULTY, MAX_DIFFICULTY);
+        return issue(Instant.now().getEpochSecond(), ttlSeconds(), boundedDifficulty);
+    }
+
     Challenge issue(long issuedAtEpochSeconds, int ttlSeconds, int difficulty) {
         byte[] nonce = new byte[NONCE_BYTES];
         random.nextBytes(nonce);
@@ -161,7 +166,7 @@ public class CommentCaptchaService {
         }
     }
 
-    static boolean hasLeadingZeroBits(byte[] digest, int bits) {
+    public static boolean hasLeadingZeroBits(byte[] digest, int bits) {
         if (digest == null || bits < 0 || digest.length * 8 < bits) {
             return false;
         }
