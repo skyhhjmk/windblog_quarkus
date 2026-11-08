@@ -37,7 +37,6 @@
     {#else}
         <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
     {/if}
-    <link rel="manifest" href="/manifest.webmanifest"/>
     <link rel="alternate" type="application/rss+xml" title="{config:siteTitle}" href="{languagePrefix}/feed"/>
 
     {#if canonicalUrl.or(null)}
@@ -307,13 +306,11 @@
         <!-- Primary Column -->
         <div id="pjax-container" class="flex-1 min-w-0">
             <div data-wb-ad-placement="content_top"></div>
-            <!--WINDBLOG_PJAX_CONTENT_START-->
             {#insert content}
                 <div class="flex items-center justify-center h-64 border border-dashed border-border rounded-lg">
                     <p class="text-sm text-gray-600 uppercase tracking-widest font-mono">Content Placeholder</p>
                 </div>
             {/insert}
-            <!--WINDBLOG_PJAX_CONTENT_END-->
             <div data-wb-ad-placement="content_bottom"></div>
         </div>
 
@@ -398,7 +395,7 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/main.js?v=article-transition-cover-20261106-v2" defer></script>
+<script src="/assets/js/main.js?v=article-transition-cover-20261108" defer></script>
 <script src="/assets/js/drag-character-trail.js?v=cover-grid-20261030" defer></script>
 <script src="/assets/js/ruler-hud.js?v=ruler-hud-20261107-snapfix" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>
@@ -412,6 +409,5 @@
 <script src="/assets/js/post-premium.js?v=attachment-20261102" defer></script>
 <script src="/assets/js/post-quote.js?v=i18n-20261029" defer></script>
 <script src="/assets/js/relax-games.js?v=relax-games-20261104-v2" defer></script>
-<script src="/assets/js/sw-register.js?v=sw-20261107-v1" defer></script>
 </body>
 </html>

@@ -2,6 +2,17 @@
 (function () {
     'use strict';
 
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
+        navigator.serviceWorker.getRegistrations()
+            .then(registrations => Promise.all(registrations.map(reg => reg.unregister().catch(() => false))))
+            .catch(() => {});
+    }
+    if (typeof caches !== 'undefined' && typeof caches.keys === 'function') {
+        caches.keys()
+            .then(keys => Promise.all(keys.filter(key => key.indexOf('windblog-') === 0).map(key => caches.delete(key))))
+            .catch(() => {});
+    }
+
     function ready(fn) {
         if (document.readyState !== 'loading') fn();
         else document.addEventListener('DOMContentLoaded', fn);
@@ -859,10 +870,9 @@
             }
         }
 
-        function finalizePjaxLoad(url, swSource) {
-            const eventDetail = { url: url, swSource: swSource || '' };
-            document.dispatchEvent(new CustomEvent('pjax:complete', { detail: eventDetail }));
-            document.dispatchEvent(new CustomEvent('pjax:end', { detail: eventDetail }));
+        function finalizePjaxLoad(url) {
+            document.dispatchEvent(new CustomEvent('pjax:complete', { detail: { url: url } }));
+            document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url } }));
         }
 
         function clampRectToViewport(rect) {
@@ -1628,12 +1638,10 @@
                 if (!response.headers.get('content-type')?.includes('text/html')) {
                     throw new Error('PJAX response is not HTML');
                 }
-                const swSource = response.headers.get('X-WindBlog-SW-Source') || '';
-                const effectiveResponseUrl = response.headers.get('X-WindBlog-Resolved-Url') || response.url || url;
-                const resolvedUrl = new URL(effectiveResponseUrl, window.location.href);
-                if (resolvedUrl.origin !== window.location.origin) {
+                if (new URL(response.url).origin !== window.location.origin) {
                     throw new Error('PJAX redirect leaves this site');
                 }
+                const resolvedUrl = new URL(response.url);
                 resolvedUrl.hash = new URL(url, window.location.href).hash;
                 url = resolvedUrl.href;
 
@@ -1669,7 +1677,7 @@
                         return;
                     }
                     navigationFinalized = true;
-                    finalizePjaxLoad(url, swSource);
+                    finalizePjaxLoad(url);
                 };
                 const isCurrentNavigation = function () {
                     return activePjaxController === requestController && !requestController.signal.aborted;
