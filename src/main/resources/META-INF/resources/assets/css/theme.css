@@ -727,6 +727,7 @@ input::placeholder {
     margin-bottom: 1.25rem;
     padding-bottom: 0.625rem;
     border-bottom: 2px solid var(--border);
+    scroll-margin-top: 5.5rem;
 }
 
 .prose h1::after {

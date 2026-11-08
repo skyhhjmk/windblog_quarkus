@@ -2642,6 +2642,239 @@
             });
         }
 
+        // ==========================================
+        // TOC & Mobile Floating Controls (Scrollspy, Mobile Drawer, Back to Top)
+        // ==========================================
+        let activeHeadingId = null;
+        let tocHeadings = [];
+
+        const mobileFloatingControls = document.getElementById('mobileFloatingControls');
+        const mobileTocBtn = document.getElementById('mobileTocBtn');
+        const mobileBackToTopBtn = document.getElementById('mobileBackToTopBtn');
+        const mobileProgressCirclePath = document.getElementById('mobileScrollProgressPath');
+        const mobileTocDrawer = document.getElementById('mobileTocDrawer');
+        const mobileTocBackdrop = document.getElementById('mobileTocBackdrop');
+        const mobileTocCloseBtn = document.getElementById('mobileTocCloseBtn');
+        const mobileTocContent = document.getElementById('mobileTocContent');
+
+        const isMobileTocDrawerOpen = () => {
+            return !!(mobileTocDrawer && mobileTocDrawer.classList.contains('mobile-drawer-open'));
+        };
+
+        const openMobileTocDrawer = () => {
+            if (!mobileTocDrawer) return;
+            mobileTocDrawer.classList.add('mobile-drawer-open');
+            mobileTocDrawer.setAttribute('aria-hidden', 'false');
+            if (mobileTocBackdrop) {
+                mobileTocBackdrop.classList.add('mobile-backdrop-open');
+            }
+            if (mobileTocBtn) {
+                mobileTocBtn.setAttribute('aria-expanded', 'true');
+            }
+            document.body.style.overflow = 'hidden';
+        };
+
+        const closeMobileTocDrawer = (restoreFocus = false) => {
+            if (!mobileTocDrawer) return;
+            mobileTocDrawer.classList.remove('mobile-drawer-open');
+            mobileTocDrawer.setAttribute('aria-hidden', 'true');
+            if (mobileTocBackdrop) {
+                mobileTocBackdrop.classList.remove('mobile-backdrop-open');
+            }
+            if (mobileTocBtn) {
+                mobileTocBtn.setAttribute('aria-expanded', 'false');
+                if (restoreFocus) mobileTocBtn.focus();
+            }
+            document.body.style.overflow = '';
+        };
+
+        mobileTocBtn?.addEventListener('click', openMobileTocDrawer);
+        mobileTocCloseBtn?.addEventListener('click', () => closeMobileTocDrawer(true));
+        mobileTocBackdrop?.addEventListener('click', () => closeMobileTocDrawer(false));
+
+        mobileBackToTopBtn?.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isMobileTocDrawerOpen()) {
+                closeMobileTocDrawer(true);
+            }
+        });
+
+        function initToc() {
+            const content = document.querySelector('.prose') || document.querySelector('#post-content-section');
+            const desktopTocWidget = document.getElementById('toc-widget');
+            const desktopTocContent = document.getElementById('toc-content');
+
+            if (!content) {
+                if (desktopTocWidget) desktopTocWidget.classList.add('hidden');
+                if (mobileTocBtn) mobileTocBtn.classList.add('hidden');
+                closeMobileTocDrawer();
+                tocHeadings = [];
+                activeHeadingId = null;
+                return;
+            }
+
+            const rawHeadings = Array.from(content.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+                .filter(h => h.textContent.trim().length > 0 && !h.closest('.not-prose, #comment-section'));
+
+            if (rawHeadings.length < 2) {
+                if (desktopTocWidget) desktopTocWidget.classList.add('hidden');
+                if (mobileTocBtn) mobileTocBtn.classList.add('hidden');
+                closeMobileTocDrawer();
+                tocHeadings = [];
+                activeHeadingId = null;
+                return;
+            }
+
+            tocHeadings = rawHeadings;
+
+            if (desktopTocWidget) desktopTocWidget.classList.remove('hidden');
+            if (mobileTocBtn) mobileTocBtn.classList.remove('hidden');
+
+            const minLevel = Math.min(...tocHeadings.map(h => parseInt(h.tagName[1], 10) || 2));
+
+            if (desktopTocContent) desktopTocContent.replaceChildren();
+            if (mobileTocContent) mobileTocContent.replaceChildren();
+
+            tocHeadings.forEach((heading, index) => {
+                const id = heading.id || ('heading-' + index);
+                heading.id = id;
+
+                const level = parseInt(heading.tagName[1], 10) || minLevel;
+                const indent = Math.max(0, level - minLevel);
+                const titleText = heading.textContent.trim();
+
+                // Desktop link
+                if (desktopTocContent) {
+                    const dLink = document.createElement('a');
+                    dLink.href = '#' + id;
+                    dLink.className = 'toc-link';
+                    dLink.style.paddingLeft = `${indent * 0.75 + 0.5}rem`;
+                    dLink.dataset.headingId = id;
+                    dLink.title = titleText;
+                    dLink.textContent = titleText;
+                    dLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        heading.scrollIntoView({ behavior: 'smooth' });
+                        history.replaceState(null, '', '#' + id);
+                    });
+                    desktopTocContent.appendChild(dLink);
+                }
+
+                // Mobile link
+                if (mobileTocContent) {
+                    const mLink = document.createElement('a');
+                    mLink.href = '#' + id;
+                    mLink.className = 'toc-link';
+                    mLink.style.paddingLeft = `${indent * 0.75 + 0.65}rem`;
+                    mLink.dataset.headingId = id;
+                    mLink.title = titleText;
+                    mLink.textContent = titleText;
+                    mLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        closeMobileTocDrawer();
+                        heading.scrollIntoView({ behavior: 'smooth' });
+                        history.replaceState(null, '', '#' + id);
+                    });
+                    mobileTocContent.appendChild(mLink);
+                }
+            });
+
+            updateScrollspy();
+        }
+
+        function setActiveHeading(id) {
+            if (activeHeadingId === id) return;
+            activeHeadingId = id;
+
+            const allLinks = document.querySelectorAll('.toc-link');
+            allLinks.forEach(link => {
+                if (link.dataset.headingId === id) {
+                    link.classList.add('is-active');
+                    const container = link.closest('#toc-content, #mobileTocContent');
+                    if (container) {
+                        const linkTop = link.offsetTop;
+                        const containerScroll = container.scrollTop;
+                        const containerHeight = container.clientHeight;
+                        if (linkTop < containerScroll || linkTop > containerScroll + containerHeight - 36) {
+                            container.scrollTo({ top: Math.max(0, linkTop - 36), behavior: 'smooth' });
+                        }
+                    }
+                } else {
+                    link.classList.remove('is-active');
+                }
+            });
+        }
+
+        function updateScrollspy() {
+            if (!tocHeadings || tocHeadings.length === 0) return;
+
+            const scrollY = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight;
+            const docHeight = document.documentElement.scrollHeight;
+
+            if (scrollY + windowHeight >= docHeight - 40) {
+                setActiveHeading(tocHeadings[tocHeadings.length - 1].id);
+                return;
+            }
+
+            const offset = 95;
+            let currentId = tocHeadings[0].id;
+            for (let i = 0; i < tocHeadings.length; i++) {
+                const rect = tocHeadings[i].getBoundingClientRect();
+                if (rect.top <= offset) {
+                    currentId = tocHeadings[i].id;
+                } else {
+                    break;
+                }
+            }
+            setActiveHeading(currentId);
+        }
+
+        function updateScrollProgress() {
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = scrollHeight > 0 ? Math.min(1, Math.max(0, scrollTop / scrollHeight)) : 0;
+
+            if (mobileBackToTopBtn) {
+                if (scrollTop > 280) {
+                    mobileBackToTopBtn.classList.add('is-visible');
+                } else {
+                    mobileBackToTopBtn.classList.remove('is-visible');
+                }
+            }
+
+            if (mobileProgressCirclePath) {
+                const dashoffset = Math.max(0, 100 - (progress * 100));
+                mobileProgressCirclePath.style.strokeDashoffset = dashoffset;
+            }
+        }
+
+        let scrollTicking = false;
+        window.addEventListener('scroll', () => {
+            if (!scrollTicking) {
+                window.requestAnimationFrame(() => {
+                    updateScrollspy();
+                    updateScrollProgress();
+                    scrollTicking = false;
+                });
+                scrollTicking = true;
+            }
+        }, { passive: true });
+
+        document.addEventListener('page:ready', () => {
+            initToc();
+            updateScrollProgress();
+        });
+        document.addEventListener('pjax:complete', () => {
+            initToc();
+            closeMobileTocDrawer();
+            updateScrollProgress();
+        });
+        document.addEventListener('sidebar:updated', initToc);
+
         bindSearchForms();
         decorateShortcutButtons();
         document.addEventListener('page:ready', () => {

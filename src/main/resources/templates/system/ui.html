@@ -30,3 +30,53 @@
         <div class="h-1 w-full bg-gradient-to-r from-transparent via-accent to-transparent opacity-30"></div>
     </div>
 </div>
+
+<!-- Mobile Floating Controls (TOC & Back to Top) -->
+<div id="mobileFloatingControls" class="mobile-floating-controls lg:hidden" aria-label="{i18n.t('common.floating_controls', '快捷导航')}">
+    <!-- Mobile TOC Floating Button (only active on articles with TOC) -->
+    <button type="button" id="mobileTocBtn" class="mobile-floating-btn mobile-toc-fab hidden"
+            aria-label="{i18n.t('sidebar.toc', '文章目录')}" title="{i18n.t('sidebar.toc', '文章目录')}"
+            aria-controls="mobileTocDrawer" aria-expanded="false">
+        <svg class="w-5 h-5 text-main transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h14"/>
+        </svg>
+    </button>
+
+    <!-- Mobile Back to Top Button with Circular Progress -->
+    <button type="button" id="mobileBackToTopBtn" class="mobile-floating-btn mobile-back-to-top-fab"
+            aria-label="{i18n.t('common.back_to_top', '回到顶部')}" title="{i18n.t('common.back_to_top', '回到顶部')}">
+        <svg class="progress-ring" viewBox="0 0 36 36" aria-hidden="true">
+            <path class="progress-ring-bg" stroke-width="2.5" fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+            <path id="mobileScrollProgressPath" class="progress-ring-indicator" stroke-width="2.5" stroke-dasharray="100, 100" stroke-dashoffset="100" stroke-linecap="round" fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+        </svg>
+        <svg class="w-4 h-4 text-main relative z-10 transition-transform group-hover:-translate-y-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+        </svg>
+    </button>
+</div>
+
+<!-- Mobile TOC Drawer Backdrop -->
+<div id="mobileTocBackdrop" class="mobile-drawer-backdrop lg:hidden" aria-hidden="true"></div>
+
+<!-- Mobile TOC Side Drawer (移动端文章目录侧向滑出抽屉) -->
+<div id="mobileTocDrawer" role="dialog" aria-modal="true" aria-label="{i18n.t('sidebar.toc', '文章目录')}" aria-hidden="true"
+     class="mobile-side-drawer lg:hidden">
+    <!-- Drawer Header -->
+    <div class="h-16 px-6 border-b border-border flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2.5">
+            <div class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"></div>
+            <h3 class="text-sm font-bold tracking-wider text-main uppercase font-mono">{i18n.t('sidebar.toc', '文章目录')}</h3>
+        </div>
+        <button type="button" id="mobileTocCloseBtn" aria-label="{i18n.t('common.close', '关闭')}" title="{i18n.t('common.close', '关闭')}"
+                class="w-9 h-9 rounded-lg flex items-center justify-center text-meta hover:text-main hover:bg-hover-surface transition-colors border border-border/40 shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    </div>
+
+    <!-- Drawer Scrollable TOC Content -->
+    <div id="mobileTocContent" class="flex-1 overflow-y-auto px-5 py-5 space-y-1 custom-scrollbar text-xs">
+        <!-- JS populates items here -->
+    </div>
+</div>

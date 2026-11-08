@@ -146,10 +146,10 @@
     </script>
 
     <!-- Custom Theme Styles -->
-    <link rel="stylesheet" href="/assets/css/theme.css?v=article-lightbox-close-20261108" />
+    <link rel="stylesheet" href="/assets/css/theme.css?v=article-toc-scroll-20261108" />
     <link rel="stylesheet" href="/assets/css/drag-character-trail.css?v=card-rainbow-20261108" />
     <link rel="stylesheet" href="/assets/css/ruler-hud.css?v=ruler-hud-20261106-elastic" />
-    <link rel="stylesheet" href="/assets/css/ui.css?v=mobile-drawer-20261108"/>
+    <link rel="stylesheet" href="/assets/css/ui.css?v=toc-and-floating-controls-20261108"/>
     <link rel="stylesheet" href="/assets/css/post-quote.css?v=theme-audit-20261029"/>
     <link rel="stylesheet" href="/assets/css/relax-games.css?v=relax-games-20261104-v2"/>
 </head>
@@ -386,7 +386,7 @@
         </div>
 
         <!-- Sidebar Column (Asymmetric 3:1 approx) -->
-        <aside id="sidebar-container" class="w-full md:w-[320px] shrink-0">
+        <aside id="sidebar-container" class="w-full md:w-[320px] shrink-0 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6.5rem)] md:overflow-y-auto custom-scrollbar">
             <div data-wb-ad-placement="sidebar"></div>
             {#insert sidebar}
                 <div class="space-y-12">
@@ -466,7 +466,7 @@
 
 <!-- JS Scripts -->
 <script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/main.js?v=mobile-drawer-20261108" defer></script>
+<script src="/assets/js/main.js?v=toc-and-floating-controls-20261108" defer></script>
 <script src="/assets/js/drag-character-trail.js?v=card-rainbow-20261108" defer></script>
 <script src="/assets/js/ruler-hud.js?v=ruler-hud-20261107-snapfix" defer></script>
 <script src="/assets/js/internal-link-graph.js?v=20261016-1" defer></script>
