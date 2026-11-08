@@ -9,7 +9,7 @@
 (function () {
     'use strict';
 
-    const CACHE_VERSION = '20261107-v2';
+    const CACHE_VERSION = '20261108-v1';
     const CACHE_PREFIX = 'windblog-';
     const STATIC_CACHE = CACHE_PREFIX + 'static-' + CACHE_VERSION;
     const MEDIA_CACHE = CACHE_PREFIX + 'media-' + CACHE_VERSION;

@@ -34,8 +34,9 @@ Web Serial 目前只在 Chromium 系浏览器中可用（Chrome、Edge 等），
 - 脚本：`tools.js` 末尾的 `Web Serial terminal` IIFE。
 - xterm 资源：`assets/vendor/xterm/`（`@xterm/xterm@5.5.0` 与
   `@xterm/addon-fit@0.10.0`），只在串口页面首次进入时动态加载。
-- PJAX 生命周期：`page:ready` 初始化，`pjax:start` 关闭串口并释放终端；导航离开后
-  不会残留打开的端口。
+- PJAX 与页面卸载生命周期：`page:ready` 初始化，`pjax:start` / `pagehide` / `beforeunload`
+  关闭串口、释放读写流锁并销毁终端；当打开或关闭失败时通过 `port.forget()` 强制重置
+  Chromium `SerialPort` 内部句柄，避免单次连接失败或异常断开后无法再次打开串口。
 
 ## 常见问题
 

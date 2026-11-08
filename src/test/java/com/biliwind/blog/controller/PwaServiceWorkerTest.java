@@ -130,4 +130,18 @@ class PwaServiceWorkerTest {
         assertTrue(rulerHudJs.contains("secScale: secScale") && rulerHudJs.contains("st.secScale"),
                 "ruler-hud.js must persist per-section secScale and use it during flip auto-snap");
     }
+
+    @Test
+    void webSerialTerminalRecoversPortStateOnOpenAndReadFailure() throws IOException {
+        String toolsJs = Files.readString(
+                Path.of("src/main/resources/META-INF/resources/assets/js/tools.js"),
+                StandardCharsets.UTF_8);
+
+        assertTrue(toolsJs.contains("openPortWithRecovery"),
+                "tools.js must open serial ports through openPortWithRecovery");
+        assertTrue(toolsJs.contains("forceClosePort"),
+                "tools.js must release stream locks and close/forget failed serial ports");
+        assertTrue(toolsJs.contains("port.forget()"),
+                "tools.js must call port.forget() to reset Chromium SerialPort Mojo bindings after open/close failures");
+    }
 }

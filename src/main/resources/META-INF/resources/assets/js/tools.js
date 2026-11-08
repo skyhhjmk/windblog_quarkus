@@ -3007,6 +3007,7 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
 
     let assetPromise = null;
     let activeDispose = null;
+    let pendingDisposePromise = null;
     let initToken = 0;
 
     function initWebSerial() {
@@ -3044,7 +3045,14 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         activeDispose = null;
         if (typeof dispose === 'function') {
             try {
-                dispose();
+                const result = dispose();
+                if (result && typeof result.then === 'function') {
+                    pendingDisposePromise = result.catch(() => {}).finally(() => {
+                        if (pendingDisposePromise === result) {
+                            pendingDisposePromise = null;
+                        }
+                    });
+                }
             } catch (error) {
                 // Navigation is already in progress.
             }
@@ -3150,12 +3158,23 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         term.open(screenEl);
         safeFit();
 
+        const RECOVERABLE_READ_ERRORS = new Set([
+            'BreakError',
+            'FramingError',
+            'ParityError',
+            'BufferOverrunError'
+        ]);
+
         const state = {
             term,
             fitAddon,
             port: null,
             reader: null,
             writer: null,
+            readLoopPromise: null,
+            closePromise: null,
+            pendingWrites: 0,
+            connecting: false,
             closing: false,
             disposed: false,
             resizeTimer: null
@@ -3235,9 +3254,9 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         }
 
         function refreshButtons() {
-            const connected = !!state.port;
-            ui.connect.disabled = connected;
-            ui.disconnect.disabled = !connected;
+            const connected = !!state.port && !state.closing;
+            ui.connect.disabled = connected || state.connecting || state.closing;
+            ui.disconnect.disabled = !connected || state.connecting || state.closing;
         }
 
         function applyLineEnding(data) {
@@ -3249,6 +3268,158 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
             return normalized.replace(/\n/g, '\r\n');
         }
 
+        async function withTimeout(promise, ms) {
+            let timer = null;
+            try {
+                return await Promise.race([
+                    promise,
+                    new Promise(resolve => {
+                        timer = setTimeout(resolve, ms);
+                    })
+                ]);
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+        }
+
+        async function releasePortStreams(reader, writer, readLoopPromise, hasPendingWrites) {
+            if (reader) {
+                try {
+                    await withTimeout(reader.cancel(), 300);
+                } catch (error) {
+                    // The stream may already be errored or closed.
+                }
+                try {
+                    reader.releaseLock();
+                } catch (error) {
+                    // The reader lock may already be released.
+                }
+            }
+            if (readLoopPromise) {
+                try {
+                    await withTimeout(readLoopPromise, 300);
+                } catch (error) {
+                    // Errors are handled inside readSerialLoop.
+                }
+            }
+            if (writer) {
+                if (hasPendingWrites) {
+                    try {
+                        await withTimeout(writer.abort(), 200);
+                    } catch (error) {
+                        // Ignore abort error on disconnected or errored streams.
+                    }
+                }
+                try {
+                    writer.releaseLock();
+                } catch (error) {
+                    try {
+                        await withTimeout(writer.abort(), 200);
+                    } catch (_) {
+                        // Ignore abort error.
+                    }
+                    try {
+                        writer.releaseLock();
+                    } catch (_) {
+                        // Ignore releaseLock error.
+                    }
+                }
+            }
+        }
+
+        async function forceClosePort(port, options) {
+            if (!port) return;
+            const opts = options || {};
+            await releasePortStreams(
+                opts.reader,
+                opts.writer,
+                opts.readLoopPromise,
+                Boolean(opts.hasPendingWrites)
+            );
+            let closeFailed = false;
+            if (port.readable || port.writable || !opts.onlyIfOpen) {
+                try {
+                    const closed = await withTimeout(
+                        port.close().then(() => true),
+                        500
+                    );
+                    if (closed !== true) {
+                        closeFailed = true;
+                    }
+                } catch (error) {
+                    closeFailed = true;
+                }
+            }
+            // In Chromium, a failed SerialPort.open() or an interrupted close can leave
+            // the Blink SerialPort's Mojo remote/client receiver bound or keep the OS
+            // device descriptor open inside SerialIoHandler. Calling port.forget()
+            // revokes the port in SerialService, tearing down SerialPortImpl/SerialIoHandler
+            // and triggering SerialPort::OnConnectionError() to reset Blink's state.
+            if ((opts.alwaysForget || (closeFailed && opts.forgetOnError !== false))
+                && typeof port.forget === 'function') {
+                try {
+                    await withTimeout(port.forget(), 300);
+                } catch (error) {
+                    // Ignore forget failure on browsers that do not implement it.
+                }
+            }
+        }
+
+        async function openPortWithRecovery(port, options) {
+            if (pendingDisposePromise) {
+                try {
+                    await pendingDisposePromise;
+                } catch (error) {
+                    // Ignore previous dispose error.
+                }
+            }
+            if (state.closePromise) {
+                try {
+                    await state.closePromise;
+                } catch (error) {
+                    // Ignore previous close error.
+                }
+            }
+            if ('serial' in navigator && typeof navigator.serial.getPorts === 'function') {
+                try {
+                    const grantedPorts = await navigator.serial.getPorts();
+                    for (const grantedPort of grantedPorts) {
+                        if (grantedPort && grantedPort !== port && (grantedPort.readable || grantedPort.writable)) {
+                            await forceClosePort(grantedPort, {
+                                onlyIfOpen: true,
+                                forgetOnError: true,
+                                alwaysForget: false
+                            });
+                        }
+                    }
+                } catch (error) {
+                    // Ignore getPorts inspection errors.
+                }
+            }
+            if (port.readable || port.writable) {
+                await forceClosePort(port, {
+                    onlyIfOpen: true,
+                    forgetOnError: false,
+                    alwaysForget: false
+                });
+            }
+            try {
+                await port.open(options);
+            } catch (firstError) {
+                if (firstError && firstError.name === 'InvalidStateError') {
+                    await forceClosePort(port, {
+                        onlyIfOpen: false,
+                        forgetOnError: false,
+                        alwaysForget: false
+                    });
+                    await new Promise(resolve => setTimeout(resolve, 80));
+                    await port.open(options);
+                    return;
+                }
+                throw firstError;
+            }
+        }
+
         async function connectSerial(event) {
             if (event) event.preventDefault();
             hideError();
@@ -3257,34 +3428,68 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
                 setStatus('浏览器不支持 Web Serial', 'error');
                 return;
             }
-            if (state.port) return;
+            if (state.port || state.connecting || state.closing) return;
 
             const label = ui.connect.innerHTML;
-            ui.connect.disabled = true;
+            state.connecting = true;
+            refreshButtons();
             ui.connect.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>等待选择串口…';
+            setStatus('等待选择串口…', 'connecting');
+            let selectedPort = null;
             try {
-                const port = await navigator.serial.requestPort();
-                await port.open({
+                selectedPort = await navigator.serial.requestPort();
+                if (state.disposed) {
+                    await forceClosePort(selectedPort, { onlyIfOpen: true, alwaysForget: true });
+                    return;
+                }
+                ui.connect.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>正在打开串口…';
+                setStatus('正在打开串口…', 'connecting');
+                const openOptions = {
                     baudRate: Number(ui.baudRate.value || 115200),
                     dataBits: Number(ui.dataBits.value || 8),
                     stopBits: Number(ui.stopBits.value || 1),
                     parity: ui.parity.value || 'none',
                     flowControl: ui.flowControl.value || 'none'
-                });
-                state.port = port;
+                };
+                await openPortWithRecovery(selectedPort, openOptions);
+                if (state.disposed) {
+                    await forceClosePort(selectedPort, { onlyIfOpen: true, alwaysForget: true });
+                    return;
+                }
+                state.port = selectedPort;
                 state.closing = false;
-                state.writer = port.writable.getWriter();
-                state.reader = port.readable.getReader();
+                state.pendingWrites = 0;
+                state.writer = selectedPort.writable ? selectedPort.writable.getWriter() : null;
                 ui.connectionInfo.textContent = ui.baudRate.value + ' ' + ui.dataBits.value
                     + (ui.parity.value === 'none' ? 'N' : (ui.parity.value === 'even' ? 'E' : 'O'))
                     + ui.stopBits.value;
                 setStatus('串口已连接', 'online');
                 term.writeln('');
                 term.writeln('\x1b[32m[串口已连接]\x1b[0m ' + ui.connectionInfo.textContent);
-                refreshButtons();
-                readSerialLoop(port);
+                state.readLoopPromise = readSerialLoop(selectedPort);
             } catch (error) {
-                if (error && error.name === 'NotFoundError') {
+                if (selectedPort) {
+                    const reader = state.reader;
+                    const writer = state.writer;
+                    const readLoopPromise = state.readLoopPromise;
+                    const hasPendingWrites = state.pendingWrites > 0;
+                    state.reader = null;
+                    state.writer = null;
+                    state.readLoopPromise = null;
+                    state.port = null;
+                    state.closing = false;
+                    state.pendingWrites = 0;
+                    await forceClosePort(selectedPort, {
+                        reader,
+                        writer,
+                        readLoopPromise,
+                        hasPendingWrites,
+                        onlyIfOpen: false,
+                        alwaysForget: true
+                    });
+                    await new Promise(resolve => setTimeout(resolve, 60));
+                }
+                if (error && (error.name === 'NotFoundError' || error.name === 'AbortError')) {
                     showError('未选择串口设备');
                     setStatus('未连接', 'idle');
                 } else if (error && error.name === 'SecurityError') {
@@ -3295,71 +3500,114 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
                     setStatus('串口连接失败', 'error');
                 }
             } finally {
+                state.connecting = false;
                 ui.connect.innerHTML = label;
                 refreshButtons();
             }
         }
 
         async function readSerialLoop(port) {
-            const reader = state.reader;
-            if (!reader) return;
-            try {
-                while (!state.closing) {
-                    const result = await reader.read();
-                    if (result.done) break;
-                    if (result.value && result.value.length) {
-                        term.write(result.value);
+            let fatalError = null;
+            while (!state.closing && state.port === port && port.readable) {
+                let reader = null;
+                try {
+                    reader = port.readable.getReader();
+                    state.reader = reader;
+                    while (!state.closing && state.port === port) {
+                        const result = await reader.read();
+                        if (result.done) break;
+                        if (result.value && result.value.length) {
+                            term.write(result.value);
+                        }
+                    }
+                    break;
+                } catch (error) {
+                    if (state.closing || state.port !== port) {
+                        break;
+                    }
+                    if (error && RECOVERABLE_READ_ERRORS.has(error.name) && port.readable) {
+                        await new Promise(resolve => setTimeout(resolve, 30));
+                        continue;
+                    }
+                    fatalError = error;
+                    break;
+                } finally {
+                    if (reader) {
+                        try {
+                            reader.releaseLock();
+                        } catch (error) {
+                            // The reader lock may already be released.
+                        }
+                        if (state.reader === reader) {
+                            state.reader = null;
+                        }
                     }
                 }
-            } catch (error) {
-                if (!state.closing) {
-                    term.writeln('\r\n\x1b[31m[串口读取失败]\x1b[0m ' + (error && error.message ? error.message : ''));
-                    showError('串口读取失败：' + (error && error.message ? error.message : '未知错误'));
-                    setStatus('串口读取失败', 'error');
-                }
             }
-            if (port === state.port) {
-                await closeSerial();
-                setStatus('串口已断开', 'idle');
+
+            if (fatalError && !state.closing) {
+                term.writeln('\r\n\x1b[31m[串口读取失败]\x1b[0m ' + (fatalError.message || ''));
+                showError('串口读取失败：' + (fatalError.message || '未知错误'));
+                setStatus('串口读取失败', 'error');
+            }
+            state.readLoopPromise = null;
+            if (port === state.port && !state.closing) {
+                await closeSerial({ forget: true });
+                if (!fatalError) {
+                    setStatus('串口已断开', 'idle');
+                }
             }
         }
 
-        async function closeSerial() {
-            if (!state.port) return;
-            state.closing = true;
+        async function closeSerial(options) {
+            if (state.closePromise) {
+                return state.closePromise;
+            }
+            const port = state.port;
             const reader = state.reader;
             const writer = state.writer;
-            const port = state.port;
+            const readLoopPromise = state.readLoopPromise;
+            const hasPendingWrites = state.pendingWrites > 0;
+            if (!port && !reader && !writer) {
+                state.closing = false;
+                refreshButtons();
+                return;
+            }
+            state.closing = true;
             state.reader = null;
             state.writer = null;
-            state.port = null;
-            try {
-                if (reader) {
-                    await reader.cancel();
-                    reader.releaseLock();
-                }
-            } catch (error) {
-                // The reader may already be released by the browser.
-            }
-            try {
-                if (writer) {
-                    writer.releaseLock();
-                }
-            } catch (error) {
-                // The writer may already be released.
-            }
-            try {
-                await port.close();
-            } catch (error) {
-                // The device may already be gone.
-            }
-            ui.connectionInfo.textContent = '';
+            state.readLoopPromise = null;
+            state.pendingWrites = 0;
             refreshButtons();
+
+            const forgetPort = !options || options.forget !== false;
+            state.closePromise = (async () => {
+                try {
+                    await forceClosePort(port, {
+                        reader,
+                        writer,
+                        readLoopPromise,
+                        hasPendingWrites,
+                        onlyIfOpen: true,
+                        forgetOnError: true,
+                        alwaysForget: forgetPort
+                    });
+                } finally {
+                    if (state.port === port) {
+                        state.port = null;
+                    }
+                    state.closing = false;
+                    state.closePromise = null;
+                    ui.connectionInfo.textContent = '';
+                    refreshButtons();
+                }
+            })();
+            return state.closePromise;
         }
 
         ui.form.addEventListener('submit', connectSerial);
         ui.disconnect.addEventListener('click', async () => {
-            await closeSerial();
+            await closeSerial({ forget: true });
             setStatus('串口已断开', 'idle');
         });
         ui.clear.addEventListener('click', () => term.clear());
@@ -3382,10 +3630,18 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         });
 
         term.onData(data => {
-            if (!state.writer) return;
-            state.writer.write(new TextEncoder().encode(applyLineEnding(data))).catch(() => {
-                setStatus('串口写入失败', 'error');
-            });
+            if (!state.writer || state.closing) return;
+            const writer = state.writer;
+            state.pendingWrites++;
+            writer.write(new TextEncoder().encode(applyLineEnding(data)))
+                .catch(() => {
+                    if (!state.closing) {
+                        setStatus('串口写入失败', 'error');
+                    }
+                })
+                .finally(() => {
+                    state.pendingWrites = Math.max(0, state.pendingWrites - 1);
+                });
         });
 
         const resizeObserver = new ResizeObserver(() => {
@@ -3396,7 +3652,7 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
 
         function onSerialDisconnect(event) {
             if (event && event.target === state.port) {
-                closeSerial();
+                closeSerial({ forget: true });
                 setStatus('串口设备已移除', 'error');
             }
         }
@@ -3409,19 +3665,20 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         setStatus('未连接', 'idle');
 
         activeDispose = function () {
-            if (state.disposed) return;
+            if (state.disposed) return null;
             state.disposed = true;
             if (state.resizeTimer) clearTimeout(state.resizeTimer);
             resizeObserver.disconnect();
             if ('serial' in navigator) {
                 navigator.serial.removeEventListener('disconnect', onSerialDisconnect);
             }
-            closeSerial();
+            const closingPromise = closeSerial({ forget: true });
             try {
                 term.dispose();
             } catch (error) {
                 // Already disposed.
             }
+            return closingPromise;
         };
     }
 
@@ -3435,6 +3692,8 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
     }
 
     document.addEventListener('pjax:start', disposeActive);
+    window.addEventListener('pagehide', disposeActive);
+    window.addEventListener('beforeunload', disposeActive);
 
     if (document.readyState !== 'loading') {
         initWebSerial();

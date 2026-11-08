@@ -127,6 +127,14 @@ class ToolsControllerTest {
                 .body(containsString("Web Serial 串口终端"))
                 .body(containsString("serialToolApp"))
                 .body(containsString("tools.js"));
+
+        given()
+                .when().get("/assets/js/tools.js")
+                .then()
+                .statusCode(200)
+                .body(containsString("openPortWithRecovery"))
+                .body(containsString("forceClosePort"))
+                .body(containsString("port.forget()"));
     }
 
     @Test
