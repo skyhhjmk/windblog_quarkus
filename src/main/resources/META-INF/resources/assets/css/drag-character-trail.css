@@ -4,7 +4,7 @@ body {
 
 #windblog-drag-character-trail {
     position: fixed;
-    z-index: -1;
+    z-index: 20;
     inset: 0;
     display: block;
     width: 100%;

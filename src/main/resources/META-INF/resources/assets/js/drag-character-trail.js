@@ -22,13 +22,31 @@
     }
 
     let accentColor = '#0ea5e9';
-    function refreshAccentColor() {
+    let isLightMode = false;
+
+    const darkRainbow = new Array(360);
+    const lightRainbow = new Array(360);
+    for (let i = 0; i < 360; i++) {
+        darkRainbow[i] = `hsl(${i}, 96%, 66%)`;
+        lightRainbow[i] = `hsl(${i}, 90%, 46%)`;
+    }
+
+    function refreshTheme() {
         try {
-            const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+            const root = document.documentElement;
+            isLightMode = root.classList.contains('light');
+            const value = getComputedStyle(root).getPropertyValue('--accent').trim();
             if (value) accentColor = value;
         } catch (_) {}
     }
-    refreshAccentColor();
+    refreshTheme();
+
+    function isArticleCard(element) {
+        if (!element || element === document.body || element === document.documentElement) {
+            return false;
+        }
+        return Boolean(element.closest && element.closest('article.card, .card, .article-reference-card'));
+    }
 
     let canvas = null;
     let context = null;
@@ -93,7 +111,7 @@
         }
         canvas = element;
         context = ctx;
-        refreshAccentColor();
+        refreshTheme();
         resize();
         return width > 0 && height > 0;
     }
@@ -135,7 +153,6 @@
         context.font = `${fontSize}px 'JetBrains Mono', ui-monospace, monospace`;
         context.textAlign = 'center';
         context.textBaseline = 'middle';
-        context.fillStyle = accentColor;
 
         let minX = Infinity;
         let minY = Infinity;
@@ -157,12 +174,16 @@
 
         const radiusSquared = radius * radius;
         const pointCount = points.length;
+        const rainbowColors = isLightMode ? lightRainbow : darkRainbow;
+        let currentFillStyle = '';
+
         for (let index = 0; index < cellCount; index++) {
             const x = cellX[index];
             const y = cellY[index];
             if (x < minX || x > maxX || y < minY || y > maxY) continue;
 
-            let intensity = 0;
+            let normalIntensity = 0;
+            let cardIntensity = 0;
             for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
                 const point = points[pointIndex];
                 const age = frame - point.birth;
@@ -176,17 +197,39 @@
                 const distanceRatio = Math.sqrt(distanceSquared) / radius;
                 const ageRatio = age / lifetimeFrames;
                 const influence = (1 - distanceRatio) ** (1 + ageRatio * 5) * (1 - ageRatio * ageRatio);
-                if (influence > intensity) intensity = influence;
+                if (point.isCard) {
+                    if (influence > cardIntensity) cardIntensity = influence;
+                } else {
+                    if (influence > normalIntensity) normalIntensity = influence;
+                }
             }
 
+            const intensity = Math.max(normalIntensity, cardIntensity);
             if (intensity < 0.03) continue;
+
+            const isCardCell = cardIntensity > normalIntensity;
             const glyphIndex = intensity > 0.25
                 ? (baseGlyph[index] + ((frame * 0.06 + intensity * 2 | 0) & 32767)) % glyphs.length
                 : baseGlyph[index];
             const glyph = glyphs[glyphIndex];
             if (glyph === ' ') continue;
 
-            context.globalAlpha = intensity > 0.25 ? intensity * 0.55 : intensity * 0.4;
+            if (isCardCell) {
+                const hue = (((x + y) * 0.45 + frame * 2.5 | 0) % 360 + 360) % 360;
+                const targetColor = rainbowColors[hue];
+                if (currentFillStyle !== targetColor) {
+                    context.fillStyle = targetColor;
+                    currentFillStyle = targetColor;
+                }
+                context.globalAlpha = intensity > 0.25 ? Math.min(1, intensity * 0.8) : intensity * 0.5;
+            } else {
+                if (currentFillStyle !== accentColor) {
+                    context.fillStyle = accentColor;
+                    currentFillStyle = accentColor;
+                }
+                context.globalAlpha = intensity > 0.25 ? intensity * 0.55 : intensity * 0.4;
+            }
+
             context.fillText(glyph, x, y);
         }
         context.globalAlpha = 1;
@@ -226,7 +269,9 @@
             return;
         }
         if (!ensureCanvas()) return;
-        points.push({x, y, birth: frame});
+        const target = event.target || (document.elementFromPoint ? document.elementFromPoint(x, y) : null);
+        const onCard = isArticleCard(target);
+        points.push({x, y, birth: frame, isCard: onCard});
         if (points.length > maximumPoints) points.shift();
         previousX = x;
         previousY = y;
@@ -260,10 +305,10 @@
 
     // The accent is read from the theme once and refreshed only when it changes,
     // instead of calling getComputedStyle for every glyph of every frame.
-    const themeObserver = new MutationObserver(refreshAccentColor);
+    const themeObserver = new MutationObserver(refreshTheme);
     themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
     const colorScheme = window.matchMedia('(prefers-color-scheme: light)');
-    colorScheme.addEventListener?.('change', refreshAccentColor);
+    colorScheme.addEventListener?.('change', refreshTheme);
 
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
