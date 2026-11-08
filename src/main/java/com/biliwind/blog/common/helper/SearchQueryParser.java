@@ -1,5 +1,7 @@
 package com.biliwind.blog.common.helper;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -10,6 +12,7 @@ import java.util.regex.Pattern;
  * 解析带有高级检索过滤器的查询字符串（类似 GitHub 搜索语法）。
  * 支持形如 title:xxx、content:xxx、author:xxx、user:xxx 及混合自由文本。
  */
+@RegisterForReflection
 public record SearchQueryParser(
         String rawQuery,
         String freeText,
@@ -18,6 +21,13 @@ public record SearchQueryParser(
         String author,
         String user
 ) {
+    public String getRawQuery() { return rawQuery; }
+    public String getFreeText() { return freeText; }
+    public String getTitle() { return title; }
+    public String getContent() { return content; }
+    public String getAuthor() { return author; }
+    public String getUser() { return user; }
+
     private static final Pattern FILTER_PATTERN =
             Pattern.compile("(?i)(title|content|author|user):(\"[^\"]+\"|'[^']+'|\\S+)");
 
