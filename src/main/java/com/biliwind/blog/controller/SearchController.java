@@ -4,6 +4,7 @@ import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.dto.SearchHighlightSegment;
 import com.biliwind.blog.common.helper.SearchContentHelper;
+import com.biliwind.blog.common.helper.SearchQueryParser;
 import com.biliwind.blog.common.helper.SearchWeightHelper;
 import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
@@ -213,6 +214,8 @@ public class SearchController {
                 .data("language", lang)
                 .data("pageTitle", buildPageTitle(searchKeyword))
                 .data("searchKeyword", searchKeyword)
+                .data("parsedQuery", SearchQueryParser.parse(searchKeyword))
+                .data("hasAdvancedFilters", SearchQueryParser.parse(searchKeyword).hasFilters())
                 .data("searchType", searchType)
                 .data("searchSort", searchSort)
                 .data("searchDate", searchDate)
@@ -360,24 +363,14 @@ public class SearchController {
                 : "p.view_count DESC NULLS LAST, p.published_at DESC NULLS LAST, p.id DESC";
         String regionPattern = "%\"" + regionContext.getCurrentRegion().getCode() + "\"%";
 
-        String where = "p.status = 1 and p.deleted_at is null and p.visibility = 0 "
-                + "and p.published_revision_id is not null "
-                + "and (p.visibility_regions is null or p.visibility_regions::text like ?3) "
-                + "and (p.search_document @@ plainto_tsquery('simple', ?1) "
-                + "or lower(p.slug) like ?2 escape '\\' "
-                + "or lower(p.title::text) like ?2 escape '\\' "
-                + "or lower(coalesce(p.summary::text, '')) like ?2 escape '\\')";
-        if (threshold != null) {
-            where = where + " and p.published_at >= ?4";
-        }
+        SearchQueryParser parsed = SearchQueryParser.parse(keyword);
+        Map<String, Object> params = new HashMap<>();
+        String where = buildPostFilterWhere(parsed, keyword, searchPattern, regionPattern, threshold, params);
 
         String selectSql = "select p.* from posts p where " + where + " order by " + orderBy;
         jakarta.persistence.Query selectQuery = entityManager.createNativeQuery(selectSql, Post.class);
-        selectQuery.setParameter(1, keyword);
-        selectQuery.setParameter(2, searchPattern);
-        selectQuery.setParameter(3, regionPattern);
-        if (threshold != null) {
-            selectQuery.setParameter(4, threshold);
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            selectQuery.setParameter(entry.getKey(), entry.getValue());
         }
         int safePage = Math.max(1, page);
         selectQuery.setFirstResult((safePage - 1) * PAGE_SIZE);
@@ -393,11 +386,8 @@ public class SearchController {
 
         String countSql = "select count(*) from posts p where " + where;
         jakarta.persistence.Query countQuery = entityManager.createNativeQuery(countSql);
-        countQuery.setParameter(1, keyword);
-        countQuery.setParameter(2, searchPattern);
-        countQuery.setParameter(3, regionPattern);
-        if (threshold != null) {
-            countQuery.setParameter(4, threshold);
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            countQuery.setParameter(entry.getKey(), entry.getValue());
         }
         Number total = (Number) countQuery.getSingleResult();
         return new ElasticsearchResult(hits, total.longValue(), false, true, true);
@@ -487,26 +477,73 @@ public class SearchController {
         return new ElasticsearchResult(hits, total, false, true, true);
     }
 
+    private String buildPostFilterWhere(SearchQueryParser parsed, String keyword, String searchPattern,
+                                        String regionPattern, OffsetDateTime threshold,
+                                        Map<String, Object> params) {
+        if (parsed.hasFilters()) {
+            StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern) ");
+            params.put("regionPattern", regionPattern);
+            if (threshold != null) {
+                wb.append("and p.published_at >= :threshold ");
+                params.put("threshold", threshold);
+            }
+            if (parsed.title() != null) {
+                wb.append("and lower(p.title::text) like :titlePattern escape '\\' ");
+                params.put("titlePattern", "%" + escapeLike(parsed.title().toLowerCase(Locale.ROOT)) + "%");
+            }
+            if (parsed.content() != null) {
+                wb.append("and (p.search_document @@ plainto_tsquery('simple', :rawContent) or lower(coalesce(p.summary::text, '')) like :contentPattern escape '\\') ");
+                params.put("rawContent", parsed.content());
+                params.put("contentPattern", "%" + escapeLike(parsed.content().toLowerCase(Locale.ROOT)) + "%");
+            }
+            if (parsed.author() != null) {
+                wb.append("and lower(coalesce(p.author_name, '')) like :authorPattern escape '\\' ");
+                params.put("authorPattern", "%" + escapeLike(parsed.author().toLowerCase(Locale.ROOT)) + "%");
+            }
+            if (parsed.user() != null) {
+                wb.append("and lower(coalesce(p.author_name, '')) like :userPattern escape '\\' ");
+                params.put("userPattern", "%" + escapeLike(parsed.user().toLowerCase(Locale.ROOT)) + "%");
+            }
+            if (!parsed.freeText().isEmpty()) {
+                wb.append("and (p.search_document @@ plainto_tsquery('simple', :freeText) or lower(p.slug) like :freePattern escape '\\' or lower(p.title::text) like :freePattern escape '\\' or lower(coalesce(p.summary::text, '')) like :freePattern escape '\\') ");
+                params.put("freeText", parsed.freeText());
+                params.put("freePattern", "%" + escapeLike(parsed.freeText().toLowerCase(Locale.ROOT)) + "%");
+            }
+            return wb.toString();
+        }
+
+        StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern) ");
+        params.put("regionPattern", regionPattern);
+        params.put("keyword", keyword);
+        params.put("searchPattern", searchPattern);
+        wb.append("and (p.search_document @@ plainto_tsquery('simple', :keyword) or lower(p.slug) like :searchPattern escape '\\' or lower(p.title::text) like :searchPattern escape '\\' or lower(coalesce(p.summary::text, '')) like :searchPattern escape '\\') ");
+        if (threshold != null) {
+            wb.append("and p.published_at >= :threshold ");
+            params.put("threshold", threshold);
+        }
+        return wb.toString();
+    }
+
     private PostFallbackPage findPostFallbackCandidates(
             String keyword, String searchPattern, OffsetDateTime threshold, int limit) {
         String orderBy = "p.published_at DESC NULLS LAST, p.id DESC";
         String regionPattern = "%\"" + regionContext.getCurrentRegion().getCode() + "\"%";
-        String where = "p.status = 1 and p.deleted_at is null and p.visibility = 0 "
-                + "and p.published_revision_id is not null "
-                + "and (p.visibility_regions is null or p.visibility_regions::text like ?3) "
-                + "and (p.search_document @@ plainto_tsquery('simple', ?1) "
-                + "or lower(p.slug) like ?2 escape '\\' "
-                + "or lower(p.title::text) like ?2 escape '\\' "
-                + "or lower(coalesce(p.summary::text, '')) like ?2 escape '\\')";
-        if (threshold != null) {
-            where = where + " and p.published_at >= ?4";
-        }
+
+        SearchQueryParser parsed = SearchQueryParser.parse(keyword);
+        Map<String, Object> params = new HashMap<>();
+        String where = buildPostFilterWhere(parsed, keyword, searchPattern, regionPattern, threshold, params);
+
         jakarta.persistence.Query countQuery = entityManager.createNativeQuery("select count(*) from posts p where " + where);
-        setPostFallbackParameters(countQuery, keyword, searchPattern, regionPattern, threshold);
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            countQuery.setParameter(entry.getKey(), entry.getValue());
+        }
         long total = ((Number) countQuery.getSingleResult()).longValue();
+
         jakarta.persistence.Query selectQuery = entityManager.createNativeQuery(
                 "select p.* from posts p where " + where + " order by " + orderBy, Post.class);
-        setPostFallbackParameters(selectQuery, keyword, searchPattern, regionPattern, threshold);
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            selectQuery.setParameter(entry.getKey(), entry.getValue());
+        }
         selectQuery.setMaxResults(limit);
         @SuppressWarnings("unchecked")
         List<Post> items = selectQuery.getResultList();

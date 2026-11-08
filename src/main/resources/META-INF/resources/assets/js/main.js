@@ -123,7 +123,7 @@
     // Custom key mapping is intentionally not exposed to users.
     const SHORTCUTS = Object.freeze({
         submit: 'Enter',
-        search: 'Ctrl+K'
+        search: '/'
     });
 
     ready(() => {
@@ -2210,6 +2210,7 @@
         }
 
         function focusSearchInput() {
+            if (typeof openGithubSearchModal === 'function' && openGithubSearchModal()) return true;
             const searchInput = Array.from(document.querySelectorAll('[data-shortcut-target="search"]'))
                 .find(isVisible);
             if (!searchInput) return false;
@@ -2525,10 +2526,17 @@
         document.addEventListener('keydown', (event) => {
             if (!document.hasFocus() || document.visibilityState === 'hidden' || event.isComposing) return;
 
-            if (event.key.toLowerCase() === 'k' && event.ctrlKey &&
-                !event.metaKey && !event.altKey && !event.shiftKey &&
-                !isFormControlTarget(event.target)) {
-                if (focusSearchInput()) event.preventDefault();
+            // Shortcut '/' or 'Ctrl+K' / 'Cmd+K' opens GitHub-style Spotlight Search Palette
+            if (
+                (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !isFormControlTarget(event.target)) ||
+                (event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && !isFormControlTarget(event.target))
+            ) {
+                event.preventDefault();
+                if (typeof openGithubSearchModal === 'function') {
+                    openGithubSearchModal();
+                } else {
+                    focusSearchInput();
+                }
                 return;
             }
 
@@ -2560,6 +2568,15 @@
                 searchInput.setAttribute('aria-haspopup', 'listbox');
                 searchInput.setAttribute('aria-expanded', 'false');
                 searchInput.setAttribute('autocomplete', 'off');
+
+                searchInput.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    openGithubSearchModal(searchInput.value);
+                });
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    openGithubSearchModal(searchInput.value);
+                });
 
                 const suggestWrap = document.createElement('div');
                 const suggestId = `search-suggestions-${++searchSuggestionCounter}`;
@@ -2684,6 +2701,628 @@
                 });
             });
         }
+
+        // ==========================================
+        // GitHub-Style Command Palette & Spotlight Search
+        // ==========================================
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function escapeRegex(str) {
+            if (!str) return '';
+            return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        const githubSearchBackdrop = document.getElementById('githubSearchBackdrop');
+        const githubSearchModal = document.getElementById('githubSearchModal');
+        const githubSearchPalette = document.getElementById('githubSearchPalette');
+        const githubSearchInput = document.getElementById('githubSearchInput');
+        const githubSearchClearBtn = document.getElementById('githubSearchClearBtn');
+        const githubSearchActiveFilters = document.getElementById('githubSearchActiveFilters');
+        const githubSearchInPageToolbar = document.getElementById('githubSearchInPageToolbar');
+        const githubSearchInPageCount = document.getElementById('githubSearchInPageCount');
+        const githubSearchInPagePrev = document.getElementById('githubSearchInPagePrev');
+        const githubSearchInPageNext = document.getElementById('githubSearchInPageNext');
+        const githubSearchResultsList = document.getElementById('githubSearchResultsList');
+        const chipInArticle = document.getElementById('chipInArticle');
+
+        let currentSearchMode = 'all'; // 'all' | 'in-page' | 'in-article'
+        let inPageMatches = [];
+        let inPageCurrentIndex = -1;
+        let searchSuggestTimer = null;
+        let searchSuggestRequestId = 0;
+        let paletteActiveItemIndex = 0;
+
+        function isGithubSearchOpen() {
+            return Boolean(githubSearchModal && githubSearchModal.classList.contains('is-open'));
+        }
+
+        function openGithubSearchModal(initialQuery = '') {
+            if (!githubSearchModal || !githubSearchBackdrop) return false;
+
+            const hasArticle = Boolean(document.querySelector('.prose, #post-content-section, article.post-article'));
+            if (chipInArticle) {
+                chipInArticle.classList.toggle('hidden', !hasArticle);
+            }
+
+            githubSearchBackdrop.classList.remove('hidden');
+            githubSearchModal.classList.remove('hidden');
+            void githubSearchModal.offsetWidth;
+            githubSearchBackdrop.classList.add('is-open');
+            githubSearchModal.classList.add('is-open');
+
+            document.body.style.overflow = 'hidden';
+
+            if (typeof initialQuery === 'string' && initialQuery.length > 0 && githubSearchInput) {
+                githubSearchInput.value = initialQuery;
+            }
+
+            setSearchFilterMode('all');
+
+            requestAnimationFrame(() => {
+                if (githubSearchInput) {
+                    githubSearchInput.focus();
+                    if (githubSearchInput.value) {
+                        githubSearchInput.select();
+                    }
+                }
+                updateSearchPalette();
+            });
+
+            return true;
+        }
+
+        function closeGithubSearchModal() {
+            if (!githubSearchModal || !githubSearchBackdrop) return;
+            githubSearchBackdrop.classList.remove('is-open');
+            githubSearchModal.classList.remove('is-open');
+            setTimeout(() => {
+                githubSearchBackdrop.classList.add('hidden');
+                githubSearchModal.classList.add('hidden');
+            }, 200);
+
+            document.body.style.overflow = '';
+            if (currentSearchMode !== 'in-page') {
+                clearInPageHighlights();
+            }
+        }
+
+        function updateClearButtonVisibility() {
+            if (!githubSearchClearBtn || !githubSearchInput) return;
+            githubSearchClearBtn.classList.toggle('hidden', !githubSearchInput.value);
+        }
+
+        function setSearchFilterMode(mode) {
+            currentSearchMode = mode;
+            const chips = document.querySelectorAll('.search-filter-chip[data-filter-mode]');
+            chips.forEach(chip => {
+                chip.classList.toggle('active', chip.dataset.filterMode === mode);
+            });
+            if (mode !== 'in-page') {
+                clearInPageHighlights();
+            }
+            updateSearchPalette();
+        }
+
+        function parseSearchSyntax(raw) {
+            const result = {
+                title: null,
+                author: null,
+                content: null,
+                user: null,
+                freeText: ''
+            };
+            if (!raw) return result;
+
+            let text = raw;
+            const matchToken = (prefix) => {
+                const re = new RegExp(`\\b${prefix}:(?:"([^"]*)"|'([^']*)'|([^\\s]+))`, 'i');
+                const m = text.match(re);
+                if (m) {
+                    const val = m[1] || m[2] || m[3] || '';
+                    text = text.replace(m[0], ' ');
+                    return val;
+                }
+                return null;
+            };
+
+            result.title = matchToken('title');
+            result.author = matchToken('author');
+            result.content = matchToken('content');
+            result.user = matchToken('user');
+            result.freeText = text.replace(/\s+/g, ' ').trim();
+            return result;
+        }
+
+        function renderActiveFiltersBar(parsed) {
+            if (!githubSearchActiveFilters) return;
+            const tags = [];
+            if (parsed.title) tags.push({ key: 'title', label: '标题', val: parsed.title, prefix: 'title:' });
+            if (parsed.author) tags.push({ key: 'author', label: '作者', val: parsed.author, prefix: 'author:' });
+            if (parsed.content) tags.push({ key: 'content', label: '正文', val: parsed.content, prefix: 'content:' });
+            if (parsed.user) tags.push({ key: 'user', label: '用户', val: parsed.user, prefix: 'user:' });
+
+            if (tags.length === 0) {
+                githubSearchActiveFilters.classList.add('hidden');
+                githubSearchActiveFilters.replaceChildren();
+                return;
+            }
+
+            githubSearchActiveFilters.classList.remove('hidden');
+            githubSearchActiveFilters.replaceChildren();
+
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'text-meta text-[11px] self-center mr-1 select-none';
+            titleSpan.textContent = '过滤条件:';
+            githubSearchActiveFilters.appendChild(titleSpan);
+
+            tags.forEach(tag => {
+                const badge = document.createElement('span');
+                badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/30 text-xs';
+                badge.innerHTML = `<span>${tag.label}: <strong class="font-semibold">${escapeHtml(tag.val)}</strong></span>`;
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'hover:text-red-400 p-0.5 rounded transition-colors ml-0.5 font-bold';
+                removeBtn.innerHTML = '×';
+                removeBtn.title = `移除 ${tag.label} 筛选`;
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeFilterFromInput(tag.prefix);
+                });
+                badge.appendChild(removeBtn);
+                githubSearchActiveFilters.appendChild(badge);
+            });
+        }
+
+        function removeFilterFromInput(prefix) {
+            if (!githubSearchInput) return;
+            const re = new RegExp(`\\b${prefix}(?:"[^"]*"|'[^']*'|[^\\s]+)\\s*`, 'i');
+            githubSearchInput.value = githubSearchInput.value.replace(re, '').trim();
+            updateSearchPalette();
+            githubSearchInput.focus();
+        }
+
+        function appendSyntaxToInput(syntax) {
+            if (!githubSearchInput) return;
+            let current = githubSearchInput.value.trim();
+            if (current && !current.endsWith(' ')) {
+                current += ' ';
+            }
+            githubSearchInput.value = current + syntax;
+            githubSearchInput.focus();
+            const len = githubSearchInput.value.length;
+            githubSearchInput.setSelectionRange(len, len);
+            updateSearchPalette();
+        }
+
+        function clearInPageHighlights() {
+            const marks = document.querySelectorAll('.github-search-inpage-highlight');
+            marks.forEach(m => {
+                const parent = m.parentNode;
+                if (parent) {
+                    parent.replaceChild(document.createTextNode(m.textContent), m);
+                    parent.normalize();
+                }
+            });
+            inPageMatches = [];
+            inPageCurrentIndex = -1;
+            if (githubSearchInPageToolbar) githubSearchInPageToolbar.classList.add('hidden');
+        }
+
+        function performInPageSearch(keyword) {
+            clearInPageHighlights();
+            const term = (keyword || '').trim();
+            if (!term) return;
+
+            const root = document.getElementById('pjax-container') || document.querySelector('main') || document.body;
+            const walker = document.createTreeWalker(
+                root,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode(node) {
+                        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                        const parent = node.parentElement;
+                        if (!parent) return NodeFilter.FILTER_REJECT;
+                        if (parent.closest('#githubSearchModal, #githubSearchBackdrop, script, style, noscript, svg, button')) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
+
+            const textNodes = [];
+            let n;
+            while ((n = walker.nextNode())) {
+                textNodes.push(n);
+            }
+
+            const lower = term.toLowerCase();
+            textNodes.forEach(node => {
+                const text = node.nodeValue;
+                const lowerText = text.toLowerCase();
+                let idx = lowerText.indexOf(lower);
+                if (idx === -1) return;
+
+                const frag = document.createDocumentFragment();
+                let last = 0;
+                while (idx !== -1) {
+                    if (idx > last) {
+                        frag.appendChild(document.createTextNode(text.substring(last, idx)));
+                    }
+                    const mark = document.createElement('mark');
+                    mark.className = 'github-search-inpage-highlight';
+                    mark.textContent = text.substring(idx, idx + term.length);
+                    frag.appendChild(mark);
+                    inPageMatches.push(mark);
+
+                    last = idx + term.length;
+                    idx = lowerText.indexOf(lower, last);
+                }
+                if (last < text.length) {
+                    frag.appendChild(document.createTextNode(text.substring(last)));
+                }
+                node.parentNode.replaceChild(frag, node);
+            });
+
+            if (githubSearchInPageToolbar) {
+                githubSearchInPageToolbar.classList.toggle('hidden', inPageMatches.length === 0);
+            }
+            if (githubSearchInPageCount) {
+                githubSearchInPageCount.textContent = `${inPageMatches.length} 处匹配`;
+            }
+            if (inPageMatches.length > 0) {
+                goToInPageMatch(0);
+            }
+        }
+
+        function goToInPageMatch(index) {
+            if (inPageMatches.length === 0) return;
+            inPageMatches.forEach(m => m.classList.remove('is-current'));
+            inPageCurrentIndex = (index + inPageMatches.length) % inPageMatches.length;
+            const mark = inPageMatches[inPageCurrentIndex];
+            if (mark) {
+                mark.classList.add('is-current');
+                mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (githubSearchInPageCount) {
+                    githubSearchInPageCount.textContent = `${inPageCurrentIndex + 1} / ${inPageMatches.length} 处匹配`;
+                }
+            }
+        }
+
+        function findArticleMatches(term) {
+            const article = document.querySelector('.prose') || document.querySelector('#post-content-section');
+            if (!article || !term) return [];
+
+            const elements = Array.from(article.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, blockquote'));
+            const lowerTerm = term.toLowerCase();
+            const results = [];
+
+            for (const el of elements) {
+                const text = el.textContent.trim();
+                if (!text) continue;
+                const idx = text.toLowerCase().indexOf(lowerTerm);
+                if (idx !== -1) {
+                    const isHeading = /^H[1-6]$/i.test(el.tagName);
+                    const start = Math.max(0, idx - 30);
+                    const end = Math.min(text.length, idx + term.length + 50);
+                    let snippet = text.substring(start, end);
+                    if (start > 0) snippet = '...' + snippet;
+                    if (end < text.length) snippet = snippet + '...';
+
+                    results.push({
+                        element: el,
+                        isHeading: isHeading,
+                        tag: el.tagName.toUpperCase(),
+                        text: text,
+                        snippet: snippet
+                    });
+                    if (results.length >= 8) break;
+                }
+            }
+            return results;
+        }
+
+        function renderResultsList(query, parsed, suggestions = []) {
+            if (!githubSearchResultsList) return;
+            githubSearchResultsList.replaceChildren();
+            paletteActiveItemIndex = 0;
+
+            const rawQuery = (query || '').trim();
+            const freeText = parsed.freeText;
+            const searchTerm = freeText || rawQuery;
+
+            if (currentSearchMode === 'in-page') {
+                performInPageSearch(searchTerm);
+                const infoItem = document.createElement('div');
+                infoItem.className = 'github-search-item is-selected';
+                infoItem.innerHTML = `
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-accent">📄</span>
+                        <span class="font-medium text-main">页面内匹配 (${inPageMatches.length} 处)</span>
+                    </div>
+                    <span class="text-xs text-meta">按 Enter 键跳转下一处</span>
+                `;
+                githubSearchResultsList.appendChild(infoItem);
+                return;
+            }
+
+            if (currentSearchMode === 'in-article') {
+                const matches = findArticleMatches(searchTerm);
+                if (matches.length === 0) {
+                    const emptyItem = document.createElement('div');
+                    emptyItem.className = 'px-4 py-6 text-center text-meta text-xs';
+                    emptyItem.textContent = searchTerm ? '当前文章内未找到匹配内容' : '输入关键词在文章段落与标题中检索';
+                    githubSearchResultsList.appendChild(emptyItem);
+                    return;
+                }
+
+                matches.forEach((m, idx) => {
+                    const item = document.createElement('div');
+                    item.className = `github-search-item ${idx === 0 ? 'is-selected' : ''}`;
+                    item.dataset.articleResultIndex = String(idx);
+                    const tagLabel = m.isHeading ? `<span class="px-1.5 py-0.5 rounded bg-accent/10 text-accent font-mono text-[10px]">${m.tag}</span>` : '<span class="text-meta text-[11px]">段落</span>';
+                    const highlightedSnippet = escapeHtml(m.snippet).replace(
+                        new RegExp(escapeRegex(searchTerm), 'gi'),
+                        match => `<mark class="bg-accent/25 text-accent font-semibold px-0.5 rounded">${match}</mark>`
+                    );
+                    item.innerHTML = `
+                        <div class="flex-1 min-w-0 pr-2">
+                            <div class="flex items-center gap-1.5 mb-1">
+                                ${tagLabel}
+                                <span class="font-semibold text-main text-xs truncate">${escapeHtml(m.text.substring(0, 40))}</span>
+                            </div>
+                            <div class="text-xs text-body line-clamp-1 opacity-80">${highlightedSnippet}</div>
+                        </div>
+                        <span class="search-item-action-icon text-meta text-xs shrink-0 font-mono">跳转 →</span>
+                    `;
+                    item.addEventListener('click', () => {
+                        jumpToArticleElement(m.element);
+                    });
+                    githubSearchResultsList.appendChild(item);
+                });
+                return;
+            }
+
+            // Mode 'all': Global & multi-target spotlight
+            // Item 1: Site-wide search
+            const globalSearchItem = document.createElement('div');
+            globalSearchItem.className = 'github-search-item is-selected';
+            globalSearchItem.dataset.actionType = 'site-search';
+            globalSearchItem.innerHTML = `
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="text-accent text-base">🌐</span>
+                    <div class="min-w-0">
+                        <div class="font-semibold text-main text-xs sm:text-sm truncate">全站搜索: <span class="text-accent font-mono">${escapeHtml(rawQuery || '*')}</span></div>
+                        <div class="text-[11px] text-meta">前往全站搜索页，支持全部结构化过滤条件与高亮检索</div>
+                    </div>
+                </div>
+                <kbd class="hidden sm:inline-block px-1.5 py-0.5 rounded bg-card border border-border text-[10px] text-meta font-mono shrink-0">Enter ↵</kbd>
+            `;
+            globalSearchItem.addEventListener('click', () => executeSiteSearch(rawQuery));
+            githubSearchResultsList.appendChild(globalSearchItem);
+
+            // Item 2: Search in current page
+            if (rawQuery) {
+                const inPageItem = document.createElement('div');
+                inPageItem.className = 'github-search-item';
+                inPageItem.dataset.actionType = 'in-page';
+                inPageItem.innerHTML = `
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="text-accent text-base">📄</span>
+                        <div class="min-w-0">
+                            <div class="font-medium text-main text-xs sm:text-sm truncate">在当前页面查找: <span class="text-accent font-mono">${escapeHtml(searchTerm)}</span></div>
+                            <div class="text-[11px] text-meta">在当前页面 DOM 中高亮匹配并快速跳转</div>
+                        </div>
+                    </div>
+                    <span class="text-xs text-meta shrink-0">切换模式 →</span>
+                `;
+                inPageItem.addEventListener('click', () => {
+                    setSearchFilterMode('in-page');
+                });
+                githubSearchResultsList.appendChild(inPageItem);
+            }
+
+            // Item 3: Search in current article if exists
+            const hasArticle = Boolean(document.querySelector('.prose, #post-content-section'));
+            if (hasArticle && rawQuery) {
+                const inArticleItem = document.createElement('div');
+                inArticleItem.className = 'github-search-item';
+                inArticleItem.dataset.actionType = 'in-article';
+                inArticleItem.innerHTML = `
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="text-accent text-base">📖</span>
+                        <div class="min-w-0">
+                            <div class="font-medium text-main text-xs sm:text-sm truncate">在当前文章正文中查找: <span class="text-accent font-mono">${escapeHtml(searchTerm)}</span></div>
+                            <div class="text-[11px] text-meta">检索文章章节标题、正文与代码段落</div>
+                        </div>
+                    </div>
+                    <span class="text-xs text-meta shrink-0">文章检索 →</span>
+                `;
+                inArticleItem.addEventListener('click', () => {
+                    setSearchFilterMode('in-article');
+                });
+                githubSearchResultsList.appendChild(inArticleItem);
+            }
+
+            // Suggestion items from /search/suggest
+            if (suggestions && suggestions.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'px-3 pt-2 pb-1 text-[11px] font-mono uppercase text-meta tracking-wider';
+                header.textContent = '推荐建议';
+                githubSearchResultsList.appendChild(header);
+
+                suggestions.forEach(s => {
+                    const sugItem = document.createElement('div');
+                    sugItem.className = 'github-search-item';
+                    sugItem.dataset.actionType = 'suggestion';
+                    sugItem.dataset.suggestValue = String(s);
+                    sugItem.innerHTML = `
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="text-meta">💡</span>
+                            <span class="text-xs sm:text-sm text-body hover:text-main truncate">${escapeHtml(String(s))}</span>
+                        </div>
+                        <kbd class="hidden sm:inline-block px-1.5 py-0.5 rounded bg-card border border-border text-[10px] text-meta font-mono shrink-0">Tab 补全</kbd>
+                    `;
+                    sugItem.addEventListener('click', () => {
+                        githubSearchInput.value = String(s);
+                        updateSearchPalette();
+                        executeSiteSearch(String(s));
+                    });
+                    githubSearchResultsList.appendChild(sugItem);
+                });
+            }
+        }
+
+        function jumpToArticleElement(element) {
+            if (!element) return;
+            closeGithubSearchModal();
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('bg-accent/20', 'transition-all', 'duration-500', 'rounded');
+            setTimeout(() => {
+                element.classList.remove('bg-accent/20');
+            }, 2200);
+        }
+
+        function executeSiteSearch(query) {
+            const q = (query || '').trim();
+            closeGithubSearchModal();
+            const targetUrl = '/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+            if (typeof loadByPjax === 'function') {
+                loadByPjax(targetUrl, true);
+            } else {
+                window.location.href = targetUrl;
+            }
+        }
+
+        function updateSearchPalette() {
+            updateClearButtonVisibility();
+            const raw = githubSearchInput ? githubSearchInput.value : '';
+            const parsed = parseSearchSyntax(raw);
+            renderActiveFiltersBar(parsed);
+
+            const q = (parsed.freeText || raw).trim();
+            clearTimeout(searchSuggestTimer);
+
+            if (currentSearchMode !== 'all' || q.length < 2) {
+                renderResultsList(raw, parsed, []);
+                return;
+            }
+
+            const requestId = ++searchSuggestRequestId;
+            searchSuggestTimer = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/search/suggest?q=${encodeURIComponent(q)}`);
+                    if (!res.ok) throw new Error('Suggest failed');
+                    const suggestions = await res.json();
+                    if (requestId !== searchSuggestRequestId) return;
+                    renderResultsList(raw, parsed, suggestions || []);
+                } catch {
+                    if (requestId === searchSuggestRequestId) {
+                        renderResultsList(raw, parsed, []);
+                    }
+                }
+            }, 250);
+        }
+
+        // Initialize Search Modal DOM Events
+        if (githubSearchClearBtn) {
+            githubSearchClearBtn.addEventListener('click', () => {
+                if (githubSearchInput) {
+                    githubSearchInput.value = '';
+                    updateSearchPalette();
+                    githubSearchInput.focus();
+                }
+            });
+        }
+
+        document.querySelectorAll('.search-filter-chip[data-filter-mode]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setSearchFilterMode(btn.dataset.filterMode);
+            });
+        });
+
+        document.querySelectorAll('.search-filter-chip[data-syntax]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                appendSyntaxToInput(btn.dataset.syntax);
+            });
+        });
+
+        githubSearchBackdrop?.addEventListener('click', closeGithubSearchModal);
+        githubSearchModal?.addEventListener('click', (e) => {
+            if (e.target === githubSearchModal) {
+                closeGithubSearchModal();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isGithubSearchOpen()) {
+                e.preventDefault();
+                closeGithubSearchModal();
+            }
+        });
+
+        githubSearchInput?.addEventListener('input', () => {
+            updateSearchPalette();
+        });
+
+        githubSearchInPagePrev?.addEventListener('click', () => goToInPageMatch(inPageCurrentIndex - 1));
+        githubSearchInPageNext?.addEventListener('click', () => goToInPageMatch(inPageCurrentIndex + 1));
+
+        githubSearchInput?.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowDown') {
+                const items = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
+                if (items.length > 0) {
+                    event.preventDefault();
+                    items.forEach(i => i.classList.remove('is-selected'));
+                    paletteActiveItemIndex = (paletteActiveItemIndex + 1) % items.length;
+                    items[paletteActiveItemIndex].classList.add('is-selected');
+                    items[paletteActiveItemIndex].scrollIntoView({ block: 'nearest' });
+                }
+            } else if (event.key === 'ArrowUp') {
+                const items = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
+                if (items.length > 0) {
+                    event.preventDefault();
+                    items.forEach(i => i.classList.remove('is-selected'));
+                    paletteActiveItemIndex = (paletteActiveItemIndex - 1 + items.length) % items.length;
+                    items[paletteActiveItemIndex].classList.add('is-selected');
+                    items[paletteActiveItemIndex].scrollIntoView({ block: 'nearest' });
+                }
+            } else if (event.key === 'Tab') {
+                const items = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
+                const selected = items[paletteActiveItemIndex];
+                if (selected && selected.dataset.suggestValue) {
+                    event.preventDefault();
+                    githubSearchInput.value = selected.dataset.suggestValue;
+                    updateSearchPalette();
+                }
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                if (currentSearchMode === 'in-page') {
+                    goToInPageMatch(event.shiftKey ? inPageCurrentIndex - 1 : inPageCurrentIndex + 1);
+                    return;
+                }
+                const items = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
+                const selected = items[paletteActiveItemIndex] || items[0];
+                if (selected) {
+                    selected.click();
+                } else {
+                    executeSiteSearch(githubSearchInput.value);
+                }
+            }
+        });
+
+        document.addEventListener('pjax:start', () => {
+            closeGithubSearchModal();
+            clearInPageHighlights();
+        });
 
         // ==========================================
         // TOC & Mobile Floating Controls (Scrollspy, Mobile Drawer, Back to Top)

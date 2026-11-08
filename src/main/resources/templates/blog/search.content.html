@@ -21,6 +21,35 @@
                 {#if hasKeyword}
                     <p class="text-lg text-gray-400">{i18n.format('search.found_count', totalCount ?: 0)}<span
                                 class="text-main font-semibold">"{searchKeyword ?: ''}"</span></p>
+                    {#if hasAdvancedFilters}
+                        <div class="flex flex-wrap gap-2 pt-2">
+                            {#if parsedQuery.title}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-accent/10 border border-accent/30 text-accent">
+                                    <span class="opacity-70">title:</span><strong>{parsedQuery.title}</strong>
+                                </span>
+                            {/if}
+                            {#if parsedQuery.author}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-accent/10 border border-accent/30 text-accent">
+                                    <span class="opacity-70">author:</span><strong>{parsedQuery.author}</strong>
+                                </span>
+                            {/if}
+                            {#if parsedQuery.content}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-accent/10 border border-accent/30 text-accent">
+                                    <span class="opacity-70">content:</span><strong>{parsedQuery.content}</strong>
+                                </span>
+                            {/if}
+                            {#if parsedQuery.user}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-accent/10 border border-accent/30 text-accent">
+                                    <span class="opacity-70">user:</span><strong>{parsedQuery.user}</strong>
+                                </span>
+                            {/if}
+                            {#if parsedQuery.freeText}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-card border border-border text-body">
+                                    <span class="opacity-70">keyword:</span><strong>{parsedQuery.freeText}</strong>
+                                </span>
+                            {/if}
+                        </div>
+                    {/if}
                     {#if edgeNode && !deepSearchRequested}
                         <p class="text-sm text-gray-500">
                             {i18n.t('search.local')}

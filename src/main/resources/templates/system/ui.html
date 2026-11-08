@@ -80,3 +80,67 @@
         <!-- JS populates items here -->
     </div>
 </div>
+
+<!-- GitHub-Style Global Search / Command Palette Modal -->
+<div id="githubSearchBackdrop" class="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-200" aria-hidden="true"></div>
+
+<div id="githubSearchModal" role="dialog" aria-modal="true" aria-label="{i18n.t('search.title', '搜索')}" class="fixed inset-0 z-[10001] hidden overflow-y-auto p-4 sm:p-6 md:p-16 flex items-start justify-center">
+    <div class="relative w-full max-w-2xl bg-card border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col transform opacity-0 scale-95 transition-all duration-200" id="githubSearchPalette">
+        <!-- Top Search Bar -->
+        <div class="relative flex items-center px-4 py-3.5 border-b border-border bg-input-bg/40">
+            <svg class="w-5 h-5 text-meta shrink-0 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input id="githubSearchInput" type="text" autocomplete="off" spellcheck="false"
+                   class="w-full bg-transparent border-0 px-3 py-1 text-base text-main placeholder:text-meta/60 focus:outline-none focus:ring-0"
+                   placeholder="{i18n.t('search.github_placeholder', '搜索全站、当前页面或输入 title: author: content: ...')}" />
+            <button type="button" id="githubSearchClearBtn" class="hidden text-meta hover:text-main p-1 rounded-md transition-colors mr-1" aria-label="{i18n.t('common.clear', '清空')}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <kbd class="hidden sm:inline-block px-2 py-0.5 text-[11px] font-mono bg-card border border-border rounded text-meta select-none">ESC</kbd>
+        </div>
+
+        <!-- Filter Chips Row (GitHub 风格快捷标签) -->
+        <div class="flex items-center gap-1.5 px-4 py-2 border-b border-border/50 bg-card/60 overflow-x-auto custom-scrollbar text-xs">
+            <span class="text-meta text-[11px] font-mono uppercase tracking-wider shrink-0 mr-1">快捷模式:</span>
+            <button type="button" class="search-filter-chip active" data-filter-mode="all">🌐 全站</button>
+            <button type="button" class="search-filter-chip" data-filter-mode="in-page">📄 页面内查找</button>
+            <button type="button" class="search-filter-chip hidden" id="chipInArticle" data-filter-mode="in-article">📖 当前文章</button>
+            <span class="h-3 w-[1px] bg-border shrink-0 mx-1"></span>
+            <button type="button" class="search-filter-chip" data-syntax="title:">title:</button>
+            <button type="button" class="search-filter-chip" data-syntax="author:">author:</button>
+            <button type="button" class="search-filter-chip" data-syntax="content:">content:</button>
+            <button type="button" class="search-filter-chip" data-syntax="user:">user:</button>
+        </div>
+
+        <!-- Live Filter Syntax Preview Bar -->
+        <div id="githubSearchActiveFilters" class="hidden px-4 py-2 border-b border-border/40 bg-accent/[0.03] flex flex-wrap gap-1.5 text-xs font-mono">
+            <!-- JS populates badges for active filters -->
+        </div>
+
+        <!-- In-Page Match Counter / Navigation Bar (when in in-page search mode) -->
+        <div id="githubSearchInPageToolbar" class="hidden px-4 py-2 bg-accent/10 border-b border-accent/20 flex items-center justify-between text-xs">
+            <span id="githubSearchInPageCount" class="text-accent font-semibold">0 处匹配</span>
+            <div class="flex items-center gap-2">
+                <button type="button" id="githubSearchInPagePrev" class="px-2.5 py-1 rounded-md bg-card border border-border hover:bg-hover-surface text-meta hover:text-main">↑ 上一个</button>
+                <button type="button" id="githubSearchInPageNext" class="px-2.5 py-1 rounded-md bg-card border border-border hover:bg-hover-surface text-meta hover:text-main">↓ 下一个</button>
+            </div>
+        </div>
+
+        <!-- Suggestions & Results Container -->
+        <div id="githubSearchResultsList" class="max-h-[55vh] overflow-y-auto px-2 py-3 space-y-1 custom-scrollbar text-sm">
+            <!-- JS dynamically renders options here -->
+        </div>
+
+        <!-- Footer Shortcuts Legend -->
+        <div class="px-4 py-2.5 border-t border-border bg-input-bg/30 text-meta text-[11px] font-mono flex items-center justify-between select-none">
+            <div class="flex items-center gap-3">
+                <span><kbd class="px-1.5 py-0.5 rounded bg-card border border-border">↑↓</kbd> 导航</span>
+                <span><kbd class="px-1.5 py-0.5 rounded bg-card border border-border">↵</kbd> 确认</span>
+                <span><kbd class="px-1.5 py-0.5 rounded bg-card border border-border">Tab</kbd> 补全</span>
+                <span><kbd class="px-1.5 py-0.5 rounded bg-card border border-border">Esc</kbd> 退出</span>
+            </div>
+            <span class="opacity-60">WindBlog Spotlight</span>
+        </div>
+    </div>
+</div>
