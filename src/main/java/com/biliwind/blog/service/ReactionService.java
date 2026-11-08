@@ -7,8 +7,8 @@ import org.jboss.logging.Logger;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -20,7 +20,7 @@ public class ReactionService {
 
     private static final Logger LOG = Logger.getLogger(ReactionService.class);
 
-    public static final Set<String> ALLOWED_REACTIONS = Set.of(
+    public static final List<String> ALLOWED_REACTIONS = List.of(
             "like", "heart", "rocket", "celebrate", "insightful"
     );
 
@@ -44,6 +44,14 @@ public class ReactionService {
                         result.put(type, existing.getOrDefault(type, seedCount(cleanSlug, type)));
                     }
                     return result;
+                } else {
+                    // Seed initial realistic baseline in Redis so it's persisted immediately
+                    Map<String, Long> seeded = new LinkedHashMap<>();
+                    for (String type : ALLOWED_REACTIONS) {
+                        seeded.put(type, seedCount(cleanSlug, type));
+                    }
+                    redis.hash(Long.class).hset(key, seeded);
+                    return seeded;
                 }
             } catch (Exception e) {
                 LOG.debugf("Redis reactions fetch error, falling back to local: %s", e.getMessage());
@@ -70,7 +78,7 @@ public class ReactionService {
             try {
                 String key = REDIS_KEY_PREFIX + cleanSlug;
                 if (!redis.key().exists(key)) {
-                    Map<String, Long> seeded = new HashMap<>();
+                    Map<String, Long> seeded = new LinkedHashMap<>();
                     for (String t : ALLOWED_REACTIONS) {
                         seeded.put(t, seedCount(cleanSlug, t));
                     }
@@ -102,8 +110,26 @@ public class ReactionService {
         return slug == null ? "" : slug.trim().replaceAll("[^a-zA-Z0-9_\\-]", "");
     }
 
+    public static int getSlugSeed(String slug) {
+        if (slug == null || slug.isBlank()) {
+            return 42;
+        }
+        int h = 0;
+        for (int i = 0; i < slug.length(); i++) {
+            h = 31 * h + slug.charAt(i);
+        }
+        return Math.abs(h & 0x7fffffff);
+    }
+
     public static long seedCount(String slug, String type) {
-        int hash = (slug + ":" + type).hashCode();
-        return Math.abs(hash % 16) + 3;
+        int seed = getSlugSeed(slug);
+        return switch (type) {
+            case "like" -> 16 + (seed % 23);             // 16 ~ 38
+            case "heart" -> 11 + ((seed / 7) % 18);        // 11 ~ 28
+            case "insightful" -> 6 + ((seed / 13) % 14);   // 6 ~ 19
+            case "rocket" -> 3 + ((seed / 19) % 12);       // 3 ~ 14
+            case "celebrate" -> 2 + ((seed / 29) % 10);    // 2 ~ 11
+            default -> 5 + (seed % 10);
+        };
     }
 }

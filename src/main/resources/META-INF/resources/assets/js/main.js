@@ -3551,7 +3551,7 @@
         // ==========================================
         let reactionPowWorker = null;
         let cachedReactionChallenge = null;
-        let isSolvingReactionPow = false;
+        let currentReactionPowPromise = null;
 
         function solveReactionPow(challenge, difficulty) {
             return new Promise((resolve, reject) => {
@@ -3600,32 +3600,37 @@
         }
 
         async function ensureReactionChallenge() {
-            if (isSolvingReactionPow) return null;
             const now = Math.floor(Date.now() / 1000);
             if (cachedReactionChallenge && cachedReactionChallenge.expiresAt > now + 15) {
                 return cachedReactionChallenge;
             }
-
-            try {
-                isSolvingReactionPow = true;
-                const res = await fetch('/api/reactions/challenge', { cache: 'no-store' });
-                if (!res.ok) throw new Error('Failed to fetch reaction challenge');
-                const json = await res.json();
-                if (!json.success || !json.data) throw new Error('Invalid challenge response');
-                const ch = json.data;
-                const nonce = await solveReactionPow(ch.id, ch.difficulty);
-                cachedReactionChallenge = {
-                    challengeId: ch.id,
-                    powNonce: nonce,
-                    expiresAt: ch.expiresAt
-                };
-                return cachedReactionChallenge;
-            } catch (err) {
-                console.warn('[Reactions] Background PoW preparation:', err.message);
-                return null;
-            } finally {
-                isSolvingReactionPow = false;
+            if (currentReactionPowPromise) {
+                return currentReactionPowPromise;
             }
+
+            currentReactionPowPromise = (async () => {
+                try {
+                    const res = await fetch('/api/reactions/challenge', { credentials: 'same-origin', cache: 'no-store' });
+                    if (!res.ok) throw new Error('Failed to fetch reaction challenge');
+                    const json = await res.json();
+                    if (!json.success || !json.data) throw new Error('Invalid challenge response');
+                    const ch = json.data;
+                    const nonce = await solveReactionPow(ch.id, ch.difficulty);
+                    cachedReactionChallenge = {
+                        challengeId: ch.id,
+                        powNonce: nonce,
+                        expiresAt: ch.expiresAt
+                    };
+                    return cachedReactionChallenge;
+                } catch (err) {
+                    console.warn('[Reactions] Background PoW preparation:', err.message);
+                    return null;
+                } finally {
+                    currentReactionPowPromise = null;
+                }
+            })();
+
+            return currentReactionPowPromise;
         }
 
         function initPostReactions(root = document) {
@@ -3640,14 +3645,26 @@
             const storageReactionsKey = `windblog_reactions_${slug}`;
             const storageCountsKey = `windblog_reaction_counts_${slug}`;
 
-            const seedCount = (type) => {
-                let hash = 0;
-                const str = slug + ':' + type;
-                for (let i = 0; i < str.length; i++) {
-                    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-                    hash |= 0;
+            const getSlugSeed = (s) => {
+                if (!s) return 42;
+                let h = 0;
+                for (let i = 0; i < s.length; i++) {
+                    h = ((h << 5) - h) + s.charCodeAt(i);
+                    h |= 0;
                 }
-                return Math.abs(hash % 16) + 3;
+                return Math.abs(h & 0x7fffffff);
+            };
+
+            const seedCount = (type) => {
+                const seed = getSlugSeed(slug);
+                switch (type) {
+                    case 'like': return 16 + (seed % 23);
+                    case 'heart': return 11 + (Math.floor(seed / 7) % 18);
+                    case 'insightful': return 6 + (Math.floor(seed / 13) % 14);
+                    case 'rocket': return 3 + (Math.floor(seed / 19) % 12);
+                    case 'celebrate': return 2 + (Math.floor(seed / 29) % 10);
+                    default: return 5 + (seed % 10);
+                }
             };
 
             let userReactions = [];
@@ -3684,7 +3701,7 @@
             updateButtonViews();
 
             // Fetch live counts from backend
-            fetch(`/api/reactions/${encodeURIComponent(slug)}`, { cache: 'no-cache' })
+            fetch(`/api/reactions/${encodeURIComponent(slug)}`, { credentials: 'same-origin', cache: 'no-cache' })
                 .then(r => r.ok ? r.json() : null)
                 .then(json => {
                     if (json && json.success && json.data) {
@@ -3751,9 +3768,16 @@
                             }
                         }
 
+                        const headers = { 'Content-Type': 'application/json' };
+                        const csrfToken = typeof window.getCsrfToken === 'function' ? window.getCsrfToken() : '';
+                        if (csrfToken) {
+                            headers['X-XSRF-TOKEN'] = csrfToken;
+                        }
+
                         const res = await fetch(`/api/reactions/${encodeURIComponent(slug)}`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: headers,
+                            credentials: 'same-origin',
                             body: JSON.stringify(payload)
                         });
 
@@ -3768,6 +3792,9 @@
                             if (typeof window.showToast === 'function') {
                                 window.showToast('操作过于频繁，请稍后重试', 'warning');
                             }
+                        } else {
+                            console.warn('[Reactions] Server returned error status:', res.status);
+                        }
                         }
                     } catch (netErr) {
                         console.warn('[Reactions] Sync error:', netErr.message);
