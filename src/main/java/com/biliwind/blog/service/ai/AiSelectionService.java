@@ -55,10 +55,20 @@ public class AiSelectionService {
             if (operations.isArray()) {
                 for (JsonNode item : operations) {
                     if (operation.equalsIgnoreCase(item.asText())) return true;
+                    if ("slug".equalsIgnoreCase(operation)
+                            && ("translate".equalsIgnoreCase(item.asText()) || "assistant".equalsIgnoreCase(item.asText()))) {
+                        return true;
+                    }
                 }
                 return false;
             }
-            return !operations.isTextual() || operation.equalsIgnoreCase(operations.asText());
+            if (operations.isTextual()) {
+                String text = operations.asText();
+                return operation.equalsIgnoreCase(text)
+                        || ("slug".equalsIgnoreCase(operation)
+                                && ("translate".equalsIgnoreCase(text) || "assistant".equalsIgnoreCase(text)));
+            }
+            return true;
         } catch (Exception ignored) {
             return true;
         }
@@ -70,8 +80,16 @@ public class AiSelectionService {
             SystemSetting setting = SystemSetting.findByKey("ai_operation_configs");
             if (setting == null || setting.configValue == null) return null;
             JsonNode selected = setting.configValue.get(operation);
-            if (selected == null || selected.isNull() || selected.asText().isBlank()) return null;
-            return selected.asText().trim();
+            if (selected != null && !selected.isNull() && !selected.asText().isBlank()) {
+                return selected.asText().trim();
+            }
+            if ("slug".equalsIgnoreCase(operation)) {
+                JsonNode translate = setting.configValue.get("translate");
+                if (translate != null && !translate.isNull() && !translate.asText().isBlank()) {
+                    return translate.asText().trim();
+                }
+            }
+            return null;
         } catch (Throwable ignored) {
             return null;
         }

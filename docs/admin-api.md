@@ -25,7 +25,7 @@
 - `GET /api/admin/posts`: 分页查询文章
 - `GET /api/admin/posts/{id}`: 查询文章详情
 - `POST /api/admin/posts`: 创建文章草稿
-- `GET /api/admin/posts/slug-preview?title=...`: 按标题生成 URL 友好 slug（中文按拼音音译）
+- `GET /api/admin/posts/slug-preview?title=...`: 按标题生成 URL 友好 slug（中文优先通过 AI 翻译为英文，失败或未配置时回退拼音音译）
 - `PUT /api/admin/posts/{id}`: 编辑文章（带 `version` 做并发控制）
 - `POST /api/admin/posts/{id}/publish`: 发布文章
 - `DELETE /api/admin/posts/{id}`: 软删除文章

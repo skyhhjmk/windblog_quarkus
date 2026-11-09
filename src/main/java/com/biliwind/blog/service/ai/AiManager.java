@@ -161,6 +161,52 @@ public class AiManager {
         }
     }
 
+    public static final String SLUG_SYSTEM_PROMPT = """
+            You are a technical SEO specialist. Convert the given article title into a concise, URL-safe English slug (kebab-case).
+            Rules:
+            1. Translate or summarize non-English titles into concise, natural English keywords.
+            2. Only output lowercase letters (a-z), digits (0-9), and hyphens (-).
+            3. Do NOT output any explanations, markdown code fences, quotes, or other punctuation.
+            4. Keep it under 80 characters.
+            """;
+
+    /**
+     * 根据文章标题生成 URL 友好的 slug。
+     * 纯 ASCII 标题直接格式化；非 ASCII 标题优先调用 AI 翻译为英文 slug，
+     * 若未配置 AI、调用失败或超时，自动回退到基于 ICU4J 的拼音音译生成。
+     */
+    public CompletionStage<String> generateSlug(String title) {
+        if (title == null || title.isBlank()) {
+            return CompletableFuture.completedFuture("");
+        }
+        if (isAsciiSlugCandidate(title)) {
+            return CompletableFuture.completedFuture(com.biliwind.blog.common.helper.SlugHelper.slugify(title));
+        }
+        String prompt = "Title: " + title.trim();
+        return complete(null, "slug", SLUG_SYSTEM_PROMPT, prompt)
+                .thenApply(res -> {
+                    String text = res == null ? null : res.contents.get("text");
+                    String candidate = com.biliwind.blog.common.helper.SlugHelper.slugify(text);
+                    if (candidate == null || candidate.isBlank()) {
+                        log.debug("[AI] AI slug 为空，回退到拼音生成");
+                        return com.biliwind.blog.common.helper.SlugHelper.slugify(title);
+                    }
+                    return candidate;
+                })
+                .exceptionally(ex -> {
+                    log.debug("[AI] AI slug 生成失败，回退到拼音生成: {}", ex.getMessage());
+                    return com.biliwind.blog.common.helper.SlugHelper.slugify(title);
+                });
+    }
+
+    private static boolean isAsciiSlugCandidate(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c > 127) return false;
+        }
+        return true;
+    }
+
     /**
      * Free-form completion for admin writing tools. The provider can be chosen
      * explicitly (including a polling group) or resolved by the configured

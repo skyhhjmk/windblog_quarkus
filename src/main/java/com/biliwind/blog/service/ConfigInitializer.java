@@ -350,7 +350,8 @@ public class ConfigInitializer {
                 {"summarize", "AI 摘要配置"},
                 {"translate", "AI 翻译配置"},
                 {"assistant", "写作助手 AI 配置"},
-                {"topic", "话题功能 AI 配置"}
+                {"topic", "话题功能 AI 配置"},
+                {"slug", "Slug 翻译/生成 AI 配置"}
         }) {
             ObjectNode field = aiOperationConfigFields.addObject();
             field.put("key", operation[0]);
@@ -358,7 +359,9 @@ public class ConfigInitializer {
             field.put("widget", "select");
             field.put("hint", "topic".equals(operation[0])
                     ? "选择单个提供商或轮询组；留空时自动选择。话题生成、话题池和草稿回写全部由 AI API 完成。"
-                    : "选择单个提供商或轮询组；留空时自动选择");
+                    : ("slug".equals(operation[0])
+                            ? "选择单个提供商或轮询组；留空时自动沿用翻译配置或自动选择。"
+                            : "选择单个提供商或轮询组；留空时自动选择"));
             field.putArray("options");
         }
         ObjectNode aiOperationConfigValue = mapper.createObjectNode();
@@ -367,8 +370,9 @@ public class ConfigInitializer {
         aiOperationConfigValue.put("translate", "");
         aiOperationConfigValue.put("assistant", "");
         aiOperationConfigValue.put("topic", "");
+        aiOperationConfigValue.put("slug", "");
         list.add(new SettingDefinition("ai_operation_configs", aiOperationConfigValue, "object", "功能设置",
-                aiOperationConfigSchema, "分别指定 AI 评论审核、摘要、翻译和话题功能使用的提供商或轮询组。"));
+                aiOperationConfigSchema, "分别指定 AI 评论审核、摘要、翻译、话题和 Slug 生成功能使用的提供商或轮询组。"));
 
         ObjectNode elasticsearchSchema = mapper.createObjectNode();
         elasticsearchSchema.put("type", "object");

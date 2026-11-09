@@ -54,6 +54,18 @@ public class MockAiService implements AiService {
     }
 
     @Override
+    public CompletionStage<AiResult> complete(com.biliwind.blog.model.AiProviderConfig config,
+            String systemPrompt, String prompt) {
+        AiResult result = new AiResult();
+        if (prompt != null && prompt.startsWith("Title: ")) {
+            result.contents.put("text", "mock-slug-english-result");
+        } else {
+            result.contents.put("text", "This is a mock complete response.");
+        }
+        return CompletableFuture.completedStage(result);
+    }
+
+    @Override
     public io.smallrye.mutiny.Multi<String> testStream(com.biliwind.blog.model.AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest request) {
         return io.smallrye.mutiny.Multi.createFrom().items(
                 "{\"type\":\"content\",\"content\":\"This is a mock streaming response.\"}\n",

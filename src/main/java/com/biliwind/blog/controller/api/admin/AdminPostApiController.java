@@ -198,10 +198,24 @@ public class AdminPostApiController {
 
     @GET
     @Path("/slug-preview")
+    @Blocking
     @Operation(summary = "根据标题预览 URL 友好的 slug")
     @APIResponse(responseCode = "200", description = "返回由标题生成的 slug")
     public Map<String, String> previewSlug(@QueryParam("title") String title) {
-        return Map.of("slug", com.biliwind.blog.common.helper.SlugHelper.slugify(title));
+        return Map.of("slug", generateSlugWithAiFallback(title));
+    }
+
+    private String generateSlugWithAiFallback(String title) {
+        if (title == null || title.isBlank()) {
+            return "";
+        }
+        try {
+            return aiManager.generateSlug(title)
+                    .toCompletableFuture()
+                    .get(8, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return com.biliwind.blog.common.helper.SlugHelper.slugify(title);
+        }
     }
 
     @POST
@@ -432,7 +446,7 @@ public class AdminPostApiController {
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
                     translatedTitle, translatedSummary, translatedContent,
                     translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords,
-                    com.biliwind.blog.common.helper.SlugHelper.slugify(translatedTitle));
+                    generateSlugWithAiFallback(translatedTitle));
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
@@ -484,7 +498,7 @@ public class AdminPostApiController {
             return new PostTranslationResponse(sourceLanguage, targetLanguage,
                     translatedTitle, translatedSummary, translatedContent,
                     translatedSeoTitle, translatedSeoDescription, translatedSeoKeywords,
-                    com.biliwind.blog.common.helper.SlugHelper.slugify(translatedTitle));
+                    generateSlugWithAiFallback(translatedTitle));
         } catch (java.util.concurrent.CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw badRequest("AI 翻译失败: " + safeErrorMessage(cause));
@@ -906,7 +920,12 @@ public class AdminPostApiController {
         String slug = requested == null || requested.isBlank()
                 ? "" : com.biliwind.blog.common.helper.SlugHelper.slugify(requested);
         if (slug.isBlank()) {
-            slug = com.biliwind.blog.common.helper.SlugHelper.slugify(title);
+            String titleText = title == null ? null : LanguageHelper.resolveLocalizedValue(title, null);
+            if (titleText != null && !titleText.isBlank()) {
+                slug = generateSlugWithAiFallback(titleText);
+            } else {
+                slug = com.biliwind.blog.common.helper.SlugHelper.slugify(title);
+            }
         }
         if (slug.isBlank()) {
             slug = "post-" + Long.toString(System.currentTimeMillis(), 36);
