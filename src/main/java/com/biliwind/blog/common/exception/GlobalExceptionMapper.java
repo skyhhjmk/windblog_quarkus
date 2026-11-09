@@ -114,6 +114,9 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
 
             return Response.status(status)
                     .type(MediaType.TEXT_HTML)
+                    .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                    .header("Pragma", "no-cache")
+                    .header("Expires", "0")
                     .entity(instance)
                     .build();
         }
@@ -122,6 +125,9 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         ErrorResponse errorResponse = new ErrorResponse(message, errorType, trackingId, trackingText, errorCode);
         return Response.status(status)
                 .type(MediaType.APPLICATION_JSON)
+                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                .header("Pragma", "no-cache")
+                .header("Expires", "0")
                 .entity(errorResponse)
                 .build();
     }

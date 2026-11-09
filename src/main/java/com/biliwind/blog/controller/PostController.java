@@ -188,12 +188,13 @@ public class PostController {
         EntityTag etag = new EntityTag(etagValue, true);
         boolean protectedPage = snapshot.visibility() == 2;
 
-        // 评估客户端提供的 If-None-Match 首部
-        if (!protectedPage && !trackedReferral) {
+        // 评估客户端提供的 If-None-Match 首部（仅限未登录访客、非受保护且非推广的公开文章）
+        if (!protectedPage && !trackedReferral && requestUserId == null) {
             Response.ResponseBuilder responseBuilder = request.evaluatePreconditions(etag);
             if (responseBuilder != null) {
                 CacheControl cacheControl = new CacheControl();
-                cacheControl.setMaxAge(60); // 缓存 60 秒
+                cacheControl.setMaxAge(60); // 浏览器缓存 60 秒
+                cacheControl.setSMaxAge(300); // 共享 CDN 缓存 300 秒
                 return responseBuilder.cacheControl(cacheControl)
                         .header("Vary", "Accept-Language, Cookie")
                         .build();
@@ -434,16 +435,16 @@ public class PostController {
 
         Response.ResponseBuilder responseBuilder = Response.ok(templateInstance)
                 .header("Vary", "Accept-Language, Cookie");
-        if (protectedPage || trackedReferral || requestUserId != null || hasPurchased) {
+        boolean isPrivateContext = protectedPage || trackedReferral || requestUserId != null || hasPurchased;
+        if (isPrivateContext) {
             responseBuilder.header("X-WindBlog-Private", "true");
-        }
-        if (protectedPage || trackedReferral) {
-            responseBuilder.header("Cache-Control", "no-store")
+            responseBuilder.header("Cache-Control", "private, no-cache, no-store, must-revalidate")
                     .header("Pragma", "no-cache")
                     .header("Expires", "0");
         } else {
             CacheControl cacheControl = new CacheControl();
-            cacheControl.setMaxAge(60); // 缓存 60 秒
+            cacheControl.setMaxAge(60); // 浏览器缓存 60 秒
+            cacheControl.setSMaxAge(300); // 共享 CDN 缓存 300 秒
             responseBuilder.tag(etag).cacheControl(cacheControl);
         }
         return responseBuilder.build();

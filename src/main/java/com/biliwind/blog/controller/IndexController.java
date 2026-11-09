@@ -250,7 +250,8 @@ public class IndexController {
     private Response buildHtmlResponse(String html) {
         return Response.ok(html)
                 .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"))
-                .header("Cache-Control", "no-cache")
+                .header("Cache-Control", "private, no-cache, must-revalidate")
+                .header("Vary", "Accept-Language, Cookie")
                 .header("Link", AGENT_DISCOVERY_LINKS)
                 .build();
     }
