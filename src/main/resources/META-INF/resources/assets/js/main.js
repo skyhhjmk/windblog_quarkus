@@ -3490,11 +3490,18 @@
                     link.classList.add('is-active');
                     const container = link.closest('#toc-content, #mobileTocContent');
                     if (container) {
-                        const linkTop = link.offsetTop;
+                        const linkRect = link.getBoundingClientRect();
+                        const containerRect = container.getBoundingClientRect();
+                        const relativeTop = linkRect.top - containerRect.top + container.scrollTop;
                         const containerScroll = container.scrollTop;
                         const containerHeight = container.clientHeight;
-                        if (linkTop < containerScroll || linkTop > containerScroll + containerHeight - 36) {
-                            container.scrollTo({ top: Math.max(0, linkTop - 36), behavior: 'smooth' });
+
+                        // Only scroll when active link is outside the comfortable view window
+                        if (relativeTop < containerScroll + 16 || relativeTop > containerScroll + containerHeight - 48) {
+                            container.scrollTo({
+                                top: Math.max(0, relativeTop - Math.floor(containerHeight / 3)),
+                                behavior: 'smooth'
+                            });
                         }
                     }
                 } else {
@@ -3547,16 +3554,87 @@
             }
         }
 
+        // ==========================================
+        // Smart Sticky Sidebar (Dual-direction natural sticky)
+        // ==========================================
+        let lastSidebarScrollY = window.scrollY || 0;
+        let sidebarStickyTop = 80;
+        let sidebarResizeObserver = null;
+
+        function updateStickySidebar(reset = false) {
+            const sidebar = document.getElementById('sidebar-container');
+            if (!sidebar) return;
+
+            // Only apply on desktop (>= 768px) where sidebar is placed alongside main content
+            if (window.innerWidth < 768) {
+                sidebar.style.position = '';
+                sidebar.style.top = '';
+                return;
+            }
+
+            const headerOffset = 80; // 5rem = 80px (sticky header 64px + 16px buffer)
+            const bottomOffset = 24; // 1.5rem = 24px bottom buffer
+            const windowHeight = window.innerHeight;
+            const sidebarHeight = sidebar.offsetHeight;
+            const availableHeight = windowHeight - headerOffset - bottomOffset;
+
+            // When sidebar fits entirely within the viewport, pin to header offset
+            if (sidebarHeight <= availableHeight) {
+                sidebar.style.position = 'sticky';
+                sidebar.style.top = `${headerOffset}px`;
+                sidebarStickyTop = headerOffset;
+                lastSidebarScrollY = window.scrollY || 0;
+                return;
+            }
+
+            const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+            if (reset) {
+                sidebarStickyTop = headerOffset;
+                lastSidebarScrollY = scrollY;
+                sidebar.style.position = 'sticky';
+                sidebar.style.top = `${headerOffset}px`;
+                return;
+            }
+
+            const delta = scrollY - lastSidebarScrollY;
+            lastSidebarScrollY = scrollY;
+
+            const maxTop = headerOffset;
+            const minTop = windowHeight - sidebarHeight - bottomOffset;
+
+            sidebarStickyTop = Math.max(minTop, Math.min(maxTop, sidebarStickyTop - delta));
+
+            sidebar.style.position = 'sticky';
+            sidebar.style.top = `${sidebarStickyTop}px`;
+        }
+
+        function initStickySidebarObserver() {
+            const sidebar = document.getElementById('sidebar-container');
+            if (!sidebar || typeof ResizeObserver === 'undefined') return;
+            if (sidebarResizeObserver) {
+                sidebarResizeObserver.disconnect();
+            }
+            sidebarResizeObserver = new ResizeObserver(() => {
+                updateStickySidebar();
+            });
+            sidebarResizeObserver.observe(sidebar);
+        }
+
         let scrollTicking = false;
         window.addEventListener('scroll', () => {
             if (!scrollTicking) {
                 window.requestAnimationFrame(() => {
                     updateScrollspy();
                     updateScrollProgress();
+                    updateStickySidebar();
                     scrollTicking = false;
                 });
                 scrollTicking = true;
             }
+        }, { passive: true });
+
+        window.addEventListener('resize', () => {
+            updateStickySidebar(true);
         }, { passive: true });
 
         // ==========================================
@@ -3850,15 +3928,26 @@
         document.addEventListener('page:ready', () => {
             initToc();
             updateScrollProgress();
+            updateStickySidebar(true);
+            initStickySidebarObserver();
             initPostReactions(document);
         });
         document.addEventListener('pjax:complete', () => {
             initToc();
             closeMobileTocDrawer();
             updateScrollProgress();
+            updateStickySidebar(true);
+            initStickySidebarObserver();
             initPostReactions(document);
         });
-        document.addEventListener('sidebar:updated', initToc);
+        document.addEventListener('sidebar:updated', () => {
+            initToc();
+            updateStickySidebar(true);
+            initStickySidebarObserver();
+        });
+
+        updateStickySidebar(true);
+        initStickySidebarObserver();
 
         bindSearchForms();
         decorateShortcutButtons();
