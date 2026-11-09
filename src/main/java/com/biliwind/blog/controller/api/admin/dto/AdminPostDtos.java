@@ -37,7 +37,10 @@ public final class AdminPostDtos {
                         String repostPolicyCode,
                         Map<String, String> seoTitleTranslations,
                         Map<String, String> seoKeywordsTranslations,
-                        Map<String, String> seoDescriptionTranslations) {
+                        Map<String, String> seoDescriptionTranslations,
+                        Short articleMode,
+                        com.biliwind.blog.model.TutorialMeta tutorialMeta,
+                        com.biliwind.blog.model.ResourceMeta resourceMeta) {
         }
 
     public record PostUpdateRequest(
@@ -67,7 +70,10 @@ public final class AdminPostDtos {
                         Map<String, String> seoTitleTranslations,
                         Map<String, String> seoKeywordsTranslations,
                         Map<String, String> seoDescriptionTranslations,
-                        Boolean force) {
+                        Boolean force,
+                        Short articleMode,
+                        com.biliwind.blog.model.TutorialMeta tutorialMeta,
+                        com.biliwind.blog.model.ResourceMeta resourceMeta) {
         }
 
         public record PostTranslationRequest(
@@ -121,7 +127,8 @@ public final class AdminPostDtos {
                         Boolean hasPublishedRevision,
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
-                        OffsetDateTime updatedAt) {
+                        OffsetDateTime updatedAt,
+                        Short articleMode) {
         }
 
     public record EmailDispatchRequest(
@@ -169,7 +176,10 @@ public final class AdminPostDtos {
                         OffsetDateTime updatedAt,
                         Map<String, String> seoTitleTranslations,
                         Map<String, String> seoKeywordsTranslations,
-                        Map<String, String> seoDescriptionTranslations) {
+                        Map<String, String> seoDescriptionTranslations,
+                        Short articleMode,
+                        com.biliwind.blog.model.TutorialMeta tutorialMeta,
+                        com.biliwind.blog.model.ResourceMeta resourceMeta) {
         }
 
     public record PostRevisionItem(

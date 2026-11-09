@@ -1,0 +1,86 @@
+{#if articleMode == 'resource' && (resourceVersion || resourceFileSize || (resourcePlatforms && !resourcePlatforms.isEmpty) || resourceOfficialUrl || resourceLicense || resourceChecksumSha256 || resourceChecksumMd5)}
+<div class="my-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-emerald-500/[0.06] via-teal-500/[0.03] to-transparent border border-emerald-500/20 space-y-5 not-prose shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-500/15 pb-4">
+        <div class="flex items-center gap-2.5">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                </svg>
+            </span>
+            <div>
+                <h3 class="text-sm font-bold text-main">资源规格与详情参数</h3>
+                <p class="text-xs text-meta">已核验资源包可用性，支持多通道分流与校验</p>
+            </div>
+        </div>
+        {#if resourceVersion}
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                版本：{resourceVersion}
+            </span>
+        {/if}
+    </div>
+
+    <!-- Spec parameters grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        {#if resourceFileSize}
+            <div class="p-3 rounded-xl bg-card border border-border/70 space-y-1">
+                <span class="text-meta block">文件大小</span>
+                <span class="font-mono font-bold text-main">{resourceFileSize}</span>
+            </div>
+        {/if}
+        {#if resourcePlatforms && !resourcePlatforms.isEmpty}
+            <div class="p-3 rounded-xl bg-card border border-border/70 space-y-1">
+                <span class="text-meta block">适配平台</span>
+                <div class="flex flex-wrap gap-1 font-mono font-bold text-main">
+                    {#for platform in resourcePlatforms}
+                        <span>{platform}{#if platform_hasNext}, {/if}</span>
+                    {/for}
+                </div>
+            </div>
+        {/if}
+        {#if resourceLicense}
+            <div class="p-3 rounded-xl bg-card border border-border/70 space-y-1">
+                <span class="text-meta block">授权许可</span>
+                <span class="font-mono font-bold text-main">{resourceLicense}</span>
+            </div>
+        {/if}
+        {#if resourceOfficialUrl}
+            <div class="p-3 rounded-xl bg-card border border-border/70 space-y-1">
+                <span class="text-meta block">官网 / 主页</span>
+                <a href="{resourceOfficialUrl}" target="_blank" rel="noopener noreferrer" class="font-mono font-bold text-accent hover:underline truncate block" title="{resourceOfficialUrl}">访问主页 ↗</a>
+            </div>
+        {/if}
+    </div>
+
+    <!-- Checksum verification bar -->
+    {#if resourceChecksumSha256 || resourceChecksumMd5}
+        <div class="p-3.5 rounded-xl bg-input-bg/60 border border-border/60 space-y-2 text-xs font-mono">
+            {#if resourceChecksumSha256}
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 truncate">
+                        <span class="text-meta font-bold shrink-0">SHA-256:</span>
+                        <code class="text-[11px] text-body truncate select-all">{resourceChecksumSha256}</code>
+                    </div>
+                    <button type="button" class="btn-copy-checksum inline-flex items-center gap-1 text-accent hover:underline font-bold text-[11px] shrink-0 self-end sm:self-auto" data-copy="{resourceChecksumSha256}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        <span>复制散列</span>
+                    </button>
+                </div>
+            {/if}
+            {#if resourceChecksumMd5}
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 truncate">
+                        <span class="text-meta font-bold shrink-0">MD5:</span>
+                        <code class="text-[11px] text-body truncate select-all">{resourceChecksumMd5}</code>
+                    </div>
+                    <button type="button" class="btn-copy-checksum inline-flex items-center gap-1 text-accent hover:underline font-bold text-[11px] shrink-0 self-end sm:self-auto" data-copy="{resourceChecksumMd5}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        <span>复制 MD5</span>
+                    </button>
+                </div>
+            {/if}
+        </div>
+    {/if}
+</div>
+{/if}

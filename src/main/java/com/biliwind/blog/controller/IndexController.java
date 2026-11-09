@@ -301,10 +301,26 @@ public class IndexController {
             if (categories.isEmpty() && snapshot.categorySlug() != null) {
                 categories = List.of(new CategoryItem(categoryName, categorySlug));
             }
+            String articleMode = snapshot.articleMode() == null ? "standard" : snapshot.articleMode().value();
+            String modeBadge = null;
+            if ("tutorial".equals(articleMode)) {
+                if (snapshot.tutorialMeta() != null && snapshot.tutorialMeta().estimatedMinutes() != null && snapshot.tutorialMeta().estimatedMinutes() > 0) {
+                    modeBadge = "教程 · " + snapshot.tutorialMeta().estimatedMinutes() + "分钟";
+                } else {
+                    modeBadge = "教程";
+                }
+            } else if ("resource".equals(articleMode)) {
+                if (snapshot.resourceMeta() != null && snapshot.resourceMeta().version() != null && !snapshot.resourceMeta().version().isBlank()) {
+                    modeBadge = "资源 · " + snapshot.resourceMeta().version();
+                } else {
+                    modeBadge = "资源";
+                }
+            }
             result.add(new IndexPostItem(
                     snapshot.slug(), title, summary, snapshot.aiSummary(), aiSummaryStatusValue,
                     snapshot.publishedAt(), snapshot.createdAt(), categoryName, categorySlug,
-                    categories, snapshot.authorName(), tags, snapshot.coverImageUrl(), snapshot.coverThumbhash()));
+                    categories, snapshot.authorName(), tags, snapshot.coverImageUrl(), snapshot.coverThumbhash(),
+                    articleMode, modeBadge));
         }
         return result;
     }
@@ -332,7 +348,9 @@ public class IndexController {
             String authorName,
             List<TagItem> tags,
             String coverImageUrl,
-            String coverThumbhash
+            String coverThumbhash,
+            String articleMode,
+            String modeBadge
     ) {
         public IndexPostItem(
                 String slug,
@@ -350,7 +368,7 @@ public class IndexController {
                 String coverImageUrl
         ) {
             this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, createdAt,
-                    categoryName, categorySlug, categories, authorName, tags, coverImageUrl, null);
+                    categoryName, categorySlug, categories, authorName, tags, coverImageUrl, null, "standard", null);
         }
     }
 

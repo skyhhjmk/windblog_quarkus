@@ -99,6 +99,27 @@ public class Post extends PanacheEntityBase {
     @Column(name = "render_type", nullable = false)
     public PostRenderType renderType;
 
+    /**
+     * 文章模式：0=常规(STANDARD), 1=教程(TUTORIAL), 2=资源(RESOURCE)
+     */
+    @Convert(converter = ArticleModeConverter.class)
+    @Column(name = "article_mode", nullable = false)
+    public ArticleMode articleMode = ArticleMode.STANDARD;
+
+    /**
+     * 教程模式专属元数据
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "tutorial_meta", columnDefinition = "jsonb")
+    public TutorialMeta tutorialMeta;
+
+    /**
+     * 资源模式专属元数据
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "resource_meta", columnDefinition = "jsonb")
+    public ResourceMeta resourceMeta;
+
     /** 作者 */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)

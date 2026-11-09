@@ -169,6 +169,72 @@ class StructuredDataServiceTest {
     }
 
     @Test
+    void tutorialModeEmitsHowToSchema() throws Exception {
+        PublicCacheRefreshService.PublicPostSnapshot tutSnapshot = new PublicCacheRefreshService.PublicPostSnapshot(
+                1L, "tutorial-test", 1L, Map.of("zh-CN", "教程标题"), Map.of(), Map.of(), null,
+                Map.of(), null, null, null, null, Map.of("zh-CN", "Tech"), "tech", List.of(), "Author",
+                OffsetDateTime.parse("2026-10-01T08:00:00+08:00"), null,
+                0L, false, true, (short) 0, 0L, List.of(), List.of(), List.of(), List.of(), null, List.of(),
+                com.biliwind.blog.model.ArticleMode.TUTORIAL,
+                new com.biliwind.blog.model.TutorialMeta(
+                        Map.of("zh-CN", "入门"),
+                        30,
+                        Map.of("zh-CN", List.of("JDK 21", "Docker")),
+                        Map.of("zh-CN", "开发工程师")),
+                null);
+
+        JsonNode graph = mapper.readTree(service.article(tutSnapshot, "教程标题", "教程描述",
+                ORIGIN + "/post/tutorial-test", "zh-CN", "")).path("@graph");
+
+        boolean foundHowTo = false;
+        for (JsonNode node : graph) {
+            if ("HowTo".equals(node.path("@type").asText())) {
+                foundHowTo = true;
+                assertEquals("PT30M", node.path("totalTime").asText());
+                assertEquals("教程标题", node.path("name").asText());
+                assertEquals(2, node.path("supply").size());
+                assertEquals("JDK 21", node.path("supply").get(0).path("name").asText());
+            }
+        }
+        assertTrue(foundHowTo, "Graph should contain HowTo node for TUTORIAL mode");
+    }
+
+    @Test
+    void resourceModeEmitsSoftwareApplicationSchema() throws Exception {
+        PublicCacheRefreshService.PublicPostSnapshot resSnapshot = new PublicCacheRefreshService.PublicPostSnapshot(
+                2L, "resource-test", 1L, Map.of("zh-CN", "资源标题"), Map.of(), Map.of(), null,
+                Map.of(), null, null, null, null, Map.of("zh-CN", "Software"), "software", List.of(), "Author",
+                OffsetDateTime.parse("2026-10-01T08:00:00+08:00"), null,
+                0L, false, true, (short) 0, 0L, List.of(), List.of(), List.of(), List.of(), null, List.of(),
+                com.biliwind.blog.model.ArticleMode.RESOURCE,
+                null,
+                new com.biliwind.blog.model.ResourceMeta(
+                        "v2.1.0",
+                        "85 MB",
+                        List.of("Windows", "macOS"),
+                        "https://example.com/app",
+                        "MIT",
+                        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                        null,
+                        List.of()));
+
+        JsonNode graph = mapper.readTree(service.article(resSnapshot, "资源标题", "资源描述",
+                ORIGIN + "/post/resource-test", "zh-CN", "")).path("@graph");
+
+        boolean foundSoftware = false;
+        for (JsonNode node : graph) {
+            if ("SoftwareApplication".equals(node.path("@type").asText())) {
+                foundSoftware = true;
+                assertEquals("v2.1.0", node.path("softwareVersion").asText());
+                assertEquals("85 MB", node.path("fileSize").asText());
+                assertEquals("Windows, macOS", node.path("operatingSystem").asText());
+                assertEquals("https://example.com/app", node.path("url").asText());
+            }
+        }
+        assertTrue(foundSoftware, "Graph should contain SoftwareApplication node for RESOURCE mode");
+    }
+
+    @Test
     void serializationFailureOmitsMarkupInsteadOfReturningAnEmptyObject() {
         service.mapper = new ObjectMapper() {
             @Override public String writeValueAsString(Object value) throws JsonProcessingException {

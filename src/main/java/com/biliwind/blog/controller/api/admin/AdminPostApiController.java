@@ -254,6 +254,9 @@ public class AdminPostApiController {
         post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
         post.contentDeclarations = validateContentDeclarations(request.contentDeclarations());
         post.repostPolicyCode = repostPolicyCatalog.require(request.repostPolicyCode()).code();
+        post.articleMode = request.articleMode() == null ? ArticleMode.STANDARD : ArticleMode.fromCode(request.articleMode());
+        post.tutorialMeta = request.tutorialMeta();
+        post.resourceMeta = request.resourceMeta();
 
         List<Long> initialCategoryIds = request.categoryIds() != null
                 ? request.categoryIds()
@@ -741,7 +744,8 @@ public class AdminPostApiController {
                 post.publishedRevision != null,
                 post.publishedAt,
                 post.createdAt,
-                post.updatedAt);
+                post.updatedAt,
+                post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code());
     }
 
     private AdminPostDetail toDetail(Post post) {
@@ -784,7 +788,10 @@ public class AdminPostApiController {
                 post.updatedAt,
                 post.seoTitle,
                 post.seoKeywords,
-                post.seoDescription);
+                post.seoDescription,
+                post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
+                post.tutorialMeta,
+                post.resourceMeta);
     }
 
 
@@ -1060,6 +1067,28 @@ public class AdminPostApiController {
             }
         }
 
+        if (request.articleMode() != null) {
+            ArticleMode nextArticleMode = ArticleMode.fromCode(request.articleMode());
+            if (!Objects.equals(post.articleMode, nextArticleMode)) {
+                post.articleMode = nextArticleMode;
+                changed = true;
+            }
+        }
+
+        if (request.tutorialMeta() != null || (request.articleMode() != null && request.articleMode() != ArticleMode.TUTORIAL.code())) {
+            if (!Objects.equals(post.tutorialMeta, request.tutorialMeta())) {
+                post.tutorialMeta = request.tutorialMeta();
+                changed = true;
+            }
+        }
+
+        if (request.resourceMeta() != null || (request.articleMode() != null && request.articleMode() != ArticleMode.RESOURCE.code())) {
+            if (!Objects.equals(post.resourceMeta, request.resourceMeta())) {
+                post.resourceMeta = request.resourceMeta();
+                changed = true;
+            }
+        }
+
         if (request.status() != null) {
             PostStatus nextStatus = PostStatus.fromCode(request.status());
             if (nextStatus == null) {
@@ -1225,7 +1254,10 @@ public class AdminPostApiController {
                 post.updatedAt,
                 post.seoTitle,
                 post.seoKeywords,
-                post.seoDescription);
+                post.seoDescription,
+                post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
+                post.tutorialMeta,
+                post.resourceMeta);
     }
 
     @POST

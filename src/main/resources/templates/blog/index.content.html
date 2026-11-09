@@ -37,10 +37,19 @@
             {/if}
         </div>
 
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-mono" id="post-mode-filter">
+            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-accent/40 bg-accent/15 text-accent font-bold transition-all" data-mode="all">全部</button>
+            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-border bg-card hover:border-accent/40 text-meta hover:text-main font-bold transition-all" data-mode="standard">博客</button>
+            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-border bg-card hover:border-accent/40 text-meta hover:text-main font-bold transition-all" data-mode="tutorial">教程</button>
+            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-border bg-card hover:border-accent/40 text-meta hover:text-main font-bold transition-all" data-mode="resource">资源</button>
+        </div>
+
         {#if posts && !posts.isEmpty}
             <div class="grid grid-cols-1 gap-6 md:gap-8">
                 {#for post in posts}
-                    <article class="group card p-5 sm:p-6 md:p-7 relative rounded-2xl border border-border bg-card" data-article-transition-slug="{post.slug}">
+                    <article class="group card p-5 sm:p-6 md:p-7 relative rounded-2xl border border-border bg-card"
+                             data-article-transition-slug="{post.slug}"
+                             data-article-mode="{post.articleMode ?: 'standard'}">
                         <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
                             {#if post.coverImageUrl}
                                 <div class="post-list-cover relative w-full shrink-0 overflow-hidden rounded-xl border border-border/40 bg-bg sm:w-44 md:w-52 lg:w-60"
@@ -56,6 +65,17 @@
                             <div class="flex min-w-0 flex-1 flex-col gap-4">
                                 <!-- Meta Information -->
                                 <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono">
+                                    {#if post.articleMode == 'tutorial'}
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+                                            {post.modeBadge ?: '教程'}
+                                        </span>
+                                    {#else if post.articleMode == 'resource'}
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                            {post.modeBadge ?: '资源'}
+                                        </span>
+                                    {/if}
                                     <span class="text-main font-semibold flex items-center gap-1.5">
                                         <span class="w-1.5 h-1.5 rounded-full bg-accent/70"></span>
                                         {post.authorName}

@@ -160,4 +160,5 @@
     <include file="db/migration/159-add-post-revision-paragraph-translations.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/160-create-post-reactions.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/161-add-media-thumbhash.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/162-add-article-mode-and-metadata.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

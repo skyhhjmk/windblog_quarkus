@@ -380,11 +380,64 @@ public class PostController {
         int wordCount = com.biliwind.blog.common.helper.PostHelper.calculateWordCount(postBody.body());
         int readingTimeMinutes = com.biliwind.blog.common.helper.PostHelper.calculateReadingTimeMinutes(wordCount);
 
+        com.biliwind.blog.model.ArticleMode articleMode = snapshot.articleMode() == null
+                ? com.biliwind.blog.model.ArticleMode.STANDARD
+                : snapshot.articleMode();
+        String articleModeName = articleMode.value();
+
+        com.biliwind.blog.model.TutorialMeta tutorialMeta = snapshot.tutorialMeta();
+        String tutorialDifficulty = "";
+        Integer tutorialEstimatedMinutes = null;
+        List<String> tutorialPrerequisites = List.of();
+        String tutorialTargetAudience = "";
+        if (tutorialMeta != null) {
+            tutorialDifficulty = LanguageHelper.resolveLocalizedValue(tutorialMeta.difficulty(), resolvedLang);
+            tutorialEstimatedMinutes = tutorialMeta.estimatedMinutes();
+            if (tutorialMeta.prerequisites() != null) {
+                tutorialPrerequisites = tutorialMeta.prerequisites().getOrDefault(resolvedLang,
+                        tutorialMeta.prerequisites().values().stream().findFirst().orElse(List.of()));
+            }
+            tutorialTargetAudience = LanguageHelper.resolveLocalizedValue(tutorialMeta.targetAudience(), resolvedLang);
+        }
+
+        com.biliwind.blog.model.ResourceMeta resourceMeta = snapshot.resourceMeta();
+        String resourceVersion = "";
+        String resourceFileSize = "";
+        List<String> resourcePlatforms = List.of();
+        String resourceOfficialUrl = "";
+        String resourceLicense = "";
+        String resourceChecksumSha256 = "";
+        String resourceChecksumMd5 = "";
+        List<com.biliwind.blog.model.ResourceMirror> resourceMirrors = List.of();
+        if (resourceMeta != null) {
+            resourceVersion = resourceMeta.version() == null ? "" : resourceMeta.version();
+            resourceFileSize = resourceMeta.fileSize() == null ? "" : resourceMeta.fileSize();
+            resourcePlatforms = resourceMeta.platforms() == null ? List.of() : resourceMeta.platforms();
+            resourceOfficialUrl = resourceMeta.officialUrl() == null ? "" : resourceMeta.officialUrl();
+            resourceLicense = resourceMeta.license() == null ? "" : resourceMeta.license();
+            resourceChecksumSha256 = resourceMeta.checksumSha256() == null ? "" : resourceMeta.checksumSha256();
+            resourceChecksumMd5 = resourceMeta.checksumMd5() == null ? "" : resourceMeta.checksumMd5();
+            resourceMirrors = resourceMeta.mirrors() == null ? List.of() : resourceMeta.mirrors();
+        }
+
         TemplateInstance templateInstance = template
                 .data("language", resolvedLang)
                 .data("pjaxRequest", pjaxRequest)
                 .data("contentLanguage", contentLanguage)
                 .data("postSlug", slug)
+                .data("articleMode", articleModeName)
+                .data("tutorialDifficulty", tutorialDifficulty)
+                .data("tutorialEstimatedMinutes", tutorialEstimatedMinutes)
+                .data("tutorialPrerequisites", tutorialPrerequisites)
+                .data("tutorialTargetAudience", tutorialTargetAudience)
+                .data("resourceVersion", resourceVersion)
+                .data("resourceFileSize", resourceFileSize)
+                .data("resourcePlatforms", resourcePlatforms)
+                .data("resourceOfficialUrl", resourceOfficialUrl)
+                .data("resourceLicense", resourceLicense)
+                .data("resourceChecksumSha256", resourceChecksumSha256)
+                .data("resourceChecksumMd5", resourceChecksumMd5)
+                .data("resourceMirrors", resourceMirrors)
                 .data("postCoverImageUrl", postCoverImageUrl)
                 .data("postCoverThumbhash", postCoverThumbhash)
                 .data("wordCount", wordCount)

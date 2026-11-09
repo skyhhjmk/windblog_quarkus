@@ -60,6 +60,17 @@
                     {/if}
                     <div class="post-title-stage-content space-y-4">
                         <div class="flex items-center gap-3">
+                            {#if articleMode == 'tutorial'}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+                                    教程文章
+                                </span>
+                            {#else if articleMode == 'resource'}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                    资源分享
+                                </span>
+                            {/if}
                             {#for category in postCategories}
                                 <a href="{languagePrefix}/category/{category.slug}" class="badge-category">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
@@ -110,6 +121,9 @@
                         </span>
                     </div>
                 </div>
+
+                {#include blog/post.tutorial.header.html /}
+                {#include blog/post.resource.header.html /}
 
                 {#if aiSummary && ! aiSummary.isEmpty}
                     <div class="my-3 p-4 sm:p-5 rounded-xl bg-accent/[0.04] border border-accent/20 space-y-2"
@@ -226,6 +240,8 @@
                     <p class="text-gray-500 italic">{i18n.t('post.no_content_language')}</p>
                 {/if}
             </section>
+
+            {#include blog/post.resource.download.html /}
 
             <!-- 附件区域容器（动态更新） -->
             <div id="attachments-container">

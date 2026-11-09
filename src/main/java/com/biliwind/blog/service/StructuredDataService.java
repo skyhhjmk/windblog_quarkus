@@ -116,7 +116,57 @@ public class StructuredDataService {
                     localizePath("/category/" + snapshot.categorySlug())));
         }
         trail.add(new Breadcrumb(title, canonicalUrl));
-        return graph(List.of(article, publisher, breadcrumb(canonicalUrl, trail)));
+
+        List<ObjectNode> entities = new ArrayList<>();
+        entities.add(article);
+        entities.add(publisher);
+        entities.add(breadcrumb(canonicalUrl, trail));
+
+        if (snapshot.articleMode() == com.biliwind.blog.model.ArticleMode.TUTORIAL && snapshot.tutorialMeta() != null) {
+            ObjectNode howTo = node("HowTo", canonicalUrl + "#howto");
+            howTo.put("name", title);
+            howTo.put("description", description == null ? "" : description);
+            howTo.put("inLanguage", language);
+            howTo.putObject("mainEntityOfPage").put("@type", "WebPage").put("@id", canonicalUrl);
+            if (snapshot.tutorialMeta().estimatedMinutes() != null && snapshot.tutorialMeta().estimatedMinutes() > 0) {
+                howTo.put("totalTime", "PT" + snapshot.tutorialMeta().estimatedMinutes() + "M");
+            }
+            List<String> prereqs = snapshot.tutorialMeta().prerequisites() != null
+                    ? snapshot.tutorialMeta().prerequisites().getOrDefault(language,
+                    snapshot.tutorialMeta().prerequisites().values().stream().findFirst().orElse(List.of()))
+                    : List.of();
+            if (prereqs != null && !prereqs.isEmpty()) {
+                ArrayNode supplyArray = howTo.putArray("supply");
+                for (String p : prereqs) {
+                    ObjectNode supply = mapper.createObjectNode();
+                    supply.put("@type", "HowToSupply");
+                    supply.put("name", p);
+                    supplyArray.add(supply);
+                }
+            }
+            entities.add(howTo);
+        } else if (snapshot.articleMode() == com.biliwind.blog.model.ArticleMode.RESOURCE && snapshot.resourceMeta() != null) {
+            ObjectNode software = node("SoftwareApplication", canonicalUrl + "#software");
+            software.put("name", title);
+            software.put("description", description == null ? "" : description);
+            software.put("inLanguage", language);
+            software.put("applicationCategory", "UtilitiesApplication");
+            if (snapshot.resourceMeta().version() != null && !snapshot.resourceMeta().version().isBlank()) {
+                software.put("softwareVersion", snapshot.resourceMeta().version());
+            }
+            if (snapshot.resourceMeta().fileSize() != null && !snapshot.resourceMeta().fileSize().isBlank()) {
+                software.put("fileSize", snapshot.resourceMeta().fileSize());
+            }
+            if (snapshot.resourceMeta().platforms() != null && !snapshot.resourceMeta().platforms().isEmpty()) {
+                software.put("operatingSystem", String.join(", ", snapshot.resourceMeta().platforms()));
+            }
+            if (snapshot.resourceMeta().officialUrl() != null && !snapshot.resourceMeta().officialUrl().isBlank()) {
+                software.put("url", snapshot.resourceMeta().officialUrl());
+            }
+            entities.add(software);
+        }
+
+        return graph(entities);
     }
 
     private ObjectNode publisher() {

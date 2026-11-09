@@ -335,7 +335,10 @@ public class PublicCacheRefreshService {
                 copyList(post.visibilityRegions),
                 copyList(post.contentDeclarations),
                 repostPolicyCatalog.resolve(post).code(),
-                resolveRelatedStoreItems(post.extraInfo));
+                resolveRelatedStoreItems(post.extraInfo),
+                post.articleMode == null ? com.biliwind.blog.model.ArticleMode.STANDARD : post.articleMode,
+                post.tutorialMeta,
+                post.resourceMeta);
     }
 
     private List<PublicPostListSnapshot> toPublicPostListSnapshots(List<Post> posts, String language) {
@@ -386,7 +389,10 @@ public class PublicCacheRefreshService {
                     tagsByPost.getOrDefault(post.id, List.of()),
                     copyList(post.visibilityRegions),
                     coverInfo.url(),
-                    coverInfo.thumbhash()));
+                    coverInfo.thumbhash(),
+                    post.articleMode == null ? com.biliwind.blog.model.ArticleMode.STANDARD : post.articleMode,
+                    post.tutorialMeta,
+                    post.resourceMeta));
         }
         return result;
     }
@@ -532,7 +538,48 @@ public class PublicCacheRefreshService {
             List<String> visibilityRegions,
             List<String> contentDeclarations,
             String repostPolicyCode,
-            List<PublicStoreItemSnapshot> relatedStoreItems) {
+            List<PublicStoreItemSnapshot> relatedStoreItems,
+            com.biliwind.blog.model.ArticleMode articleMode,
+            com.biliwind.blog.model.TutorialMeta tutorialMeta,
+            com.biliwind.blog.model.ResourceMeta resourceMeta) {
+
+        public PublicPostSnapshot(
+                Long postId,
+                String slug,
+                Long publishedRevisionId,
+                Map<String, String> title,
+                Map<String, String> summary,
+                Map<String, String> aiSummary,
+                Short aiSummaryStatus,
+                Map<String, String> previewContent,
+                com.biliwind.blog.model.PostRenderType renderType,
+                Map<String, String> seoTitle,
+                Map<String, String> seoKeywords,
+                Map<String, String> seoDescription,
+                Map<String, String> categoryName,
+                String categorySlug,
+                List<PublicCategorySnapshot> categories,
+                String authorName,
+                OffsetDateTime publishedAt,
+                OffsetDateTime updatedAt,
+                Long viewCount,
+                Boolean featured,
+                Boolean allowComment,
+                short visibility,
+                long postPrice,
+                List<PublicTagSnapshot> tags,
+                List<PublicAttachmentSnapshot> attachments,
+                List<String> visibilityRegions,
+                List<String> contentDeclarations,
+                String repostPolicyCode,
+                List<PublicStoreItemSnapshot> relatedStoreItems) {
+            this(postId, slug, publishedRevisionId, title, summary, aiSummary, aiSummaryStatus,
+                    previewContent, renderType, seoTitle, seoKeywords, seoDescription, categoryName,
+                    categorySlug, categories, authorName, publishedAt, updatedAt, viewCount, featured,
+                    allowComment, visibility, postPrice, tags, attachments, visibilityRegions,
+                    contentDeclarations, repostPolicyCode, relatedStoreItems,
+                    com.biliwind.blog.model.ArticleMode.STANDARD, null, null);
+        }
     }
 
     @RegisterForReflection
@@ -568,7 +615,33 @@ public class PublicCacheRefreshService {
             List<PublicTagSnapshot> tags,
             List<String> visibilityRegions,
             String coverImageUrl,
-            String coverThumbhash) {
+            String coverThumbhash,
+            com.biliwind.blog.model.ArticleMode articleMode,
+            com.biliwind.blog.model.TutorialMeta tutorialMeta,
+            com.biliwind.blog.model.ResourceMeta resourceMeta) {
+
+        public PublicPostListSnapshot(
+                String slug,
+                Map<String, String> title,
+                Map<String, String> summary,
+                Map<String, String> aiSummary,
+                Short aiSummaryStatus,
+                OffsetDateTime publishedAt,
+                OffsetDateTime updatedAt,
+                OffsetDateTime createdAt,
+                Map<String, String> categoryName,
+                String categorySlug,
+                List<PublicCategorySnapshot> categories,
+                String authorName,
+                List<PublicTagSnapshot> tags,
+                List<String> visibilityRegions,
+                String coverImageUrl,
+                String coverThumbhash) {
+            this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, updatedAt, createdAt,
+                    categoryName, categorySlug, categories, authorName, tags, visibilityRegions,
+                    coverImageUrl, coverThumbhash, com.biliwind.blog.model.ArticleMode.STANDARD, null, null);
+        }
+
         public PublicPostListSnapshot(
                 String slug,
                 Map<String, String> title,
@@ -586,7 +659,8 @@ public class PublicCacheRefreshService {
                 List<String> visibilityRegions,
                 String coverImageUrl) {
             this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, updatedAt, createdAt,
-                    categoryName, categorySlug, categories, authorName, tags, visibilityRegions, coverImageUrl, null);
+                    categoryName, categorySlug, categories, authorName, tags, visibilityRegions,
+                    coverImageUrl, null, com.biliwind.blog.model.ArticleMode.STANDARD, null, null);
         }
     }
 
