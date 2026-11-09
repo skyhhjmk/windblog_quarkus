@@ -50,6 +50,8 @@ public class HoneypotService {
             "(?i)(?:^|/)(?:wp-login\\.php|wp-admin(?:/|$)|wp-content/debug\\.log|xmlrpc\\.php|phpmyadmin(?:/|$)|adminer(?:\\.php)?(?:/|$)|actuator/(?:env|heapdump|configprops|mappings|beans|gateway/routes)(?:/|$)|vendor/phpunit/phpunit/src/util/php/eval-stdin\\.php|phpunit/phpunit/src/util/php/eval-stdin\\.php|cgi-bin/(?:\\.\\./|[^?]*\\.(?:cgi|sh))(?:$|/)|boaform/admin/formlogin|hnap1(?:/|$)|gponform/diag_form|setup\\.cgi(?:/|$)|autodiscover/autodiscover\\.json|solr/admin/info/system|jenkins/script(?:/|$)|manager/html(?:/|$)|console/login/loginform\\.jsp|jmx-console(?:/|$)|_profiler/phpinfo(?:/|$)|debug/default/view(?:/|$)|h2-console(?:/|$)|v2/_catalog(?:/|$)|api/jsonws(?:/|$)|server-status(?:/|$))");
     private static final Pattern SENSITIVE_FILE_PATH = Pattern.compile(
             "(?i)(?:^|/)(?:\\.env(?:\\.[a-z0-9_-]+)?|\\.git/(?:config|head|index)|\\.svn/entries|\\.hg/(?:hgrc|store)|\\.aws/credentials|\\.docker/config\\.json|\\.kube/config|\\.npmrc|\\.htaccess|\\.htpasswd|\\.ds_store|wp-config\\.php(?:\\.(?:bak|old|save|orig|swp))?|(?:config|database|settings|credentials|secrets?)(?:\\.[a-z0-9_-]+)?\\.(?:php|json|ya?ml|ini|conf|properties|bak|old|orig|save)|[^/]+\\.(?:sql|dump|sqlite|db|pem|key|p12|pfx)(?:\\.(?:gz|zip|bak))?|[^/]+\\.(?:zip|tar(?:\\.gz)?|tgz|7z|rar|bak|old|orig|save|swp)|(?:id_rsa|authorized_keys|known_hosts))(?=$|/|\\?)");
+    private static final Pattern SENSITIVE_CONFIG_PATH = Pattern.compile(
+            "(?i)(?:^|/)(?:\\.env(?:\\.[a-z0-9_-]+)?|\\.git/(?:config|head|index)|\\.svn/entries|\\.hg/(?:hgrc|store)|\\.aws/credentials|\\.docker/config\\.json|\\.kube/config|\\.npmrc|\\.htaccess|\\.htpasswd|\\.ds_store|wp-config\\.php(?:\\.(?:bak|old|save|orig|swp))?|(?:config|database|settings|credentials|secrets?)(?:\\.[a-z0-9_-]+)?\\.(?:php|json|ya?ml|ini|conf|properties|bak|old|orig|save)|(?:id_rsa|authorized_keys|known_hosts))(?=$|/|\\?)");
 
     private volatile Map<String, RuleState> rules = defaultRuleStates();
 
@@ -131,7 +133,7 @@ public class HoneypotService {
             if (!state.enabled()) continue;
             boolean match = switch (definition.key()) {
                 case "scanner_probe" -> SCANNER_PATH.matcher(normalizedPath).find();
-                case "sensitive_file_probe" -> SENSITIVE_FILE_PATH.matcher(normalizedPath).find();
+                case "sensitive_file_probe" -> isSensitiveFileProbe(normalizedPath);
                 case "honeypot_paths" -> DECOY_PATHS.stream().anyMatch(decoy -> normalizedPath.equalsIgnoreCase(decoy));
                 default -> definition.pattern().matcher(normalized).find();
             };
@@ -143,9 +145,25 @@ public class HoneypotService {
 
     public boolean isDecoyPath(String rawPath) {
         String normalizedPath = decodeForDetection(pathOnly(rawPath));
+        if (isUploadPath(normalizedPath)) {
+            return false;
+        }
         return DECOY_PATHS.stream().anyMatch(decoy -> normalizedPath.equalsIgnoreCase(decoy))
                 || SCANNER_PATH.matcher(normalizedPath).find()
                 || SENSITIVE_FILE_PATH.matcher(normalizedPath).find();
+    }
+
+    static boolean isUploadPath(String path) {
+        if (path == null) return false;
+        String normalized = path.startsWith("/") ? path : "/" + path;
+        return normalized.startsWith("/uploads/") || normalized.equals("/uploads");
+    }
+
+    private boolean isSensitiveFileProbe(String normalizedPath) {
+        if (isUploadPath(normalizedPath)) {
+            return SENSITIVE_CONFIG_PATH.matcher(normalizedPath).find();
+        }
+        return SENSITIVE_FILE_PATH.matcher(normalizedPath).find();
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
