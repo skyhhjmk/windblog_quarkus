@@ -503,6 +503,8 @@ public class AdminLinkController {
         if (l != null) {
             auditService.log("link", String.valueOf(l.id), "delete", java.util.Map.of("name", l.name), null);
             dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", id, "DELETE"));
+            LinkAudit.delete("link.id", id);
+            LinkMonitorLog.delete("link.id", id);
             Link.deleteById(id);
         }
     }
@@ -804,10 +806,12 @@ public class AdminLinkController {
             });
         }
         boolean fraudDetected = Boolean.TRUE.equals(detectionDetails.get("keywordFraudDetected"));
+        Long linkId = log.link != null ? log.link.id : null;
+        String linkName = log.link != null ? log.link.name : "";
         return new AdminLinkMonitorLogItem(
                 log.id,
-                log.link.id,
-                log.link.name,
+                linkId,
+                linkName,
                 log.checkTime,
                 log.checkSource == null ? LinkMonitorSource.UNKNOWN.name() : log.checkSource.name(),
                 log.ok,
@@ -823,10 +827,12 @@ public class AdminLinkController {
     }
 
     private AdminLinkAuditItem toAuditItem(LinkAudit audit) {
+        Long linkId = audit.link != null ? audit.link.id : null;
+        String linkName = audit.link != null ? audit.link.name : "";
         return new AdminLinkAuditItem(
                 audit.id,
-                audit.link.id,
-                audit.link.name,
+                linkId,
+                linkName,
                 audit.status,
                 audit.score,
                 audit.reason,

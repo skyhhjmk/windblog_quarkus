@@ -161,4 +161,5 @@
     <include file="db/migration/160-create-post-reactions.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/161-add-media-thumbhash.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/162-add-article-mode-and-metadata.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/163-remove-event-log-foreign-keys.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>
