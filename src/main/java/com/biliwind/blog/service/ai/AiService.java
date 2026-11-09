@@ -53,6 +53,11 @@ public interface AiService {
                     }
                     AiResult result = new AiResult();
                     result.contents.put("text", text);
+                    if (config != null) {
+                        result.modelId = (config.model != null && !config.model.isBlank())
+                                ? config.model : config.name;
+                        result.provider = config.provider;
+                    }
                     return result;
                 });
     }

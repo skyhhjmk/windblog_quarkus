@@ -164,6 +164,17 @@ public class AiArticleDraftService {
                     .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
         }
 
+        String modelName = "";
+        if (draft.aiResult() != null && draft.aiResult().modelId != null && !draft.aiResult().modelId.isBlank()) {
+            modelName = draft.aiResult().modelId.trim();
+        }
+        if (modelName.isBlank() && topic != null && topic.hasNonNull("model")) {
+            modelName = topic.get("model").asText("").trim();
+        }
+        if (modelName.isBlank() && draft.aiResult() != null && draft.aiResult().provider != null && !draft.aiResult().provider.isBlank()) {
+            modelName = draft.aiResult().provider.trim();
+        }
+
         boolean isRegeneration = post != null;
         String effectivePolicy = (repostPolicyCode == null || repostPolicyCode.isBlank()) && post != null
                 ? post.repostPolicyCode
@@ -175,6 +186,9 @@ public class AiArticleDraftService {
             post.title = titleMap;
             post.summary = summaryMap;
             post.repostPolicyCode = effectivePolicy;
+            if (!modelName.isBlank()) {
+                post.authorName = modelName;
+            }
             post.updatedAt = now;
             post.persist();
 
@@ -200,6 +214,7 @@ public class AiArticleDraftService {
             post.renderType = PostRenderType.MARKDOWN;
             post.aiSummaryStatus = 2;
             post.user = operator;
+            post.authorName = modelName.isBlank() ? null : modelName;
             post.repostPolicyCode = effectivePolicy;
             post.createdAt = now;
             post.updatedAt = now;

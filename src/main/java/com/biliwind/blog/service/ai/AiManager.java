@@ -154,7 +154,18 @@ public class AiManager {
                 }
                 stage = service.translate(config, sourceLanguage, targetLanguage, fields, promptTemplate);
             }
-            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            return stage.thenApply(res -> {
+                if (res != null && config != null) {
+                    if (res.modelId == null || res.modelId.isBlank()) {
+                        res.modelId = (config.model != null && !config.model.isBlank())
+                                ? config.model : config.name;
+                    }
+                    if (res.provider == null || res.provider.isBlank()) {
+                        res.provider = config.provider;
+                    }
+                }
+                return res;
+            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
         } catch (Throwable t) {
             concurrencyLimiter.release(config);
             return CompletableFuture.failedFuture(t);
@@ -291,7 +302,18 @@ public class AiManager {
                 }
                 stage = service.complete(config, systemPrompt, prompt);
             }
-            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            return stage.thenApply(res -> {
+                if (res != null && config != null) {
+                    if (res.modelId == null || res.modelId.isBlank()) {
+                        res.modelId = (config.model != null && !config.model.isBlank())
+                                ? config.model : config.name;
+                    }
+                    if (res.provider == null || res.provider.isBlank()) {
+                        res.provider = config.provider;
+                    }
+                }
+                return res;
+            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
         } catch (Throwable t) {
             concurrencyLimiter.release(config);
             return CompletableFuture.failedFuture(t);
@@ -432,7 +454,18 @@ public class AiManager {
                 }
                 stage = svc.summarize(config, content);
             }
-            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            return stage.thenApply(res -> {
+                if (res != null && config != null) {
+                    if (res.modelId == null || res.modelId.isBlank()) {
+                        res.modelId = (config.model != null && !config.model.isBlank())
+                                ? config.model : config.name;
+                    }
+                    if (res.provider == null || res.provider.isBlank()) {
+                        res.provider = config.provider;
+                    }
+                }
+                return res;
+            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
         } catch (Throwable t) {
             concurrencyLimiter.release(config);
             return CompletableFuture.failedFuture(t);
@@ -458,7 +491,18 @@ public class AiManager {
                 }
                 stage = svc.moderate(config, prompt, content);
             }
-            return stage.whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            return stage.thenApply(res -> {
+                if (res != null && config != null) {
+                    if (res.modelId == null || res.modelId.isBlank()) {
+                        res.modelId = (config.model != null && !config.model.isBlank())
+                                ? config.model : config.name;
+                    }
+                    if (res.provider == null || res.provider.isBlank()) {
+                        res.provider = config.provider;
+                    }
+                }
+                return res;
+            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
         } catch (Throwable t) {
             concurrencyLimiter.release(config);
             return CompletableFuture.failedFuture(t);

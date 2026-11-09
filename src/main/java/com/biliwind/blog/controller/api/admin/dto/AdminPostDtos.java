@@ -40,7 +40,10 @@ public final class AdminPostDtos {
                         Map<String, String> seoDescriptionTranslations,
                         Short articleMode,
                         com.biliwind.blog.model.TutorialMeta tutorialMeta,
-                        com.biliwind.blog.model.ResourceMeta resourceMeta) {
+                        com.biliwind.blog.model.ResourceMeta resourceMeta,
+                        String authorName,
+                        Long userId,
+                        Boolean allowComment) {
         }
 
     public record PostUpdateRequest(
@@ -73,7 +76,11 @@ public final class AdminPostDtos {
                         Boolean force,
                         Short articleMode,
                         com.biliwind.blog.model.TutorialMeta tutorialMeta,
-                        com.biliwind.blog.model.ResourceMeta resourceMeta) {
+                        com.biliwind.blog.model.ResourceMeta resourceMeta,
+                        String authorName,
+                        Long userId,
+                        OffsetDateTime publishedAt,
+                        Boolean allowComment) {
         }
 
         public record PostTranslationRequest(
@@ -120,6 +127,7 @@ public final class AdminPostDtos {
                         Integer version,
                         Long userId,
                         String userName,
+                        String authorName,
                         Long categoryId,
                         List<Long> categoryIds,
                         List<Long> tagIds,
@@ -128,7 +136,25 @@ public final class AdminPostDtos {
                         OffsetDateTime publishedAt,
                         OffsetDateTime createdAt,
                         OffsetDateTime updatedAt,
-                        Short articleMode) {
+                        Short articleMode,
+                        Boolean allowComment) {
+        }
+
+        public record PostQuickEditRequest(
+                        String slug,
+                        Map<String, String> title,
+                        Short status,
+                        Short visibility,
+                        String password,
+                        Long categoryId,
+                        List<Long> categoryIds,
+                        List<Long> tagIds,
+                        String authorName,
+                        Long userId,
+                        OffsetDateTime publishedAt,
+                        Short articleMode,
+                        Boolean allowComment,
+                        @NotNull(message = "version 不能为空") Integer version) {
         }
 
     public record EmailDispatchRequest(
@@ -163,6 +189,7 @@ public final class AdminPostDtos {
                         Integer freeLines,
                         Long userId,
                         String userName,
+                        String authorName,
                         Long categoryId,
                         List<Long> categoryIds,
                         List<Long> tagIds,
@@ -179,7 +206,8 @@ public final class AdminPostDtos {
                         Map<String, String> seoDescriptionTranslations,
                         Short articleMode,
                         com.biliwind.blog.model.TutorialMeta tutorialMeta,
-                        com.biliwind.blog.model.ResourceMeta resourceMeta) {
+                        com.biliwind.blog.model.ResourceMeta resourceMeta,
+                        Boolean allowComment) {
         }
 
     public record PostRevisionItem(

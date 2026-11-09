@@ -248,7 +248,19 @@ public class AdminPostApiController {
         post.seoDescription = mergeSeo(null, request.seoDescriptionTranslations(), seoLanguage, request.seoDescription());
         post.renderType = resolveRenderType(request.renderType());
         post.aiSummaryStatus = request.aiSummaryStatus() == null ? 0 : request.aiSummaryStatus();
+        if (request.userId() != null) {
+            User targetUser = User.findById(request.userId());
+            if (targetUser != null) {
+                operator = targetUser;
+            }
+        }
         post.user = operator;
+        if (request.authorName() != null && !request.authorName().isBlank()) {
+            post.authorName = request.authorName().trim();
+        }
+        if (request.allowComment() != null) {
+            post.allowComment = request.allowComment();
+        }
         post.createdAt = now;
         post.updatedAt = now;
         post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
@@ -368,6 +380,139 @@ public class AdminPostApiController {
         esSyncEvent.fire(new PostSyncedEvent(post.id));
         adminPostEventService.broadcastPostUpdated(post, isForce ? "FORCE_OVERWRITE" : "ADMIN_UPDATE");
         return toDetail(post);
+    }
+
+    @PATCH
+    @Path("/{id}/quick-edit")
+    @Transactional
+    @Operation(summary = "快捷编辑文章元数据")
+    @APIResponse(responseCode = "200", description = "更新成功")
+    @APIResponse(responseCode = "404", description = "文章不存在")
+    @APIResponse(responseCode = "409", description = "版本冲突或 slug 冲突")
+    public AdminPostItem quickEdit(@PathParam("id") Long id,
+                                   @Valid PostQuickEditRequest request) {
+        Post post = mustFindPost(id);
+        if (!post.version.equals(request.version())) {
+            throw conflict("版本冲突，请刷新后重试");
+        }
+
+        boolean changed = false;
+
+        if (request.slug() != null) {
+            String requestedSlug = request.slug().trim();
+            String nextSlug = requestedSlug.equals(post.slug)
+                    ? post.slug
+                    : resolvePostSlug(requestedSlug, request.title() != null ? request.title() : post.title);
+            if (!nextSlug.equals(post.slug)) {
+                if (Post.count("slug = ?1 and id != ?2", nextSlug, post.id) > 0) {
+                    throw conflict("slug 已存在");
+                }
+                seoManagementService.recordPostMove(post.slug, nextSlug);
+                post.slug = nextSlug;
+                changed = true;
+            }
+        }
+
+        if (request.title() != null && !request.title().isEmpty() && !Objects.equals(post.title, request.title())) {
+            post.title = request.title();
+            if (post.currentRevision != null) {
+                post.currentRevision.title = request.title();
+            }
+            if (post.publishedRevision != null) {
+                post.publishedRevision.title = request.title();
+            }
+            changed = true;
+        }
+
+        if (request.authorName() != null) {
+            String trimmed = request.authorName().trim();
+            String normalized = trimmed.isEmpty() ? null : trimmed;
+            if (!Objects.equals(post.authorName, normalized)) {
+                post.authorName = normalized;
+                changed = true;
+            }
+        }
+
+        if (request.userId() != null && (post.user == null || !Objects.equals(post.user.id, request.userId()))) {
+            User target = User.findById(request.userId());
+            if (target != null) {
+                post.user = target;
+                changed = true;
+            }
+        }
+
+        List<Long> requestedCategoryIds = request.categoryIds();
+        if (requestedCategoryIds == null && request.categoryId() != null) {
+            requestedCategoryIds = List.of(request.categoryId());
+        }
+        if (requestedCategoryIds != null) {
+            List<Long> currentIds = getCategoryIds(post);
+            List<Long> nextIds = requestedCategoryIds.stream().filter(Objects::nonNull).distinct().toList();
+            if (!currentIds.equals(nextIds)) {
+                applyPostCategories(post, nextIds);
+                changed = true;
+            }
+        }
+
+        if (request.tagIds() != null) {
+            changed |= updatePostTags(post, request.tagIds());
+        }
+
+        if (request.visibility() != null && !Objects.equals(post.visibility, request.visibility())) {
+            post.visibility = request.visibility();
+            changed = true;
+        }
+
+        if (request.password() != null) {
+            String nextPassword = request.password().trim();
+            if (!Objects.equals(post.password, nextPassword)) {
+                post.password = nextPassword.isEmpty() ? null : nextPassword;
+                contentAccessTicketService.revokePasswordTickets(post.id);
+                changed = true;
+            }
+        }
+
+        if (request.publishedAt() != null && !Objects.equals(post.publishedAt, request.publishedAt())) {
+            post.publishedAt = request.publishedAt();
+            changed = true;
+        }
+
+        if (request.articleMode() != null) {
+            ArticleMode nextMode = ArticleMode.fromCode(request.articleMode());
+            if (!Objects.equals(post.articleMode, nextMode)) {
+                post.articleMode = nextMode;
+                changed = true;
+            }
+        }
+
+        if (request.allowComment() != null && !Objects.equals(post.allowComment, request.allowComment())) {
+            post.allowComment = request.allowComment();
+            changed = true;
+        }
+
+        if (request.status() != null) {
+            PostStatus nextStatus = PostStatus.fromCode(request.status());
+            if (nextStatus != null && !Objects.equals(post.status, nextStatus)) {
+                post.status = nextStatus;
+                if (nextStatus == PostStatus.PUBLISHED) {
+                    if (post.publishedRevision == null && post.currentRevision != null) {
+                        publishRevision(post, post.currentRevision, OffsetDateTime.now());
+                    }
+                } else {
+                    post.publishedRevision = null;
+                }
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            post.updatedAt = OffsetDateTime.now();
+            post.persist();
+            esSyncEvent.fire(new PostSyncedEvent(post.id));
+            adminPostEventService.broadcastPostUpdated(post, "ADMIN_QUICK_EDIT");
+        }
+
+        return toItem(post);
     }
 
     @POST
@@ -737,6 +882,7 @@ public class AdminPostApiController {
                 post.version,
                 post.user == null ? null : post.user.id,
                 PostAuthorHelper.displayName(post),
+                post.authorName,
                 post.category == null ? null : post.category.id,
                 getCategoryIds(post),
                 tagIds,
@@ -745,7 +891,8 @@ public class AdminPostApiController {
                 post.publishedAt,
                 post.createdAt,
                 post.updatedAt,
-                post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code());
+                post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
+                post.allowComment == null ? true : post.allowComment);
     }
 
     private AdminPostDetail toDetail(Post post) {
@@ -775,6 +922,7 @@ public class AdminPostApiController {
                 postAccessService.getFreeLines(post),
                 post.user == null ? null : post.user.id,
                 PostAuthorHelper.displayName(post),
+                post.authorName,
                 post.category == null ? null : post.category.id,
                 getCategoryIds(post),
                 tagIds,
@@ -791,7 +939,8 @@ public class AdminPostApiController {
                 post.seoDescription,
                 post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
                 post.tutorialMeta,
-                post.resourceMeta);
+                post.resourceMeta,
+                post.allowComment == null ? true : post.allowComment);
     }
 
 
@@ -1099,8 +1248,37 @@ public class AdminPostApiController {
                 changed = true;
                 if (nextStatus != PostStatus.PUBLISHED) {
                     post.publishedRevision = null;
+                } else if (post.publishedRevision == null && post.currentRevision != null) {
+                    publishRevision(post, post.currentRevision, OffsetDateTime.now());
                 }
             }
+        }
+
+        if (request.authorName() != null) {
+            String trimmed = request.authorName().trim();
+            String normalized = trimmed.isEmpty() ? null : trimmed;
+            if (!Objects.equals(post.authorName, normalized)) {
+                post.authorName = normalized;
+                changed = true;
+            }
+        }
+
+        if (request.userId() != null && (post.user == null || !Objects.equals(post.user.id, request.userId()))) {
+            User targetUser = User.findById(request.userId());
+            if (targetUser != null) {
+                post.user = targetUser;
+                changed = true;
+            }
+        }
+
+        if (request.publishedAt() != null && !Objects.equals(post.publishedAt, request.publishedAt())) {
+            post.publishedAt = request.publishedAt();
+            changed = true;
+        }
+
+        if (request.allowComment() != null && !Objects.equals(post.allowComment, request.allowComment())) {
+            post.allowComment = request.allowComment();
+            changed = true;
         }
 
         return changed;
@@ -1241,6 +1419,7 @@ public class AdminPostApiController {
                 com.biliwind.blog.common.helper.PostHelper.getFreeLines(post),
                 post.user == null ? null : post.user.id,
                 PostAuthorHelper.displayName(post),
+                post.authorName,
                 post.category == null ? null : post.category.id,
                 getCategoryIds(post),
                 tagIds,
@@ -1257,7 +1436,8 @@ public class AdminPostApiController {
                 post.seoDescription,
                 post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
                 post.tutorialMeta,
-                post.resourceMeta);
+                post.resourceMeta,
+                post.allowComment == null ? true : post.allowComment);
     }
 
     @POST
