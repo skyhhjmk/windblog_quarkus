@@ -3886,7 +3886,6 @@
                         } else {
                             console.warn('[Reactions] Server returned error status:', res.status);
                         }
-                        }
                     } catch (netErr) {
                         console.warn('[Reactions] Sync error:', netErr.message);
                     } finally {
