@@ -1,4 +1,4 @@
-{#if articleMode == 'resource' && resourceMirrors && !resourceMirrors.isEmpty}
+{#if articleMode == 'resource'}
 <div class="my-8 rounded-2xl border border-emerald-500/25 bg-card overflow-hidden shadow-sm not-prose" id="resource-download-center">
     <div class="p-5 sm:p-6 bg-gradient-to-r from-emerald-500/[0.08] to-transparent border-b border-border/60 flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -8,57 +8,95 @@
                 <p class="text-xs text-meta mt-0.5">提供多节点网络分流与备用网盘，已通过安全性检测</p>
             </div>
         </div>
-        <span class="text-xs font-mono px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
-            {resourceMirrors.size} 个下载通道
-        </span>
+        {#if resourceMirrors && !resourceMirrors.isEmpty}
+            <span class="text-xs font-mono px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
+                {resourceMirrors.size} 个下载通道
+            </span>
+        {#else if resourceOfficialUrl}
+            <span class="text-xs font-mono px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
+                官方源
+            </span>
+        {#else}
+            <span class="text-xs font-mono px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
+                资源专区
+            </span>
+        {/if}
     </div>
 
     <div class="p-4 sm:p-6 space-y-3">
-        {#for mirror in resourceMirrors}
-            <div class="p-4 rounded-xl border border-border/80 bg-input-bg/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-emerald-500/40 hover:bg-input-bg/70">
-                <div class="space-y-1.5 min-w-0">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full {#if mirror.requiresUnlock && postPrice > 0 && !hasPurchased}bg-amber-500{#else}bg-emerald-500{/if}"></span>
-                        <h4 class="text-sm font-bold text-main truncate">{mirror.name ?: '标准下载通道'}</h4>
-                        {#if mirror.requiresUnlock && postPrice > 0}
-                            {#if hasPurchased}
-                                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">已解锁</span>
-                            {#else}
-                                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold border border-amber-500/20">需积分解锁</span>
+        {#if resourceMirrors && !resourceMirrors.isEmpty}
+            {#for mirror in resourceMirrors}
+                <div class="p-4 rounded-xl border border-border/80 bg-input-bg/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-emerald-500/40 hover:bg-input-bg/70">
+                    <div class="space-y-1.5 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full {#if mirror.requiresUnlock && postPrice > 0 && !hasPurchased}bg-amber-500{#else}bg-emerald-500{/if}"></span>
+                            <h4 class="text-sm font-bold text-main truncate">{mirror.name ?: '标准下载通道'}</h4>
+                            {#if mirror.requiresUnlock && postPrice > 0}
+                                {#if hasPurchased}
+                                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">已解锁</span>
+                                {#else}
+                                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold border border-amber-500/20">需积分解锁</span>
+                                {#/if}
                             {/if}
+                        </div>
+
+                        {#if mirror.extractionCode}
+                            <div class="flex items-center gap-2 text-xs font-mono">
+                                <span class="text-meta">提取码 / 解压密码:</span>
+                                {#if mirror.requiresUnlock && postPrice > 0 && !hasPurchased}
+                                    <span class="text-meta filter blur-[3px] select-none">******</span>
+                                {#else}
+                                    <code class="px-2 py-0.5 rounded bg-card border border-border font-bold text-accent select-all">{mirror.extractionCode}</code>
+                                    <button type="button" class="btn-copy-code text-xs text-accent hover:underline font-bold" data-copy="{mirror.extractionCode}">
+                                        复制
+                                    </button>
+                                {/if}
+                            </div>
                         {/if}
                     </div>
 
-                    {#if mirror.extractionCode}
-                        <div class="flex items-center gap-2 text-xs font-mono">
-                            <span class="text-meta">提取码 / 解压密码:</span>
-                            {#if mirror.requiresUnlock && postPrice > 0 && !hasPurchased}
-                                <span class="text-meta filter blur-[3px] select-none">******</span>
-                            {#else}
-                                <code class="px-2 py-0.5 rounded bg-card border border-border font-bold text-accent select-all">{mirror.extractionCode}</code>
-                                <button type="button" class="btn-copy-code text-xs text-accent hover:underline font-bold" data-copy="{mirror.extractionCode}">
-                                    复制
-                                </button>
-                            {/if}
-                        </div>
-                    {/if}
+                    <div class="shrink-0 flex items-center gap-2">
+                        {#if mirror.requiresUnlock && postPrice > 0 && !hasPurchased}
+                            <button type="button" class="btn-unlock-resource px-4 py-2 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold text-xs shadow-sm hover:opacity-90 transition-opacity flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                <span>{postPrice} 积分解锁</span>
+                            </button>
+                        {#else}
+                            <a href="{mirror.url}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                <span>立即下载</span>
+                            </a>
+                        {/if}
+                    </div>
                 </div>
+            {/for}
+        {/if}
 
+        {#if resourceOfficialUrl}
+            <div class="p-4 rounded-xl border border-border/80 bg-input-bg/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-blue-500/40 hover:bg-input-bg/70">
+                <div class="space-y-1.5 min-w-0">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                        <h4 class="text-sm font-bold text-main truncate">官方源 / 项目发布主页</h4>
+                        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 font-semibold border border-blue-500/20">官方源</span>
+                    </div>
+                    <div class="text-xs text-meta font-mono truncate">{resourceOfficialUrl}</div>
+                </div>
                 <div class="shrink-0 flex items-center gap-2">
-                    {#if mirror.requiresUnlock && postPrice > 0 && !hasPurchased}
-                        <button type="button" class="btn-unlock-resource px-4 py-2 rounded-lg bg-accent text-[var(--accent-foreground)] font-bold text-xs shadow-sm hover:opacity-90 transition-opacity flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                            <span>{postPrice} 积分解锁</span>
-                        </button>
-                    {#else}
-                        <a href="{mirror.url}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            <span>立即下载</span>
-                        </a>
-                    {/if}
+                    <a href="{resourceOfficialUrl}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        <span>访问官网获取</span>
+                    </a>
                 </div>
             </div>
-        {/for}
+        {/if}
+
+        {#if (!resourceMirrors || resourceMirrors.isEmpty) && !resourceOfficialUrl}
+            <div class="p-4 rounded-xl border border-dashed border-border bg-input-bg/20 text-center py-6 space-y-1">
+                <p class="text-sm font-bold text-main">高速下载通道正在接入中</p>
+                <p class="text-xs text-meta">当前资源暂未配置独立的外部网盘镜像，请参阅正文获取指引或稍后刷新查看更新。</p>
+            </div>
+        {/if}
     </div>
 </div>
 {/if}
