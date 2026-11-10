@@ -564,10 +564,22 @@ body.drawer-open {
     transform-origin: left top;
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-2xl, 1rem);
     box-shadow: var(--card-shadow);
-    will-change: transform, opacity;
+    will-change: transform, width, height, border-radius, box-shadow;
     contain: layout paint style;
+}
+
+.pjax-article-transition-target-card {
+    background: transparent !important;
+    background-color: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
+.pjax-article-transition-target-card::before,
+.pjax-article-transition-target-card::after {
+    opacity: 0 !important;
 }
 
 .pjax-article-transition-clone {

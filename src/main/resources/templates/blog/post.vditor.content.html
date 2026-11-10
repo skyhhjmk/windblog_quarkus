@@ -13,7 +13,7 @@
         </div>
     </div>
 
-    <article class="space-y-4" data-article-transition-slug="{postSlug}">
+    <article class="card card-static p-6 sm:p-7 md:p-8 rounded-2xl border border-border bg-card shadow-sm space-y-4" data-article-transition-slug="{postSlug}" data-article-transition-card="{postSlug}">
         <header class="post-title-stage {#if postCoverImageUrl.or(null)}has-cover{#else}space-y-3{/if}">
             {#if postCoverImageUrl.or(null)}
                 <div class="post-header-cover"

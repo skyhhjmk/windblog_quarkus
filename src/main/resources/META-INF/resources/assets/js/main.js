@@ -692,6 +692,11 @@
             }
 
             const safeSlug = getCssSafeSelectorValue(slug);
+            const explicitCard = root.querySelector('[data-article-transition-card="' + safeSlug + '"]');
+            if (explicitCard) {
+                return explicitCard;
+            }
+
             const cardCandidate = root.querySelector('article[data-article-transition-slug="' + safeSlug + '"]');
             if (cardCandidate) {
                 return cardCandidate.classList.contains('card')
@@ -940,6 +945,37 @@
             };
         }
 
+        function getArticleCardViewportRect(cardElement, container) {
+            if (!cardElement) {
+                return null;
+            }
+            const rawRect = getArticleTransitionTargetRect(cardElement, container);
+            if (!rawRect || rawRect.width <= 0 || rawRect.height <= 0) {
+                return null;
+            }
+
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+            let top = rawRect.top;
+            let height = rawRect.height;
+
+            if (height > viewportHeight) {
+                const effectiveTop = Math.max(-20, Math.min(top, 100));
+                const effectiveBottom = Math.min(viewportHeight + 40, top + height);
+                top = effectiveTop;
+                height = Math.max(160, effectiveBottom - effectiveTop);
+            } else if (top < -20) {
+                top = -20;
+                height = Math.max(100, (rawRect.top + rawRect.height) - top);
+            }
+
+            return {
+                left: rawRect.left,
+                top: top,
+                width: rawRect.width,
+                height: height
+            };
+        }
+
         function captureArticleTransitionItems(slug) {
             const capturedItems = [];
             if (!slug) {
@@ -948,9 +984,10 @@
 
             const cardElement = findArticleTransitionCardElement(document, slug);
             if (cardElement) {
-                const rawCardRect = cardElement.getBoundingClientRect();
-                if (rawCardRect.width > 0 && rawCardRect.height > 0) {
-                    capturedItems.cardSourceRect = clampRectToViewport(rawCardRect);
+                const cardRect = getArticleCardViewportRect(cardElement, null);
+                if (cardRect) {
+                    capturedItems.cardSourceRect = cardRect;
+                    capturedItems.cardSourceStyle = getArticleCardStyleSnapshot(cardElement);
                 }
             }
 
@@ -963,6 +1000,17 @@
                 const sourceRect = sourceElement.getBoundingClientRect();
                 if (sourceRect.width <= 0 || sourceRect.height <= 0) {
                     return;
+                }
+
+                let effectiveSourceRect = {
+                    left: sourceRect.left,
+                    top: sourceRect.top,
+                    width: sourceRect.width,
+                    height: sourceRect.height
+                };
+
+                if (partName === 'title' && sourceRect.bottom < 0 && capturedItems.cardSourceRect) {
+                    effectiveSourceRect.top = Math.max(capturedItems.cardSourceRect.top + 24, -20);
                 }
 
                 let coverState = null;
@@ -983,12 +1031,7 @@
 
                 capturedItems.push({
                     partName: partName,
-                    sourceRect: {
-                        left: sourceRect.left,
-                        top: sourceRect.top,
-                        width: sourceRect.width,
-                        height: sourceRect.height
-                    },
+                    sourceRect: effectiveSourceRect,
                     sourceStyle: getArticleTransitionStyleSnapshot(sourceElement),
                     coverState: coverState
                 });
@@ -1064,6 +1107,51 @@
             element.style.paddingTop = styleSnapshot.paddingTop;
             element.style.textAlign = styleSnapshot.textAlign;
             element.style.textTransform = styleSnapshot.textTransform;
+        }
+
+        function getArticleCardStyleSnapshot(element) {
+            if (!element) {
+                return null;
+            }
+            const computedStyle = window.getComputedStyle(element);
+            return {
+                backgroundColor: computedStyle.backgroundColor,
+                borderTopColor: computedStyle.borderTopColor,
+                borderRightColor: computedStyle.borderRightColor,
+                borderBottomColor: computedStyle.borderBottomColor,
+                borderLeftColor: computedStyle.borderLeftColor,
+                borderTopWidth: computedStyle.borderTopWidth,
+                borderRightWidth: computedStyle.borderRightWidth,
+                borderBottomWidth: computedStyle.borderBottomWidth,
+                borderLeftWidth: computedStyle.borderLeftWidth,
+                borderTopStyle: computedStyle.borderTopStyle,
+                borderTopLeftRadius: computedStyle.borderTopLeftRadius,
+                borderTopRightRadius: computedStyle.borderTopRightRadius,
+                borderBottomRightRadius: computedStyle.borderBottomRightRadius,
+                borderBottomLeftRadius: computedStyle.borderBottomLeftRadius,
+                boxShadow: computedStyle.boxShadow
+            };
+        }
+
+        function applyArticleCardStyleSnapshot(element, styleSnapshot) {
+            if (!element || !styleSnapshot) {
+                return;
+            }
+            element.style.backgroundColor = styleSnapshot.backgroundColor;
+            element.style.borderTopColor = styleSnapshot.borderTopColor;
+            element.style.borderRightColor = styleSnapshot.borderRightColor;
+            element.style.borderBottomColor = styleSnapshot.borderBottomColor;
+            element.style.borderLeftColor = styleSnapshot.borderLeftColor;
+            element.style.borderTopWidth = styleSnapshot.borderTopWidth;
+            element.style.borderRightWidth = styleSnapshot.borderRightWidth;
+            element.style.borderBottomWidth = styleSnapshot.borderBottomWidth;
+            element.style.borderLeftWidth = styleSnapshot.borderLeftWidth;
+            element.style.borderTopStyle = styleSnapshot.borderTopStyle;
+            element.style.borderTopLeftRadius = styleSnapshot.borderTopLeftRadius;
+            element.style.borderTopRightRadius = styleSnapshot.borderTopRightRadius;
+            element.style.borderBottomRightRadius = styleSnapshot.borderBottomRightRadius;
+            element.style.borderBottomLeftRadius = styleSnapshot.borderBottomLeftRadius;
+            element.style.boxShadow = styleSnapshot.boxShadow;
         }
 
         function getArticleTransitionContainerOffset(container) {
@@ -1225,6 +1313,7 @@
 
             const targetCardElement = findArticleTransitionCardElement(document, slug);
             if (capturedItems.cardSourceRect && targetCardElement) {
+                targetCardElement.classList.add('pjax-article-transition-target-card');
                 const backdropElement = document.createElement('div');
                 backdropElement.className = 'pjax-article-transition-backdrop';
                 backdropElement.setAttribute('aria-hidden', 'true');
@@ -1233,13 +1322,18 @@
                     + capturedItems.cardSourceRect.top + 'px, 0)';
                 backdropElement.style.width = capturedItems.cardSourceRect.width + 'px';
                 backdropElement.style.height = capturedItems.cardSourceRect.height + 'px';
-                backdropElement.style.opacity = '0.94';
+                backdropElement.style.opacity = '1';
+                if (capturedItems.cardSourceStyle) {
+                    applyArticleCardStyleSnapshot(backdropElement, capturedItems.cardSourceStyle);
+                }
                 document.body.appendChild(backdropElement);
                 preparedItems.backdropItem = {
                     element: backdropElement,
                     sourceRect: capturedItems.cardSourceRect,
+                    sourceStyle: capturedItems.cardSourceStyle,
                     targetElement: targetCardElement,
-                    targetRect: null
+                    targetRect: null,
+                    targetStyle: null
                 };
             }
 
@@ -1305,14 +1399,16 @@
         function measureArticleTransitionTargets(preparedItems, container) {
             const measuredItems = [];
             if (preparedItems && preparedItems.backdropItem) {
-                const rawTargetCardRect = getArticleTransitionTargetRect(
+                const targetCardRect = getArticleCardViewportRect(
                     preparedItems.backdropItem.targetElement,
                     container
                 );
-                if (rawTargetCardRect.width > 0 && rawTargetCardRect.height > 0) {
-                    preparedItems.backdropItem.targetRect = clampRectToViewport(rawTargetCardRect);
+                if (targetCardRect && targetCardRect.width > 0 && targetCardRect.height > 0) {
+                    preparedItems.backdropItem.targetRect = targetCardRect;
+                    preparedItems.backdropItem.targetStyle = getArticleCardStyleSnapshot(preparedItems.backdropItem.targetElement);
                     measuredItems.backdropItem = preparedItems.backdropItem;
                 } else {
+                    preparedItems.backdropItem.targetElement.classList.remove('pjax-article-transition-target-card');
                     preparedItems.backdropItem.element.remove();
                 }
             }
@@ -1498,25 +1594,34 @@
 
             if (preparedItems.backdropItem && preparedItems.backdropItem.targetRect) {
                 const backdrop = preparedItems.backdropItem;
+                const sourceStyle = backdrop.sourceStyle || {};
+                const targetStyle = backdrop.targetStyle || {};
                 animationPromises.push(backdrop.element.animate([
                     {
                         transform: 'translate3d(' + backdrop.sourceRect.left + 'px, ' + backdrop.sourceRect.top + 'px, 0)',
                         width: backdrop.sourceRect.width + 'px',
                         height: backdrop.sourceRect.height + 'px',
-                        opacity: 0.94
+                        borderTopLeftRadius: sourceStyle.borderTopLeftRadius || '1rem',
+                        borderTopRightRadius: sourceStyle.borderTopRightRadius || '1rem',
+                        borderBottomRightRadius: sourceStyle.borderBottomRightRadius || '1rem',
+                        borderBottomLeftRadius: sourceStyle.borderBottomLeftRadius || '1rem',
+                        backgroundColor: sourceStyle.backgroundColor || 'var(--card-bg)',
+                        borderColor: sourceStyle.borderTopColor || 'var(--border)',
+                        boxShadow: sourceStyle.boxShadow || 'var(--card-shadow)',
+                        opacity: 1
                     },
                     {
                         transform: 'translate3d(' + backdrop.targetRect.left + 'px, ' + backdrop.targetRect.top + 'px, 0)',
                         width: backdrop.targetRect.width + 'px',
                         height: backdrop.targetRect.height + 'px',
-                        opacity: 0.32,
-                        offset: 0.68
-                    },
-                    {
-                        transform: 'translate3d(' + backdrop.targetRect.left + 'px, ' + backdrop.targetRect.top + 'px, 0)',
-                        width: backdrop.targetRect.width + 'px',
-                        height: backdrop.targetRect.height + 'px',
-                        opacity: 0
+                        borderTopLeftRadius: targetStyle.borderTopLeftRadius || '1rem',
+                        borderTopRightRadius: targetStyle.borderTopRightRadius || '1rem',
+                        borderBottomRightRadius: targetStyle.borderBottomRightRadius || '1rem',
+                        borderBottomLeftRadius: targetStyle.borderBottomLeftRadius || '1rem',
+                        backgroundColor: targetStyle.backgroundColor || 'var(--card-bg)',
+                        borderColor: targetStyle.borderTopColor || 'var(--border)',
+                        boxShadow: targetStyle.boxShadow || 'var(--card-shadow)',
+                        opacity: 1
                     }
                 ], {
                     duration: duration,
@@ -1549,6 +1654,36 @@
             // may still settle while the morph runs. Glide the clone to the
             // final rect instead of snapping when the real element is revealed.
             const corrections = [];
+            if (preparedItems.backdropItem && preparedItems.backdropItem.targetElement && preparedItems.backdropItem.targetRect) {
+                const targetCardRect = getArticleCardViewportRect(
+                    preparedItems.backdropItem.targetElement,
+                    container
+                );
+                if (targetCardRect) {
+                    const moved = Math.abs(targetCardRect.left - preparedItems.backdropItem.targetRect.left) > 0.5
+                        || Math.abs(targetCardRect.top - preparedItems.backdropItem.targetRect.top) > 0.5
+                        || Math.abs(targetCardRect.width - preparedItems.backdropItem.targetRect.width) > 0.5
+                        || Math.abs(targetCardRect.height - preparedItems.backdropItem.targetRect.height) > 0.5;
+                    if (moved) {
+                        corrections.push(preparedItems.backdropItem.element.animate([
+                            {
+                                transform: 'translate3d(' + preparedItems.backdropItem.targetRect.left + 'px, ' + preparedItems.backdropItem.targetRect.top + 'px, 0)',
+                                width: preparedItems.backdropItem.targetRect.width + 'px',
+                                height: preparedItems.backdropItem.targetRect.height + 'px'
+                            },
+                            {
+                                transform: 'translate3d(' + targetCardRect.left + 'px, ' + targetCardRect.top + 'px, 0)',
+                                width: targetCardRect.width + 'px',
+                                height: targetCardRect.height + 'px'
+                            }
+                        ], {
+                            duration: 120,
+                            easing: 'ease-out',
+                            fill: 'forwards'
+                        }).finished);
+                    }
+                }
+            }
             preparedItems.forEach(function (preparedItem) {
                 const targetRect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
                 const moved = Math.abs(targetRect.left - preparedItem.targetRect.left) > 0.5
@@ -1600,10 +1735,18 @@
             if (!preparedItems) {
                 return;
             }
-            if (preparedItems.backdropItem && preparedItems.backdropItem.element) {
-                preparedItems.backdropItem.element.remove();
+            if (preparedItems.backdropItem) {
+                if (preparedItems.backdropItem.targetElement) {
+                    preparedItems.backdropItem.targetElement.classList.remove('pjax-article-transition-target-card');
+                }
+                if (preparedItems.backdropItem.element) {
+                    preparedItems.backdropItem.element.remove();
+                }
                 preparedItems.backdropItem = null;
             }
+            document.querySelectorAll('.pjax-article-transition-target-card').forEach(function (el) {
+                el.classList.remove('pjax-article-transition-target-card');
+            });
             preparedItems.forEach(function (preparedItem) {
                 if (preparedItem.targetElement) {
                     preparedItem.targetElement.classList.remove('pjax-article-transition-target-hidden');
@@ -1611,6 +1754,9 @@
                 if (preparedItem.cloneElement) {
                     preparedItem.cloneElement.remove();
                 }
+            });
+            document.querySelectorAll('.pjax-article-transition-target-hidden').forEach(function (el) {
+                el.classList.remove('pjax-article-transition-target-hidden');
             });
         }
 
@@ -1645,6 +1791,7 @@
             const currentUrl = window.location.href;
             const sourceScrollPosition = getCurrentScrollPosition();
             if (pushState) {
+                replaceCurrentHistoryState({ windblogScroll: sourceScrollPosition });
                 displayedUrl = currentUrl;
                 displayedHistoryState = { ...window.history.state, windblogScroll: sourceScrollPosition };
             }
@@ -1779,9 +1926,8 @@
                                 container.style.opacity = '';
                                 if (container.animate) {
                                     container.animate([
-                                        { opacity: 0, transform: 'translate3d(0, 8px, 0)' },
-                                        { opacity: 0.28, transform: 'translate3d(0, 5px, 0)', offset: 0.26 },
-                                        { opacity: 1, transform: 'translate3d(0, 0, 0)' }
+                                        { opacity: 0 },
+                                        { opacity: 1 }
                                     ], {
                                         duration: 380,
                                         easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
@@ -1837,6 +1983,13 @@
                         targetNode.classList.add('pjax-article-transition-target-hidden');
                     }
                 });
+            }
+
+            if (transitionSlug && capturedItems && capturedItems.cardSourceRect) {
+                const targetCardNode = findArticleTransitionCardElement(documentSnapshot, transitionSlug);
+                if (targetCardNode) {
+                    targetCardNode.classList.add('pjax-article-transition-target-card');
+                }
             }
 
             const contentRoot = documentSnapshot.querySelector('#pjax-content-root');
@@ -2133,14 +2286,16 @@
             }
 
             const anchor = event.target.closest('a');
+            const returnTargetUrl = getArticleListReturnUrl();
             const isArticleReturnNavigation = anchor &&
-                anchor.matches('[data-article-return-link]') &&
-                isArticleDetailUrl(window.location.href);
+                isArticleDetailUrl(window.location.href) &&
+                (anchor.matches('[data-article-return-link]') ||
+                 (returnTargetUrl && areSameInternalUrls(anchor.href, returnTargetUrl)));
             const currentHistoryState = window.history.state;
             if (isArticleReturnNavigation &&
                 currentHistoryState &&
                 currentHistoryState.articleListReturnViaHistory &&
-                areSameInternalUrls(getArticleListReturnUrl(), currentHistoryState.articleListReturnUrl)) {
+                areSameInternalUrls(returnTargetUrl, currentHistoryState.articleListReturnUrl)) {
                 event.preventDefault();
                 window.history.back();
                 return;

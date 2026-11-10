@@ -33,11 +33,11 @@
     </div>
 
 
-    <div class="card card-static p-6 sm:p-7 md:p-8 rounded-2xl border border-border bg-card shadow-sm">
+    <div class="card card-static p-6 sm:p-7 md:p-8 rounded-2xl border border-border bg-card shadow-sm" data-article-transition-card="{postSlug}">
         <nav aria-label="{i18n.t('post.breadcrumb')}" class="text-xs text-meta font-mono mb-6 flex items-center gap-1.5">
-            <a href="{languagePrefix}/" class="hover:text-accent transition-colors">{i18n.t('common.home')}</a>
+            <a href="{languagePrefix}/" class="hover:text-accent transition-colors" data-article-return-link>{i18n.t('common.home')}</a>
             {#if breadcrumbCategorySlug}
-            <span aria-hidden="true" class="text-meta/60">/</span><a href="{languagePrefix}/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors">{postCategory}</a>
+            <span aria-hidden="true" class="text-meta/60">/</span><a href="{languagePrefix}/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors" data-article-return-link>{postCategory}</a>
             {/if}
             <span aria-hidden="true" class="text-meta/60">/</span><span class="text-main truncate max-w-xs">{postTitle}</span>
         </nav>

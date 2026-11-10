@@ -26,6 +26,7 @@ WindBlog 采用自研轻量级 PJAX 结合原生 Web Animations API (WAAPI) 实�
 ### 2.1 HTML 标记规范 (Qute 模板)
 在模板中，文章卡片与文章详情页通过特定的 `data-*` 属性进行配对：
 - `data-article-transition-slug="{post.slug}"`：标识目标文章唯一 slug。
+- `data-article-transition-card="{post.slug}"`：标识文章列表卡片与文章背景卡片（实现进入与退出时的卡片形状/尺寸/圆角平滑形变）。
 - `data-article-transition-part="cover"`：标识文章封面缩略图/详情页标题下方渐变封面条（`.post-list-cover` <-> `.post-header-cover`）。
 - `data-article-transition-part="title"`：标识文章标题部分。
 - `data-article-transition-part="summary"`：标识文章 AI 摘要卡片外层容器（可选）。
@@ -109,7 +110,9 @@ sequenceDiagram
 - **标题 (`title`, `.pjax-article-transition-clone-title`)**：在测量完目标 `targetStyle` 后将克隆体直接锁定为目标字号、字重与宽度，通过 `transform: translate3d(x, y, 0) scale(sourceFontPx / targetFontPx)` 到 `translate3d(targetX, targetY, 0) scale(1)` 以及 `color` 进行纯 GPU 合成插值。
 - **封面 (`cover`, `.pjax-article-transition-clone-cover`)**：列表页左侧缩略图 `.post-list-cover` 与文章详情页标题下方紧凑封面区域 `.post-header-cover` 配对，同步过渡 `transform`、`width`、`height`、`borderRadius`，并同步插值内部图片透明度与 `.post-header-cover-gradient` 遮罩透明度（`0 <-> 1`），确保详情页标题在亮/暗主题下均清晰可读。
 - **摘要卡片 (`summary`, `.pjax-article-transition-clone-summary`)**：作用于整个 AI 摘要卡片容器（`overflow: hidden`），平滑插值 `transform`、`width`、`height` 与圆角，避免目标页在动画开始时露出空心边框。
-- **卡片背景共享遮罩 (`.pjax-article-transition-backdrop`)**：捕获来源卡片 `.card` 视口边界并向目标文章卡片过渡同时渐隐，且在 `settleArticleTransitionTargets()` 等待期间保持 `#pjax-container` 透明（`opacity: 0`），确保背景容器淡入与克隆体 FLIP 动画在同一帧同步启动。
+- **卡片背景共享元素 (`.pjax-article-transition-backdrop` <-> `.pjax-article-transition-target-card`)**：
+  - 进入文章时：捕获列表卡片的视口边界与计算样式（背景色、圆角、边框、阴影），作为实心卡片克隆体以 `380ms` 平滑形变展开为文章页背景卡片的完整尺寸与圆角；目标卡片在过渡期间通过 `.pjax-article-transition-target-card` 隐藏背景边框以消除双层重影。
+  - 关闭/返回列表时：捕获文章背景卡片当前可见视口边界，向列表卡片目标位置反向平滑收缩还原，同时联动封面、标题与摘要缩小，实现无缝的双向共享元素展开与收缩体验。
 
 ### 4.2 动效参数与 CSS 配合
 - **时长**：`380ms`
