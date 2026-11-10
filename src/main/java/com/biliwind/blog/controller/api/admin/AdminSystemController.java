@@ -6,6 +6,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.MediaType;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.health.HealthCheck;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -32,6 +33,10 @@ public class AdminSystemController {
 
     @Inject
     com.biliwind.blog.service.security.GrafanaEmbedTokenService grafanaEmbedTokenService;
+
+    @Inject
+    @ConfigProperty(name = "windblog.observability.kibana.url")
+    java.util.Optional<String> kibanaUrlConfig;
 
     // 注入所有 HealthCheck 实现（由 CDI 自动收集所有实现类）
     @Inject
@@ -71,6 +76,14 @@ public class AdminSystemController {
                     .entity(Map.of("success", false, "message", "Grafana observability is not configured"))
                     .build();
         }
+    }
+
+    @GET
+    @Path("/observability/kibana-url")
+    @Operation(summary = "获取 Kibana 地址", description = "返回 Kibana 日志可视化控制台地址")
+    public Response kibanaUrl() {
+        String url = kibanaUrlConfig.orElse("").trim();
+        return Response.ok(Map.of("url", url)).build();
     }
 
     private Map<String, Object> buildJvmSection() {

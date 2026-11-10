@@ -170,6 +170,8 @@ class AdminAuthorizationPolicyTest {
         assertEquals("system.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/system/monitor").action());
         assertEquals("system.read", AdminAuthorizationPolicy.decide(
                 "GET", "/api/admin/system/observability/grafana-embed-url").action());
+        assertEquals("system.read", AdminAuthorizationPolicy.decide(
+                "GET", "/api/admin/system/observability/kibana-url").action());
         assertEquals("ai.read", AdminAuthorizationPolicy.decide(
                 "GET", "/api/admin/ai/topics").action());
         assertEquals("ai.write", AdminAuthorizationPolicy.decide(
