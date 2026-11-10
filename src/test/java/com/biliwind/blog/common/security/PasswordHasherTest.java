@@ -1,7 +1,6 @@
 package com.biliwind.blog.common.security;
 
-import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -10,11 +9,16 @@ import static org.junit.jupiter.api.Assertions.*;
  * PasswordHasher 单元测试
  * 测试密码哈希和验证功能
  */
-@QuarkusTest
 class PasswordHasherTest {
 
-    @Inject
-    PasswordHasher passwordHasher;
+    private PasswordHasher passwordHasher;
+
+    @BeforeEach
+    void setUp() {
+        passwordHasher = new PasswordHasher();
+        passwordHasher.iterations = 210000;
+        passwordHasher.keyLengthBits = 256;
+    }
 
     @Test
     void shouldHashPasswordWithCorrectFormat() {

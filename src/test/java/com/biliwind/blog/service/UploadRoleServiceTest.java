@@ -24,14 +24,14 @@ class UploadRoleServiceTest {
     void shouldListAllRoles() {
         List<UploadRole> roles = uploadRoleService.listRoles();
         assertNotNull(roles);
+        assertFalse(roles.isEmpty(), "Should contain default upload roles");
     }
 
     @Test
     void shouldFindRoleByName() {
         UploadRole role = uploadRoleService.findByName(RoleConstant.GUEST);
-        if (role != null) {
-            assertEquals(RoleConstant.GUEST, role.name);
-        }
+        assertNotNull(role, "Default GUEST upload role should exist");
+        assertEquals(RoleConstant.GUEST, role.name);
     }
 
     @Test

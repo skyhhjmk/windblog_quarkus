@@ -35,12 +35,12 @@ class FakeAiServiceTest {
     }
 
     @Test
-    void openaiStreamWaitsFiveSecondsAndTerminatesCorrectly() throws Exception {
+    void openaiStreamGeneratesAndTerminatesCorrectly() throws Exception {
         checkStream("openai", "chat/completions", "GPT-100");
     }
 
     @Test
-    void claudeStreamWaitsFiveSecondsAndUsesNamedEvents() throws Exception {
+    void claudeStreamGeneratesAndUsesNamedEvents() throws Exception {
         checkStream("claude", "messages", "Claude Opus 100");
     }
 
@@ -60,7 +60,7 @@ class FakeAiServiceTest {
         };
         ((StreamingOutput) response.getEntity()).write(out);
         assertTrue((firstFlush[0] - started) / 1_000_000 < 1000);
-        assertTrue((System.nanoTime() - started) / 1_000_000 >= 5000);
+        assertTrue((System.nanoTime() - started) / 1_000_000 >= FakeAiService.THINKING_MILLIS);
         String stream = out.toString(java.nio.charset.StandardCharsets.UTF_8);
         if (provider.equals("openai")) {
             assertTrue(stream.contains("chat.completion.chunk"));

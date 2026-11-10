@@ -1,12 +1,10 @@
 package com.biliwind.blog.common.helper;
 
-import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-@QuarkusTest
 class MediaSecurityHelperTest {
 
     @Test
@@ -25,8 +23,8 @@ class MediaSecurityHelperTest {
         assertTrue(MediaSecurityHelper.isPrivateOrLoopbackAddress(""));
         assertTrue(MediaSecurityHelper.isPrivateOrLoopbackAddress("not-a-valid-url"));
 
-        // 外网合法 IP/域名
-        assertFalse(MediaSecurityHelper.isPrivateOrLoopbackAddress("https://www.baidu.com/img"));
+        // 外网合法 IP
+        assertFalse(MediaSecurityHelper.isPrivateOrLoopbackAddress("https://1.1.1.1/img"));
         assertFalse(MediaSecurityHelper.isPrivateOrLoopbackAddress("http://8.8.8.8/"));
     }
 }

@@ -8,8 +8,10 @@ import java.io.IOException;
 import java.util.Collections;
 import java.time.Duration;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class AliyunOssStorageClassMockTest {
@@ -24,7 +26,7 @@ public class AliyunOssStorageClassMockTest {
     }
 
     @Test
-    void testInitialize() throws IOException {
+    void testInitializeSuccess() throws IOException {
         String configJson = "{" +
                 "\"endpoint\":\"oss-cn-hangzhou.aliyuncs.com\"," +
                 "\"accessKeyId\":\"test-ak\"," +
@@ -40,13 +42,19 @@ public class AliyunOssStorageClassMockTest {
                 true
         );
 
-        // This will attempt to create an OSSClient which might fail without real credentials or environment
-        // But we can at least test that initialize doesn't throw immediate exception if handled gracefully
-        try {
-            provider.initialize(config);
-        } catch (Exception e) {
-            // Expected if it tries to connect
-        }
+        assertDoesNotThrow(() -> provider.initialize(config));
+        assertTrue(provider.supportsVariant("image/jpeg", "original"));
+    }
+
+    @Test
+    void testInitializeFailsOnMissingRequiredConfig() {
+        StorageClassConfig emptyConfig = new StorageClassConfig(
+                objectMapper.createObjectNode(),
+                Collections.emptyList(),
+                null,
+                false
+        );
+        assertThrows(StorageException.class, () -> provider.initialize(emptyConfig));
     }
 
     @Test

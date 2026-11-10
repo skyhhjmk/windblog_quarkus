@@ -4,7 +4,10 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 public class StorageServiceTest {
@@ -13,19 +16,18 @@ public class StorageServiceTest {
     StorageService storageService;
 
     @Test
-    public void testServiceInjected() {
-        assertNotNull(storageService);
-    }
-
-    @Test
     public void testGetPrimaryProviderName() {
         String name = storageService.getPrimaryProviderName();
         assertNotNull(name);
+        assertFalse(name.isBlank(), "Primary provider name should not be blank");
+        assertEquals("local_fs", name);
     }
 
     @Test
     public void testGetAllProviderEntities() {
         java.util.List<com.biliwind.blog.model.StorageClassEntity> entities = storageService.getAllProviderEntities();
         assertNotNull(entities);
+        assertFalse(entities.isEmpty(), "Should contain at least the default local_fs provider");
+        assertTrue(entities.stream().anyMatch(e -> "local_fs".equals(e.name)), "Should include local_fs entity");
     }
 }
