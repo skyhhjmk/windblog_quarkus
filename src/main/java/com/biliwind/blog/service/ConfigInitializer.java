@@ -44,14 +44,16 @@ public class ConfigInitializer {
                 setting.groupName = def.group;
                 setting.uiSchema = def.uiSchema;
                 setting.description = def.description;
+                setting.settingLevel = def.level;
                 setting.persist();
                 LOG.infof("Added missing setting: %s", def.key);
             } else {
                 boolean definitionChanged = false;
-                if (!setting.uiSchema.equals(def.uiSchema) || !setting.groupName.equals(def.group) || !setting.description.equals(def.description)) {
+                if (!setting.uiSchema.equals(def.uiSchema) || !setting.groupName.equals(def.group) || !setting.description.equals(def.description) || !def.level.equalsIgnoreCase(setting.settingLevel)) {
                     setting.uiSchema = def.uiSchema;
                     setting.groupName = def.group;
                     setting.description = def.description;
+                    setting.settingLevel = def.level;
                     definitionChanged = true;
                 }
 
@@ -465,7 +467,8 @@ public class ConfigInitializer {
                 "object",
                 "Elasticsearch",
                 elasticsearchSchema,
-                "Elasticsearch 搜索、分词与同义词设置"
+                "Elasticsearch 搜索、分词与同义词设置",
+                com.biliwind.blog.model.SettingLevel.CRITICAL.name()
         ));
 
         ObjectNode securityNetworkSchema = mapper.createObjectNode();
@@ -488,7 +491,7 @@ public class ConfigInitializer {
         securityNetworkValue.put("trusted_proxy_cidrs", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16");
         securityNetworkValue.put("client_ip_header", "X-Forwarded-For");
         securityNetworkValue.put("client_ip_source", "auto");
-        list.add(new SettingDefinition("security_network", securityNetworkValue, "object", "安全设置", securityNetworkSchema, "可信代理与客户端 IP 解析设置"));
+        list.add(new SettingDefinition("security_network", securityNetworkValue, "object", "安全设置", securityNetworkSchema, "可信代理与客户端 IP 解析设置", com.biliwind.blog.model.SettingLevel.CRITICAL.name()));
 
         ObjectNode commentSecuritySchema = mapper.createObjectNode();
         commentSecuritySchema.put("type", "object");
@@ -503,7 +506,7 @@ public class ConfigInitializer {
         ObjectNode commentSecurityValue = mapper.createObjectNode();
         commentSecurityValue.put("pow_difficulty", 16);
         commentSecurityValue.put("challenge_ttl_seconds", 300);
-        list.add(new SettingDefinition("comment_security", commentSecurityValue, "object", "安全设置", commentSecuritySchema, "评论无感工作量证明验证设置"));
+        list.add(new SettingDefinition("comment_security", commentSecurityValue, "object", "安全设置", commentSecuritySchema, "评论无感工作量证明验证设置", com.biliwind.blog.model.SettingLevel.CRITICAL.name()));
         return list;
     }
 
@@ -528,14 +531,20 @@ public class ConfigInitializer {
         String group;
         com.fasterxml.jackson.databind.JsonNode uiSchema;
         String description;
+        String level;
 
         SettingDefinition(String key, com.fasterxml.jackson.databind.JsonNode defaultValue, String type, String group, com.fasterxml.jackson.databind.JsonNode uiSchema, String description) {
+            this(key, defaultValue, type, group, uiSchema, description, com.biliwind.blog.model.SettingLevel.NORMAL.name());
+        }
+
+        SettingDefinition(String key, com.fasterxml.jackson.databind.JsonNode defaultValue, String type, String group, com.fasterxml.jackson.databind.JsonNode uiSchema, String description, String level) {
             this.key = key;
             this.defaultValue = defaultValue;
             this.type = type;
             this.group = group;
             this.uiSchema = uiSchema;
             this.description = description;
+            this.level = level != null ? level : com.biliwind.blog.model.SettingLevel.NORMAL.name();
         }
     }
 }

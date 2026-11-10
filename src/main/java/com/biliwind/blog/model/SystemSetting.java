@@ -45,6 +45,13 @@ public class SystemSetting extends PanacheEntityBase {
     @Column(name = "is_frozen", nullable = false)
     public boolean isFrozen = false;
 
+    @Column(name = "setting_level", nullable = false, length = 32)
+    public String settingLevel = SettingLevel.NORMAL.name();
+
+    public boolean requiresVerification() {
+        return SettingLevel.CRITICAL.name().equalsIgnoreCase(settingLevel);
+    }
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp
     public OffsetDateTime createdAt;

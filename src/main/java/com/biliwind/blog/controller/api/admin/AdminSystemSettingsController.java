@@ -149,21 +149,25 @@ public class AdminSystemSettingsController {
         // 更新当前
         setting.configValue = newValue;
         setting.version += 1;
-        setting.isFrozen = true; // 进入锁定验证期
+        boolean requiresVerification = setting.requiresVerification();
+        setting.isFrozen = requiresVerification;
         setting.persist();
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
 
         // 触发热更新
         configChangedEvent.fire(new ConfigChangedEvent(key, newValue));
 
-        // 启动 Watchdog (3分钟后验证)
-        watchdog.watch(key, 3);
+        if (requiresVerification) {
+            // 启动 Watchdog (3分钟后验证)
+            watchdog.watch(key, 3);
+        }
 
         auditService.log("system_setting", String.valueOf(setting.id), "update",
                 sanitizeForAudit(key, setting.configValue),
                 sanitizeForAudit(key, newValue));
 
-        return Response.ok(Map.of("success", true, "message", "配置已更新，进入3分钟验证期", "data", toView(setting))).build();
+        String message = requiresVerification ? "配置已更新，进入3分钟验证期" : "配置已更新";
+        return Response.ok(Map.of("success", true, "message", message, "data", toView(setting))).build();
     }
 
     @POST
@@ -266,19 +270,23 @@ public class AdminSystemSettingsController {
         // 更新
         setting.configValue = newValue;
         setting.version += 1;
-        setting.isFrozen = true;
+        boolean requiresVerification = setting.requiresVerification();
+        setting.isFrozen = requiresVerification;
         setting.persist();
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
 
         // 触发热更新和 Watchdog
         configChangedEvent.fire(new ConfigChangedEvent(key, newValue));
-        watchdog.watch(key, 3);
+        if (requiresVerification) {
+            watchdog.watch(key, 3);
+        }
 
         auditService.log("system_setting", String.valueOf(setting.id), "audit_apply",
                 Map.of("key", key, "value", maskSecrets(key, history.configValue), "version", history.version),
                 Map.of("key", key, "value", maskSecrets(key, newValue), "version", setting.version));
 
-        return Response.ok(Map.of("success", true, "message", "已应用配置并进入验证期")).build();
+        String message = requiresVerification ? "已应用配置并进入验证期" : "已应用配置";
+        return Response.ok(Map.of("success", true, "message", message)).build();
     }
 
     @GET
@@ -366,7 +374,8 @@ public class AdminSystemSettingsController {
         return new SystemSettingView(setting.id, setting.configKey,
                 maskSecrets(setting.configKey, setting.configValue), setting.configType,
                 setting.groupName, uiSchema, setting.description, setting.version,
-                setting.isFrozen, secret, setting.createdAt, setting.updatedAt);
+                setting.isFrozen, secret, setting.settingLevel, setting.requiresVerification(),
+                setting.createdAt, setting.updatedAt);
     }
 
     private boolean aiConfigAllows(AiProviderConfig config, String operation) {

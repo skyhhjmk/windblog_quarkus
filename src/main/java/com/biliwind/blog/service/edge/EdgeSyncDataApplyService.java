@@ -182,6 +182,7 @@ public class EdgeSyncDataApplyService {
         setting.description = readOptionalText(node, "description", "");
         setting.version = node.path("version").canConvertToInt() ? node.path("version").asInt() : 1;
         setting.isFrozen = node.path("isFrozen").asBoolean(false);
+        setting.settingLevel = readOptionalText(node, "settingLevel", "NORMAL");
         setting.persist();
         entityManager.flush();
     }

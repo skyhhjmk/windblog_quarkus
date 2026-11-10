@@ -190,6 +190,7 @@ public class EdgeDataSyncService {
         putText(payload, "description", setting.description);
         putInteger(payload, "version", setting.version);
         putBoolean(payload, "isFrozen", setting.isFrozen);
+        putText(payload, "settingLevel", setting.settingLevel);
         return writePayload(payload);
     }
 

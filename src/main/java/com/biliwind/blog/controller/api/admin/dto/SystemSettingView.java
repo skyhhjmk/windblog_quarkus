@@ -17,6 +17,8 @@ public record SystemSettingView(
         Integer version,
         boolean isFrozen,
         boolean secret,
+        String settingLevel,
+        boolean requiresVerification,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
 }
