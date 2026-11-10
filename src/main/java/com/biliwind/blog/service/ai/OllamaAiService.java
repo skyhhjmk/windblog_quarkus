@@ -92,12 +92,13 @@ public class OllamaAiService implements AiService {
             payload.put("format", "json");
             payload.put("stream", false);
             String bodyJson = objectMapper.writeValueAsString(payload);
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(resolveUri(config, "/api/generate"))
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+            AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "translate");
+            HttpRequest request = reqBuilder.build();
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
                     AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
                 if (response.statusCode() >= 400) {
@@ -105,7 +106,8 @@ public class OllamaAiService implements AiService {
                 }
                 try {
                     JsonNode root = objectMapper.readTree(response.body());
-                    JsonNode translated = objectMapper.readTree(extractTextFromResponse(root));
+                    String raw = cleanJsonText(extractTextFromResponse(root));
+                    JsonNode translated = objectMapper.readTree(raw);
                     AiResult result = new AiResult();
                     for (String field : fields.keySet()) {
                         JsonNode value = translated.get(field);
@@ -139,12 +141,13 @@ public class OllamaAiService implements AiService {
 
             String bodyJson = objectMapper.writeValueAsString(payload);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(uri)
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+            AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "summarize");
+            HttpRequest request = reqBuilder.build();
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
                     AiHttpClientHelper.boundedStringBodyHandler())
@@ -244,12 +247,13 @@ public class OllamaAiService implements AiService {
             payload.put("format", "json");
 
             String bodyJson = objectMapper.writeValueAsString(payload);
-            HttpRequest req = HttpRequest.newBuilder()
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(uri)
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+            AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "moderate");
+            HttpRequest req = reqBuilder.build();
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), req,
                     AiHttpClientHelper.boundedStringBodyHandler())
@@ -259,7 +263,7 @@ public class OllamaAiService implements AiService {
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
-                            String resultText = extractTextFromResponse(root);
+                            String resultText = cleanJsonText(extractTextFromResponse(root));
                             JsonNode resultJson = objectMapper.readTree(resultText);
 
                             AiResult res = AiModerationResultParser.parse(resultJson, response.body());
@@ -302,12 +306,13 @@ public class OllamaAiService implements AiService {
                 payload.put("messages", messages);
 
                 String bodyJson = objectMapper.writeValueAsString(payload);
-                HttpRequest req = HttpRequest.newBuilder()
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                         .uri(uri)
                         .timeout(timeout)
                         .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8))
-                        .build();
+                        .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+                AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "test");
+                HttpRequest req = reqBuilder.build();
 
                 if (request.stream()) {
                     AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), req,
@@ -411,5 +416,14 @@ public class OllamaAiService implements AiService {
             log.error("获取 Ollama 模型列表请求异常", e);
             return CompletableFuture.completedFuture(List.of());
         }
+    }
+
+    private String cleanJsonText(String raw) {
+        if (raw == null) return "";
+        String text = raw.trim();
+        if (text.startsWith("```")) {
+            text = text.replaceFirst("^```[a-zA-Z]*\\s*", "").replaceFirst("\\s*```$", "").trim();
+        }
+        return text;
     }
 }

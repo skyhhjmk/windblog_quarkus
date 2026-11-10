@@ -134,4 +134,29 @@ class AiHttpClientHelperTest {
         assertNotNull(apacheRequest.getConfig().getResponseTimeout());
         assertEquals(180_000L, apacheRequest.getConfig().getResponseTimeout().toMilliseconds());
     }
+
+    @Test
+    void shouldAttachClientFeatureHeaders() {
+        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create("https://example.com/api"));
+        AiHttpClientHelper.attachClientFeatureHeaders(builder, "translate");
+        HttpRequest req = builder.GET().build();
+        assertEquals("WindBlog-Translate/1.0", req.headers().firstValue("User-Agent").orElse(null));
+        assertEquals("WindBlog - Translate", req.headers().firstValue("X-Title").orElse(null));
+        assertEquals("translate", req.headers().firstValue("X-Client-Feature").orElse(null));
+
+        builder = HttpRequest.newBuilder().uri(URI.create("https://example.com/api"));
+        AiHttpClientHelper.attachClientFeatureHeaders(builder, "summarize");
+        req = builder.GET().build();
+        assertEquals("WindBlog-Summarize/1.0", req.headers().firstValue("User-Agent").orElse(null));
+
+        builder = HttpRequest.newBuilder().uri(URI.create("https://example.com/api"));
+        AiHttpClientHelper.attachClientFeatureHeaders(builder, "moderate");
+        req = builder.GET().build();
+        assertEquals("WindBlog-Moderate/1.0", req.headers().firstValue("User-Agent").orElse(null));
+
+        builder = HttpRequest.newBuilder().uri(URI.create("https://example.com/api"));
+        AiHttpClientHelper.attachClientFeatureHeaders(builder, null);
+        req = builder.GET().build();
+        assertEquals("WindBlog-General/1.0", req.headers().firstValue("User-Agent").orElse(null));
+    }
 }

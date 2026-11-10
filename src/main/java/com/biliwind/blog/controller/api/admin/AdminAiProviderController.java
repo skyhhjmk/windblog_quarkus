@@ -30,6 +30,9 @@ public class AdminAiProviderController {
     @Inject
     com.biliwind.blog.service.ai.AiManager aiManager;
 
+    @Inject
+    com.biliwind.blog.service.ai.AiUsageService aiUsageService;
+
     @GET
     @Blocking
     public List<AiProviderConfigDto> list() {
@@ -91,5 +94,21 @@ public class AdminAiProviderController {
         config.endpoint = request.endpoint();
         config.apiKey = request.apiKey();
         return aiManager.fetchModels(config);
+    }
+
+    @GET
+    @Path("/usage")
+    @Blocking
+    public com.biliwind.blog.controller.api.admin.dto.AdminAiProviderDtos.AiUsageSummaryDto getUsageSummary(
+            @QueryParam("days") @DefaultValue("30") int days) {
+        return aiUsageService.getSummary(days);
+    }
+
+    @DELETE
+    @Path("/usage")
+    @Blocking
+    public Response clearUsage(@QueryParam("days") @DefaultValue("0") int days) {
+        aiUsageService.clearUsageLogs(days);
+        return Response.noContent().build();
     }
 }

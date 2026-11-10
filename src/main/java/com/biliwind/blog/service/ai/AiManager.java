@@ -39,6 +39,9 @@ public class AiManager {
     @Inject
     AiConcurrencyLimiter concurrencyLimiter;
 
+    @Inject
+    AiUsageService aiUsageService;
+
     private AiService findService(AiProviderConfig config) {
         if (config == null) return null;
         for (AiService service : providers) {
@@ -141,6 +144,7 @@ public class AiManager {
         if (limited != null) return limited;
         CompletionStage<AiResult> concLimited = concurrencyLimited(config);
         if (concLimited != null) return concLimited;
+        long start = System.currentTimeMillis();
         try {
             CompletionStage<AiResult> stage;
             if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
@@ -148,7 +152,7 @@ public class AiManager {
             } else {
                 AiService service = findService(config);
                 if (service == null) {
-                    concurrencyLimiter.release(config);
+                    if (concurrencyLimiter != null) concurrencyLimiter.release(config);
                     return CompletableFuture.failedFuture(
                             new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
                 }
@@ -165,9 +169,19 @@ public class AiManager {
                     }
                 }
                 return res;
-            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            }).whenComplete((res, ex) -> {
+                if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+                if (aiUsageService != null && config != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                    long duration = System.currentTimeMillis() - start;
+                    aiUsageService.record(config, "translate", res, duration, ex);
+                }
+            });
         } catch (Throwable t) {
-            concurrencyLimiter.release(config);
+            if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+            if (aiUsageService != null && config != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                long duration = System.currentTimeMillis() - start;
+                aiUsageService.record(config, "translate", null, duration, t);
+            }
             return CompletableFuture.failedFuture(t);
         }
     }
@@ -279,16 +293,28 @@ public class AiManager {
         }
         final AiProviderConfig fallbackConfig = fallback;
         log.info("[AI] 开始完成调用，使用配置={}, provider={}, operation={}", primary.name, primary.provider, op);
-        return executeComplete(primary, systemPrompt, prompt).exceptionallyCompose(error ->
+        return executeComplete(primary, op, systemPrompt, prompt).exceptionallyCompose(error ->
                 fallbackConfig == null ? CompletableFuture.failedFuture(error)
-                        : executeComplete(fallbackConfig, systemPrompt, prompt));
+                        : executeComplete(fallbackConfig, op, systemPrompt, prompt));
     }
 
     public CompletionStage<AiResult> executeComplete(AiProviderConfig config, String systemPrompt, String prompt) {
+        return executeComplete(config, "assistant", systemPrompt, prompt);
+    }
+
+    public CompletionStage<AiResult> executeComplete(AiProviderConfig config, String operation, String systemPrompt, String prompt) {
+        try {
+            if (getClass().getMethod("executeComplete", AiProviderConfig.class, String.class, String.class).getDeclaringClass() != AiManager.class) {
+                return executeComplete(config, systemPrompt, prompt);
+            }
+        } catch (NoSuchMethodException ignored) {
+        }
         CompletionStage<AiResult> limited = rateLimited(config);
         if (limited != null) return limited;
         CompletionStage<AiResult> concLimited = concurrencyLimited(config);
         if (concLimited != null) return concLimited;
+        long start = System.currentTimeMillis();
+        String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
         try {
             CompletionStage<AiResult> stage;
             if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
@@ -296,11 +322,11 @@ public class AiManager {
             } else {
                 AiService service = findService(config);
                 if (service == null) {
-                    concurrencyLimiter.release(config);
+                    if (concurrencyLimiter != null) concurrencyLimiter.release(config);
                     return CompletableFuture.failedFuture(
                             new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
                 }
-                stage = service.complete(config, systemPrompt, prompt);
+                stage = service.complete(config, op, systemPrompt, prompt);
             }
             return stage.thenApply(res -> {
                 if (res != null && config != null) {
@@ -313,9 +339,19 @@ public class AiManager {
                     }
                 }
                 return res;
-            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            }).whenComplete((res, ex) -> {
+                if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+                if (aiUsageService != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                    long duration = System.currentTimeMillis() - start;
+                    aiUsageService.record(config, op, res, duration, ex);
+                }
+            });
         } catch (Throwable t) {
-            concurrencyLimiter.release(config);
+            if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+            if (aiUsageService != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                long duration = System.currentTimeMillis() - start;
+                aiUsageService.record(config, op, null, duration, t);
+            }
             return CompletableFuture.failedFuture(t);
         }
     }
@@ -407,6 +443,9 @@ public class AiManager {
     }
 
     private CompletionStage<AiResult> rateLimited(AiProviderConfig config) {
+        if (rateLimiter == null) {
+            return null;
+        }
         AiRateLimiter.Result result = rateLimiter.tryAcquire(config);
         if (result.allowed()) {
             return null;
@@ -417,6 +456,9 @@ public class AiManager {
     }
 
     private CompletionStage<AiResult> concurrencyLimited(AiProviderConfig config) {
+        if (concurrencyLimiter == null) {
+            return null;
+        }
         if (!concurrencyLimiter.tryAcquire(config)) {
             return CompletableFuture.failedFuture(new AiConcurrencyLimitException(
                     config == null || config.name == null ? "unknown" : config.name,
@@ -442,6 +484,7 @@ public class AiManager {
         if (limited != null) return limited;
         CompletionStage<AiResult> concLimited = concurrencyLimited(config);
         if (concLimited != null) return concLimited;
+        long start = System.currentTimeMillis();
         try {
             CompletionStage<AiResult> stage;
             if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
@@ -465,9 +508,19 @@ public class AiManager {
                     }
                 }
                 return res;
-            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            }).whenComplete((res, ex) -> {
+                if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+                if (aiUsageService != null && config != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                    long duration = System.currentTimeMillis() - start;
+                    aiUsageService.record(config, "summarize", res, duration, ex);
+                }
+            });
         } catch (Throwable t) {
-            concurrencyLimiter.release(config);
+            if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+            if (aiUsageService != null && config != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                long duration = System.currentTimeMillis() - start;
+                aiUsageService.record(config, "summarize", null, duration, t);
+            }
             return CompletableFuture.failedFuture(t);
         }
     }
@@ -477,6 +530,7 @@ public class AiManager {
         if (limited != null) return limited;
         CompletionStage<AiResult> concLimited = concurrencyLimited(config);
         if (concLimited != null) return concLimited;
+        long start = System.currentTimeMillis();
         try {
             CompletionStage<AiResult> stage;
             if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
@@ -484,7 +538,7 @@ public class AiManager {
             } else {
                 AiService svc = findService(config);
                 if (svc == null) {
-                    concurrencyLimiter.release(config);
+                    if (concurrencyLimiter != null) concurrencyLimiter.release(config);
                     log.warn("[AI] 未找到支持该配置的 AI 服务: name={}, provider={}", config.name, config.provider);
                     return CompletableFuture.failedFuture(new IllegalStateException(
                             "不支持的 AI 提供商引擎: " + config.provider));
@@ -502,9 +556,19 @@ public class AiManager {
                     }
                 }
                 return res;
-            }).whenComplete((res, ex) -> concurrencyLimiter.release(config));
+            }).whenComplete((res, ex) -> {
+                if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+                if (aiUsageService != null && config != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                    long duration = System.currentTimeMillis() - start;
+                    aiUsageService.record(config, "moderate", res, duration, ex);
+                }
+            });
         } catch (Throwable t) {
-            concurrencyLimiter.release(config);
+            if (concurrencyLimiter != null) concurrencyLimiter.release(config);
+            if (aiUsageService != null && config != null && config.type != com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+                long duration = System.currentTimeMillis() - start;
+                aiUsageService.record(config, "moderate", null, duration, t);
+            }
             return CompletableFuture.failedFuture(t);
         }
     }
@@ -516,7 +580,14 @@ public class AiManager {
             AiService svc = findService(config);
             if (svc == null)
                 return io.smallrye.mutiny.Multi.createFrom().failure(new RuntimeException("不支持的 AI 提供商引擎: " + config.provider));
-            return svc.testStream(config, req);
+            long start = System.currentTimeMillis();
+            return svc.testStream(config, req)
+                    .onTermination().invoke((throwable, cancelled) -> {
+                        if (aiUsageService != null && config != null) {
+                            long duration = System.currentTimeMillis() - start;
+                            aiUsageService.record(config, "test", null, duration, throwable);
+                        }
+                    });
         }
     }
 

@@ -94,6 +94,7 @@ public class OpenAiAiService implements AiService {
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+            AiHttpClientHelper.attachClientFeatureHeaders(builder, "translate");
             attachApiKeyHeader(builder, config);
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
@@ -103,7 +104,8 @@ public class OpenAiAiService implements AiService {
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
-                            JsonNode translated = objectMapper.readTree(extractTextFromResponse(root));
+                            String rawJson = cleanJsonText(extractTextFromResponse(root));
+                            JsonNode translated = objectMapper.readTree(rawJson);
                             AiResult result = new AiResult();
                             for (String field : fields.keySet()) {
                                 JsonNode value = translated.get(field);
@@ -111,6 +113,13 @@ public class OpenAiAiService implements AiService {
                                     throw new RuntimeException("AI 翻译结果缺少字段: " + field);
                                 }
                                 result.contents.put(field, value.asText());
+                            }
+                            if (root.has("usage")) {
+                                JsonNode usage = root.get("usage");
+                                int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
+                                int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
+                                int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
+                                result.addUsage(promptTokens, completionTokens, totalTokens);
                             }
                             return result;
                         } catch (Exception e) {
@@ -120,6 +129,15 @@ public class OpenAiAiService implements AiService {
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    protected String cleanJsonText(String raw) {
+        if (raw == null) return "";
+        String text = raw.trim();
+        if (text.startsWith("```")) {
+            text = text.replaceFirst("^```[a-zA-Z]*\\s*", "").replaceFirst("\\s*```$", "").trim();
+        }
+        return text;
     }
 
     private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String lang, String text) {
@@ -134,6 +152,7 @@ public class OpenAiAiService implements AiService {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
 
+            AiHttpClientHelper.attachClientFeatureHeaders(builder, "summarize");
             attachApiKeyHeader(builder, config);
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
@@ -237,6 +256,7 @@ public class OpenAiAiService implements AiService {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
 
+            AiHttpClientHelper.attachClientFeatureHeaders(builder, "moderate");
             attachApiKeyHeader(builder, config);
 
             return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
@@ -247,7 +267,7 @@ public class OpenAiAiService implements AiService {
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
-                            String resultText = extractTextFromResponse(root);
+                            String resultText = cleanJsonText(extractTextFromResponse(root));
                             JsonNode resultJson = objectMapper.readTree(resultText);
 
                             AiResult res = AiModerationResultParser.parse(resultJson, response.body());
@@ -315,6 +335,7 @@ public class OpenAiAiService implements AiService {
                         .timeout(timeout)
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+                AiHttpClientHelper.attachClientFeatureHeaders(builder, "test");
                 attachApiKeyHeader(builder, config);
 
                 if (request.stream()) {
@@ -418,6 +439,74 @@ public class OpenAiAiService implements AiService {
             return "未知错误";
         }
         return SensitiveMessageSanitizer.sanitize(throwable.getMessage());
+    }
+
+    @Override
+    public CompletionStage<AiResult> complete(AiProviderConfig config, String operation,
+                                              String systemPrompt, String prompt) {
+        if (!isConfigReady(config)) {
+            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置未就绪"));
+        }
+        String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
+        try {
+            URI uri = resolveUri(config);
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
+            payload.put("stream", false);
+
+            List<Map<String, Object>> messages = new ArrayList<>();
+            if (systemPrompt != null && !systemPrompt.isBlank()) {
+                messages.add(Map.of("role", "system", "content", systemPrompt));
+            }
+            messages.add(Map.of("role", "user", "content", prompt));
+            payload.put("messages", messages);
+
+            String bodyJson = objectMapper.writeValueAsString(payload);
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(uri)
+                    .timeout(timeout)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
+            AiHttpClientHelper.attachClientFeatureHeaders(builder, op);
+            attachApiKeyHeader(builder, config);
+
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
+                    AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
+                if (response.statusCode() >= 400) {
+                    throw new RuntimeException("OpenAI 调用失败，HTTP " + response.statusCode());
+                }
+                try {
+                    JsonNode root = objectMapper.readTree(response.body());
+                    String text = extractTextFromResponse(root);
+                    if (text.isBlank()) {
+                        throw new IllegalStateException("AI 提供商未返回写作结果");
+                    }
+                    AiResult res = new AiResult();
+                    res.contents.put("text", text);
+                    if (config != null) {
+                        res.modelId = (config.model != null && !config.model.isBlank()) ? config.model : config.name;
+                        res.provider = config.provider;
+                    }
+                    if (root.has("usage")) {
+                        JsonNode usage = root.get("usage");
+                        int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
+                        int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
+                        int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
+                        res.addUsage(promptTokens, completionTokens, totalTokens);
+                    }
+                    return res;
+                } catch (Exception e) {
+                    throw new RuntimeException("解析 OpenAI 响应失败", e);
+                }
+            });
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    @Override
+    public CompletionStage<AiResult> complete(AiProviderConfig config, String systemPrompt, String prompt) {
+        return complete(config, "assistant", systemPrompt, prompt);
     }
 
     @Override

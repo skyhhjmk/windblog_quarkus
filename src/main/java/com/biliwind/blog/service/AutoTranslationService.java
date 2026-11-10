@@ -103,14 +103,15 @@ public class AutoTranslationService {
                 + "              r.paragraph_translations -> :targetLanguageLower ->> 'outdated') = 'true') "
                 + "and not exists ( "
                 + "    select 1 from translation_tasks t "
-                + "    where t.post_id = p.id and t.target_language = :targetLanguage "
-                + "      and t.status in ('QUEUED', 'RUNNING') "
+                + "    where t.post_id = p.id and lower(t.target_language) = :targetLanguageLower "
+                + "      and (t.status in ('QUEUED', 'RUNNING') "
+                + "           or (t.status = 'FAILED' and t.created_at >= coalesce(p.updated_at, p.created_at))) "
                 + ") "
-                + "and not exists ( "
-                + "    select 1 from translation_tasks t "
-                + "    where t.post_id = p.id and t.target_language = :targetLanguage "
-                + "      and t.status = 'FAILED' and t.updated_at > now() - interval '10 minutes' "
-                + ") "
+                + "and ( "
+                + "    select count(*) from translation_tasks t "
+                + "    where t.post_id = p.id and lower(t.target_language) = :targetLanguageLower "
+                + "      and t.status = 'FAILED' "
+                + ") < 5 "
                 + "order by p.updated_at desc, p.id desc limit :batchSize";
 
         @SuppressWarnings("unchecked")
@@ -153,9 +154,15 @@ public class AutoTranslationService {
                     + "              r.paragraph_translations -> :targetLanguageLower ->> 'outdated') = 'true') "
                     + "and not exists ( "
                     + "    select 1 from translation_tasks t "
-                    + "    where t.post_id = p.id and t.target_language = :targetLanguage "
-                    + "      and t.status in ('QUEUED', 'RUNNING') "
-                    + ")";
+                    + "    where t.post_id = p.id and lower(t.target_language) = :targetLanguageLower "
+                    + "      and (t.status in ('QUEUED', 'RUNNING') "
+                    + "           or (t.status = 'FAILED' and t.created_at >= coalesce(p.updated_at, p.created_at))) "
+                    + ") "
+                    + "and ( "
+                    + "    select count(*) from translation_tasks t "
+                    + "    where t.post_id = p.id and lower(t.target_language) = :targetLanguageLower "
+                    + "      and t.status = 'FAILED' "
+                    + ") < 5";
 
             Number pendingNum = (Number) entityManager.createNativeQuery(countSql)
                     .setParameter("targetLanguage", target)

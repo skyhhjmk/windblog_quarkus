@@ -43,6 +43,14 @@ public interface AiService {
      */
     default CompletionStage<AiResult> complete(com.biliwind.blog.model.AiProviderConfig config,
             String systemPrompt, String prompt) {
+        return complete(config, "assistant", systemPrompt, prompt);
+    }
+
+    /**
+     * Free-form completion with operation tag (e.g. "writing", "topic", "slug").
+     */
+    default CompletionStage<AiResult> complete(com.biliwind.blog.model.AiProviderConfig config,
+            String operation, String systemPrompt, String prompt) {
         return testStream(config, new AiTestRequest(prompt, systemPrompt, false, null, false))
                 .collect().asList()
                 .convert().toCompletionStage()

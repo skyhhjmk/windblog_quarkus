@@ -55,4 +55,48 @@ public class AdminAiProviderDtos {
             String config
     ) {
     }
+
+    public record AiUsageSummaryDto(
+            long totalRequests,
+            long successRequests,
+            long failedRequests,
+            long promptTokens,
+            long completionTokens,
+            long totalTokens,
+            java.util.List<AiProviderUsageStatDto> providers,
+            java.util.List<AiFeatureUsageStatDto> features,
+            java.util.List<AiDailyUsageStatDto> dailyStats
+    ) {
+    }
+
+    public record AiProviderUsageStatDto(
+            Long providerConfigId,
+            String providerName,
+            String providerType,
+            String model,
+            long requests,
+            long successRequests,
+            long failedRequests,
+            long promptTokens,
+            long completionTokens,
+            long totalTokens,
+            OffsetDateTime lastUsedAt
+    ) {
+    }
+
+    public record AiFeatureUsageStatDto(
+            String feature,
+            long requests,
+            long promptTokens,
+            long completionTokens,
+            long totalTokens
+    ) {
+    }
+
+    public record AiDailyUsageStatDto(
+            String date,
+            long requests,
+            long totalTokens
+    ) {
+    }
 }

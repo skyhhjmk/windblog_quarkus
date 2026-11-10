@@ -47,6 +47,29 @@ public class AiHttpClientHelper {
         }
     }
 
+    /**
+     * 汇报 AI 调用的客户端头部信息，将不同功能块汇报为独立的客户端，便于上游网关和监控识别。
+     */
+    public static void attachClientFeatureHeaders(HttpRequest.Builder builder, String feature) {
+        if (builder == null) return;
+        String normalized = (feature == null || feature.isBlank())
+                ? "general" : feature.trim().toLowerCase(java.util.Locale.ROOT);
+        String label = switch (normalized) {
+            case "translate", "translation" -> "Translate";
+            case "summarize", "summary" -> "Summarize";
+            case "moderate", "moderation", "audit" -> "Moderate";
+            case "topic" -> "Topic";
+            case "assistant", "writing" -> "Writing";
+            case "slug" -> "Slug";
+            case "test" -> "Test";
+            default -> Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
+        };
+
+        builder.header("User-Agent", "WindBlog-" + label + "/1.0");
+        builder.header("X-Title", "WindBlog - " + label);
+        builder.header("X-Client-Feature", normalized);
+    }
+
     // 直连客户端在每次请求前固定已验证的 DNS 地址。
     private static volatile AiPinnedHttpClient defaultClient;
 
