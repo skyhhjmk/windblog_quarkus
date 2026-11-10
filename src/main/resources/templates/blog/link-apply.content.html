@@ -1,11 +1,7 @@
 <div id="pjax-content-root" data-page-description="{pageDescription ?: ''}" data-page-keywords="{pageKeywords ?: ''}" data-page-canonical="{defaultCanonicalUrl}" data-page-robots="{seoRobots}" data-seeray-layout-version="windblog-pjax-v1" data-page-title="{pageTitle ?: '申请友情链接'}">
 <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / links / apply</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-8">
-                {#include sidebar/stats.html /}
-                {#include sidebar/recent_posts.html /}
-                {#include sidebar/tags.html /}
-        </div>
+        {#include sidebar/area.html area='link' /}
     </div>
 
     <section class="space-y-8">

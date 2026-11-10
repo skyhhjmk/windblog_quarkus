@@ -1,8 +1,12 @@
 <div id="toc-widget"
-     class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg hidden">
+     class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg hidden"
+     data-sidebar-widget="toc"
+     {#if widget.or(null)}data-widget-id="{widget.id}"{/if}>
     <div class="flex items-center gap-2.5 mb-5 pb-3 border-b border-border/50">
         <div class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"></div>
-        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">{i18n.t('sidebar.toc')}</h3>
+        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">
+            {#if widget.or(null) && widget.title && !widget.title.isEmpty}{widget.title}{#else}{i18n.t('sidebar.toc')}{/if}
+        </h3>
     </div>
 
     <div id="toc-content" class="relative py-1 toc-list text-xs space-y-1 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar">

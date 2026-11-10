@@ -11,11 +11,7 @@
     {/if}
     <div id="pjax-nav-path" class="hidden">{#if navPath}{navPath}{#else}{config:siteNavRoot} / categories{/if}</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-8">
-                {#include sidebar/categories.html /}
-                {#include sidebar/tags.html /}
-                {#include sidebar/stats.html /}
-        </div>
+        {#include sidebar/area.html area='archive' /}
     </div>
 
     {#if detailMode}

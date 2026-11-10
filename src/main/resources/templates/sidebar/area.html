@@ -1,0 +1,27 @@
+<div class="space-y-8" data-sidebar-area="{area ?: 'default'}">
+    {#for widget in sidebar:widgets(area ?: 'default')}
+        {#if widget.type == 'stats'}
+            {#include sidebar/stats.html widget=widget /}
+        {#else if widget.type == 'recent_posts'}
+            {#include sidebar/recent_posts.html widget=widget /}
+        {#else if widget.type == 'categories'}
+            {#include sidebar/categories.html widget=widget /}
+        {#else if widget.type == 'tags'}
+            {#include sidebar/tags.html widget=widget /}
+        {#else if widget.type == 'custom_html'}
+            {#include sidebar/custom_html.html widget=widget /}
+        {#else if widget.type == 'post_access'}
+            {#include sidebar/post_access.html widget=widget /}
+        {#else if widget.type == 'tutorial_tracker'}
+            {#include blog/post.tutorial.sidebar.html widget=widget /}
+        {#else if widget.type == 'toc'}
+            {#include sidebar/toc.html widget=widget /}
+        {#else if widget.type == 'block_manager'}
+            {#include sidebar/block_manager.html widget=widget /}
+        {#else if widget.type == 'post_attachments'}
+            {#include sidebar/post_attachments.html widget=widget /}
+        {#else if widget.type == 'related_store'}
+            {#include sidebar/related_store.html widget=widget /}
+        {/if}
+    {/for}
+</div>

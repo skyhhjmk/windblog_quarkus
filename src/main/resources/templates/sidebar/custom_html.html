@@ -1,0 +1,23 @@
+{#if widget.or(null) && widget.content && !widget.content.isEmpty}
+    {#if widget.showCardWrapper}
+        <div class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg group"
+             data-sidebar-widget="custom_html"
+             data-widget-id="{widget.id}">
+            {#if widget.title && !widget.title.isEmpty}
+                <div class="flex items-center gap-2.5 mb-5 pb-3 border-b border-border/50">
+                    <div class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"></div>
+                    <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">{widget.title}</h3>
+                </div>
+            {/if}
+            <div class="text-xs text-body leading-relaxed space-y-2 break-words">
+                {widget.content.raw}
+            </div>
+        </div>
+    {#else}
+        <div class="sidebar-widget-raw break-words"
+             data-sidebar-widget="custom_html"
+             data-widget-id="{widget.id}">
+            {widget.content.raw}
+        </div>
+    {/if}
+{/if}

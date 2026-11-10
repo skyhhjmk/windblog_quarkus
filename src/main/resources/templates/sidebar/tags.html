@@ -1,11 +1,15 @@
-<div class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg group">
+<div class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg group"
+     data-sidebar-widget="tags"
+     {#if widget.or(null)}data-widget-id="{widget.id}"{/if}>
     <div class="flex items-center gap-2.5 mb-5 pb-3 border-b border-border/50">
         <div class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"></div>
-        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">{i18n.t('sidebar.tags')}</h3>
+        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">
+            {#if widget.or(null) && widget.title && !widget.title.isEmpty}{widget.title}{#else}{i18n.t('sidebar.tags')}{/if}
+        </h3>
     </div>
 
     <div class="flex flex-wrap gap-1.5">
-        {#for tag in sidebar:tags}
+        {#for tag in sidebar:tags(widget.limit)}
             <a href="{languagePrefix}/tag/{tag.slug}" class="badge-tag">
                 #{tag.name}
             </a>

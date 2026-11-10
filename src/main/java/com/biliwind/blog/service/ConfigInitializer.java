@@ -239,6 +239,25 @@ public class ConfigInitializer {
 
         list.add(new SettingDefinition("social_links", socialValue, "object", "外观设置", socialSchema, "社交链接设置"));
 
+        // Sidebar Layout (WordPress-style draggable multi-area widget configuration)
+        ObjectNode sidebarLayoutSchema = mapper.createObjectNode();
+        sidebarLayoutSchema.put("type", "object");
+        com.fasterxml.jackson.databind.node.ArrayNode sidebarLayoutFields = sidebarLayoutSchema.putArray("fields");
+        sidebarLayoutFields.addObject()
+                .put("key", "areas")
+                .put("label", "侧边栏场景布局配置")
+                .put("widget", "sidebar_layout_editor")
+                .put("hint", "按场景（首页、分类/标签/搜索、友链、文章详情、通用默认）拖拽排序小工具并配置参数。");
+        ObjectNode sidebarLayoutValue = SidebarTemplateData.buildDefaultSidebarLayoutNode(mapper);
+        list.add(new SettingDefinition(
+                SidebarTemplateData.SIDEBAR_LAYOUT_KEY,
+                sidebarLayoutValue,
+                "object",
+                "外观设置",
+                sidebarLayoutSchema,
+                "侧边栏小工具布局（支持多场景独立拖拽排序、启停与参数配置）"
+        ));
+
         // Feature Toggle
         ObjectNode featureSchema = mapper.createObjectNode();
         featureSchema.put("type", "object");

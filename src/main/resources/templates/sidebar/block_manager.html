@@ -1,11 +1,15 @@
 <div id="block-manager-widget"
-     class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300 hover:border-accent/30 hidden">
+     class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300 hover:border-accent/30 hidden"
+     data-sidebar-widget="block_manager"
+     {#if widget.or(null)}data-widget-id="{widget.id}"{/if}>
     
     <!-- 标题栏 -->
     <div class="flex items-center justify-between mb-6 pb-4 border-b border-border/40">
         <div class="flex items-center gap-3">
             <div class="w-1.5 h-6 bg-accent rounded-full shadow-[0_0_12px_rgba(6,182,212,0.5)]"></div>
-            <h3 class="text-sm font-bold tracking-wider text-main uppercase">阅读偏好</h3>
+            <h3 class="text-sm font-bold tracking-wider text-main uppercase">
+                {#if widget.or(null) && widget.title && !widget.title.isEmpty}{widget.title}{#else}阅读偏好{/if}
+            </h3>
         </div>
         <span class="text-[10px] font-mono text-gray-500 bg-accent/5 px-2 py-0.5 rounded border border-accent/10">BETA</span>
     </div>

@@ -1,19 +1,25 @@
-<div class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg group">
+<div class="sidebar-widget bg-card border border-border/70 rounded-2xl p-5 md:p-6 transition-all duration-300 hover:border-border hover:shadow-lg group"
+     data-sidebar-widget="categories"
+     {#if widget.or(null)}data-widget-id="{widget.id}"{/if}>
     <div class="flex items-center gap-2.5 mb-5 pb-3 border-b border-border/50">
         <div class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"></div>
-        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">{i18n.t('sidebar.categories')}</h3>
+        <h3 class="text-xs font-bold tracking-wider text-main uppercase font-mono">
+            {#if widget.or(null) && widget.title && !widget.title.isEmpty}{widget.title}{#else}{i18n.t('sidebar.categories')}{/if}
+        </h3>
     </div>
 
     <div class="space-y-1">
-        {#for cat in sidebar:categories}
+        {#for cat in sidebar:categories(widget.limit)}
             <a href="{languagePrefix}/category/{cat.slug}"
                class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-input-bg group/link transition-all">
                 <span class="text-xs font-medium text-body group-hover/link:text-accent transition-colors">
                     {cat.name}
                 </span>
-                <span class="text-[10px] font-mono px-2 py-0.5 rounded-md bg-input-bg/80 border border-border/40 text-meta group-hover/link:border-accent/40 group-hover/link:text-accent transition-colors">
-                    {cat.count}
-                </span>
+                {#if !widget.or(null) || widget.showCount}
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded-md bg-input-bg/80 border border-border/40 text-meta group-hover/link:border-accent/40 group-hover/link:text-accent transition-colors">
+                        {cat.count}
+                    </span>
+                {/if}
             </a>
         {/for}
     </div>

@@ -3,11 +3,7 @@
      data-page-robots="{seoRobots}">
     <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / search</div>
     <div id="pjax-sidebar-html" class="hidden">
-        <div class="space-y-8">
-                {#include sidebar/recent_posts.html /}
-                {#include sidebar/categories.html /}
-                {#include sidebar/tags.html /}
-        </div>
+        {#include sidebar/area.html area='archive' /}
     </div>
 
     <section class="space-y-10 md:space-y-16">

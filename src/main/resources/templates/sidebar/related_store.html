@@ -1,0 +1,38 @@
+{#if relatedStoreItems.or(null) && ! relatedStoreItems.isEmpty}
+    <section
+            class="sidebar-widget bg-card border border-border rounded-xl p-6 transition-all duration-300"
+            data-sidebar-widget="related_store">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-1.5 h-6 bg-accent rounded-full"></div>
+            <h3 class="text-sm font-bold tracking-wider text-main uppercase">
+                {#if widget.or(null) && widget.title && !widget.title.isEmpty}{widget.title}{#else}{i18n.t('post.related_store')}{/if}
+            </h3>
+        </div>
+        <div class="space-y-5">
+            {#for item in relatedStoreItems}
+                <div class="card card-static overflow-hidden group/item border-border/60 hover:border-accent/40 transition-all bg-card-bg/30">
+                    <div class="p-5 space-y-4">
+                        <div class="flex justify-between items-start gap-4">
+                            <h4 class="text-sm font-black text-main line-clamp-2 leading-relaxed">{item.name}</h4>
+                            <div class="px-2.5 py-1 bg-accent/10 text-accent text-xs font-black rounded-lg border border-accent/20 font-mono shadow-sm">
+                                {item.price}P
+                            </div>
+                        </div>
+                        {#if item.description}
+                            <p class="text-xs text-gray-500 line-clamp-2 leading-relaxed opacity-90">{item.description}</p>
+                        {/if}
+                        <a href="{languagePrefix}/user/store"
+                           class="flex items-center justify-center w-full mt-2 py-2.5 bg-input-bg border border-border/80 rounded-xl text-xs font-bold text-gray-400 hover:border-accent/50 hover:text-accent transition-all group-hover/item:bg-accent/[0.03]">
+                            {i18n.t('post.store_detail')}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="ml-2" width="14" height="14"
+                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <line x1="7" y1="17" x2="17" y2="7"></line>
+                                <polyline points="7 7 17 7 17 17"></polyline>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            {/for}
+        </div>
+    </section>
+{/if}
