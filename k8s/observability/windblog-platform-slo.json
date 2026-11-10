@@ -1,1 +1,1582 @@
-{"uid":"windblog-platform-slo","title":"WindBlog 平台 SLO 总览","schemaVersion":41,"version":1,"refresh":"30s","panels":[{"id":1,"type":"stat","title":"Prometheus Targets UP","datasource":{"uid":"prometheus"},"gridPos":{"x":0,"y":0,"w":8,"h":8},"targets":[{"expr":"sum(up)","refId":"A"}]},{"id":2,"type":"timeseries","title":"HTTP 请求率","datasource":{"uid":"prometheus"},"gridPos":{"x":8,"y":0,"w":16,"h":8},"targets":[{"expr":"sum(rate(http_server_request_duration_seconds_count[5m])) by (service_name)","refId":"A"}]},{"id":3,"type":"timeseries","title":"JVM 堆内存","datasource":{"uid":"prometheus"},"gridPos":{"x":0,"y":8,"w":12,"h":8},"targets":[{"expr":"sum(process_runtime_jvm_memory_usage) by (service_name)","refId":"A"}]},{"id":4,"type":"timeseries","title":"Collector 导出失败","datasource":{"uid":"prometheus"},"gridPos":{"x":12,"y":8,"w":12,"h":8},"targets":[{"expr":"sum(rate(otelcol_exporter_send_failed_metric_points[5m]))","refId":"A"}]}]}
+{
+  "uid": "windblog-platform-slo",
+  "title": "WindBlog 平台全景可观测性仪表盘",
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 2,
+  "refresh": "15s",
+  "tags": [
+    "windblog",
+    "slo",
+    "opentelemetry",
+    "full-stack",
+    "elasticsearch",
+    "database",
+    "redis"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "服务名",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus"
+        },
+        "query": "label_values(target_info, service_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "interval",
+        "label": "聚合周期",
+        "type": "interval",
+        "datasource": {
+          "uid": "prometheus"
+        },
+        "query": "30s,1m,2m,5m,10m",
+        "current": {
+          "text": "1m",
+          "value": "1m"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "🌟 平台核心健康度与 SLO 概览 (Platform Health & SLO)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Collector 指标导出成功率",
+      "description": "OTel Collector 指标导出成功率与健康度",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 5,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "windblog:collector_export_success:ratio",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Prometheus 活跃监控目标 (UP)",
+      "description": "监控采集端点在线数量",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 1,
+        "w": 4,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(up)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "HTTP 总吞吐率 (QPS)",
+      "description": "WindBlog 当前 HTTP 请求吞吐量",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 1,
+        "w": 5,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_milliseconds_count{service_name=~\"$service\"}[$interval])) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "HTTP 5xx 错误率",
+      "description": "服务端异常响应占比",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 1,
+        "w": 5,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(http_server_requests_milliseconds_count{status=~\"5..\",service_name=~\"$service\"}[$interval])) or vector(0)) / clamp_min(sum(rate(http_server_requests_milliseconds_count{service_name=~\"$service\"}[$interval])), 0.001)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "HTTP P95 响应延迟",
+      "description": "95% 请求的响应时间上限",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 19,
+        "y": 1,
+        "w": 5,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_milliseconds_bucket{service_name=~\"$service\"}[$interval])) by (le))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 200
+              },
+              {
+                "color": "red",
+                "value": 800
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "🌐 HTTP 流量明细与分位数延迟 (HTTP Traffic & Latencies)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "HTTP 请求吞吐 (按状态码分布)",
+      "description": "HTTP 请求状态码吞吐面积图",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_milliseconds_count{status=~\"2..\",service_name=~\"$service\"}[$interval])) or vector(0)",
+          "legendFormat": "2xx 成功",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(http_server_requests_milliseconds_count{status=~\"3..\",service_name=~\"$service\"}[$interval])) or vector(0)",
+          "legendFormat": "3xx 重定向",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(http_server_requests_milliseconds_count{status=~\"4..\",service_name=~\"$service\"}[$interval])) or vector(0)",
+          "legendFormat": "4xx 客户端错误",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(http_server_requests_milliseconds_count{status=~\"5..\",service_name=~\"$service\"}[$interval])) or vector(0)",
+          "legendFormat": "5xx 服务端错误",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "fillOpacity": 40
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "HTTP 响应延迟分位数 (P50 / P90 / P95 / P99)",
+      "description": "请求响应延迟各分位数分布趋势",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_milliseconds_bucket{service_name=~\"$service\"}[$interval])) by (le))",
+          "legendFormat": "P50 延迟",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(http_server_requests_milliseconds_bucket{service_name=~\"$service\"}[$interval])) by (le))",
+          "legendFormat": "P90 延迟",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_milliseconds_bucket{service_name=~\"$service\"}[$interval])) by (le))",
+          "legendFormat": "P95 延迟",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_milliseconds_bucket{service_name=~\"$service\"}[$interval])) by (le))",
+          "legendFormat": "P99 延迟",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Top 请求路由吞吐与分布 (按 URI)",
+      "description": "访问量最高的 8 个接口路由",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 16,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(8, sum(rate(http_server_requests_milliseconds_count{service_name=~\"$service\"}[$interval])) by (uri))",
+          "legendFormat": "{{uri}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "piechart",
+      "title": "HTTP 状态码占比分布",
+      "description": "各状态码总体比例",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 16,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_milliseconds_count{service_name=~\"$service\"}[$interval])) by (status)",
+          "legendFormat": "Status {{status}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        }
+      }
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "🗄️ PostgreSQL 与 Agroal 数据库连接池 (Database & Connection Pools)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Agroal 数据库连接池状态 (活跃 / 可用 / 上限 / 排队)",
+      "description": "WindBlog 数据源连接池使用情况，监测连接泄漏与阻塞",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(agroal_active_count{service_name=~\"$service\"}) or sum(postgresql_backends)",
+          "legendFormat": "活跃连接 (Active)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(agroal_available_count{service_name=~\"$service\"}) or vector(0)",
+          "legendFormat": "空闲可用 (Available)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(agroal_max_count{service_name=~\"$service\"}) or vector(32)",
+          "legendFormat": "池上限 (Max)",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(agroal_awaiting_count{service_name=~\"$service\"}) or vector(0)",
+          "legendFormat": "等待排队 (Awaiting)",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Agroal 连接池流转速率与获取耗时",
+      "description": "连接创建/销毁速率与线程获取连接的平均耗时",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 25,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(agroal_creation_count_total{service_name=~\"$service\"}[$interval])) or vector(0)",
+          "legendFormat": "连接创建速率",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(agroal_destroy_count_total{service_name=~\"$service\"}[$interval])) or vector(0)",
+          "legendFormat": "连接销毁速率",
+          "refId": "B"
+        },
+        {
+          "expr": "((sum(rate(agroal_acquire_duration_seconds_sum{service_name=~\"$service\"}[$interval])) / clamp_min(sum(rate(agroal_acquire_duration_seconds_count{service_name=~\"$service\"}[$interval])), 0.001)) * 1000) or vector(0)",
+          "legendFormat": "平均获取耗时 (ms)",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "PostgreSQL 后端连接与死锁检测",
+      "description": "PostgreSQL 服务端连接数与死锁检测",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 25,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "postgresql_backends or vector(0)",
+          "legendFormat": "后端连接数 (Backends)",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(postgresql_deadlocks[$interval]) or vector(0)",
+          "legendFormat": "死锁速率 (Deadlocks/s)",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "PostgreSQL 事务吞吐与缓冲区命中率",
+      "description": "事务提交/回滚速率与共享缓冲区读命中比例",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(postgresql_commits[$interval])) or sum(rate(postgresql_commits_total[$interval])) or vector(0)",
+          "legendFormat": "提交速率 (Commits/s)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(postgresql_rollbacks[$interval])) or sum(rate(postgresql_rollbacks_total[$interval])) or vector(0)",
+          "legendFormat": "回滚速率 (Rollbacks/s)",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum(rate(postgresql_blocks_hit[$interval])) / clamp_min(sum(rate(postgresql_blocks_hit[$interval])) + sum(rate(postgresql_blocks_read[$interval])), 0.001)) or vector(1)",
+          "legendFormat": "缓冲区命中率",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "PostgreSQL 行操作 (DML) 速率与数据库大小",
+      "description": "数据行读取、插入、更新、删除操作吞吐",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(postgresql_rows{state=\"fetched\"}[$interval])) or vector(0)",
+          "legendFormat": "Rows Fetched",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(postgresql_rows{state=\"inserted\"}[$interval])) or vector(0)",
+          "legendFormat": "Rows Inserted",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(postgresql_rows{state=\"updated\"}[$interval])) or vector(0)",
+          "legendFormat": "Rows Updated",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(postgresql_rows{state=\"deleted\"}[$interval])) or vector(0)",
+          "legendFormat": "Rows Deleted",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 400,
+      "type": "row",
+      "title": "🔍 Elasticsearch 搜索引擎与集群状态 (Elasticsearch Cluster & Search)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "ES 集群状态 (Health Status)",
+      "description": "Elasticsearch 集群健康状态：Green=健康，Yellow=副本待分配(单节点)，Red=分片丢失",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "elasticsearch_cluster_status or vector(1)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "RED 异常",
+                  "color": "red"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "YELLOW 正常(单节点)",
+                  "color": "#EAB839"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "2": {
+                  "text": "GREEN 极佳",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "ES 分片与节点统计",
+      "description": "活跃分片、未分配分片及集群节点总数",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 42,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(elasticsearch_cluster_shards{shard_state=\"active\"}) or vector(0)",
+          "legendFormat": "活跃分片",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(elasticsearch_cluster_shards{shard_state=\"unassigned\"}) or vector(0)",
+          "legendFormat": "未分配分片",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(elasticsearch_cluster_nodes) or vector(1)",
+          "legendFormat": "节点总数",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "ES 索引文档总数",
+      "description": "Elasticsearch 中存储的全部索引文档总数",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(elasticsearch_node_documents{document_state=\"active\"}) or sum(elasticsearch_node_documents) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        }
+      }
+    },
+    {
+      "id": 34,
+      "type": "stat",
+      "title": "ES 索引分片占用存储空间",
+      "description": "分片占用磁盘大小与可用空间",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 42,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(elasticsearch_node_shards_size) or sum(elasticsearch_node_shards_size_bytes) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        }
+      }
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "ES 写入索引与搜索查询吞吐速率",
+      "description": "实时索引写入吞吐与检索查询吞吐",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(elasticsearch_node_operations_completed{operation=\"indexing\"}[$interval])) or sum(rate(elasticsearch_node_operations_completed{type=\"indexing\"}[$interval])) or vector(0)",
+          "legendFormat": "写入索引速率 (Indexing)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(elasticsearch_node_operations_completed{operation=\"search\"}[$interval])) or sum(rate(elasticsearch_node_operations_completed{type=\"search\"}[$interval])) or vector(0)",
+          "legendFormat": "搜索查询速率 (Search)",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "ES 节点 JVM 堆内存与磁盘可用容量",
+      "description": "Elasticsearch 节点 JVM 堆占用与底层磁盘可用余量",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(elasticsearch_node_jvm_memory_used_bytes) or vector(0)",
+          "legendFormat": "ES JVM 堆使用",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(elasticsearch_node_jvm_memory_max_bytes) or vector(0)",
+          "legendFormat": "ES JVM 堆上限",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(elasticsearch_node_fs_disk_available) or vector(0)",
+          "legendFormat": "磁盘可用余量",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "id": 500,
+      "type": "row",
+      "title": "⚡ Redis 缓存与客户端连接 (Redis Cache & Connections)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Redis 客户端连接数与阻塞客户端",
+      "description": "连接到 Redis 实例的客户端数量与阻塞中的客户端数",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "redis_connected_clients or vector(0)",
+          "legendFormat": "客户端连接数",
+          "refId": "A"
+        },
+        {
+          "expr": "redis_blocked_clients or vector(0)",
+          "legendFormat": "阻塞客户端数",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Redis 内存占用与历史峰值",
+      "description": "Redis 内存占用、历史峰值与 Lua 引擎内存",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 57,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes or vector(0)",
+          "legendFormat": "已用内存 (Used)",
+          "refId": "A"
+        },
+        {
+          "expr": "redis_memory_peak_bytes or vector(0)",
+          "legendFormat": "峰值内存 (Peak)",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "id": 43,
+      "type": "timeseries",
+      "title": "Redis 命令处理 QPS 与缓存命中率",
+      "description": "命令处理吞吐量与键命中率",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 57,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(redis_commands_processed_total[$interval]) or vector(0)",
+          "legendFormat": "命令处理 QPS",
+          "refId": "A"
+        },
+        {
+          "expr": "(rate(redis_keyspace_hits_total[$interval]) / clamp_min(rate(redis_keyspace_hits_total[$interval]) + rate(redis_keyspace_misses_total[$interval]), 0.001)) or vector(1)",
+          "legendFormat": "缓存命中率",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Redis 网络 I/O 速率",
+      "description": "Redis 实例进出网络带宽吞吐",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(redis_net_input_bytes_total[$interval]) or vector(0)",
+          "legendFormat": "网络输入 (Rx)",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(redis_net_output_bytes_total[$interval]) or vector(0)",
+          "legendFormat": "网络输出 (Tx)",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        }
+      }
+    },
+    {
+      "id": 45,
+      "type": "timeseries",
+      "title": "Redis 过期与淘汰键速率",
+      "description": "过期键清理速率与内存满驱逐键速率",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 65,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(redis_expired_keys_total[$interval]) or vector(0)",
+          "legendFormat": "过期键清理速率",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(redis_evicted_keys_total[$interval]) or vector(0)",
+          "legendFormat": "驱逐淘汰键速率",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 600,
+      "type": "row",
+      "title": "📨 RabbitMQ 异步消息队列 (RabbitMQ Queues & Message Flow)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 51,
+      "type": "timeseries",
+      "title": "RabbitMQ 队列积压消息数 (Ready / Unacked)",
+      "description": "各业务队列等待消费与消费未确认的消息数量",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 74,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rabbitmq_message_current) by (rabbitmq_queue_name, state)",
+          "legendFormat": "{{rabbitmq_queue_name}} ({{state}})",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 52,
+      "type": "timeseries",
+      "title": "RabbitMQ 消息生产、投递与确认速率",
+      "description": "消息发布、消费者投递与 ACK 确认吞吐速率",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 74,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(rabbitmq_message_published_total[$interval])) by (rabbitmq_queue_name)",
+          "legendFormat": "发布: {{rabbitmq_queue_name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(rabbitmq_message_delivered_total[$interval])) by (rabbitmq_queue_name)",
+          "legendFormat": "投递: {{rabbitmq_queue_name}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(rabbitmq_message_acknowledged_total[$interval])) by (rabbitmq_queue_name)",
+          "legendFormat": "确认: {{rabbitmq_queue_name}}",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 700,
+      "type": "row",
+      "title": "☕ WindBlog JVM 性能与应用运行时 (JVM & Runtime Performance)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 82,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 61,
+      "type": "timeseries",
+      "title": "JVM 堆内存与非堆内存分布",
+      "description": "堆内存占用、最大上限与非堆内存使用",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\",service_name=~\"$service\"}) by (service_name)",
+          "legendFormat": "堆内存已用 (Heap)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(jvm_memory_max_bytes{area=\"heap\",service_name=~\"$service\"}) by (service_name)",
+          "legendFormat": "堆内存上限 (Max)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"nonheap\",service_name=~\"$service\"}) by (service_name)",
+          "legendFormat": "非堆内存已用 (Non-Heap)",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "id": 62,
+      "type": "timeseries",
+      "title": "JVM GC 暂停占比与频次",
+      "description": "垃圾回收停顿时间占比与每秒 GC 触发频次",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 83,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(jvm_gc_collections_elapsed_milliseconds_total{service_name=~\"$service\"}[$interval])) by (service_name) / 1000",
+          "legendFormat": "GC 停顿占比",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(jvm_gc_collections_count_total{service_name=~\"$service\"}[$interval])) by (service_name)",
+          "legendFormat": "GC 触发速率",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "id": 63,
+      "type": "timeseries",
+      "title": "JVM 线程分布与进程 CPU 使用率",
+      "description": "活跃线程、峰值线程与进程 CPU 消耗",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 83,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(jvm_threads_live_threads{service_name=~\"$service\"}) by (service_name)",
+          "legendFormat": "活跃线程 (Live)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(jvm_threads_peak_threads{service_name=~\"$service\"}) by (service_name)",
+          "legendFormat": "峰值线程 (Peak)",
+          "refId": "B"
+        },
+        {
+          "expr": "process_cpu_usage{service_name=~\"$service\"} * 100",
+          "legendFormat": "进程 CPU 使用率 (%)",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 800,
+      "type": "row",
+      "title": "🐳 容器资源利用率与 OTel 监控底座 (Containers & Telemetry Pipeline)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 91,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 71,
+      "type": "timeseries",
+      "title": "各容器 CPU 核心占用率 (cAdvisor)",
+      "description": "各 Docker/Podman 容器 CPU 核心使用量",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 92,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\".+\"}[$interval])) by (name)",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      }
+    },
+    {
+      "id": 72,
+      "type": "timeseries",
+      "title": "各容器内存工作集占用 (Working Set)",
+      "description": "各容器物理内存真实工作集大小",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 92,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(container_memory_working_set_bytes{name=~\".+\"}) by (name)",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "id": 73,
+      "type": "timeseries",
+      "title": "各容器网络 I/O 速率",
+      "description": "容器网络收发吞吐速率",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 92,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_receive_bytes_total{name=~\".+\"}[$interval])) by (name)",
+          "legendFormat": "Rx: {{name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(container_network_transmit_bytes_total{name=~\".+\"}[$interval])) by (name)",
+          "legendFormat": "Tx: {{name}}",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        }
+      }
+    },
+    {
+      "id": 74,
+      "type": "timeseries",
+      "title": "OTel Collector 指标管道处理速率与丢弃失败",
+      "description": "OpenTelemetry Collector 接收、导出及失败指标点速率",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 100,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_metric_points[$interval])) or vector(0)",
+          "legendFormat": "接收成功 (Accepted)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(otelcol_exporter_sent_metric_points_total[$interval])) or vector(0)",
+          "legendFormat": "导出成功 (Sent)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(otelcol_exporter_send_failed_metric_points_total[$interval])) or vector(0)",
+          "legendFormat": "导出失败 (Failed)",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 75,
+      "type": "timeseries",
+      "title": "Prometheus 抓取目标状态矩阵 (Targets UP)",
+      "description": "各被抓取服务的存活状态 (1=UP, 0=DOWN)",
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 100,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "up",
+          "legendFormat": "{{job}} ({{instance}})",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1
+        }
+      }
+    }
+  ]
+}
