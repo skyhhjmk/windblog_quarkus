@@ -2723,7 +2723,7 @@
         // Search Suggestions logic
         let searchSuggestionCounter = 0;
         function bindSearchForms() {
-            const searchForms = document.querySelectorAll('form[action="/search"]');
+            const searchForms = document.querySelectorAll('form[data-shortcut-form="search"], form[action$="/search"]');
             searchForms.forEach((form) => {
                 if (form.dataset.searchBound === 'true') return;
                 form.dataset.searchBound = 'true';
@@ -2740,6 +2740,11 @@
                 searchInput.addEventListener('click', (e) => {
                     e.preventDefault();
                     openGithubSearchModal(searchInput.value);
+                });
+                searchInput.addEventListener('focus', () => {
+                    if (typeof isGithubSearchOpen === 'function' && !isGithubSearchOpen()) {
+                        openGithubSearchModal(searchInput.value);
+                    }
                 });
                 form.addEventListener('submit', (e) => {
                     e.preventDefault();
@@ -2949,6 +2954,7 @@
 
         function closeGithubSearchModal() {
             if (!githubSearchModal || !githubSearchBackdrop) return;
+            clearTimeout(searchSuggestTimer);
             githubSearchBackdrop.classList.remove('is-open');
             githubSearchModal.classList.remove('is-open');
             setTimeout(() => {
@@ -3198,14 +3204,20 @@
             return results;
         }
 
+        let lastRenderedPaletteQuery = null;
+
         function renderResultsList(query, parsed, suggestions = []) {
             if (!githubSearchResultsList) return;
-            githubSearchResultsList.replaceChildren();
-            paletteActiveItemIndex = 0;
-
             const rawQuery = (query || '').trim();
             const freeText = parsed.freeText;
             const searchTerm = freeText || rawQuery;
+
+            if (query !== lastRenderedPaletteQuery) {
+                paletteActiveItemIndex = 0;
+                lastRenderedPaletteQuery = query;
+            }
+
+            githubSearchResultsList.replaceChildren();
 
             if (currentSearchMode === 'in-page') {
                 performInPageSearch(searchTerm);
@@ -3234,7 +3246,7 @@
 
                 matches.forEach((m, idx) => {
                     const item = document.createElement('div');
-                    item.className = `github-search-item ${idx === 0 ? 'is-selected' : ''}`;
+                    item.className = 'github-search-item';
                     item.dataset.articleResultIndex = String(idx);
                     const tagLabel = m.isHeading ? `<span class="px-1.5 py-0.5 rounded bg-accent/10 text-accent font-mono text-[10px]">${m.tag}</span>` : '<span class="text-meta text-[11px]">段落</span>';
                     const highlightedSnippet = escapeHtml(m.snippet).replace(
@@ -3256,13 +3268,27 @@
                     });
                     githubSearchResultsList.appendChild(item);
                 });
+
+                const allItems = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
+                if (allItems.length > 0) {
+                    if (paletteActiveItemIndex >= allItems.length) {
+                        paletteActiveItemIndex = 0;
+                    }
+                    allItems.forEach((item, idx) => {
+                        item.classList.toggle('is-selected', idx === paletteActiveItemIndex);
+                        item.addEventListener('mouseenter', () => {
+                            paletteActiveItemIndex = idx;
+                            allItems.forEach((it, i) => it.classList.toggle('is-selected', i === paletteActiveItemIndex));
+                        });
+                    });
+                }
                 return;
             }
 
             // Mode 'all': Global & multi-target spotlight
             // Item 1: Site-wide search
             const globalSearchItem = document.createElement('div');
-            globalSearchItem.className = 'github-search-item is-selected';
+            globalSearchItem.className = 'github-search-item';
             globalSearchItem.dataset.actionType = 'site-search';
             globalSearchItem.innerHTML = `
                 <div class="flex items-center gap-2.5 min-w-0">
@@ -3274,7 +3300,10 @@
                 </div>
                 <kbd class="hidden sm:inline-block px-1.5 py-0.5 rounded bg-card border border-border text-[10px] text-meta font-mono shrink-0">Enter ↵</kbd>
             `;
-            globalSearchItem.addEventListener('click', () => executeSiteSearch(rawQuery));
+            globalSearchItem.addEventListener('click', () => {
+                const currentVal = githubSearchInput ? githubSearchInput.value : rawQuery;
+                executeSiteSearch(currentVal);
+            });
             githubSearchResultsList.appendChild(globalSearchItem);
 
             // Item 2: Search in current page
@@ -3340,11 +3369,26 @@
                         <kbd class="hidden sm:inline-block px-1.5 py-0.5 rounded bg-card border border-border text-[10px] text-meta font-mono shrink-0">Tab 补全</kbd>
                     `;
                     sugItem.addEventListener('click', () => {
-                        githubSearchInput.value = String(s);
+                        const val = String(s);
+                        if (githubSearchInput) githubSearchInput.value = val;
                         updateSearchPalette();
-                        executeSiteSearch(String(s));
+                        executeSiteSearch(val);
                     });
                     githubSearchResultsList.appendChild(sugItem);
+                });
+            }
+
+            const allItems = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
+            if (allItems.length > 0) {
+                if (paletteActiveItemIndex >= allItems.length) {
+                    paletteActiveItemIndex = 0;
+                }
+                allItems.forEach((item, idx) => {
+                    item.classList.toggle('is-selected', idx === paletteActiveItemIndex);
+                    item.addEventListener('mouseenter', () => {
+                        paletteActiveItemIndex = idx;
+                        allItems.forEach((it, i) => it.classList.toggle('is-selected', i === paletteActiveItemIndex));
+                    });
                 });
             }
         }
@@ -3360,9 +3404,12 @@
         }
 
         function executeSiteSearch(query) {
-            const q = (query || '').trim();
+            const rawVal = query !== undefined ? query : (githubSearchInput ? githubSearchInput.value : '');
+            const q = String(rawVal || '').trim();
             closeGithubSearchModal();
-            const targetUrl = '/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+            const searchForm = document.querySelector('form[data-shortcut-form="search"], form[action$="/search"]');
+            const searchAction = searchForm?.getAttribute('action') || '/search';
+            const targetUrl = searchAction + (q ? '?q=' + encodeURIComponent(q) : '');
             if (typeof loadByPjax === 'function') {
                 loadByPjax(targetUrl, true);
             } else {
@@ -3376,11 +3423,13 @@
             const parsed = parseSearchSyntax(raw);
             renderActiveFiltersBar(parsed);
 
+            // Synchronously and immediately update the preview list on every keystroke/input!
+            renderResultsList(raw, parsed, []);
+
             const q = (parsed.freeText || raw).trim();
             clearTimeout(searchSuggestTimer);
 
             if (currentSearchMode !== 'all' || q.length < 2) {
-                renderResultsList(raw, parsed, []);
                 return;
             }
 
@@ -3391,11 +3440,10 @@
                     if (!res.ok) throw new Error('Suggest failed');
                     const suggestions = await res.json();
                     if (requestId !== searchSuggestRequestId) return;
+                    if (!githubSearchInput || githubSearchInput.value !== raw) return;
                     renderResultsList(raw, parsed, suggestions || []);
                 } catch {
-                    if (requestId === searchSuggestRequestId) {
-                        renderResultsList(raw, parsed, []);
-                    }
+                    // Ignore suggest errors
                 }
             }, 250);
         }
@@ -3440,11 +3488,17 @@
         githubSearchInput?.addEventListener('input', () => {
             updateSearchPalette();
         });
+        githubSearchInput?.addEventListener('compositionend', () => {
+            updateSearchPalette();
+        });
 
         githubSearchInPagePrev?.addEventListener('click', () => goToInPageMatch(inPageCurrentIndex - 1));
         githubSearchInPageNext?.addEventListener('click', () => goToInPageMatch(inPageCurrentIndex + 1));
 
         githubSearchInput?.addEventListener('keydown', (event) => {
+            if (event.isComposing || event.keyCode === 229) {
+                return;
+            }
             if (event.key === 'ArrowDown') {
                 const items = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
                 if (items.length > 0) {
@@ -3480,9 +3534,17 @@
                 const items = Array.from(githubSearchResultsList.querySelectorAll('.github-search-item'));
                 const selected = items[paletteActiveItemIndex] || items[0];
                 if (selected) {
-                    selected.click();
+                    if (selected.dataset.actionType === 'site-search') {
+                        executeSiteSearch(githubSearchInput ? githubSearchInput.value : '');
+                    } else if (selected.dataset.actionType === 'suggestion' && selected.dataset.suggestValue) {
+                        const val = selected.dataset.suggestValue;
+                        if (githubSearchInput) githubSearchInput.value = val;
+                        executeSiteSearch(val);
+                    } else {
+                        selected.click();
+                    }
                 } else {
-                    executeSiteSearch(githubSearchInput.value);
+                    executeSiteSearch(githubSearchInput ? githubSearchInput.value : '');
                 }
             }
         });

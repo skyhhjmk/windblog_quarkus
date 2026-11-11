@@ -152,6 +152,10 @@ class AdminAuthorizationPolicyTest {
                 "PUT", "/api/admin/email-templates/7").action());
         assertEquals("elasticsearch.write", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/elasticsearch/rebuild").action());
+        assertEquals("elasticsearch.write", AdminAuthorizationPolicy.decide(
+                "PUT", "/api/admin/elasticsearch/synonyms").action());
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp(
+                "PUT", "/api/admin/elasticsearch/synonyms"));
         assertEquals("image_processing.write", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/storage/image-processing/configs/test").action());
         assertEquals("link.write", AdminAuthorizationPolicy.decide("POST", "/api/admin/links").action());

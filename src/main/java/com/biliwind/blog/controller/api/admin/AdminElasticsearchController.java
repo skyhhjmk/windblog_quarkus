@@ -1,7 +1,13 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
+import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.model.Post;
+import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.model.SystemSettingHistory;
+import com.biliwind.blog.model.dto.ConfigChangedEvent;
+import com.biliwind.blog.service.AuditService;
+import com.biliwind.blog.service.edge.DataSyncEvent;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchConnectionManager;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchIndexService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchLogBufferService;
@@ -9,6 +15,11 @@ import com.biliwind.blog.service.elasticsearch.ElasticsearchPostIndexFeedbackSer
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchSettingsService;
 import com.biliwind.blog.service.edge.NodeRoleService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -47,6 +58,16 @@ public class AdminElasticsearchController {
     ElasticsearchLogBufferService logBufferService;
     @Inject
     NodeRoleService nodeRoleService;
+    @Inject
+    ObjectMapper mapper;
+    @Inject
+    AdminRequestContext adminRequestContext;
+    @Inject
+    AuditService auditService;
+    @Inject
+    Event<ConfigChangedEvent> configChangedEvent;
+    @Inject
+    Event<DataSyncEvent> dataSyncEvent;
 
     @GET
     @Path("/health")
@@ -602,6 +623,135 @@ public class AdminElasticsearchController {
                     "message", SensitiveMessageSanitizer.sanitize(exception.getMessage())
             )).build();
         }
+    }
+
+    @GET
+    @Path("/synonyms")
+    @Operation(summary = "获取同义词规则")
+    @APIResponse(responseCode = "200", description = "同义词规则列表")
+    public Response getSynonyms() {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.ok(edgeDisabledResponse()).build();
+        }
+        SystemSetting setting = SystemSetting.findByKey(ElasticsearchSettingsService.SETTING_KEY);
+        if (setting == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("success", false, "message", "Elasticsearch 配置项不存在"))
+                    .build();
+        }
+        JsonNode synonymsNode = (setting.configValue != null && setting.configValue.has("synonyms"))
+                ? setting.configValue.path("synonyms")
+                : mapper.createArrayNode();
+        return Response.ok(Map.of(
+                "success", true,
+                "synonyms", synonymsNode,
+                "version", setting.version,
+                "isFrozen", setting.isFrozen
+        )).build();
+    }
+
+    @PUT
+    @Path("/synonyms")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(summary = "更新同义词规则并自动应用配置与重建索引")
+    @APIResponse(responseCode = "200", description = "更新完成")
+    public Response updateSynonyms(Map<String, Object> body) {
+        if (nodeRoleService.isEdgeNode()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(edgeDisabledResponse())
+                    .build();
+        }
+
+        Object synonymsObj = body.get("synonyms");
+        if (synonymsObj == null && body.containsKey("configValue")) {
+            Object configVal = body.get("configValue");
+            if (configVal instanceof Map<?, ?> m) {
+                synonymsObj = m.get("synonyms");
+            }
+        }
+        if (synonymsObj == null && body.containsKey("rules")) {
+            synonymsObj = body.get("rules");
+        }
+        if (synonymsObj == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "synonyms 不能为空"))
+                    .build();
+        }
+
+        JsonNode synonymsNode = mapper.valueToTree(synonymsObj);
+
+        // 使用 QuarkusTransaction 在独立事务中保存设置并提交，不锁定数据库事务运行 ES 重建
+        SystemSetting savedSetting = QuarkusTransaction.requiringNew().call(() -> {
+            SystemSetting setting = SystemSetting.findByKey(ElasticsearchSettingsService.SETTING_KEY);
+            if (setting == null) {
+                throw new NotFoundException("Elasticsearch 配置项不存在");
+            }
+
+            ObjectNode currentValueNode = (setting.configValue != null && setting.configValue.isObject())
+                    ? (ObjectNode) setting.configValue.deepCopy()
+                    : mapper.createObjectNode();
+            currentValueNode.set("synonyms", synonymsNode);
+
+            // 保存历史
+            SystemSettingHistory history = new SystemSettingHistory();
+            history.settingId = setting.id;
+            history.configKey = setting.configKey;
+            history.configValue = setting.configValue;
+            history.version = setting.version;
+            history.operatorId = adminRequestContext.getUserId();
+            history.changeReason = "修改 Elasticsearch 同义词规则（自动应用与重建索引）";
+            history.persist();
+
+            // 直接生效，不设置 isFrozen，无需二次确认与密码验证
+            setting.configValue = currentValueNode;
+            setting.version += 1;
+            setting.isFrozen = false;
+            setting.persist();
+
+            dataSyncEvent.fire(new DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
+            configChangedEvent.fire(new ConfigChangedEvent(setting.configKey, currentValueNode));
+
+            auditService.log("system_setting", String.valueOf(setting.id), "update_synonyms",
+                    null, Map.of("synonymsCount", synonymsNode.size()));
+
+            return setting;
+        });
+
+        // 自动操作：更新索引模板并全量重建文章索引
+        boolean reindexSuccess = false;
+        long indexedCount = 0;
+        String autoActionMessage = "";
+
+        if (connectionManager.isAvailable()) {
+            try {
+                // 1. 自动应用分词器和同义词模板配置
+                postSearchService.applyIndexConfiguration();
+
+                // 2. 自动全量重建文章索引，让新同义词立即生效
+                ElasticsearchPostIndexFeedbackService.SyncResult sync = postIndexFeedbackService.rebuildIndex();
+                reindexSuccess = true;
+                indexedCount = sync.indexedCount();
+                autoActionMessage = "，索引配置已自动更新并完成重建（已索引 " + indexedCount + " 篇文章）";
+            } catch (ElasticsearchPostIndexFeedbackService.SyncAlreadyRunningException e) {
+                autoActionMessage = "，索引模板已更新；后台已有索引同步任务正在执行";
+            } catch (Exception ex) {
+                log.error("Failed to automatically rebuild index after synonym update", ex);
+                autoActionMessage = "，但自动重建索引失败：" + safeErrorMessage(ex);
+            }
+        } else {
+            autoActionMessage = "；当前 Elasticsearch 未连接，连接后将自动生效";
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "同义词规则已保存" + autoActionMessage);
+        result.put("rebuilt", reindexSuccess);
+        result.put("indexedCount", indexedCount);
+        result.put("version", savedSetting.version);
+        result.put("isFrozen", savedSetting.isFrozen);
+        result.put("synonyms", synonymsNode);
+
+        return Response.ok(result).build();
     }
 
     private Map<String, Object> edgeDisabledResponse() {

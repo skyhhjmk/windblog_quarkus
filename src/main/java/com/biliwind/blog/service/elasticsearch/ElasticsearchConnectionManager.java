@@ -17,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -404,6 +405,7 @@ public class ElasticsearchConnectionManager {
             return;
         }
 
+        ElasticsearchSettingsService.ElasticsearchSettings previous = currentSettings;
         currentSettings = settingsService.parse(event.newValue);
         startHealthCheckExecutor();
         if (!currentSettings.enabled()) {
@@ -411,11 +413,19 @@ public class ElasticsearchConnectionManager {
             return;
         }
 
-        initialized.set(false);
-        available.set(false);
-        healthStatus.set(HealthStatus.INITIALIZING);
-        lastError.set(null);
-        CompletableFuture.runAsync(this::asyncInitialize);
+        boolean connectionChanged = previous == null
+                || !Objects.equals(previous.hosts(), currentSettings.hosts())
+                || !Objects.equals(previous.username(), currentSettings.username())
+                || !Objects.equals(previous.password(), currentSettings.password())
+                || previous.enabled() != currentSettings.enabled();
+
+        if (connectionChanged || !available.get()) {
+            initialized.set(false);
+            available.set(false);
+            healthStatus.set(HealthStatus.INITIALIZING);
+            lastError.set(null);
+            CompletableFuture.runAsync(this::asyncInitialize);
+        }
     }
 
     private void markDisabled() {
