@@ -111,17 +111,18 @@ sequenceDiagram
 - **封面 (`cover`, `.pjax-article-transition-clone-cover`)**：列表页左侧缩略图 `.post-list-cover` 与文章详情页标题下方紧凑封面区域 `.post-header-cover` 配对，同步过渡 `transform`、`width`、`height`、`borderRadius`，并同步插值内部图片透明度与 `.post-header-cover-gradient` 遮罩透明度（`0 <-> 1`），确保详情页标题在亮/暗主题下均清晰可读。
 - **摘要卡片 (`summary`, `.pjax-article-transition-clone-summary`)**：作用于整个 AI 摘要卡片容器（`overflow: hidden`），平滑插值 `transform`、`width`、`height` 与圆角，避免目标页在动画开始时露出空心边框。
 - **卡片背景共享元素 (`.pjax-article-transition-backdrop` <-> `.pjax-article-transition-target-card`)**：
-  - 进入文章时：捕获列表卡片的视口边界与计算样式（背景色、圆角、边框、阴影），作为实心卡片克隆体以 `380ms` 平滑形变展开为文章页背景卡片的完整尺寸与圆角；目标卡片在过渡期间通过 `.pjax-article-transition-target-card` 隐藏背景边框以消除双层重影。
-  - 关闭/返回列表时：捕获文章背景卡片当前可见视口边界，向列表卡片目标位置反向平滑收缩还原，同时联动封面、标题与摘要缩小，实现无缝的双向共享元素展开与收缩体验。
+  - 进入文章时：捕获列表卡片的视口边界与真实计算样式（背景色、圆角、边框、阴影），作为实心卡片克隆体（`z-index: 30`，位于 `#pjax-container` 的 `z-index: 35` 之后）以 `380ms` 平滑形变展开为文章页背景卡片的完整尺寸与圆角；目标卡片在过渡期间通过 `.pjax-article-transition-target-card` 隐藏背景边框以消除双层重影，卡片内部文章正文内容随容器平滑淡入呈现。
+  - 关闭/返回列表时：捕获文章背景卡片当前可见视口边界，向列表卡片目标位置反向平滑收缩还原，保持实心背景色彩并过渡圆角和阴影，同时联动封面、标题与摘要缩小，在动画结束瞬间通过 `style.transition = 'none'` 无闪烁交接给真实目标卡片，消除背景消失与跳变。
 
 ### 4.2 动效参数与 CSS 配合
 - **时长**：`380ms`
 - **缓动曲线**：`cubic-bezier(0.22, 1, 0.36, 1)`
 - **CSS 类定义** (`src/main/resources/META-INF/resources/assets/css/ui.css` 与 `theme.css`)：
-  - `.pjax-article-transition-backdrop` (`z-index: 9997`)
+  - `#pjax-container` (`position: relative; z-index: 35`)
+  - `.pjax-article-transition-backdrop` (`z-index: 30`)
   - `.pjax-article-transition-clone-cover` (`z-index: 9998`, `overflow: hidden`)
   - `.pjax-article-transition-clone-summary` (`z-index: 9999`, `overflow: hidden`)
-  - `.pjax-article-transition-clone-title` (`z-index: 10000`)
+  - `.pjax-article-transition-clone-title` (`z-index: 10001`)
   - `.post-title-stage` / `.post-header-cover` / `.post-header-cover-gradient`：详情页标题下方紧凑封面条与 `--card-bg` 多向透明度渐变遮罩。
 
 ### 4.3 滚动与回退位置处理

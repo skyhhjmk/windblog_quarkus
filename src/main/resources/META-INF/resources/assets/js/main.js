@@ -959,8 +959,8 @@
             let height = rawRect.height;
 
             if (height > viewportHeight) {
-                const effectiveTop = Math.max(-20, Math.min(top, 100));
-                const effectiveBottom = Math.min(viewportHeight + 40, top + height);
+                const effectiveTop = top < 0 ? Math.max(-20, top) : top;
+                const effectiveBottom = Math.min(viewportHeight + 40, rawRect.top + rawRect.height);
                 top = effectiveTop;
                 height = Math.max(160, effectiveBottom - effectiveTop);
             } else if (top < -20) {
@@ -1109,28 +1109,55 @@
             element.style.textTransform = styleSnapshot.textTransform;
         }
 
+        function removeArticleTransitionTargetCardClass(el) {
+            if (!el || !el.classList) return;
+            const previousTransition = el.style.transition;
+            el.style.transition = 'none';
+            el.classList.remove('pjax-article-transition-target-card');
+            void el.offsetHeight;
+            el.style.transition = previousTransition;
+        }
+
         function getArticleCardStyleSnapshot(element) {
             if (!element) {
                 return null;
             }
+            const hadTargetCardClass = element.classList.contains('pjax-article-transition-target-card');
+            if (hadTargetCardClass) {
+                element.classList.remove('pjax-article-transition-target-card');
+            }
             const computedStyle = window.getComputedStyle(element);
-            return {
-                backgroundColor: computedStyle.backgroundColor,
-                borderTopColor: computedStyle.borderTopColor,
-                borderRightColor: computedStyle.borderRightColor,
-                borderBottomColor: computedStyle.borderBottomColor,
-                borderLeftColor: computedStyle.borderLeftColor,
-                borderTopWidth: computedStyle.borderTopWidth,
-                borderRightWidth: computedStyle.borderRightWidth,
-                borderBottomWidth: computedStyle.borderBottomWidth,
-                borderLeftWidth: computedStyle.borderLeftWidth,
-                borderTopStyle: computedStyle.borderTopStyle,
-                borderTopLeftRadius: computedStyle.borderTopLeftRadius,
-                borderTopRightRadius: computedStyle.borderTopRightRadius,
-                borderBottomRightRadius: computedStyle.borderBottomRightRadius,
-                borderBottomLeftRadius: computedStyle.borderBottomLeftRadius,
-                boxShadow: computedStyle.boxShadow
+            const isTransparent = function (val) {
+                if (!val) return true;
+                const s = String(val).trim().toLowerCase();
+                return s === 'transparent' || s === 'none' || s === 'rgba(0, 0, 0, 0)' || s === 'rgba(0,0,0,0)';
             };
+            const rootStyle = window.getComputedStyle(document.documentElement);
+            const fallbackBg = rootStyle.getPropertyValue('--card-bg').trim() || '#ffffff';
+            const fallbackBorder = rootStyle.getPropertyValue('--border').trim() || 'rgba(0, 0, 0, 0.1)';
+            const fallbackShadow = rootStyle.getPropertyValue('--card-shadow').trim() || 'none';
+
+            const snapshot = {
+                backgroundColor: !isTransparent(computedStyle.backgroundColor) ? computedStyle.backgroundColor : fallbackBg,
+                borderTopColor: !isTransparent(computedStyle.borderTopColor) ? computedStyle.borderTopColor : fallbackBorder,
+                borderRightColor: !isTransparent(computedStyle.borderRightColor) ? computedStyle.borderRightColor : fallbackBorder,
+                borderBottomColor: !isTransparent(computedStyle.borderBottomColor) ? computedStyle.borderBottomColor : fallbackBorder,
+                borderLeftColor: !isTransparent(computedStyle.borderLeftColor) ? computedStyle.borderLeftColor : fallbackBorder,
+                borderTopWidth: computedStyle.borderTopWidth || '1px',
+                borderRightWidth: computedStyle.borderRightWidth || '1px',
+                borderBottomWidth: computedStyle.borderBottomWidth || '1px',
+                borderLeftWidth: computedStyle.borderLeftWidth || '1px',
+                borderTopStyle: computedStyle.borderTopStyle || 'solid',
+                borderTopLeftRadius: computedStyle.borderTopLeftRadius || '1rem',
+                borderTopRightRadius: computedStyle.borderTopRightRadius || '1rem',
+                borderBottomRightRadius: computedStyle.borderBottomRightRadius || '1rem',
+                borderBottomLeftRadius: computedStyle.borderBottomLeftRadius || '1rem',
+                boxShadow: !isTransparent(computedStyle.boxShadow) ? computedStyle.boxShadow : fallbackShadow
+            };
+            if (hadTargetCardClass) {
+                element.classList.add('pjax-article-transition-target-card');
+            }
+            return snapshot;
         }
 
         function applyArticleCardStyleSnapshot(element, styleSnapshot) {
@@ -1191,7 +1218,7 @@
         }
 
         function getArticleTransitionTargetSignature(preparedItems, container) {
-            return preparedItems.map(function (preparedItem) {
+            const parts = preparedItems.map(function (preparedItem) {
                 const rect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
                 const computedStyle = window.getComputedStyle(preparedItem.targetElement);
                 // Round away sub-pixel float noise: the container transform is
@@ -1207,7 +1234,17 @@
                     computedStyle.fontWeight,
                     computedStyle.letterSpacing
                 ].join('|');
-            }).join('~');
+            });
+            if (preparedItems.backdropItem && preparedItems.backdropItem.targetElement) {
+                const cardRect = getArticleTransitionTargetRect(preparedItems.backdropItem.targetElement, container);
+                parts.push([
+                    cardRect.left.toFixed(1),
+                    cardRect.top.toFixed(1),
+                    cardRect.width.toFixed(1),
+                    cardRect.height.toFixed(1)
+                ].join('|'));
+            }
+            return parts.join('~');
         }
 
         function nextArticleTransitionFrame() {
@@ -1408,7 +1445,7 @@
                     preparedItems.backdropItem.targetStyle = getArticleCardStyleSnapshot(preparedItems.backdropItem.targetElement);
                     measuredItems.backdropItem = preparedItems.backdropItem;
                 } else {
-                    preparedItems.backdropItem.targetElement.classList.remove('pjax-article-transition-target-card');
+                    removeArticleTransitionTargetCardClass(preparedItems.backdropItem.targetElement);
                     preparedItems.backdropItem.element.remove();
                 }
             }
@@ -1437,6 +1474,7 @@
             });
 
             if (measuredItems.length === 0 && measuredItems.backdropItem) {
+                removeArticleTransitionTargetCardClass(measuredItems.backdropItem.targetElement);
                 measuredItems.backdropItem.element.remove();
                 measuredItems.backdropItem = null;
             }
@@ -1605,9 +1643,13 @@
                         borderTopRightRadius: sourceStyle.borderTopRightRadius || '1rem',
                         borderBottomRightRadius: sourceStyle.borderBottomRightRadius || '1rem',
                         borderBottomLeftRadius: sourceStyle.borderBottomLeftRadius || '1rem',
-                        backgroundColor: sourceStyle.backgroundColor || 'var(--card-bg)',
-                        borderColor: sourceStyle.borderTopColor || 'var(--border)',
-                        boxShadow: sourceStyle.boxShadow || 'var(--card-shadow)',
+                        backgroundColor: sourceStyle.backgroundColor,
+                        borderColor: sourceStyle.borderTopColor,
+                        borderTopColor: sourceStyle.borderTopColor,
+                        borderRightColor: sourceStyle.borderRightColor,
+                        borderBottomColor: sourceStyle.borderBottomColor,
+                        borderLeftColor: sourceStyle.borderLeftColor,
+                        boxShadow: sourceStyle.boxShadow,
                         opacity: 1
                     },
                     {
@@ -1618,9 +1660,13 @@
                         borderTopRightRadius: targetStyle.borderTopRightRadius || '1rem',
                         borderBottomRightRadius: targetStyle.borderBottomRightRadius || '1rem',
                         borderBottomLeftRadius: targetStyle.borderBottomLeftRadius || '1rem',
-                        backgroundColor: targetStyle.backgroundColor || 'var(--card-bg)',
-                        borderColor: targetStyle.borderTopColor || 'var(--border)',
-                        boxShadow: targetStyle.boxShadow || 'var(--card-shadow)',
+                        backgroundColor: targetStyle.backgroundColor,
+                        borderColor: targetStyle.borderTopColor,
+                        borderTopColor: targetStyle.borderTopColor,
+                        borderRightColor: targetStyle.borderRightColor,
+                        borderBottomColor: targetStyle.borderBottomColor,
+                        borderLeftColor: targetStyle.borderLeftColor,
+                        boxShadow: targetStyle.boxShadow,
                         opacity: 1
                     }
                 ], {
@@ -1737,7 +1783,7 @@
             }
             if (preparedItems.backdropItem) {
                 if (preparedItems.backdropItem.targetElement) {
-                    preparedItems.backdropItem.targetElement.classList.remove('pjax-article-transition-target-card');
+                    removeArticleTransitionTargetCardClass(preparedItems.backdropItem.targetElement);
                 }
                 if (preparedItems.backdropItem.element) {
                     preparedItems.backdropItem.element.remove();
@@ -1745,7 +1791,7 @@
                 preparedItems.backdropItem = null;
             }
             document.querySelectorAll('.pjax-article-transition-target-card').forEach(function (el) {
-                el.classList.remove('pjax-article-transition-target-card');
+                removeArticleTransitionTargetCardClass(el);
             });
             preparedItems.forEach(function (preparedItem) {
                 if (preparedItem.targetElement) {
@@ -1923,17 +1969,19 @@
                                 }
                                 const measuredItems = measureArticleTransitionTargets(preparedItems, container);
                                 activeTransitionItems = measuredItems;
+                                const containerAnim = container.animate ? container.animate([
+                                    { opacity: 0 },
+                                    { opacity: 1 }
+                                ], {
+                                    duration: 380,
+                                    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                                    fill: 'forwards'
+                                }) : null;
                                 container.style.opacity = '';
-                                if (container.animate) {
-                                    container.animate([
-                                        { opacity: 0 },
-                                        { opacity: 1 }
-                                    ], {
-                                        duration: 380,
-                                        easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
-                                    });
-                                }
                                 await animateArticleTransitionItems(measuredItems, container);
+                                if (containerAnim) {
+                                    containerAnim.cancel();
+                                }
                             }
                         } else {
                             logArticleTransitionMode(url, transitionSlug, false, 'target page does not expose a matching article transition target');

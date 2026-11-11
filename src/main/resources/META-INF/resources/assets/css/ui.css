@@ -553,11 +553,16 @@ body.drawer-open {
     line-height: 1.5;
 }
 
+#pjax-container {
+    position: relative;
+    z-index: 35;
+}
+
 .pjax-article-transition-backdrop {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
-    z-index: 9997 !important;
+    z-index: 30 !important;
     box-sizing: border-box;
     margin: 0 !important;
     pointer-events: none;
@@ -575,11 +580,13 @@ body.drawer-open {
     background-color: transparent !important;
     border-color: transparent !important;
     box-shadow: none !important;
+    transition: none !important;
 }
 
 .pjax-article-transition-target-card::before,
 .pjax-article-transition-target-card::after {
     opacity: 0 !important;
+    transition: none !important;
 }
 
 .pjax-article-transition-clone {
