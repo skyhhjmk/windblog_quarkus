@@ -463,6 +463,11 @@ public class AdminPostApiController {
             changed = true;
         }
 
+        if (request.visibilityRegions() != null && !Objects.equals(post.visibilityRegions, request.visibilityRegions())) {
+            post.visibilityRegions = regionValidationService.validateAndFilterRegions(request.visibilityRegions());
+            changed = true;
+        }
+
         if (request.password() != null) {
             String nextPassword = request.password().trim();
             if (!Objects.equals(post.password, nextPassword)) {
@@ -886,6 +891,7 @@ public class AdminPostApiController {
                 post.category == null ? null : post.category.id,
                 getCategoryIds(post),
                 tagIds,
+                post.visibilityRegions,
                 post.publishedRevision == null ? 0 : post.publishedRevision.revisionNumber,
                 post.publishedRevision != null,
                 post.publishedAt,
