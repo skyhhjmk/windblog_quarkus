@@ -2912,6 +2912,7 @@
         let searchSuggestTimer = null;
         let searchSuggestRequestId = 0;
         let paletteActiveItemIndex = 0;
+        let isSearchBackdropMouseDown = false;
 
         function isGithubSearchOpen() {
             return Boolean(githubSearchModal && githubSearchModal.classList.contains('is-open'));
@@ -2954,6 +2955,7 @@
 
         function closeGithubSearchModal() {
             if (!githubSearchModal || !githubSearchBackdrop) return;
+            isSearchBackdropMouseDown = false;
             clearTimeout(searchSuggestTimer);
             githubSearchBackdrop.classList.remove('is-open');
             githubSearchModal.classList.remove('is-open');
@@ -3471,11 +3473,34 @@
             });
         });
 
-        githubSearchBackdrop?.addEventListener('click', closeGithubSearchModal);
-        githubSearchModal?.addEventListener('click', (e) => {
-            if (e.target === githubSearchModal) {
+        isSearchBackdropMouseDown = false;
+
+        githubSearchModal?.addEventListener('mousedown', (e) => {
+            isSearchBackdropMouseDown = (e.target === githubSearchModal) && (!githubSearchPalette || !githubSearchPalette.contains(e.target));
+        });
+
+        githubSearchBackdrop?.addEventListener('mousedown', (e) => {
+            isSearchBackdropMouseDown = (e.target === githubSearchBackdrop);
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (githubSearchPalette && githubSearchPalette.contains(e.target)) {
+                isSearchBackdropMouseDown = false;
+            }
+        });
+
+        githubSearchBackdrop?.addEventListener('click', (e) => {
+            if (e.target === githubSearchBackdrop && isSearchBackdropMouseDown) {
                 closeGithubSearchModal();
             }
+            isSearchBackdropMouseDown = false;
+        });
+
+        githubSearchModal?.addEventListener('click', (e) => {
+            if (e.target === githubSearchModal && isSearchBackdropMouseDown) {
+                closeGithubSearchModal();
+            }
+            isSearchBackdropMouseDown = false;
         });
 
         document.addEventListener('keydown', (e) => {
