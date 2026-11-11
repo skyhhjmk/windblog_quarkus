@@ -114,7 +114,9 @@
                     <article class="group card p-6 sm:p-7 md:p-8 relative rounded-2xl border border-border bg-card" data-article-transition-slug="{hit.slug}" data-article-transition-card="{hit.slug}">
                         <div class="flex flex-col gap-4">
                             <!-- Meta Information -->
-                            <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono">
+                            <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono"
+                                 data-article-transition-part="meta"
+                                 data-article-transition-slug="{hit.slug}">
                                 {#if hit.type == 'post' && hit.authorName && !hit.authorName.isEmpty()}
                                     <span class="text-main font-semibold flex items-center gap-1.5">
                                         <span class="w-1.5 h-1.5 rounded-full bg-accent/70"></span>

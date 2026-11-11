@@ -33,16 +33,53 @@
     </div>
 
 
+    <nav aria-label="{i18n.t('post.breadcrumb')}" class="relative z-40 text-xs text-meta font-mono mb-4 flex items-center gap-1.5">
+        <a href="{languagePrefix}/" class="hover:text-accent transition-colors" data-article-return-link>{i18n.t('common.home')}</a>
+        {#if breadcrumbCategorySlug}
+        <span aria-hidden="true" class="text-meta/60">/</span><a href="{languagePrefix}/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors" data-article-return-link>{postCategory}</a>
+        {/if}
+        <span aria-hidden="true" class="text-meta/60">/</span><span class="text-main truncate max-w-xs">{postTitle}</span>
+    </nav>
+
     <div class="card card-static p-6 sm:p-7 md:p-8 rounded-2xl border border-border bg-card shadow-sm" data-article-transition-card="{postSlug}">
-        <nav aria-label="{i18n.t('post.breadcrumb')}" class="text-xs text-meta font-mono mb-6 flex items-center gap-1.5">
-            <a href="{languagePrefix}/" class="hover:text-accent transition-colors" data-article-return-link>{i18n.t('common.home')}</a>
-            {#if breadcrumbCategorySlug}
-            <span aria-hidden="true" class="text-meta/60">/</span><a href="{languagePrefix}/category/{breadcrumbCategorySlug}" class="hover:text-accent transition-colors" data-article-return-link>{postCategory}</a>
-            {/if}
-            <span aria-hidden="true" class="text-meta/60">/</span><span class="text-main truncate max-w-xs">{postTitle}</span>
-        </nav>
         <article class="space-y-8 md:space-y-12" data-article-transition-slug="{postSlug}">
             <header class="space-y-6 md:space-y-8 mb-8 md:mb-12">
+                <div class="flex flex-wrap items-center gap-4 sm:gap-8 pb-4 sm:pb-5 border-b border-border/50 text-xs font-mono"
+                     data-article-transition-part="meta"
+                     data-article-transition-slug="{postSlug}">
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">{i18n.t('post.author')}</span>
+                        <div class="flex items-center gap-2">
+                            <img src="{authorAvatar}" alt="{authorName}"
+                                 class="w-5 h-5 rounded-full ring-1 ring-border">
+                            <span class="post-meta-value text-xs">{authorName}</span>
+                        </div>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">{i18n.t('post.published_at')}</span>
+                        <time class="timestamp post-meta-value text-xs" data-timestamp="{publishedAt}">{publishedAt}</time>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">{i18n.t('post.word_count')}</span>
+                        <span class="post-meta-value text-xs">{wordCount ?: 0}</span>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">{i18n.t('post.reading_time')}</span>
+                        <span class="post-meta-value text-xs">{readingTimeMinutes ?: 1} {i18n.t('post.minutes')}</span>
+                    </div>
+                    <div class="post-meta-item">
+                        <span class="post-meta-label">{i18n.t('post.status')}</span>
+                        <span class="post-meta-value text-xs flex items-center gap-1.5" data-purchase-status="true">
+                            {#if postPrice > 0}
+                                <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-emerald-500' : 'bg-accent'}"></span>
+                                {hasPurchased ? i18n.t('post.unlocked') : i18n.t('post.paid')}
+                            {#else}
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> {i18n.t('post.free')}
+                            {/if}
+                        </span>
+                    </div>
+                </div>
+
                 <div class="post-title-stage {#if postCoverImageUrl.or(null)}has-cover{#else}space-y-4{/if}">
                     {#if postCoverImageUrl.or(null)}
                         <div class="post-header-cover"
@@ -83,40 +120,6 @@
                         <h1 class="post-header-title text-3xl sm:text-4xl md:text-5xl font-black text-main tracking-tight leading-[1.18]"
                             data-article-transition-part="title"
                             data-article-transition-slug="{postSlug}">{postTitle ?: i18n.t('post.page_title_default')}</h1>
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap items-center gap-4 sm:gap-8 py-4 sm:py-5 border-y border-border/50 text-xs font-mono">
-                    <div class="post-meta-item">
-                        <span class="post-meta-label">{i18n.t('post.author')}</span>
-                        <div class="flex items-center gap-2">
-                            <img src="{authorAvatar}" alt="{authorName}"
-                                 class="w-5 h-5 rounded-full ring-1 ring-border">
-                            <span class="post-meta-value text-xs">{authorName}</span>
-                        </div>
-                    </div>
-                    <div class="post-meta-item">
-                        <span class="post-meta-label">{i18n.t('post.published_at')}</span>
-                        <time class="timestamp post-meta-value text-xs" data-timestamp="{publishedAt}">{publishedAt}</time>
-                    </div>
-                    <div class="post-meta-item">
-                        <span class="post-meta-label">{i18n.t('post.word_count')}</span>
-                        <span class="post-meta-value text-xs">{wordCount ?: 0}</span>
-                    </div>
-                    <div class="post-meta-item">
-                        <span class="post-meta-label">{i18n.t('post.reading_time')}</span>
-                        <span class="post-meta-value text-xs">{readingTimeMinutes ?: 1} {i18n.t('post.minutes')}</span>
-                    </div>
-                    <div class="post-meta-item">
-                        <span class="post-meta-label">{i18n.t('post.status')}</span>
-                        <span class="post-meta-value text-xs flex items-center gap-1.5" data-purchase-status="true">
-                            {#if postPrice > 0}
-                                <span class="w-2 h-2 rounded-full {hasPurchased ? 'bg-emerald-500' : 'bg-accent'}"></span>
-                                {hasPurchased ? i18n.t('post.unlocked') : i18n.t('post.paid')}
-                            {#else}
-                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> {i18n.t('post.free')}
-                            {/if}
-                        </span>
                     </div>
                 </div>
 

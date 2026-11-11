@@ -660,7 +660,7 @@
             return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         }
 
-        const ARTICLE_TRANSITION_PARTS = ['cover', 'title', 'summary'];
+        const ARTICLE_TRANSITION_PARTS = ['meta', 'cover', 'title', 'summary'];
 
         function getArticleTransitionSelector(slug, partName) {
             if (!slug || !partName) {
@@ -959,12 +959,12 @@
             let height = rawRect.height;
 
             if (height > viewportHeight) {
-                const effectiveTop = top < 0 ? Math.max(-20, top) : top;
+                const effectiveTop = top < 0 ? Math.max(0, top) : top;
                 const effectiveBottom = Math.min(viewportHeight + 40, rawRect.top + rawRect.height);
                 top = effectiveTop;
                 height = Math.max(160, effectiveBottom - effectiveTop);
-            } else if (top < -20) {
-                top = -20;
+            } else if (top < 0) {
+                top = 0;
                 height = Math.max(100, (rawRect.top + rawRect.height) - top);
             }
 
@@ -1400,6 +1400,8 @@
                     if (clampedParagraph) {
                         clampedParagraph.classList.remove('line-clamp-2');
                     }
+                } else if (capturedItem.partName === 'meta') {
+                    cloneElement.style.zIndex = '10000';
                 } else if (capturedItem.partName === 'title') {
                     cloneElement.style.zIndex = '10001';
                 }
@@ -1580,6 +1582,37 @@
             return Promise.all(promises);
         }
 
+        function animateMetaTransitionItem(preparedItem, duration, easing) {
+            const cloneElement = preparedItem.cloneElement;
+            const sourceRect = preparedItem.sourceRect;
+            const targetRect = preparedItem.targetRect;
+            const sourceStyle = preparedItem.sourceStyle;
+            const targetStyle = preparedItem.targetStyle;
+
+            applyArticleTransitionStyleSnapshot(cloneElement, targetStyle);
+            cloneElement.style.width = targetRect.width + 'px';
+            cloneElement.style.height = targetRect.height + 'px';
+
+            return cloneElement.animate([
+                {
+                    transform: 'translate3d(' + sourceRect.left + 'px, ' + sourceRect.top + 'px, 0)',
+                    width: sourceRect.width + 'px',
+                    height: sourceRect.height + 'px',
+                    opacity: 0.85
+                },
+                {
+                    transform: 'translate3d(' + targetRect.left + 'px, ' + targetRect.top + 'px, 0)',
+                    width: targetRect.width + 'px',
+                    height: targetRect.height + 'px',
+                    opacity: 1
+                }
+            ], {
+                duration: duration,
+                easing: easing,
+                fill: 'forwards'
+            }).finished;
+        }
+
         function animateSummaryTransitionItem(preparedItem, duration, easing) {
             const cloneElement = preparedItem.cloneElement;
             const sourceRect = preparedItem.sourceRect;
@@ -1681,6 +1714,8 @@
                     animationPromises.push(animateTitleTransitionItem(preparedItem, duration, easing));
                 } else if (preparedItem.partName === 'cover') {
                     animationPromises.push(animateCoverTransitionItem(preparedItem, duration, easing));
+                } else if (preparedItem.partName === 'meta') {
+                    animationPromises.push(animateMetaTransitionItem(preparedItem, duration, easing));
                 } else {
                     animationPromises.push(animateSummaryTransitionItem(preparedItem, duration, easing));
                 }
@@ -1689,7 +1724,8 @@
             return Promise.all(animationPromises).then(function () {
                 return reconcileArticleTransitionTargets(preparedItems, container);
             }).then(function () {
-                cleanupArticleTransitionItems(preparedItems);
+                revealArticleTransitionTargets(preparedItems);
+                return fadeOutAndRemoveTransitionClones(preparedItems);
             }).catch(function () {
                 cleanupArticleTransitionItems(preparedItems);
             });
@@ -1777,18 +1813,12 @@
             return Promise.all(corrections);
         }
 
-        function cleanupArticleTransitionItems(preparedItems) {
+        function revealArticleTransitionTargets(preparedItems) {
             if (!preparedItems) {
                 return;
             }
-            if (preparedItems.backdropItem) {
-                if (preparedItems.backdropItem.targetElement) {
-                    removeArticleTransitionTargetCardClass(preparedItems.backdropItem.targetElement);
-                }
-                if (preparedItems.backdropItem.element) {
-                    preparedItems.backdropItem.element.remove();
-                }
-                preparedItems.backdropItem = null;
+            if (preparedItems.backdropItem && preparedItems.backdropItem.targetElement) {
+                removeArticleTransitionTargetCardClass(preparedItems.backdropItem.targetElement);
             }
             document.querySelectorAll('.pjax-article-transition-target-card').forEach(function (el) {
                 removeArticleTransitionTargetCardClass(el);
@@ -1797,12 +1827,78 @@
                 if (preparedItem.targetElement) {
                     preparedItem.targetElement.classList.remove('pjax-article-transition-target-hidden');
                 }
-                if (preparedItem.cloneElement) {
-                    preparedItem.cloneElement.remove();
-                }
             });
             document.querySelectorAll('.pjax-article-transition-target-hidden').forEach(function (el) {
                 el.classList.remove('pjax-article-transition-target-hidden');
+            });
+        }
+
+        function fadeOutAndRemoveTransitionClones(preparedItems) {
+            if (!preparedItems) {
+                return Promise.resolve();
+            }
+            const fadePromises = [];
+            const elementsToRemove = [];
+
+            if (preparedItems.backdropItem && preparedItems.backdropItem.element) {
+                const backdropEl = preparedItems.backdropItem.element;
+                elementsToRemove.push(backdropEl);
+                fadePromises.push(backdropEl.animate([
+                    { opacity: 1 },
+                    { opacity: 0 }
+                ], {
+                    duration: 120,
+                    easing: 'ease-out',
+                    fill: 'forwards'
+                }).finished.catch(function () {}));
+            }
+
+            preparedItems.forEach(function (item) {
+                if (item.cloneElement) {
+                    const cloneEl = item.cloneElement;
+                    elementsToRemove.push(cloneEl);
+                    fadePromises.push(cloneEl.animate([
+                        { opacity: 1 },
+                        { opacity: 0 }
+                    ], {
+                        duration: 120,
+                        easing: 'ease-out',
+                        fill: 'forwards'
+                    }).finished.catch(function () {}));
+                }
+            });
+
+            return Promise.all(fadePromises).then(function () {
+                elementsToRemove.forEach(function (el) {
+                    if (el && el.parentNode) {
+                        el.remove();
+                    }
+                });
+                if (preparedItems.backdropItem) {
+                    preparedItems.backdropItem = null;
+                }
+                preparedItems.forEach(function (item) {
+                    item.cloneElement = null;
+                });
+            });
+        }
+
+        function cleanupArticleTransitionItems(preparedItems) {
+            if (!preparedItems) {
+                return;
+            }
+            revealArticleTransitionTargets(preparedItems);
+            if (preparedItems.backdropItem) {
+                if (preparedItems.backdropItem.element) {
+                    preparedItems.backdropItem.element.remove();
+                }
+                preparedItems.backdropItem = null;
+            }
+            preparedItems.forEach(function (preparedItem) {
+                if (preparedItem.cloneElement) {
+                    preparedItem.cloneElement.remove();
+                    preparedItem.cloneElement = null;
+                }
             });
         }
 
@@ -1980,7 +2076,9 @@
                                 container.style.opacity = '';
                                 await animateArticleTransitionItems(measuredItems, container);
                                 if (containerAnim) {
+                                    container.style.opacity = '1';
                                     containerAnim.cancel();
+                                    container.style.opacity = '';
                                 }
                             }
                         } else {

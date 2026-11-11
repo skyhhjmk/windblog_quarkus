@@ -616,6 +616,11 @@ body.drawer-open {
     overflow: hidden !important;
 }
 
+.pjax-article-transition-clone-meta {
+    z-index: 10000 !important;
+    overflow: hidden !important;
+}
+
 .pjax-article-transition-clone-title {
     z-index: 10001 !important;
     overflow: visible;

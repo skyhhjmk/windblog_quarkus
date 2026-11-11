@@ -90,7 +90,9 @@
                                     {/if}
                                     <div class="flex min-w-0 flex-1 flex-col gap-4">
                                         <!-- Meta Information -->
-                                        <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono">
+                                        <div class="flex flex-wrap items-center gap-3 text-xs text-meta font-mono"
+                                             data-article-transition-part="meta"
+                                             data-article-transition-slug="{post.slug}">
                                             {#for category in post.categories}
                                                 <a class="text-accent font-semibold hover:underline" href="{languagePrefix}/category/{category.slug}">{category.name}</a>
                                             {/for}

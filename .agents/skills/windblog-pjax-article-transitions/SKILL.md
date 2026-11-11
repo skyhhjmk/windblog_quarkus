@@ -27,6 +27,7 @@ WindBlog 采用自研轻量级 PJAX 结合原生 Web Animations API (WAAPI) 实�
 在模板中，文章卡片与文章详情页通过特定的 `data-*` 属性进行配对：
 - `data-article-transition-slug="{post.slug}"`：标识目标文章唯一 slug。
 - `data-article-transition-card="{post.slug}"`：标识文章列表卡片与文章背景卡片（实现进入与退出时的卡片形状/尺寸/圆角平滑形变）。
+- `data-article-transition-part="meta"`：标识文章卡片与详情页上方的作者、发布时间元信息行。
 - `data-article-transition-part="cover"`：标识文章封面缩略图/详情页标题下方渐变封面条（`.post-list-cover` <-> `.post-header-cover`）。
 - `data-article-transition-part="title"`：标识文章标题部分。
 - `data-article-transition-part="summary"`：标识文章 AI 摘要卡片外层容器（可选）。
@@ -107,21 +108,25 @@ sequenceDiagram
 
 ### 4.1 部件化高性能动画策略
 为消除逐帧修改 `fontSize`/`lineHeight`/`fontWeight` 引发的 CPU 文本重排（Layout Thrashing）、文字中途折行跳变与字重突变，WindBlog 按部件类型采用针对性的 GPU 加速合成策略：
+- **作者与发布时间元信息 (`meta`, `.pjax-article-transition-clone-meta`)**：列表卡片顶部的元信息行与文章详情页标题上方元信息行配对，保证进入与退出时卡片内部元素自上而下顺序（Meta -> Title & Cover -> Summary）完全对称平滑展开与收缩，避免元素交错位移。
 - **标题 (`title`, `.pjax-article-transition-clone-title`)**：在测量完目标 `targetStyle` 后将克隆体直接锁定为目标字号、字重与宽度，通过 `transform: translate3d(x, y, 0) scale(sourceFontPx / targetFontPx)` 到 `translate3d(targetX, targetY, 0) scale(1)` 以及 `color` 进行纯 GPU 合成插值。
 - **封面 (`cover`, `.pjax-article-transition-clone-cover`)**：列表页左侧缩略图 `.post-list-cover` 与文章详情页标题下方紧凑封面区域 `.post-header-cover` 配对，同步过渡 `transform`、`width`、`height`、`borderRadius`，并同步插值内部图片透明度与 `.post-header-cover-gradient` 遮罩透明度（`0 <-> 1`），确保详情页标题在亮/暗主题下均清晰可读。
 - **摘要卡片 (`summary`, `.pjax-article-transition-clone-summary`)**：作用于整个 AI 摘要卡片容器（`overflow: hidden`），平滑插值 `transform`、`width`、`height` 与圆角，避免目标页在动画开始时露出空心边框。
+- **过渡层平滑溶解交接 (`revealArticleTransitionTargets` + `fadeOutAndRemoveTransitionClones`)**：动画与位移对齐完成后，先行无缝显示真实 DOM 目标元素，再通过 120ms `ease-out` WAAPI 透明度淡出浮层与背景克隆体，彻底消除过渡层在最后一帧硬切消失（“直接消失”）产生的视觉突兀感。
 - **卡片背景共享元素 (`.pjax-article-transition-backdrop` <-> `.pjax-article-transition-target-card`)**：
   - 进入文章时：捕获列表卡片的视口边界与真实计算样式（背景色、圆角、边框、阴影），作为实心卡片克隆体（`z-index: 30`，位于 `#pjax-container` 的 `z-index: 35` 之后）以 `380ms` 平滑形变展开为文章页背景卡片的完整尺寸与圆角；目标卡片在过渡期间通过 `.pjax-article-transition-target-card` 隐藏背景边框以消除双层重影，卡片内部文章正文内容随容器平滑淡入呈现。
-  - 关闭/返回列表时：捕获文章背景卡片当前可见视口边界，向列表卡片目标位置反向平滑收缩还原，保持实心背景色彩并过渡圆角和阴影，同时联动封面、标题与摘要缩小，在动画结束瞬间通过 `style.transition = 'none'` 无闪烁交接给真实目标卡片，消除背景消失与跳变。
+  - 关闭/返回列表时：捕获文章背景卡片当前可见视口边界，向列表卡片目标位置反向平滑收缩还原，保持实心背景色彩并过渡圆角和阴影，同时联动封面、元信息、标题与摘要缩小，在动画结束瞬间通过 `style.transition = 'none'` 无闪烁交接给真实目标卡片，消除背景消失与跳变。
 
 ### 4.2 动效参数与 CSS 配合
-- **时长**：`380ms`
+- **时长**：`380ms`（共享元素形变主时长）+ `120ms`（过渡层优雅淡出交接）
 - **缓动曲线**：`cubic-bezier(0.22, 1, 0.36, 1)`
 - **CSS 类定义** (`src/main/resources/META-INF/resources/assets/css/ui.css` 与 `theme.css`)：
   - `#pjax-container` (`position: relative; z-index: 35`)
+  - 面包屑导航 (`position: relative; z-index: 40`，位于卡片外部且高于过渡层)
   - `.pjax-article-transition-backdrop` (`z-index: 30`)
   - `.pjax-article-transition-clone-cover` (`z-index: 9998`, `overflow: hidden`)
   - `.pjax-article-transition-clone-summary` (`z-index: 9999`, `overflow: hidden`)
+  - `.pjax-article-transition-clone-meta` (`z-index: 10000`, `overflow: hidden`)
   - `.pjax-article-transition-clone-title` (`z-index: 10001`)
   - `.post-title-stage` / `.post-header-cover` / `.post-header-cover-gradient`：详情页标题下方紧凑封面条与 `--card-bg` 多向透明度渐变遮罩。
 
