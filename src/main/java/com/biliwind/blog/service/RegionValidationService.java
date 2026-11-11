@@ -13,7 +13,8 @@ import java.util.List;
 public class RegionValidationService {
 
     /**
-     * 校验并过滤 visibilityRegions 列表，只保留有效的区域 code
+     * 校验并过滤 visibilityRegions 列表，只保留有效的区域 code。
+     * 若包含 global 或为空，表示全区域可见，返回 null 以保持数据库标准化。
      */
     public List<String> validateAndFilterRegions(List<String> regions) {
         if (regions == null || regions.isEmpty()) {
@@ -29,7 +30,7 @@ public class RegionValidationService {
                 result.add(blogRegion.getCode());
             }
         }
-        if (result.isEmpty()) {
+        if (result.isEmpty() || result.contains(BlogRegion.GLOBAL.getCode())) {
             return null;
         }
         return result;

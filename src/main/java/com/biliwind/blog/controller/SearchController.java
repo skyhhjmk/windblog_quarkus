@@ -481,7 +481,7 @@ public class SearchController {
                                         String regionPattern, OffsetDateTime threshold,
                                         Map<String, Object> params) {
         if (parsed.hasFilters()) {
-            StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern) ");
+            StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern or p.visibility_regions::text like '%\"global\"%') ");
             params.put("regionPattern", regionPattern);
             if (threshold != null) {
                 wb.append("and p.published_at >= :threshold ");
@@ -512,7 +512,7 @@ public class SearchController {
             return wb.toString();
         }
 
-        StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern) ");
+        StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern or p.visibility_regions::text like '%\"global\"%') ");
         params.put("regionPattern", regionPattern);
         params.put("keyword", keyword);
         params.put("searchPattern", searchPattern);

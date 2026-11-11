@@ -11,10 +11,17 @@ public final class RegionQueryHelper {
     }
 
     /**
-     * visibilityRegions 为 null 或包含当前区域的通用过滤条件
+     * visibilityRegions 为 null 或包含当前区域或 global 的通用过滤条件
      */
     public static String visibilityRegionFilterJpql() {
-        return "(visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern)";
+        return "(visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern or cast(visibilityRegions as String) like '%\"global\"%')";
+    }
+
+    /**
+     * visibilityRegions 为 null 或包含当前区域或 global 的通用过滤条件（位置参数版本）
+     */
+    public static String visibilityRegionFilterJpql(int paramIndex) {
+        return "(visibilityRegions is null or cast(visibilityRegions as String) like ?" + paramIndex + " or cast(visibilityRegions as String) like '%\"global\"%')";
     }
 
     /**

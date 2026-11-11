@@ -1211,7 +1211,8 @@ public class ElasticsearchPostSearchService {
                               "bool": {
                                 "should": [
                                   { "bool": { "must_not": { "exists": { "field": "visibilityRegions" } } } },
-                                  { "term": { "visibilityRegions": "%s" } }
+                                  { "term": { "visibilityRegions": "%s" } },
+                                  { "term": { "visibilityRegions": "global" } }
                                 ]
                               }
                             }
@@ -1249,7 +1250,8 @@ public class ElasticsearchPostSearchService {
                               "bool": {
                                 "should": [
                                   { "bool": { "must_not": { "exists": { "field": "visibilityRegions" } } } },
-                                  { "term": { "visibilityRegions": "%s" } }
+                                  { "term": { "visibilityRegions": "%s" } },
+                                  { "term": { "visibilityRegions": "global" } }
                                 ]
                               }
                             }

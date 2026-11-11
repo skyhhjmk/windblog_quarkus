@@ -4,6 +4,7 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.MarkdownHelper;
 import com.biliwind.blog.model.*;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.ContextNotActiveException;
 import jakarta.inject.Inject;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -15,6 +16,7 @@ public class SeoAuditService {
     @Inject CanonicalUrlService canonical;
     @Inject PublicUrlService publicUrl;
     @Inject SeoManagementService seo;
+    @Inject com.biliwind.blog.context.RegionContext regionContext;
 
     public String html(Post post, String language) {
         if (post.publishedRevision == null) return "";
@@ -114,13 +116,26 @@ public class SeoAuditService {
                 "note", "入链按正文链接统计；零入链不代表无法通过首页、分类或 Sitemap 发现");
     }
 
+    private String currentRegionCode() {
+        if (regionContext == null) {
+            return BlogRegion.GLOBAL.getCode();
+        }
+        try {
+            BlogRegion region = regionContext.getCurrentRegion();
+            return region == null ? BlogRegion.GLOBAL.getCode() : region.getCode();
+        } catch (ContextNotActiveException ignored) {
+            return BlogRegion.GLOBAL.getCode();
+        }
+    }
+
     public List<Map<String, String>> related(Post post, String language) {
         if (post == null || post.category == null) return List.of();
+        String regionPattern = "%\"" + currentRegionCode() + "\"%";
         List<Post> candidates = Post.find("id <> ?1 and category.id = ?2 and status = ?3 and visibility = 0 "
                 + "and deletedAt is null and publishedRevision is not null "
                 + "and id not in (select policy.postId from SeoPostPolicy policy where policy.noindex = true) "
-                + "and (visibilityRegions is null or cast(visibilityRegions as String) like '%\"global\"%') "
-                + "order by publishedAt desc", post.id, post.category.id, PostStatus.PUBLISHED)
+                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?4 or cast(visibilityRegions as String) like '%\"global\"%') "
+                + "order by publishedAt desc", post.id, post.category.id, PostStatus.PUBLISHED, regionPattern)
                 .page(io.quarkus.panache.common.Page.ofSize(5)).list();
         return candidates.stream().map(p -> Map.of("title", Objects.toString(LanguageHelper.resolveLocalizedValue(p.publishedRevision.title, language), p.slug),
                 "url", canonical.buildPath(("zh-cn".equalsIgnoreCase(language) ? "" : "/" + language) + "/post/" + p.slug))).toList();

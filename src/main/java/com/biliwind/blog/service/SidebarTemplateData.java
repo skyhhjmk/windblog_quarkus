@@ -300,7 +300,7 @@ public class SidebarTemplateData {
             return cachedPosts;
         }
 
-        List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2)",
+        List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like '%\"global\"%')",
                         Sort.descending("publishedAt").and("createdAt").descending(),
                         com.biliwind.blog.model.PostStatus.PUBLISHED,
                         "%\"" + region + "\"%")

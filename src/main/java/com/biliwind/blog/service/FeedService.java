@@ -10,6 +10,7 @@ import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import io.quarkus.qute.TemplateData;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.ContextNotActiveException;
 import jakarta.inject.Inject;
 
 import java.time.OffsetDateTime;
@@ -54,22 +55,36 @@ public class FeedService {
 
     private static final int SITEMAP_PAGE_SIZE = 1000;
 
+    private String currentRegionCode() {
+        if (regionContext == null) {
+            return BlogRegion.GLOBAL.getCode();
+        }
+        try {
+            BlogRegion region = regionContext.getCurrentRegion();
+            return region == null ? BlogRegion.GLOBAL.getCode() : region.getCode();
+        } catch (ContextNotActiveException ignored) {
+            return BlogRegion.GLOBAL.getCode();
+        }
+    }
+
     private String sitemapPostQuery() {
         return "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null "
                 + "and id not in (select policy.postId from SeoPostPolicy policy where policy.noindex = true) "
-                + "and (visibilityRegions is null or cast(visibilityRegions as String) like '%\"global\"%')";
+                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like '%\"global\"%')";
     }
 
     public List<Integer> getPostSitemapPages() {
-        long count = com.biliwind.blog.model.Post.count(sitemapPostQuery(), com.biliwind.blog.model.PostStatus.PUBLISHED);
+        String regionPattern = "%\"" + currentRegionCode() + "\"%";
+        long count = com.biliwind.blog.model.Post.count(sitemapPostQuery(), com.biliwind.blog.model.PostStatus.PUBLISHED, regionPattern);
         return java.util.stream.IntStream.rangeClosed(1, Math.max(1, (int) ((count + SITEMAP_PAGE_SIZE - 1) / SITEMAP_PAGE_SIZE)))
                 .boxed().toList();
     }
 
     public List<PostSitemapUrlView> getPostSitemapUrls(int page) {
         if (page < 1 || page > getPostSitemapPages().size()) throw new jakarta.ws.rs.NotFoundException();
+        String regionPattern = "%\"" + currentRegionCode() + "\"%";
         List<com.biliwind.blog.model.Post> posts = com.biliwind.blog.model.Post.find(
-                sitemapPostQuery() + " order by id", com.biliwind.blog.model.PostStatus.PUBLISHED)
+                sitemapPostQuery() + " order by id", com.biliwind.blog.model.PostStatus.PUBLISHED, regionPattern)
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<PostSitemapUrlView> urls = new ArrayList<>();
         if (!config.getBoolean("seo", "index_enabled", true)) return urls;
