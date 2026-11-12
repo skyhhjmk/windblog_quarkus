@@ -121,27 +121,44 @@ public class PublicCacheRefreshService {
     @Transactional
     public PublicIndexPageSnapshot findPublishedIndexPage(int page, int pageSize,
                                                            String language, String regionCode) {
+        return findPublishedIndexPage(page, pageSize, language, regionCode, null);
+    }
+
+    /**
+     * Reads a paged projection of published posts for the homepage, optionally filtered by article mode.
+     */
+    @Transactional
+    public PublicIndexPageSnapshot findPublishedIndexPage(int page, int pageSize,
+                                                           String language, String regionCode,
+                                                           com.biliwind.blog.model.ArticleMode articleMode) {
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, Math.min(50, pageSize));
+        String modeKey = articleMode == null ? "all" : articleMode.value();
         // The cover-image projection changed; a versioned suffix avoids serving
         // pre-upgrade snapshots (which deserialize with a null cover) for 30 minutes.
         String cacheKey = CacheService.Keys.indexPage(safePage,
-                safeLanguage(language) + ":" + safeRegion(regionCode) + ":size:" + safePageSize + ":cover-v1");
+                safeLanguage(language) + ":" + safeRegion(regionCode) + ":size:" + safePageSize + ":mode:" + modeKey + ":cover-v1");
         Optional<PublicIndexPageSnapshot> cached = cacheService.get(cacheKey, PublicIndexPageSnapshot.class);
         if (cached.isPresent()) {
             return cached.get();
         }
 
         String regionPattern = "%\"" + safeRegion(regionCode) + "\"%";
-        Map<String, Object> parameters = Map.of(
-                "status", PostStatus.PUBLISHED,
-                "regionPattern", regionPattern);
-        PanacheQuery<Post> query = Post.find(
+        Map<String, Object> parameters = new java.util.HashMap<>();
+        parameters.put("status", PostStatus.PUBLISHED);
+        parameters.put("regionPattern", regionPattern);
+
+        StringBuilder queryBuilder = new StringBuilder(
                 "status = :status and deletedAt is null and visibility = 0 "
                         + "and publishedRevision is not null "
-                        + "and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern or cast(visibilityRegions as String) like '%\"global\"%') "
-                        + "order by publishedAt desc nulls last, createdAt desc, id desc",
-                parameters);
+                        + "and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern or cast(visibilityRegions as String) like '%\"global\"%') ");
+        if (articleMode != null) {
+            queryBuilder.append("and articleMode = :articleMode ");
+            parameters.put("articleMode", articleMode);
+        }
+        queryBuilder.append("order by publishedAt desc nulls last, createdAt desc, id desc");
+
+        PanacheQuery<Post> query = Post.find(queryBuilder.toString(), parameters);
         long totalPostsCount = query.count();
         List<Post> posts = query.page(Page.of(safePage - 1, safePageSize)).list();
         List<PublicPostListSnapshot> postItems = toPublicPostListSnapshots(posts, language);

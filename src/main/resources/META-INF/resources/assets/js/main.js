@@ -2767,7 +2767,8 @@
 
             const lastPageSuffix = `/page/${totalPages}`;
             if (!url.pathname.endsWith(lastPageSuffix)) return '';
-            url.pathname = `${url.pathname.slice(0, -lastPageSuffix.length)}/page/${requestedPage}`;
+            const basePath = url.pathname.slice(0, -lastPageSuffix.length);
+            url.pathname = requestedPage === 1 ? (basePath || '/') : `${basePath}/page/${requestedPage}`;
             return url.href;
         }
 

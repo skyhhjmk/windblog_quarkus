@@ -23,32 +23,8 @@
     }
 
     function initModeFilter() {
-        const filterContainer = document.getElementById('post-mode-filter');
-        if (!filterContainer) return;
-
-        const buttons = filterContainer.querySelectorAll('.post-mode-filter-btn');
-        const articles = document.querySelectorAll('article[data-article-mode]');
-
-        buttons.forEach(function (btn) {
-            btn.onclick = function () {
-                const targetMode = btn.dataset.mode;
-                buttons.forEach(function (b) {
-                    b.classList.remove('border-accent/40', 'bg-accent/15', 'text-accent');
-                    b.classList.add('border-border', 'bg-card', 'text-meta');
-                });
-                btn.classList.remove('border-border', 'bg-card', 'text-meta');
-                btn.classList.add('border-accent/40', 'bg-accent/15', 'text-accent');
-
-                articles.forEach(function (art) {
-                    const mode = art.dataset.articleMode || 'standard';
-                    if (targetMode === 'all' || mode === targetMode) {
-                        art.classList.remove('hidden');
-                    } else {
-                        art.classList.add('hidden');
-                    }
-                });
-            };
-        });
+        // Mode filter is now handled server-side via localized PJAX navigation
+        // preserving pagination states and mode query parameters.
     }
 
     function initTutorialTracker() {

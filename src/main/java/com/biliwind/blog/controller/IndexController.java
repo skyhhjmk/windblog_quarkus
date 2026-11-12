@@ -19,10 +19,12 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import com.biliwind.blog.model.ArticleMode;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -89,15 +91,17 @@ public class IndexController {
 
     @GET
     @Produces(MediaType.TEXT_HTML)
-    public Response index(@Context HttpHeaders httpHeaders) {
-        return subPage(1, httpHeaders);
+    public Response index(@Context HttpHeaders httpHeaders,
+                          @QueryParam("mode") String mode) {
+        return subPage(1, httpHeaders, mode);
     }
 
     @Path("/page/{subPage}")
     @GET
     @Produces(MediaType.TEXT_HTML)
     public Response subPage(@PathParam("subPage") Integer subPage,
-                            @Context HttpHeaders httpHeaders) {
+                            @Context HttpHeaders httpHeaders,
+                            @QueryParam("mode") String mode) {
         if (subPage == null) {
             subPage = 1;
         }
@@ -105,14 +109,20 @@ public class IndexController {
             subPage = 1;
         }
 
+        String normalizedMode = normalizeArticleMode(mode);
+        ArticleMode filterMode = parseFilterArticleMode(normalizedMode);
+
         String requestPath = languageContext.getPath();
         if (subPage == 1 && requestPath != null && requestPath.startsWith("/page/")) {
             // /page/1 (and /page/0, which is clamped to 1) duplicates the home page.
             // Use the canonical origin: a relative Location is resolved against the
             // proxy's internal scheme, which would redirect HTTPS visitors to HTTP.
+            String targetPath = canonicalUrlService.buildLocalizedPath("/", languageContext.getLang());
+            if (!"all".equals(normalizedMode)) {
+                targetPath += (targetPath.contains("?") ? "&" : "?") + "mode=" + normalizedMode;
+            }
             return Response.status(Response.Status.MOVED_PERMANENTLY)
-                    .location(java.net.URI.create(
-                            canonicalUrlService.buildLocalizedPath("/", languageContext.getLang())))
+                    .location(java.net.URI.create(targetPath))
                     .build();
         }
 
@@ -120,10 +130,10 @@ public class IndexController {
         String currentRegion = regionContext.getCurrentRegion().getCode();
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
         String renderedPageCacheKey = buildRenderedPageCacheKey(
-                "index:v5:" + subPage + ":" + language + ":" + currentRegion, pjaxRequest);
+                "index:v6:" + subPage + ":" + language + ":" + currentRegion + ":mode:" + normalizedMode, pjaxRequest);
 
         com.biliwind.blog.service.PublicCacheRefreshService.PublicIndexPageSnapshot pageCache =
-                publicCacheRefreshService.findPublishedIndexPage(subPage, PAGE_SIZE, language, currentRegion);
+                publicCacheRefreshService.findPublishedIndexPage(subPage, PAGE_SIZE, language, currentRegion, filterMode);
 
         long totalPostsCount = pageCache.totalPostsCount();
         long totalPages = pageCache.totalPages();
@@ -146,7 +156,7 @@ public class IndexController {
             template = index;
         }
 
-        String pageTitle = homepageTitle(subPage);
+        String pageTitle = homepageTitle(subPage, normalizedMode);
         String renderedHtml = template
                 .data("jsonLd", structuredDataService.home(subPage, language))
                 .data("pageTitle", pageTitle)
@@ -160,19 +170,20 @@ public class IndexController {
                 .data("hasNextPage", subPage < totalPages)
                 .data("prevPage", Math.max(1, subPage - 1))
                 .data("nextPage", Math.min(totalPages, subPage + 1))
-                .data("prevPageUrl", subPage <= 1 ? languageContext.homeUrl()
-                        : (subPage == 2 ? languageContext.homeUrl()
-                        : languageContext.localize("/page/" + (subPage - 1))))
+                .data("prevPageUrl", buildIndexPageUrl(Math.max(1, subPage - 1), normalizedMode))
                 .data("nextPageUrl", totalPages <= 1 || subPage >= totalPages
-                        ? (totalPages == 1 ? languageContext.homeUrl()
-                        : languageContext.localize("/page/" + totalPages))
-                        : languageContext.localize("/page/" + (subPage + 1)))
-                .data("firstPageUrl", languageContext.homeUrl())
-                .data("lastPageUrl", totalPages == 1 ? languageContext.homeUrl()
-                        : languageContext.localize("/page/" + totalPages))
-                .data("paginationPages", buildPaginationPages(subPage, totalPages))
+                        ? buildIndexPageUrl((int) totalPages, normalizedMode)
+                        : buildIndexPageUrl(subPage + 1, normalizedMode))
+                .data("firstPageUrl", buildIndexPageUrl(1, normalizedMode))
+                .data("lastPageUrl", buildIndexPageUrl((int) totalPages, normalizedMode))
+                .data("paginationPages", buildPaginationPages(subPage, totalPages, normalizedMode))
                 .data("paginationN", "n".repeat(Math.min((int) totalPages, 7)))
                 .data("pjaxRequest", pjaxRequest)
+                .data("currentMode", normalizedMode)
+                .data("filterAllUrl", buildIndexPageUrl(1, "all"))
+                .data("filterStandardUrl", buildIndexPageUrl(1, "standard"))
+                .data("filterTutorialUrl", buildIndexPageUrl(1, "tutorial"))
+                .data("filterResourceUrl", buildIndexPageUrl(1, "resource"))
                 .data("posts", postItems)
                 .render();
 
@@ -180,7 +191,42 @@ public class IndexController {
         return buildHtmlResponse(renderedHtml);
     }
 
-    private String homepageTitle(int subPage) {
+    String normalizeArticleMode(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return "all";
+        }
+        String lower = mode.trim().toLowerCase();
+        if ("standard".equals(lower) || "tutorial".equals(lower) || "resource".equals(lower)) {
+            return lower;
+        }
+        return "all";
+    }
+
+    ArticleMode parseFilterArticleMode(String normalizedMode) {
+        if ("standard".equals(normalizedMode)) {
+            return ArticleMode.STANDARD;
+        } else if ("tutorial".equals(normalizedMode)) {
+            return ArticleMode.TUTORIAL;
+        } else if ("resource".equals(normalizedMode)) {
+            return ArticleMode.RESOURCE;
+        }
+        return null;
+    }
+
+    String buildIndexPageUrl(int page, String mode) {
+        String base;
+        if (page <= 1) {
+            base = languageContext.homeUrl();
+        } else {
+            base = languageContext.localize("/page/" + page);
+        }
+        if (mode != null && !mode.isBlank() && !"all".equalsIgnoreCase(mode)) {
+            return base + (base.contains("?") ? "&" : "?") + "mode=" + mode;
+        }
+        return base;
+    }
+
+    String homepageTitle(int subPage, String mode) {
         StringBuilder title = new StringBuilder(ConfigTemplateData.siteTitle());
         String subtitle = ConfigTemplateData.siteSubtitle();
         // Site title and subtitle are single configured values, so they form the
@@ -188,19 +234,26 @@ public class IndexController {
         if (subtitle != null && !subtitle.isBlank()) {
             title.append(" - ").append(subtitle.trim());
         }
+        if ("tutorial".equals(mode)) {
+            title.append(" - ").append(i18n.t("index.mode.tutorial"));
+        } else if ("resource".equals(mode)) {
+            title.append(" - ").append(i18n.t("index.mode.resource"));
+        } else if ("standard".equals(mode)) {
+            title.append(" - ").append(i18n.t("index.mode.standard"));
+        }
         if (subPage > 1) {
             title.append(" - ").append(i18n.format("index.page", subPage));
         }
         return title.toString();
     }
 
-    private List<PaginationPage> buildPaginationPages(int currentPage, long totalPages) {
+    List<PaginationPage> buildPaginationPages(int currentPage, long totalPages, String mode) {
         int lastPage = (int) totalPages;
         int firstPage = paginationWindowStart(currentPage, lastPage);
         int lastVisiblePage = Math.min(lastPage, firstPage + 6);
         return IntStream.rangeClosed(firstPage, lastVisiblePage)
                 .mapToObj(page -> new PaginationPage(page,
-                        page == 1 ? "/" : "/page/" + page,
+                        buildIndexPageUrl(page, mode),
                         page == currentPage))
                 .toList();
     }

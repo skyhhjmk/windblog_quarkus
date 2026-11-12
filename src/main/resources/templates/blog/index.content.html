@@ -33,10 +33,10 @@
         </div>
 
         <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-mono" id="post-mode-filter">
-            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-accent/40 bg-accent/15 text-accent font-bold transition-all" data-mode="all">全部</button>
-            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-border bg-card hover:border-accent/40 text-meta hover:text-main font-bold transition-all" data-mode="standard">博客</button>
-            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-border bg-card hover:border-accent/40 text-meta hover:text-main font-bold transition-all" data-mode="tutorial">教程</button>
-            <button type="button" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border border-border bg-card hover:border-accent/40 text-meta hover:text-main font-bold transition-all" data-mode="resource">资源</button>
+            <a href="{filterAllUrl}" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border {#if currentMode == 'all'}border-accent/40 bg-accent/15 text-accent{#else}border-border bg-card hover:border-accent/40 text-meta hover:text-main{/if} font-bold transition-all" data-mode="all">{i18n.t('index.mode.all')}</a>
+            <a href="{filterStandardUrl}" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border {#if currentMode == 'standard'}border-accent/40 bg-accent/15 text-accent{#else}border-border bg-card hover:border-accent/40 text-meta hover:text-main{/if} font-bold transition-all" data-mode="standard">{i18n.t('index.mode.standard')}</a>
+            <a href="{filterTutorialUrl}" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border {#if currentMode == 'tutorial'}border-accent/40 bg-accent/15 text-accent{#else}border-border bg-card hover:border-accent/40 text-meta hover:text-main{/if} font-bold transition-all" data-mode="tutorial">{i18n.t('index.mode.tutorial')}</a>
+            <a href="{filterResourceUrl}" class="post-mode-filter-btn px-3 py-1.5 rounded-xl border {#if currentMode == 'resource'}border-accent/40 bg-accent/15 text-accent{#else}border-border bg-card hover:border-accent/40 text-meta hover:text-main{/if} font-bold transition-all" data-mode="resource">{i18n.t('index.mode.resource')}</a>
         </div>
 
         {#if posts && !posts.isEmpty}
