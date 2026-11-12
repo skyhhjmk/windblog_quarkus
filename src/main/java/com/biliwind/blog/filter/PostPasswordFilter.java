@@ -4,9 +4,10 @@ import com.biliwind.blog.common.annotation.PasswordProtected;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.common.security.UserTokenVerifier;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import com.biliwind.blog.service.PostAccessPolicy;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
@@ -28,12 +29,7 @@ import java.io.IOException;
 public class PostPasswordFilter implements ContainerRequestFilter {
 
     @Inject
-    @Location("blog/password.html")
-    Template passwordTemplate;
-
-    @Inject
-    @Location("blog/password.content.html")
-    Template passwordContentTemplate;
+    PageRenderer pageRenderer;
 
     @Inject
     PostAccessPolicy postAccessPolicy;
@@ -91,9 +87,10 @@ public class PostPasswordFilter implements ContainerRequestFilter {
         boolean isPjax =
                 PjaxHelper.isPjaxRequest(ctx.getHeaders());
 
-        TemplateInstance template =
-                (isPjax ? passwordContentTemplate : passwordTemplate)
-                        .data("post", post);
+        TemplateInstance template = pageRenderer.render(PageView.PASSWORD, ctx.getHeaders(),
+                new PageRenderModel()
+                        .put("post", post)
+                        .put("pjaxRequest", isPjax));
 
         Response response = Response
                 .status(Response.Status.UNAUTHORIZED)

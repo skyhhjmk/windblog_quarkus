@@ -1,8 +1,9 @@
 package com.biliwind.blog.controller;
 
 import com.biliwind.blog.common.helper.PjaxHelper;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -40,47 +41,36 @@ public class LegalController {
     I18n i18n;
 
     @Inject
-    @Location("legal/terms.html")
-    Template termsTemplate;
-
-    @Inject
-    @Location("legal/terms.content.html")
-    Template termsContentTemplate;
-
-    @Inject
-    @Location("legal/privacy.html")
-    Template privacyTemplate;
-
-    @Inject
-    @Location("legal/privacy.content.html")
-    Template privacyContentTemplate;
+    PageRenderer pageRenderer;
 
     @GET
     @Path("/terms")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance terms(@Context HttpHeaders headers) {
-        Template template = PjaxHelper.isPjaxRequest(headers) ? termsContentTemplate : termsTemplate;
         pageIdentityContext.set(pageIdentityService.aliased(
                 canonicalUrlService.buildPath("/terms"), "/terms", "zh-CN"));
-        return template.data("language", "zh-CN")
-                .data("pageTitle", i18n.t("user.terms"))
-                .data("pageDescription", i18n.t("legal.terms_description"))
+        return pageRenderer.render(PageView.LEGAL_TERMS, headers, new PageRenderModel()
+                .put("language", "zh-CN")
+                .put("pjaxRequest", PjaxHelper.isPjaxRequest(headers))
+                .put("pageTitle", i18n.t("user.terms"))
+                .put("pageDescription", i18n.t("legal.terms_description"))
                 // One configured document serves every language; keep a single
                 // canonical URL instead of advertising fake translations.
-                .data("legalContent", sanitizer.sanitize(configManager.getString("legal_terms", "html", DEFAULT_TERMS)));
+                .put("legalContent", sanitizer.sanitize(configManager.getString("legal_terms", "html", DEFAULT_TERMS))));
     }
 
     @GET
     @Path("/privacy")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance privacy(@Context HttpHeaders headers) {
-        Template template = PjaxHelper.isPjaxRequest(headers) ? privacyContentTemplate : privacyTemplate;
         pageIdentityContext.set(pageIdentityService.aliased(
                 canonicalUrlService.buildPath("/privacy"), "/privacy", "zh-CN"));
-        return template.data("language", "zh-CN")
-                .data("pageTitle", i18n.t("user.privacy"))
-                .data("pageDescription", i18n.t("legal.privacy_description"))
-                .data("legalContent", sanitizer.sanitize(configManager.getString("legal_privacy", "html", DEFAULT_PRIVACY)));
+        return pageRenderer.render(PageView.LEGAL_PRIVACY, headers, new PageRenderModel()
+                .put("language", "zh-CN")
+                .put("pjaxRequest", PjaxHelper.isPjaxRequest(headers))
+                .put("pageTitle", i18n.t("user.privacy"))
+                .put("pageDescription", i18n.t("legal.privacy_description"))
+                .put("legalContent", sanitizer.sanitize(configManager.getString("legal_privacy", "html", DEFAULT_PRIVACY))));
     }
 
     private static final String DEFAULT_TERMS = "<h1>用户协议</h1><p>欢迎使用 WindBlog。注册和使用本站服务即表示您同意遵守本协议以及适用的法律法规。</p><h2>账号</h2><p>您应提供真实、准确的注册信息并妥善保管账号凭据。不得冒用他人身份或利用本站从事违法活动。</p><h2>内容</h2><p>您对自行发布的内容负责，不得发布侵犯他人权利、恶意程序或违反法律法规的内容。我们可能依法处理违规内容。</p><h2>服务变更</h2><p>在必要时我们会调整功能或维护服务，并尽量提前告知重大变化。</p>";

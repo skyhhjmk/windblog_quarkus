@@ -15,10 +15,11 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.service.ConfigTemplateData;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
@@ -48,12 +49,7 @@ public class CategoryController {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @Inject
-    @Location("blog/category.html")
-    Template category;
-
-    @Inject
-    @Location("blog/category.content.html")
-    Template categoryContent;
+    PageRenderer pageRenderer;
 
     @Inject
     LanguageContext languageContext;
@@ -103,7 +99,6 @@ public class CategoryController {
                 .toList();
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
-        Template template = pjaxRequest ? categoryContent : category;
         String pageTitle = safeKeyword.isBlank()
                 ? i18n.t("category.title")
                 : i18n.format("category.filtered_title", safeKeyword);
@@ -112,30 +107,30 @@ public class CategoryController {
             canonicalPath = canonicalPath + "?page=" + currentPage;
         }
         pageIdentityContext.set(pageIdentityService.page(canonicalPath, lang));
-        return template
-                .data("language", lang)
-                .data("pjaxRequest", pjaxRequest)
-                .data("jsonLd", structuredDataService.collection(i18n.t("category.title"), "/category", lang,
+        return pageRenderer.render(PageView.CATEGORY, httpHeaders, new PageRenderModel()
+                .put("language", lang)
+                .put("pjaxRequest", pjaxRequest)
+                .put("jsonLd", structuredDataService.collection(i18n.t("category.title"), "/category", lang,
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                 i18n.t("category.title"), "/category"))))
-                .data("detailMode", false)
-                .data("pageTitle", withPageSuffix(pageTitle, currentPage))
-                .data("pageDescription", i18n.t("category.list_description"))
-                .data("navPath", ConfigTemplateData.siteNavRoot() + " / categories")
-                .data("keyword", safeKeyword)
-                .data("totalCount", totalCount)
-                .data("currentPage", currentPage)
-                .data("totalPages", totalPages)
-                .data("hasPrevPage", currentPage > 1)
-                .data("hasNextPage", currentPage < totalPages)
-                .data("prevPageUrl", buildCategoryListUrl(safeKeyword, Math.max(1, currentPage - 1)))
-                .data("nextPageUrl", buildCategoryListUrl(safeKeyword, Math.min(totalPages, currentPage + 1)))
-                .data("firstPageUrl", buildCategoryListUrl(safeKeyword, 1))
-                .data("lastPageUrl", buildCategoryListUrl(safeKeyword, totalPages))
-                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                .put("detailMode", false)
+                .put("pageTitle", withPageSuffix(pageTitle, currentPage))
+                .put("pageDescription", i18n.t("category.list_description"))
+                .put("navPath", ConfigTemplateData.siteNavRoot() + " / categories")
+                .put("keyword", safeKeyword)
+                .put("totalCount", totalCount)
+                .put("currentPage", currentPage)
+                .put("totalPages", totalPages)
+                .put("hasPrevPage", currentPage > 1)
+                .put("hasNextPage", currentPage < totalPages)
+                .put("prevPageUrl", buildCategoryListUrl(safeKeyword, Math.max(1, currentPage - 1)))
+                .put("nextPageUrl", buildCategoryListUrl(safeKeyword, Math.min(totalPages, currentPage + 1)))
+                .put("firstPageUrl", buildCategoryListUrl(safeKeyword, 1))
+                .put("lastPageUrl", buildCategoryListUrl(safeKeyword, totalPages))
+                .put("paginationPages", buildPaginationPages(currentPage, totalPages,
                         pageNumber -> buildCategoryListUrl(safeKeyword, pageNumber)))
-                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
-                .data("categories", pageItems);
+                .put("paginationN", "n".repeat(Math.min(totalPages, 7)))
+                .put("categories", pageItems));
     }
 
     @GET
@@ -179,37 +174,36 @@ public class CategoryController {
                 .toList();
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
-        Template template = pjaxRequest ? categoryContent : category;
         pageIdentityContext.set(pageIdentityService.page(
                 "/category/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang));
-        return template
-                .data("language", lang)
-                .data("jsonLd", structuredDataService.collection(resolveCategoryName(entity, lang), "/category/" + entity.slug, lang,
+        return pageRenderer.render(PageView.CATEGORY, httpHeaders, new PageRenderModel()
+                .put("language", lang)
+                .put("jsonLd", structuredDataService.collection(resolveCategoryName(entity, lang), "/category/" + entity.slug, lang,
                         buildBreadcrumbs(entity, lang).stream().map(item ->
                                 new com.biliwind.blog.service.StructuredDataService.Breadcrumb(item.name(), item.url())).toList()))
-                .data("pjaxRequest", pjaxRequest)
-                .data("detailMode", true)
-                .data("pageTitle", withPageSuffix(
+                .put("pjaxRequest", pjaxRequest)
+                .put("detailMode", true)
+                .put("pageTitle", withPageSuffix(
                         i18n.format("category.detail_title", resolveCategoryName(entity, lang)), currentPage))
-                .data("pageDescription", categoryDescription(entity, lang))
-                .data("navPath", ConfigTemplateData.siteNavRoot() + " / category / " + entity.slug)
-                .data("totalCount", childItems.size())
-                .data("postCount", postCount)
-                .data("currentPage", currentPage)
-                .data("totalPages", totalPages)
-                .data("hasPrevPage", currentPage > 1)
-                .data("hasNextPage", currentPage < totalPages)
-                .data("prevPageUrl", buildCategoryDetailUrl(entity.slug, Math.max(1, currentPage - 1)))
-                .data("nextPageUrl", buildCategoryDetailUrl(entity.slug, Math.min(totalPages, currentPage + 1)))
-                .data("firstPageUrl", buildCategoryDetailUrl(entity.slug, 1))
-                .data("lastPageUrl", buildCategoryDetailUrl(entity.slug, totalPages))
-                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                .put("pageDescription", categoryDescription(entity, lang))
+                .put("navPath", ConfigTemplateData.siteNavRoot() + " / category / " + entity.slug)
+                .put("totalCount", childItems.size())
+                .put("postCount", postCount)
+                .put("currentPage", currentPage)
+                .put("totalPages", totalPages)
+                .put("hasPrevPage", currentPage > 1)
+                .put("hasNextPage", currentPage < totalPages)
+                .put("prevPageUrl", buildCategoryDetailUrl(entity.slug, Math.max(1, currentPage - 1)))
+                .put("nextPageUrl", buildCategoryDetailUrl(entity.slug, Math.min(totalPages, currentPage + 1)))
+                .put("firstPageUrl", buildCategoryDetailUrl(entity.slug, 1))
+                .put("lastPageUrl", buildCategoryDetailUrl(entity.slug, totalPages))
+                .put("paginationPages", buildPaginationPages(currentPage, totalPages,
                         pageNumber -> buildCategoryDetailUrl(entity.slug, pageNumber)))
-                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
-                .data("currentCategory", toCategoryDetailItem(entity, lang))
-                .data("breadcrumbs", buildBreadcrumbs(entity, lang))
-                .data("children", childItems)
-                .data("posts", postItems);
+                .put("paginationN", "n".repeat(Math.min(totalPages, 7)))
+                .put("currentCategory", toCategoryDetailItem(entity, lang))
+                .put("breadcrumbs", buildBreadcrumbs(entity, lang))
+                .put("children", childItems)
+                .put("posts", postItems));
     }
 
     private CategoryPostItem toCategoryPostItem(Post post, String lang, List<TagItem> tags,

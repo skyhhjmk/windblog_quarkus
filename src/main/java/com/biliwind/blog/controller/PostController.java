@@ -11,10 +11,10 @@ import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.PostAccessPolicy;
 import com.biliwind.blog.service.PageCachePolicy;
 import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import io.quarkus.runtime.annotations.RegisterForReflection;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import org.jboss.logging.Logger;
 import jakarta.inject.Inject;
@@ -38,12 +38,7 @@ public class PostController {
             "AUTOMATION_USE_ALLOWED", "可用于自动化程序");
 
     @Inject
-    @Location("blog/post.html")
-    Template postTemplate;
-
-    @Inject
-    @Location("blog/post.content.html")
-    Template postContentTemplate;
+    PageRenderer pageRenderer;
 
     @Inject
     LanguageContext languageContext;
@@ -244,13 +239,6 @@ public class PostController {
                 : renderedBody.get().body();
 
         String localizedAiSummary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), resolvedLang);
-
-        Template template = null;
-        if (pjaxRequest) {
-            template = postContentTemplate;
-        } else {
-            template = postTemplate;
-        }
 
         List<TagItem> postTags = new java.util.ArrayList<>();
         if (snapshot.tags() != null) {
@@ -489,7 +477,7 @@ public class PostController {
             }
         }
 
-        TemplateInstance templateInstance = model.render(template);
+        TemplateInstance templateInstance = pageRenderer.render(PageView.POST, httpHeaders, model);
         Response.ResponseBuilder responseBuilder = Response.ok(templateInstance);
         boolean isPrivateContext = protectedPage || trackedReferral || requestUserId != null || hasPurchased;
         if (isPrivateContext) {

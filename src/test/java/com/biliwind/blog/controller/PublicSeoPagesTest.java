@@ -25,6 +25,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -307,9 +308,65 @@ class PublicSeoPagesTest {
     @Test
     void pjaxFragmentsCarryTheServerCanonical() {
         given().header("X-PJAX", "true").get("/").then().statusCode(200)
-                .body(containsString("data-page-canonical=\"" + SITE + "/\""));
+                .body(containsString("<link rel=\"canonical\" href=\"" + SITE + "/\""));
         given().header("X-PJAX", "true").get("/zh-cn/category").then().statusCode(200)
-                .body(containsString("data-page-canonical=\"" + SITE + "/zh-cn/category\""));
+                .body(containsString("<link rel=\"canonical\" href=\"" + SITE + "/zh-cn/category\""));
+    }
+
+    @Test
+    void documentAndFragmentHeadMetadataAreIdentical() {
+        for (String path : java.util.List.of(
+                "/",
+                "/post/" + bilingualSlug,
+                "/category/" + categorySlug,
+                "/tag/" + tagSlug,
+                "/search",
+                "/tools",
+                "/tools/subnet",
+                "/tools/timestamp",
+                "/tools/log-formatter",
+                "/tools/base-encoder",
+                "/tools/cron",
+                "/tools/regex",
+                "/tools/hash",
+                "/tools/json-diff",
+                "/tools/serial",
+                "/zh-cn/terms",
+                "/zh-cn/privacy",
+                "/link",
+                "/link/apply",
+                "/user/login",
+                "/user/register",
+                "/user/forgot-password",
+                "/user/reset-password",
+                "/offline")) {
+            assertHeadMetadataMatches(path);
+        }
+    }
+
+    private void assertHeadMetadataMatches(String path) {
+        String document = given().get(path).then().statusCode(200).extract().asString()
+                .replace("﻿", "");
+        String fragment = given().header("X-PJAX", "true").get(path).then().statusCode(200)
+                .extract().asString().replace("﻿", "");
+
+        org.jsoup.nodes.Element template = org.jsoup.Jsoup.parseBodyFragment(fragment)
+                .selectFirst("template#pjax-head-metadata");
+        assertNotNull(template, path + " fragment must carry #pjax-head-metadata");
+        assertEquals(metadataNodes(org.jsoup.Jsoup.parse(document).head()),
+                metadataNodes(org.jsoup.Jsoup.parseBodyFragment(template.html()).body()),
+                path + " document and fragment head metadata must be identical");
+    }
+
+    private static java.util.List<String> metadataNodes(org.jsoup.nodes.Element parent) {
+        return parent.select("[data-pjax-managed]").stream()
+                .map(node -> node.tagName() + "|" + node.data() + "|"
+                        + node.attributes().asList().stream()
+                        .map(attribute -> attribute.getKey() + "=" + attribute.getValue())
+                        .sorted()
+                        .collect(java.util.stream.Collectors.joining("&")))
+                .sorted()
+                .toList();
     }
 
     @Test

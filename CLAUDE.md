@@ -47,7 +47,7 @@ cd admin-flutter && flutter pub get && flutter analyze && flutter test
 
 ### Rendering: Qute + PJAX
 
-Public pages are served by JAX-RS controllers that inject two templates — a full document (`blog/post.html`, extends `base.html`) and a fragment (`blog/post.content.html`) — and select one with `PjaxHelper.isPjaxRequest` (`X-PJAX` header). **A new public page needs both templates**, and `PjaxResponseFilter` marks all HTML responses `no-store` with `Vary: X-PJAX` because fragment and document share one URL.
+Public pages are served by JAX-RS controllers that render a `PageView`: a document (`blog/post.html`, extends `base.html`) plus a fragment (`blog/post.content.html`). **A new public page needs both templates and a `PageView` constant**; the controller passes only that constant and its `PageRenderModel` to `PageRenderer`, which selects document or fragment from the `X-PJAX` header. The fragment must re-emit the shared head block with `{#if pjaxRequest}<template id="pjax-head-metadata">{#include fragments/head-metadata.html /}</template>{/if}`; `base.html` includes the same `fragments/head-metadata.html`, so document and fragment cannot drift. `PjaxResponseFilter` marks all HTML responses `no-store` with `Vary: X-PJAX` because fragment and document share one URL.
 
 `base.html` is the only shell: it defines the layout, injects `window.i18n`, the CSP nonce, and loads every script globally. PJAX replaces `#pjax-container` without re-running scripts, so page-specific script splitting is not possible without first wiring loading into the PJAX lifecycle. Article list → detail uses a manual FLIP shared-element animation (see `.agents/skills/windblog-pjax-article-transitions/SKILL.md`).
 

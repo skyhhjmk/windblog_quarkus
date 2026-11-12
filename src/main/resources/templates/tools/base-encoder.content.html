@@ -1,7 +1,10 @@
-<div id="pjax-content-root" data-page-canonical="{canonicalUrl}" data-page-robots="index,follow" data-seeray-layout-version="windblog-pjax-v1"
-     data-page-title="{pageTitle}"
-     data-page-description="{pageDescription}"
-     data-page-keywords="{pageKeywords}">
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
     <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / base-encoder</div>
 
     <section class="space-y-8" id="baseEncoderToolApp">

@@ -17,11 +17,12 @@ import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.RoutedHttpExchange;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchPostSearchService;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import com.biliwind.blog.service.SecurityMetricsService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.runtime.annotations.RegisterForReflection;
@@ -61,12 +62,7 @@ public class SearchController {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Inject
-    @Location("blog/search.html")
-    Template search;
-
-    @Inject
-    @Location("blog/search.content.html")
-    Template searchContent;
+    PageRenderer pageRenderer;
 
     @Inject
     LanguageContext languageContext;
@@ -210,39 +206,39 @@ public class SearchController {
             pageItems = searchHits.subList(fromIndex, toIndex);
         }
 
-        Template template = PjaxHelper.isPjaxRequest(httpHeaders) ? searchContent : search;
-        return template
-                .data("language", lang)
-                .data("pageTitle", buildPageTitle(searchKeyword))
-                .data("searchKeyword", searchKeyword)
-                .data("parsedQuery", SearchQueryParser.parse(searchKeyword))
-                .data("hasAdvancedFilters", SearchQueryParser.parse(searchKeyword).hasFilters())
-                .data("searchType", searchType)
-                .data("searchSort", searchSort)
-                .data("searchDate", searchDate)
-                .data("hasKeyword", !searchKeyword.isBlank())
-                .data("totalCount", totalCount)
-                .data("currentPage", currentPage)
-                .data("totalPages", totalPages)
-                .data("hasPrevPage", currentPage > 1)
-                .data("hasNextPage", currentPage < totalPages)
-                .data("prevPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, Math.max(1, currentPage - 1)))
-                .data("nextPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, Math.min(totalPages, currentPage + 1)))
-                .data("firstPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, 1))
-                .data("lastPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, totalPages))
-                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+        return pageRenderer.render(PageView.SEARCH, httpHeaders, new PageRenderModel()
+                .put("language", lang)
+                .put("pjaxRequest", PjaxHelper.isPjaxRequest(httpHeaders))
+                .put("pageTitle", buildPageTitle(searchKeyword))
+                .put("searchKeyword", searchKeyword)
+                .put("parsedQuery", SearchQueryParser.parse(searchKeyword))
+                .put("hasAdvancedFilters", SearchQueryParser.parse(searchKeyword).hasFilters())
+                .put("searchType", searchType)
+                .put("searchSort", searchSort)
+                .put("searchDate", searchDate)
+                .put("hasKeyword", !searchKeyword.isBlank())
+                .put("totalCount", totalCount)
+                .put("currentPage", currentPage)
+                .put("totalPages", totalPages)
+                .put("hasPrevPage", currentPage > 1)
+                .put("hasNextPage", currentPage < totalPages)
+                .put("prevPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, Math.max(1, currentPage - 1)))
+                .put("nextPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, Math.min(totalPages, currentPage + 1)))
+                .put("firstPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, 1))
+                .put("lastPageUrl", buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, totalPages))
+                .put("paginationPages", buildPaginationPages(currentPage, totalPages,
                         pageNumber -> buildSearchUrl(searchKeyword, searchType, searchSort, searchDate, pageNumber)))
-                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
-                .data("typeLinks", buildTypeLinks(searchKeyword, searchType, searchSort, searchDate))
-                .data("sortLinks", buildSortLinks(searchKeyword, searchType, searchSort, searchDate))
-                .data("dateLinks", buildDateLinks(searchKeyword, searchType, searchSort, searchDate))
-                .data("hits", pageItems)
-                .data("usedElasticsearch", usedElasticsearch)
-                .data("esDegraded", esDegraded)
-                .data("edgeNode", edgeNode)
-                .data("deepSearchRequested", deepSearchRequested)
-                .data("deepSearchFailed", deepSearchFailed)
-                .data("deepSearchUrl", buildDeepSearchUrl(searchKeyword, searchType, searchSort, searchDate));
+                .put("paginationN", "n".repeat(Math.min(totalPages, 7)))
+                .put("typeLinks", buildTypeLinks(searchKeyword, searchType, searchSort, searchDate))
+                .put("sortLinks", buildSortLinks(searchKeyword, searchType, searchSort, searchDate))
+                .put("dateLinks", buildDateLinks(searchKeyword, searchType, searchSort, searchDate))
+                .put("hits", pageItems)
+                .put("usedElasticsearch", usedElasticsearch)
+                .put("esDegraded", esDegraded)
+                .put("edgeNode", edgeNode)
+                .put("deepSearchRequested", deepSearchRequested)
+                .put("deepSearchFailed", deepSearchFailed)
+                .put("deepSearchUrl", buildDeepSearchUrl(searchKeyword, searchType, searchSort, searchDate)));
     }
 
     @GET

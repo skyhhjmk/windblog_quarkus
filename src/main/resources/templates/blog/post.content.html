@@ -1,30 +1,10 @@
-<div data-page-robots="{seoRobots}" id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
-     data-page-title="{pageTitle ?: postTitle ?: i18n.t('post.page_title_default')}"
-     data-page-description="{pageDescription ?: ''}"
-     data-page-keywords="{pageKeywords ?: ''}"
-     data-page-canonical="{canonicalUrl ?: ''}">
-    {#if pjaxRequest}
-        <template id="pjax-head-metadata">
-            {#for alternate in seoAlternates}
-            <link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}" data-pjax-managed="true"/>
-            {/for}
-            {#if ogData.or(null)}
-                {#for entry in ogData.entrySet}
-                    {#if entry.key.startsWith('og:') || entry.key.startsWith('article:')}
-                        <meta property="{entry.key}" content="{entry.value}" data-pjax-managed="true"/>
-                    {#else}
-                        <meta name="{entry.key}" content="{entry.value}" data-pjax-managed="true"/>
-                    {/if}
-                {/for}
-            {/if}
-            {#if ampUrl.or(null)}
-                <link rel="amphtml" href="{ampUrl}" data-pjax-managed="true"/>
-            {/if}
-            {#if jsonLd.or(null)}
-                <script type="application/ld+json" nonce="{cspNonce}" data-pjax-managed="true">{jsonLd.raw}</script>
-            {/if}
-        </template>
-    {/if}
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle ?: postTitle ?: i18n.t('post.page_title_default')}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
     <div id="pjax-nav-path" class="hidden">
         {config:siteNavRoot} / post / {postSlug ?: 'unknown'}
     </div>

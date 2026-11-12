@@ -789,7 +789,7 @@
                     document.title = title;
                 }
             }
-            updatePjaxHeadMetadata(container, url);
+            updatePjaxHeadMetadata(container);
 
             const navPathNode = document.getElementById('nav-path-text');
             const navHolder = container.querySelector('#pjax-nav-path');
@@ -839,72 +839,14 @@
             }
         }
 
-        function updatePjaxHeadMetadata(container, url) {
-            const pageRoot = container.querySelector('#pjax-content-root');
-            if (!pageRoot) {
-                return;
-            }
-
-            const descriptionMeta = document.head.querySelector('meta[name="description"]');
-            if (descriptionMeta) {
-                const siteDescription = descriptionMeta.getAttribute('data-site-content') || '';
-                const pageDescription = pageRoot.getAttribute('data-page-description') || siteDescription;
-                descriptionMeta.setAttribute('content', pageDescription);
-            }
-
-            const keywordsMeta = document.head.querySelector('meta[name="keywords"]');
-            if (keywordsMeta) {
-                const siteKeywords = keywordsMeta.getAttribute('data-site-content') || '';
-                const pageKeywords = pageRoot.getAttribute('data-page-keywords') || siteKeywords;
-                keywordsMeta.setAttribute('content', pageKeywords);
-            }
-
-            const canonicalLink = document.head.querySelector('link[rel="canonical"]');
-            if (canonicalLink) {
-                const pageCanonical = pageRoot.getAttribute('data-page-canonical');
-                const targetUrl = new URL(url, window.location.href);
-                let canonicalUrl = pageCanonical;
-                if (!canonicalUrl) {
-                    const configuredBaseUrl = canonicalLink.getAttribute('data-site-base') || targetUrl.origin;
-                    const normalizedBaseUrl = configuredBaseUrl.replace(/\/+$/, '');
-                    canonicalUrl = normalizedBaseUrl + targetUrl.pathname;
-                }
-                canonicalLink.setAttribute('href', canonicalUrl);
-            }
-
-            const pageRobots = pageRoot.getAttribute('data-page-robots') || '';
-            let robotsMeta = document.head.querySelector('meta[name="robots"]');
-            if (pageRobots) {
-                if (!robotsMeta) {
-                    robotsMeta = document.createElement('meta');
-                    robotsMeta.setAttribute('name', 'robots');
-                    document.head.appendChild(robotsMeta);
-                }
-                robotsMeta.setAttribute('content', pageRobots);
-            } else if (robotsMeta) {
-                robotsMeta.remove();
-            }
-
-            document.head.querySelectorAll(
-                'meta[property^="og:"], meta[property^="article:"], meta[name^="twitter:"], '
-                    + 'script[type="application/ld+json"], link[rel="alternate"][hreflang], link[rel="amphtml"]'
-            ).forEach(function (metadataNode) {
+        function updatePjaxHeadMetadata(container) {
+            document.head.querySelectorAll('[data-pjax-managed]').forEach(function (metadataNode) {
                 metadataNode.remove();
             });
 
-            const metadataTemplate = pageRoot.querySelector('#pjax-head-metadata');
+            const metadataTemplate = container.querySelector('#pjax-head-metadata');
             if (metadataTemplate) {
                 document.head.appendChild(metadataTemplate.content.cloneNode(true));
-            }
-            if (!document.head.querySelector('meta[property="og:title"]')) {
-                const description = document.head.querySelector('meta[name="description"]')?.content || '';
-                const canonical = document.head.querySelector('link[rel="canonical"]')?.href || url;
-                [['og:title', document.title], ['og:description', description], ['og:type', 'website'], ['og:url', canonical], ['twitter:card', 'summary'], ['twitter:title', document.title], ['twitter:description', description]].forEach(([name, content]) => {
-                    const meta = document.createElement('meta');
-                    meta.setAttribute(name.startsWith('og:') ? 'property' : 'name', name);
-                    meta.content = content;
-                    document.head.appendChild(meta);
-                });
             }
         }
 
@@ -2004,7 +1946,7 @@
             WindBlogLifecycle.beginNavigation({url: url});
             const previousHtml = container.innerHTML;
             const previousTitle = document.title;
-            const previousHead = Array.from(document.head.querySelectorAll('meta, link[rel="canonical"], script[type="application/ld+json"]')).map(node => node.cloneNode(true));
+            const previousHead = Array.from(document.head.querySelectorAll('[data-pjax-managed]')).map(node => node.cloneNode(true));
             let committed = false;
             try {
                 const response = await fetch(url, {
@@ -2052,7 +1994,7 @@
                     analyticsCancelNavigation();
                     container.innerHTML = previousHtml;
                     document.title = previousTitle;
-                    document.head.querySelectorAll('meta, link[rel="canonical"], script[type="application/ld+json"]').forEach(node => node.remove());
+                    document.head.querySelectorAll('[data-pjax-managed]').forEach(node => node.remove());
                     previousHead.forEach(node => document.head.appendChild(node));
                     WindBlogLifecycle.mountPage({url: displayedUrl});
                     throw error;

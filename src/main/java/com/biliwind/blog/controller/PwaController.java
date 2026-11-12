@@ -5,8 +5,9 @@ import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.i18n.I18n;
 import com.biliwind.blog.service.ConfigTemplateData;
 import com.biliwind.blog.service.FaviconResolverService;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -34,12 +35,7 @@ public class PwaController {
     private static final String MANIFEST_MEDIA_TYPE = "application/manifest+json; charset=UTF-8";
 
     @Inject
-    @Location("system/offline.html")
-    Template offlinePage;
-
-    @Inject
-    @Location("system/offline.content.html")
-    Template offlineContent;
+    PageRenderer pageRenderer;
 
     @Inject
     LanguageContext languageContext;
@@ -106,14 +102,12 @@ public class PwaController {
                 : offlineTitle;
         String pageDescription = i18n != null ? i18n.t("offline.description") : "";
 
-        Template targetTemplate = pjaxRequest ? offlineContent : offlinePage;
-        String renderedHtml = targetTemplate
-                .data("pageTitle", pageTitle)
-                .data("pageDescription", pageDescription)
-                .data("language", language)
-                .data("pjaxRequest", pjaxRequest)
-                .data("seoRobots", "noindex,follow")
-                .render();
+        String renderedHtml = pageRenderer.render(PageView.OFFLINE, httpHeaders, new PageRenderModel()
+                .put("pjaxRequest", pjaxRequest)
+                .put("pageTitle", pageTitle)
+                .put("pageDescription", pageDescription)
+                .put("language", language)
+                .put("seoRobots", "noindex,follow")).render();
 
         return Response.ok(renderedHtml)
                 .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"))

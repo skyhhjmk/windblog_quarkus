@@ -15,9 +15,10 @@ import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.service.ConfigTemplateData;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import io.quarkus.panache.common.Page;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
@@ -46,12 +47,7 @@ public class TagController {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @Inject
-    @Location("blog/tag.html")
-    Template tag;
-
-    @Inject
-    @Location("blog/tag.content.html")
-    Template tagContent;
+    PageRenderer pageRenderer;
 
     @Inject
     LanguageContext languageContext;
@@ -102,7 +98,6 @@ public class TagController {
                 .toList();
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
-        Template template = pjaxRequest ? tagContent : tag;
         String pageTitle = safeKeyword.isBlank()
                 ? i18n.t("tag.title")
                 : i18n.format("tag.filtered_title", safeKeyword);
@@ -111,30 +106,30 @@ public class TagController {
             canonicalPath = canonicalPath + "?page=" + currentPage;
         }
         pageIdentityContext.set(pageIdentityService.page(canonicalPath, lang));
-        return template
-                .data("language", lang)
-                .data("pjaxRequest", pjaxRequest)
-                .data("jsonLd", structuredDataService.collection(i18n.t("tag.title"), "/tag", lang,
+        return pageRenderer.render(PageView.TAG, httpHeaders, new PageRenderModel()
+                .put("language", lang)
+                .put("pjaxRequest", pjaxRequest)
+                .put("jsonLd", structuredDataService.collection(i18n.t("tag.title"), "/tag", lang,
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                 i18n.t("tag.title"), "/tag"))))
-                .data("detailMode", false)
-                .data("pageTitle", withPageSuffix(pageTitle, currentPage))
-                .data("pageDescription", i18n.t("tag.list_description"))
-                .data("navPath", ConfigTemplateData.siteNavRoot() + " / tags")
-                .data("keyword", safeKeyword)
-                .data("totalCount", totalCount)
-                .data("currentPage", currentPage)
-                .data("totalPages", totalPages)
-                .data("hasPrevPage", currentPage > 1)
-                .data("hasNextPage", currentPage < totalPages)
-                .data("prevPageUrl", buildTagListUrl(safeKeyword, Math.max(1, currentPage - 1)))
-                .data("nextPageUrl", buildTagListUrl(safeKeyword, Math.min(totalPages, currentPage + 1)))
-                .data("firstPageUrl", buildTagListUrl(safeKeyword, 1))
-                .data("lastPageUrl", buildTagListUrl(safeKeyword, totalPages))
-                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                .put("detailMode", false)
+                .put("pageTitle", withPageSuffix(pageTitle, currentPage))
+                .put("pageDescription", i18n.t("tag.list_description"))
+                .put("navPath", ConfigTemplateData.siteNavRoot() + " / tags")
+                .put("keyword", safeKeyword)
+                .put("totalCount", totalCount)
+                .put("currentPage", currentPage)
+                .put("totalPages", totalPages)
+                .put("hasPrevPage", currentPage > 1)
+                .put("hasNextPage", currentPage < totalPages)
+                .put("prevPageUrl", buildTagListUrl(safeKeyword, Math.max(1, currentPage - 1)))
+                .put("nextPageUrl", buildTagListUrl(safeKeyword, Math.min(totalPages, currentPage + 1)))
+                .put("firstPageUrl", buildTagListUrl(safeKeyword, 1))
+                .put("lastPageUrl", buildTagListUrl(safeKeyword, totalPages))
+                .put("paginationPages", buildPaginationPages(currentPage, totalPages,
                         pageNumber -> buildTagListUrl(safeKeyword, pageNumber)))
-                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
-                .data("tags", pageItems);
+                .put("paginationN", "n".repeat(Math.min(totalPages, 7)))
+                .put("tags", pageItems));
     }
 
     @GET
@@ -179,34 +174,33 @@ public class TagController {
                 .toList();
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
-        Template template = pjaxRequest ? tagContent : tag;
         pageIdentityContext.set(pageIdentityService.page(
                 "/tag/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang));
-        return template
-                .data("language", lang)
-                .data("jsonLd", structuredDataService.collection(tagName, "/tag/" + entity.slug, lang,
+        return pageRenderer.render(PageView.TAG, httpHeaders, new PageRenderModel()
+                .put("language", lang)
+                .put("jsonLd", structuredDataService.collection(tagName, "/tag/" + entity.slug, lang,
                         List.of(new com.biliwind.blog.service.StructuredDataService.Breadcrumb(
                                         i18n.t("tag.title"), "/tag"),
                                 new com.biliwind.blog.service.StructuredDataService.Breadcrumb(tagName, "/tag/" + entity.slug))))
-                .data("pjaxRequest", pjaxRequest)
-                .data("detailMode", true)
-                .data("pageTitle", withPageSuffix(i18n.format("tag.detail_title", tagName), currentPage))
-                .data("pageDescription", tagPageDescription(entity, lang))
-                .data("navPath", ConfigTemplateData.siteNavRoot() + " / tag / " + entity.slug)
-                .data("totalCount", totalCount)
-                .data("currentPage", currentPage)
-                .data("totalPages", totalPages)
-                .data("hasPrevPage", currentPage > 1)
-                .data("hasNextPage", currentPage < totalPages)
-                .data("prevPageUrl", buildTagDetailUrl(entity.slug, Math.max(1, currentPage - 1)))
-                .data("nextPageUrl", buildTagDetailUrl(entity.slug, Math.min(totalPages, currentPage + 1)))
-                .data("firstPageUrl", buildTagDetailUrl(entity.slug, 1))
-                .data("lastPageUrl", buildTagDetailUrl(entity.slug, totalPages))
-                .data("paginationPages", buildPaginationPages(currentPage, totalPages,
+                .put("pjaxRequest", pjaxRequest)
+                .put("detailMode", true)
+                .put("pageTitle", withPageSuffix(i18n.format("tag.detail_title", tagName), currentPage))
+                .put("pageDescription", tagPageDescription(entity, lang))
+                .put("navPath", ConfigTemplateData.siteNavRoot() + " / tag / " + entity.slug)
+                .put("totalCount", totalCount)
+                .put("currentPage", currentPage)
+                .put("totalPages", totalPages)
+                .put("hasPrevPage", currentPage > 1)
+                .put("hasNextPage", currentPage < totalPages)
+                .put("prevPageUrl", buildTagDetailUrl(entity.slug, Math.max(1, currentPage - 1)))
+                .put("nextPageUrl", buildTagDetailUrl(entity.slug, Math.min(totalPages, currentPage + 1)))
+                .put("firstPageUrl", buildTagDetailUrl(entity.slug, 1))
+                .put("lastPageUrl", buildTagDetailUrl(entity.slug, totalPages))
+                .put("paginationPages", buildPaginationPages(currentPage, totalPages,
                         pageNumber -> buildTagDetailUrl(entity.slug, pageNumber)))
-                .data("paginationN", "n".repeat(Math.min(totalPages, 7)))
-                .data("currentTag", new TagDetailItem(entity.slug, tagName, tagDescription, totalCount, formatDate(entity.createdAt)))
-                .data("posts", postItems);
+                .put("paginationN", "n".repeat(Math.min(totalPages, 7)))
+                .put("currentTag", new TagDetailItem(entity.slug, tagName, tagDescription, totalCount, formatDate(entity.createdAt)))
+                .put("posts", postItems));
     }
 
     private TagListItem toTagListItem(Tag tag, String lang) {

@@ -6,6 +6,9 @@ import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkType;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -26,29 +29,8 @@ import java.util.List;
 @io.smallrye.common.annotation.Blocking
 public class LinkController {
 
-        @Inject
-        @Location("blog/link.html")
-        Template link;
-
     @Inject
-    @Location("blog/link.content.html")
-    Template linkContent;
-
-    @Inject
-    @Location("blog/link-apply.html")
-    Template linkApply;
-
-    @Inject
-    @Location("blog/link-apply.content.html")
-    Template linkApplyContent;
-
-    @Inject
-    @Location("blog/link-detail.html")
-    Template linkDetail;
-
-    @Inject
-    @Location("blog/link-detail.content.html")
-    Template linkDetailContent;
+    PageRenderer pageRenderer;
 
         @Inject
         LanguageContext languageContext;
@@ -75,21 +57,13 @@ public class LinkController {
     @Path("/apply")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance application(@Context HttpHeaders httpHeaders) {
-        Template template = linkApply;
-        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
-            template = linkApplyContent;
-        }
-        return template
-                .data("pageTitle", "申请友情链接")
-                .data("language", languageContext.getLang());
+        return pageRenderer.render(PageView.LINK_APPLY, httpHeaders, new PageRenderModel()
+                .put("pjaxRequest", PjaxHelper.isPjaxRequest(httpHeaders))
+                .put("pageTitle", "申请友情链接")
+                .put("language", languageContext.getLang()));
     }
 
         private TemplateInstance render(HttpHeaders httpHeaders, String type) {
-            Template template = link;
-            if (PjaxHelper.isPjaxRequest(httpHeaders)) {
-                template = linkContent;
-            }
-                
                 List<Link> eligibleLinks = Link.<Link>list(
                                 "status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
                                 (short) 1,
@@ -121,12 +95,13 @@ public class LinkController {
                     .distinct()
                     .toList();
                 
-                return template
-                        .data("pageTitle", "友情链接")
-                                .data("language", languageContext.getLang())
-                        .data("linkTypes", activeTypes)
-                        .data("currentType", type)
-                                .data("links", links);
+                return pageRenderer.render(PageView.LINK, httpHeaders, new PageRenderModel()
+                        .put("pjaxRequest", PjaxHelper.isPjaxRequest(httpHeaders))
+                        .put("pageTitle", "友情链接")
+                        .put("language", languageContext.getLang())
+                        .put("linkTypes", activeTypes)
+                        .put("currentType", type)
+                        .put("links", links));
         }
         
         private LinkType parseLinkType(String type) {
@@ -168,23 +143,19 @@ public class LinkController {
             throw new WebApplicationException(404);
         }
 
-        Template template = linkDetail;
-        if (PjaxHelper.isPjaxRequest(httpHeaders)) {
-            template = linkDetailContent;
-        }
-
         String pageTitle = linkEntity.seoTitle;
         if (pageTitle == null || pageTitle.isBlank()) {
             pageTitle = linkEntity.name + " - 资源详情";
         }
 
-        return template
-                .data("pageTitle", pageTitle)
-                .data("language", languageContext.getLang())
-                .data("seoTitle", linkEntity.seoTitle)
-                .data("pageKeywords", linkEntity.seoKeywords)
-                .data("pageDescription", linkEntity.seoDescription)
-                .data("link", linkEntity);
+        return pageRenderer.render(PageView.LINK_DETAIL, httpHeaders, new PageRenderModel()
+                .put("pjaxRequest", PjaxHelper.isPjaxRequest(httpHeaders))
+                .put("pageTitle", pageTitle)
+                .put("language", languageContext.getLang())
+                .put("seoTitle", linkEntity.seoTitle)
+                .put("pageKeywords", linkEntity.seoKeywords)
+                .put("pageDescription", linkEntity.seoDescription)
+                .put("link", linkEntity));
     }
 
     @GET

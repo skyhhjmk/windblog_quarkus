@@ -6,11 +6,12 @@ import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import com.biliwind.blog.service.security.ClientIpResolver;
 import com.biliwind.blog.service.security.SecurityRateLimitService;
 import io.vertx.ext.web.RoutingContext;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.smallrye.jwt.build.Jwt;
 import io.quarkus.runtime.annotations.RegisterForReflection;
@@ -59,12 +60,7 @@ public class UserController {
     boolean cookieSecure;
 
     @Inject
-    @Location("user/login.html")
-    Template loginTemplate;
-
-    @Inject
-    @Location("user/login.content.html")
-    Template loginContentTemplate;
+    PageRenderer pageRenderer;
 
     @Inject
     ConfigManager configManager;
@@ -74,38 +70,6 @@ public class UserController {
 
     @Inject
     com.biliwind.blog.service.PasswordResetService passwordResetService;
-
-    @Inject
-    @Location("user/register.html")
-    Template registerTemplate;
-
-    @Inject
-    @Location("user/register.content.html")
-    Template registerContentTemplate;
-
-    @Inject
-    @Location("user/forgot-password.html")
-    Template forgotPasswordTemplate;
-
-    @Inject
-    @Location("user/forgot-password.content.html")
-    Template forgotPasswordContentTemplate;
-
-    @Inject
-    @Location("user/reset-password.html")
-    Template resetPasswordTemplate;
-
-    @Inject
-    @Location("user/reset-password.content.html")
-    Template resetPasswordContentTemplate;
-
-    @Inject
-    @Location("user/center.html")
-    Template centerTemplate;
-
-    @Inject
-    @Location("user/center.content.html")
-    Template centerContentTemplate;
 
     @Inject
     com.biliwind.blog.service.WalletService walletService;
@@ -142,10 +106,10 @@ public class UserController {
         }
         String targetRedirect = sanitizeRedirect(redirect);
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
-        Template template = isPjax ? loginContentTemplate : loginTemplate;
-        return Response.ok(template
-                .data("language", languageContext.getLang())
-                .data("redirect", targetRedirect))
+        return Response.ok(pageRenderer.render(PageView.USER_LOGIN, headers, new PageRenderModel()
+                        .put("pjaxRequest", isPjax)
+                        .put("language", languageContext.getLang())
+                        .put("redirect", targetRedirect)))
                 .type(MediaType.TEXT_HTML_TYPE)
                 .build();
     }
@@ -165,10 +129,10 @@ public class UserController {
         }
         String targetRedirect = sanitizeRedirect(redirect);
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
-        Template template = isPjax ? registerContentTemplate : registerTemplate;
-        return Response.ok(template
-                .data("language", languageContext.getLang())
-                .data("redirect", targetRedirect))
+        return Response.ok(pageRenderer.render(PageView.USER_REGISTER, headers, new PageRenderModel()
+                        .put("pjaxRequest", isPjax)
+                        .put("language", languageContext.getLang())
+                        .put("redirect", targetRedirect)))
                 .type(MediaType.TEXT_HTML_TYPE)
                 .build();
     }
@@ -177,10 +141,9 @@ public class UserController {
     @Path("/forgot-password")
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance forgotPasswordPage(@Context HttpHeaders headers) {
-        Template template = PjaxHelper.isPjaxRequest(headers)
-                ? forgotPasswordContentTemplate
-                : forgotPasswordTemplate;
-        return template.data("language", languageContext.getLang());
+        return pageRenderer.render(PageView.USER_FORGOT_PASSWORD, headers, new PageRenderModel()
+                .put("pjaxRequest", PjaxHelper.isPjaxRequest(headers))
+                .put("language", languageContext.getLang()));
     }
 
     @GET
@@ -188,13 +151,11 @@ public class UserController {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance resetPasswordPage(@QueryParam("token") String token,
                                                @Context HttpHeaders headers) {
-        Template template = PjaxHelper.isPjaxRequest(headers)
-                ? resetPasswordContentTemplate
-                : resetPasswordTemplate;
-        return template
-                .data("language", languageContext.getLang())
-                .data("token", token == null ? "" : token)
-                .data("valid", passwordResetService.isTokenValid(token));
+        return pageRenderer.render(PageView.USER_RESET_PASSWORD, headers, new PageRenderModel()
+                .put("pjaxRequest", PjaxHelper.isPjaxRequest(headers))
+                .put("language", languageContext.getLang())
+                .put("token", token == null ? "" : token)
+                .put("valid", passwordResetService.isTokenValid(token)));
     }
 
     @GET
@@ -222,20 +183,20 @@ public class UserController {
         int expPercent = Math.min(100, Math.max(0, (int) ((float) currentLevelExp / currentLevelMaxExp * 100)));
 
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
-        Template template = isPjax ? centerContentTemplate : centerTemplate;
-        return Response.ok(template
-                .data("language", languageContext.getLang())
-                .data("user", profile)
-                .data("pointsBalance", pointsBalance)
-                .data("hasCheckedIn", hasCheckedIn)
-                .data("level", level)
-                .data("exp", exp)
-                .data("currentLevelExp", currentLevelExp)
-                .data("currentLevelMaxExp", currentLevelMaxExp)
-                .data("expToNextLevel", Math.max(0, currentLevelMaxExp - currentLevelExp))
-                .data("expPercent", expPercent)
-                .data("allowUserPostSubmission",
-                        configManager.getBoolean("feature_toggles", "enable_user_post_submission", true)))
+        return Response.ok(pageRenderer.render(PageView.USER_CENTER, headers, new PageRenderModel()
+                        .put("pjaxRequest", isPjax)
+                        .put("language", languageContext.getLang())
+                        .put("user", profile)
+                        .put("pointsBalance", pointsBalance)
+                        .put("hasCheckedIn", hasCheckedIn)
+                        .put("level", level)
+                        .put("exp", exp)
+                        .put("currentLevelExp", currentLevelExp)
+                        .put("currentLevelMaxExp", currentLevelMaxExp)
+                        .put("expToNextLevel", Math.max(0, currentLevelMaxExp - currentLevelExp))
+                        .put("expPercent", expPercent)
+                        .put("allowUserPostSubmission",
+                                configManager.getBoolean("feature_toggles", "enable_user_post_submission", true))))
                 .type(MediaType.TEXT_HTML_TYPE)
                 .build();
     }

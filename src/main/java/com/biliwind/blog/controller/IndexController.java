@@ -12,11 +12,10 @@ import com.biliwind.blog.service.ConfigTemplateData;
 import com.biliwind.blog.service.PageCachePolicy;
 import com.biliwind.blog.service.PageIdentityService;
 import com.biliwind.blog.service.PageRenderModel;
+import com.biliwind.blog.service.PageRenderer;
+import com.biliwind.blog.service.PageView;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.runtime.annotations.RegisterForReflection;
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
-import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -58,12 +57,7 @@ public class IndexController {
             "</.well-known/api-catalog>; rel=\"describedby\"; type=\"application/linkset+json\"");
 
     @Inject
-    @Location("blog/index.html")
-    Template index;
-
-    @Inject
-    @Location("blog/index.content.html")
-    Template indexContent;
+    PageRenderer pageRenderer;
 
     @Inject
     LanguageContext languageContext;
@@ -146,13 +140,6 @@ public class IndexController {
 
         List<IndexPostItem> postItems = toIndexItems(pageCache.posts(), language);
 
-        Template template;
-        if (pjaxRequest) {
-            template = indexContent;
-        } else {
-            template = index;
-        }
-
         String pageTitle = homepageTitle(subPage, normalizedMode);
         PageRenderModel model = new PageRenderModel()
                 .put("jsonLd", structuredDataService.home(subPage, language))
@@ -195,7 +182,7 @@ public class IndexController {
                     .build();
         }
 
-        String renderedHtml = model.render(template).render();
+        String renderedHtml = pageRenderer.render(PageView.INDEX, httpHeaders, model).render();
         return PageCachePolicy.publicDocument(Response.ok(renderedHtml)
                         .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8")), etag)
                 .header("Link", AGENT_DISCOVERY_LINKS)
