@@ -11,7 +11,9 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Context;
+import com.biliwind.blog.context.PageIdentityContext;
 import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.PageIdentityService;
 import com.biliwind.blog.service.PublicContentSanitizer;
 import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.i18n.I18n;
@@ -27,6 +29,12 @@ public class LegalController {
 
     @Inject
     CanonicalUrlService canonicalUrlService;
+
+    @Inject
+    PageIdentityService pageIdentityService;
+
+    @Inject
+    PageIdentityContext pageIdentityContext;
 
     @Inject
     I18n i18n;
@@ -52,12 +60,13 @@ public class LegalController {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance terms(@Context HttpHeaders headers) {
         Template template = PjaxHelper.isPjaxRequest(headers) ? termsContentTemplate : termsTemplate;
+        pageIdentityContext.set(pageIdentityService.aliased(
+                canonicalUrlService.buildPath("/terms"), "/terms", "zh-CN"));
         return template.data("language", "zh-CN")
                 .data("pageTitle", i18n.t("user.terms"))
                 .data("pageDescription", i18n.t("legal.terms_description"))
                 // One configured document serves every language; keep a single
                 // canonical URL instead of advertising fake translations.
-                .data("canonicalUrl", canonicalUrlService.buildPath("/terms"))
                 .data("legalContent", sanitizer.sanitize(configManager.getString("legal_terms", "html", DEFAULT_TERMS)));
     }
 
@@ -66,10 +75,11 @@ public class LegalController {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance privacy(@Context HttpHeaders headers) {
         Template template = PjaxHelper.isPjaxRequest(headers) ? privacyContentTemplate : privacyTemplate;
+        pageIdentityContext.set(pageIdentityService.aliased(
+                canonicalUrlService.buildPath("/privacy"), "/privacy", "zh-CN"));
         return template.data("language", "zh-CN")
                 .data("pageTitle", i18n.t("user.privacy"))
                 .data("pageDescription", i18n.t("legal.privacy_description"))
-                .data("canonicalUrl", canonicalUrlService.buildPath("/privacy"))
                 .data("legalContent", sanitizer.sanitize(configManager.getString("legal_privacy", "html", DEFAULT_PRIVACY)));
     }
 

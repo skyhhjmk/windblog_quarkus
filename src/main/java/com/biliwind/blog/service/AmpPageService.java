@@ -33,10 +33,10 @@ public class AmpPageService {
     AmpContentRenderer ampContentRenderer;
 
     @Inject
-    PublicUrlService publicUrlService;
+    PageIdentityService pageIdentityService;
 
     @Inject
-    CanonicalUrlService canonicalUrlService;
+    SeoPageService seoPageService;
 
     @Inject
     RepostPolicyCatalog repostPolicyCatalog;
@@ -52,32 +52,25 @@ public class AmpPageService {
         }
 
         PublicCacheRefreshService.PublicPostSnapshot snapshot = snapshotResult.get();
-        String title = LanguageHelper.resolveLocalizedValue(snapshot.title(), language);
-        if (title == null || title.isBlank()) {
-            title = normalizedSlug;
-        }
-        // The public article may only exist in one language. Canonicalise the
-        // fallback render to that language so the AMP and standard pages agree.
-        String contentLanguage = LanguageHelper.resolveLocalizedLanguage(snapshot.previewContent(), language);
-        String summary = resolveSummary(snapshot, contentLanguage);
+        PageIdentityService.ArticleIdentity article = pageIdentityService.article(
+                snapshot, snapshot.previewContent(), language, snapshot.visibility() != 0,
+                seoPageService.policy(snapshot.postId()));
+        PageIdentity identity = article.identity();
+        String title = article.seoTitle();
+        String summary = article.description();
+        String contentLanguage = article.contentLanguage();
         String rawContent = resolveContent(snapshot.previewContent(), language);
+        OffsetDateTime lastUpdated = snapshot.updatedAt() == null ? snapshot.publishedAt() : snapshot.updatedAt();
 
         if (snapshot.visibility() != 0 || snapshot.postPrice() > 0) {
             return Optional.of(AmpPost.unavailable(
-                    normalizedSlug,
-                    language,
-                    title,
-                    summary,
-                    buildCanonicalUrl(normalizedSlug, contentLanguage),
-                    buildAmpUrl(normalizedSlug, contentLanguage),
-                    snapshot.updatedAt() == null ? snapshot.publishedAt() : snapshot.updatedAt()));
+                    normalizedSlug, language, title, summary, identity, lastUpdated));
         }
 
         AmpContentRenderer.RenderedContent rendered =
                 ampContentRenderer.render(snapshot.renderType(), rawContent);
         RepostPolicyCatalog.Policy repostPolicy = repostPolicyCatalog.resolve(
                 snapshot.repostPolicyCode(), snapshot.contentDeclarations());
-        String canonicalUrl = buildCanonicalUrl(normalizedSlug, contentLanguage);
         return Optional.of(new AmpPost(
                 true,
                 null,
@@ -86,9 +79,8 @@ public class AmpPageService {
                 title,
                 summary,
                 rendered.html(),
-                canonicalUrl,
-                buildAmpUrl(normalizedSlug, contentLanguage),
-                snapshot.updatedAt() == null ? snapshot.publishedAt() : snapshot.updatedAt(),
+                identity,
+                lastUpdated,
                 rendered.imageCount(),
                 rendered.removedElementCount(),
                 snapshot.renderType(),
@@ -97,8 +89,9 @@ public class AmpPageService {
                 repostPolicy.requiresApplication(),
                 repostPolicy.conditionsFor(language),
                 repostPolicy.licenseUrl(),
-                canonicalUrl,
-                structuredDataService.article(snapshot, title, summary, canonicalUrl, contentLanguage, rendered.html())));
+                identity.canonicalUrl(),
+                structuredDataService.article(snapshot, title, summary,
+                        identity.canonicalUrl(), contentLanguage, rendered.html())));
     }
 
     public boolean isEnabled() {
@@ -123,36 +116,6 @@ public class AmpPageService {
         return LanguageHelper.resolveLocalizedValue(content, language);
     }
 
-    private String resolveSummary(PublicCacheRefreshService.PublicPostSnapshot snapshot, String language) {
-        String summary = LanguageHelper.lookupIgnoreCase(snapshot.seoDescription(), language);
-        if (summary != null) {
-            summary = summary.trim();
-        }
-        if (summary == null || summary.isBlank()) {
-            summary = LanguageHelper.resolveLocalizedValue(snapshot.summary(), language);
-        }
-        if (summary == null || summary.isBlank()) {
-            summary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), language);
-        }
-        if (summary == null) {
-            return "";
-        }
-        String normalized = summary.replaceAll("\\s+", " ").trim();
-        if (normalized.length() <= 160) {
-            return normalized;
-        }
-        return normalized.substring(0, 160);
-    }
-
-    private String buildCanonicalUrl(String slug, String language) {
-        return canonicalUrlService.buildLocalizedPath("/post/" + slug, language);
-    }
-
-    private String buildAmpUrl(String slug, String language) {
-        return publicUrlService.buildPath(LanguageHelper.localizedPath(
-                "/amp/post/" + slug, language, canonicalUrlService.getDefaultLanguage()));
-    }
-
     private String normalizeSlug(String value) {
         if (value == null || value.isBlank()) {
             return "";
@@ -172,8 +135,7 @@ public class AmpPageService {
             String title,
             String summary,
             String html,
-            String canonicalUrl,
-            String ampUrl,
+            PageIdentity identity,
             OffsetDateTime lastUpdated,
             int imageCount,
             int removedElementCount,
@@ -186,16 +148,23 @@ public class AmpPageService {
             String repostOriginalUrl,
             String jsonLd) {
 
+        public String canonicalUrl() {
+            return identity.canonicalUrl();
+        }
+
+        public String ampUrl() {
+            return identity.ampUrl();
+        }
+
         public static AmpPost unavailable(
                 String slug,
                 String language,
                 String title,
                 String summary,
-                String canonicalUrl,
-                String ampUrl,
+                PageIdentity identity,
                 OffsetDateTime lastUpdated) {
             return new AmpPost(false, "受保护或付费文章不生成可缓存 AMP 页面", slug, language, title,
-                    summary, "", canonicalUrl, ampUrl, lastUpdated, 0, 0, null,
+                    summary, "", identity, lastUpdated, 0, 0, null,
                     null, null, false, List.of(), null, null, null);
         }
     }

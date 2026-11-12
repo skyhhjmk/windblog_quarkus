@@ -703,7 +703,6 @@ public class PublicCacheRefreshService {
     }
 
     private void refreshListCaches() {
-        com.biliwind.blog.controller.IndexController.clearRenderedPageCache();
         cacheService.deletePattern(CacheService.Keys.INDEX_PAGE_PREFIX + "*");
         cacheService.deletePattern(CacheService.Keys.PUBLIC_FEED_PREFIX + "*");
         cacheService.deletePattern(CacheService.Keys.SIDEBAR_RECENT_POSTS + "*");

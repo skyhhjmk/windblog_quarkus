@@ -8,6 +8,7 @@ import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.i18n.I18n;
 import com.biliwind.blog.service.CanonicalUrlService;
+import com.biliwind.blog.service.PageIdentity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -133,37 +134,36 @@ public class QuteGlobalProvider {
     }
 
     @TemplateGlobal
-    public static String defaultCanonicalUrl() {
-        String requestPath = "/";
-        String language = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG;
-        try {
-            HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
-            if (request != null && request.path() != null && !request.path().isBlank()) {
-                requestPath = request.path();
-            }
-            com.biliwind.blog.context.LanguageContext context =
-                    Arc.container().instance(com.biliwind.blog.context.LanguageContext.class).get();
-            language = context.getLang();
-        } catch (Exception exception) {
-            requestPath = "/";
-        }
-
-        if (!requestPath.startsWith("/")) {
-            requestPath = "/" + requestPath;
-        }
-        return Arc.container().instance(CanonicalUrlService.class).get()
-                .buildLocalizedPath(requestPath, language);
+    public static String canonicalUrl() {
+        PageIdentity identity = pageIdentity();
+        return identity == null ? null : identity.canonicalUrl();
     }
+
     @TemplateGlobal
     public static java.util.List<com.biliwind.blog.service.SeoPageService.Alternate> seoAlternates() {
-        HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
-        return Arc.container().instance(com.biliwind.blog.service.SeoPageService.class).get().alternates(request.path());
+        PageIdentity identity = pageIdentity();
+        return identity == null ? List.of() : identity.alternates();
     }
 
     @TemplateGlobal
     public static String seoRobots() {
-        HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
-        return Arc.container().instance(com.biliwind.blog.service.SeoManagementService.class).get().robots(request.path());
+        PageIdentity identity = pageIdentity();
+        return identity == null ? "index,follow" : identity.robots();
+    }
+
+    private static PageIdentity pageIdentity() {
+        try {
+            com.biliwind.blog.context.PageIdentityContext context =
+                    Arc.container().instance(com.biliwind.blog.context.PageIdentityContext.class).get();
+            com.biliwind.blog.service.PageIdentityService service =
+                    Arc.container().instance(com.biliwind.blog.service.PageIdentityService.class).get();
+            HttpServerRequest request = Arc.container().instance(HttpServerRequest.class).get();
+            String path = request == null || request.path() == null || request.path().isBlank()
+                    ? "/" : request.path();
+            return context.resolve(service, path, languageContext().getLang());
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     @TemplateGlobal

@@ -206,6 +206,14 @@ class PublicSeoPagesTest {
     }
 
     @Test
+    void ampAndStandardPagesAdvertiseTheSameSeoTitle() {
+        given().get("/zh-cn/post/" + chineseOnlySlug).then().statusCode(200)
+                .body(containsString("<title>仅中文 SEO 标题"));
+        given().get("/zh-cn/amp/post/" + chineseOnlySlug).then().statusCode(200)
+                .body(containsString("<title>仅中文 SEO 标题</title>"));
+    }
+
+    @Test
     void articleConditionalRequestsReachNotModified() {
         String etag = given().get("/post/" + chineseOnlySlug)
                 .then().statusCode(200)

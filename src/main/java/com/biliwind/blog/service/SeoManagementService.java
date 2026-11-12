@@ -15,8 +15,8 @@ public class SeoManagementService {
     @Inject ConfigManager config;
 
     public String robots(String path) {
-        boolean noindex = !config.getBoolean("seo", "index_enabled", true);
-        boolean nofollow = !config.getBoolean("seo", "follow_enabled", true);
+        boolean noindex = false;
+        boolean nofollow = false;
         if (path.matches("(?i)(/zh-cn|/en-us)?/(search|offline)(/.*)?") || path.startsWith("/admin")
                 || path.startsWith("/api/") || path.startsWith("/user/")
                 || path.startsWith("/link/go/")) noindex = true;
@@ -30,7 +30,18 @@ public class SeoManagementService {
                 if (policy != null) { noindex |= policy.noindex; nofollow |= policy.nofollow; }
             }
         }
-        return (noindex ? "noindex" : "index") + "," + (nofollow ? "nofollow" : "follow");
+        return robots(noindex, nofollow);
+    }
+
+    /**
+     * Combines already-resolved page flags with the site-wide SEO switches.
+     * Callers that hold the public snapshot use this to avoid re-querying the post.
+     */
+    public String robots(boolean noindex, boolean nofollow) {
+        boolean indexDisabled = !config.getBoolean("seo", "index_enabled", true);
+        boolean followDisabled = !config.getBoolean("seo", "follow_enabled", true);
+        return ((noindex || indexDisabled) ? "noindex" : "index") + ","
+                + ((nofollow || followDisabled) ? "nofollow" : "follow");
     }
 
     public String validatePath(String path) {

@@ -52,6 +52,16 @@ public class SeoPageService {
     }
 
     /**
+     * Loads the per-post robots policy once for the render path. Callers that
+     * already have the public snapshot use this instead of letting the
+     * alternate/robots helpers query the post again.
+     */
+    public com.biliwind.blog.model.SeoPostPolicy policy(Long postId) {
+        return postId == null ? null
+                : com.biliwind.blog.model.SeoPostPolicy.find("postId", postId).firstResult();
+    }
+
+    /**
      * Builds alternates for callers that already know which languages exist,
      * for example the sitemap, which would otherwise load every post again.
      */

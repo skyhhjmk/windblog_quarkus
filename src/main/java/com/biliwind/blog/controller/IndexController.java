@@ -3,12 +3,15 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
-import com.biliwind.blog.context.CspNonceContext;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.PageIdentityContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.i18n.I18n;
 import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.service.ConfigTemplateData;
+import com.biliwind.blog.service.PageCachePolicy;
+import com.biliwind.blog.service.PageIdentityService;
+import com.biliwind.blog.service.PageRenderModel;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.qute.Location;
@@ -21,8 +24,10 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 import com.biliwind.blog.model.ArticleMode;
 
@@ -30,7 +35,6 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.IntStream;
 
 /**
@@ -53,13 +57,6 @@ public class IndexController {
             "</api/public/docs>; rel=\"service-doc\"; type=\"text/html\"",
             "</.well-known/api-catalog>; rel=\"describedby\"; type=\"application/linkset+json\"");
 
-    private static final long RENDERED_PAGE_CACHE_TTL_MILLIS = 1000L;
-    private static final ConcurrentHashMap<String, RenderedPageCache> RENDERED_PAGE_CACHE = new ConcurrentHashMap<>();
-
-    public static void clearRenderedPageCache() {
-        RENDERED_PAGE_CACHE.clear();
-    }
-
     @Inject
     @Location("blog/index.html")
     Template index;
@@ -81,19 +78,23 @@ public class IndexController {
     com.biliwind.blog.service.StructuredDataService structuredDataService;
 
     @Inject
-    CspNonceContext cspNonceContext;
-
-    @Inject
     I18n i18n;
 
     @Inject
     CanonicalUrlService canonicalUrlService;
 
+    @Inject
+    PageIdentityService pageIdentityService;
+
+    @Inject
+    PageIdentityContext pageIdentityContext;
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public Response index(@Context HttpHeaders httpHeaders,
+                          @Context Request request,
                           @QueryParam("mode") String mode) {
-        return subPage(1, httpHeaders, mode);
+        return subPage(1, httpHeaders, request, mode);
     }
 
     @Path("/page/{subPage}")
@@ -101,6 +102,7 @@ public class IndexController {
     @Produces(MediaType.TEXT_HTML)
     public Response subPage(@PathParam("subPage") Integer subPage,
                             @Context HttpHeaders httpHeaders,
+                            @Context Request request,
                             @QueryParam("mode") String mode) {
         if (subPage == null) {
             subPage = 1;
@@ -129,8 +131,8 @@ public class IndexController {
         String language = languageContext.getLang();
         String currentRegion = regionContext.getCurrentRegion().getCode();
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
-        String renderedPageCacheKey = buildRenderedPageCacheKey(
-                "index:v6:" + subPage + ":" + language + ":" + currentRegion + ":mode:" + normalizedMode, pjaxRequest);
+        pageIdentityContext.set(pageIdentityService.page(
+                requestPath == null || requestPath.isBlank() ? "/" : requestPath, language));
 
         com.biliwind.blog.service.PublicCacheRefreshService.PublicIndexPageSnapshot pageCache =
                 publicCacheRefreshService.findPublishedIndexPage(subPage, PAGE_SIZE, language, currentRegion, filterMode);
@@ -142,11 +144,6 @@ public class IndexController {
             throw new jakarta.ws.rs.NotFoundException("Page not found: " + subPage);
         }
 
-        RenderedPageCache cachedPage = getRenderedPage(renderedPageCacheKey);
-        if (cachedPage != null) {
-            String currentNonce = cspNonceContext.getNonce();
-            return buildHtmlResponse(replaceNonce(cachedPage.html, cachedPage.nonce, currentNonce));
-        }
         List<IndexPostItem> postItems = toIndexItems(pageCache.posts(), language);
 
         Template template;
@@ -157,38 +154,52 @@ public class IndexController {
         }
 
         String pageTitle = homepageTitle(subPage, normalizedMode);
-        String renderedHtml = template
-                .data("jsonLd", structuredDataService.home(subPage, language))
-                .data("pageTitle", pageTitle)
-                .data("language", language)
-                .data("subPage", subPage)
-                .data("currentPage", subPage)
-                .data("pageSize", PAGE_SIZE)
-                .data("totalPosts", totalPostsCount)
-                .data("totalPages", totalPages)
-                .data("hasPrevPage", subPage > 1)
-                .data("hasNextPage", subPage < totalPages)
-                .data("prevPage", Math.max(1, subPage - 1))
-                .data("nextPage", Math.min(totalPages, subPage + 1))
-                .data("prevPageUrl", buildIndexPageUrl(Math.max(1, subPage - 1), normalizedMode))
-                .data("nextPageUrl", totalPages <= 1 || subPage >= totalPages
+        PageRenderModel model = new PageRenderModel()
+                .put("jsonLd", structuredDataService.home(subPage, language))
+                .put("pageTitle", pageTitle)
+                .put("language", language)
+                .put("subPage", subPage)
+                .put("currentPage", subPage)
+                .put("pageSize", PAGE_SIZE)
+                .put("totalPosts", totalPostsCount)
+                .put("totalPages", totalPages)
+                .put("hasPrevPage", subPage > 1)
+                .put("hasNextPage", subPage < totalPages)
+                .put("prevPage", Math.max(1, subPage - 1))
+                .put("nextPage", Math.min(totalPages, subPage + 1))
+                .put("prevPageUrl", buildIndexPageUrl(Math.max(1, subPage - 1), normalizedMode))
+                .put("nextPageUrl", totalPages <= 1 || subPage >= totalPages
                         ? buildIndexPageUrl((int) totalPages, normalizedMode)
                         : buildIndexPageUrl(subPage + 1, normalizedMode))
-                .data("firstPageUrl", buildIndexPageUrl(1, normalizedMode))
-                .data("lastPageUrl", buildIndexPageUrl((int) totalPages, normalizedMode))
-                .data("paginationPages", buildPaginationPages(subPage, totalPages, normalizedMode))
-                .data("paginationN", "n".repeat(Math.min((int) totalPages, 7)))
-                .data("pjaxRequest", pjaxRequest)
-                .data("currentMode", normalizedMode)
-                .data("filterAllUrl", buildIndexPageUrl(1, "all"))
-                .data("filterStandardUrl", buildIndexPageUrl(1, "standard"))
-                .data("filterTutorialUrl", buildIndexPageUrl(1, "tutorial"))
-                .data("filterResourceUrl", buildIndexPageUrl(1, "resource"))
-                .data("posts", postItems)
-                .render();
+                .put("firstPageUrl", buildIndexPageUrl(1, normalizedMode))
+                .put("lastPageUrl", buildIndexPageUrl((int) totalPages, normalizedMode))
+                .put("paginationPages", buildPaginationPages(subPage, totalPages, normalizedMode))
+                .put("paginationN", "n".repeat(Math.min((int) totalPages, 7)))
+                .put("pjaxRequest", pjaxRequest)
+                .put("currentMode", normalizedMode)
+                .put("filterAllUrl", buildIndexPageUrl(1, "all"))
+                .put("filterStandardUrl", buildIndexPageUrl(1, "standard"))
+                .put("filterTutorialUrl", buildIndexPageUrl(1, "tutorial"))
+                .put("filterResourceUrl", buildIndexPageUrl(1, "resource"))
+                .put("posts", postItems)
+                .put("pageIdentity", pageIdentityContext.get())
+                .put("siteConfig", pageIdentityService.environmentFingerprint())
+                .put("region", currentRegion)
+                .put("requestLanguage", language);
 
-        setRenderedPageHtml(renderedPageCacheKey, renderedHtml, cspNonceContext.getNonce());
-        return buildHtmlResponse(renderedHtml);
+        EntityTag etag = model.validator();
+        Response.ResponseBuilder precondition = request.evaluatePreconditions(etag);
+        if (precondition != null) {
+            return PageCachePolicy.publicDocument(precondition, etag)
+                    .header("Link", AGENT_DISCOVERY_LINKS)
+                    .build();
+        }
+
+        String renderedHtml = model.render(template).render();
+        return PageCachePolicy.publicDocument(Response.ok(renderedHtml)
+                        .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8")), etag)
+                .header("Link", AGENT_DISCOVERY_LINKS)
+                .build();
     }
 
     String normalizeArticleMode(String mode) {
@@ -260,53 +271,6 @@ public class IndexController {
 
     private int paginationWindowStart(int currentPage, int totalPages) {
         return Math.min(Math.max(1, currentPage - 3), Math.max(1, totalPages - 6));
-    }
-
-    private String buildRenderedPageCacheKey(String cacheKey, boolean pjaxRequest) {
-        String cacheType;
-        if (pjaxRequest) {
-            cacheType = "pjax";
-        } else {
-            cacheType = "full";
-        }
-        return cacheType + ":" + cacheKey;
-    }
-
-    private RenderedPageCache getRenderedPage(String renderedPageCacheKey) {
-        RenderedPageCache renderedPageCache = RENDERED_PAGE_CACHE.get(renderedPageCacheKey);
-        if (renderedPageCache == null) {
-            return null;
-        }
-
-        long now = System.currentTimeMillis();
-        if (renderedPageCache.expiresAtMillis <= now) {
-            RENDERED_PAGE_CACHE.remove(renderedPageCacheKey);
-            return null;
-        }
-
-        return renderedPageCache;
-    }
-
-    private void setRenderedPageHtml(String renderedPageCacheKey, String renderedHtml, String nonce) {
-        long expiresAtMillis = System.currentTimeMillis() + RENDERED_PAGE_CACHE_TTL_MILLIS;
-        RenderedPageCache renderedPageCache = new RenderedPageCache(renderedHtml, nonce, expiresAtMillis);
-        RENDERED_PAGE_CACHE.put(renderedPageCacheKey, renderedPageCache);
-    }
-
-    private String replaceNonce(String html, String previousNonce, String currentNonce) {
-        if (previousNonce == null || previousNonce.isBlank() || currentNonce == null || currentNonce.isBlank()) {
-            return html;
-        }
-        return html.replace("nonce=\"" + previousNonce + "\"", "nonce=\"" + currentNonce + "\"");
-    }
-
-    private Response buildHtmlResponse(String html) {
-        return Response.ok(html)
-                .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"))
-                .header("Cache-Control", "private, no-cache, must-revalidate")
-                .header("Vary", "Accept-Language, Cookie")
-                .header("Link", AGENT_DISCOVERY_LINKS)
-                .build();
     }
 
     private List<IndexPostItem> toIndexItems(
@@ -423,12 +387,5 @@ public class IndexController {
             this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, createdAt,
                     categoryName, categorySlug, categories, authorName, tags, coverImageUrl, null, "standard", null);
         }
-    }
-
-    private record RenderedPageCache(
-            String html,
-            String nonce,
-            long expiresAtMillis
-    ) {
     }
 }

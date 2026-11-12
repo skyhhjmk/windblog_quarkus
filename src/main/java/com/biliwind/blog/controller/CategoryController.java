@@ -6,9 +6,10 @@ import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.PageIdentityContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.i18n.I18n;
-import com.biliwind.blog.service.CanonicalUrlService;
+import com.biliwind.blog.service.PageIdentityService;
 import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
@@ -64,7 +65,10 @@ public class CategoryController {
     I18n i18n;
 
     @Inject
-    CanonicalUrlService canonicalUrlService;
+    PageIdentityService pageIdentityService;
+
+    @Inject
+    PageIdentityContext pageIdentityContext;
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -107,6 +111,7 @@ public class CategoryController {
         if (safeKeyword.isBlank() && currentPage > 1) {
             canonicalPath = canonicalPath + "?page=" + currentPage;
         }
+        pageIdentityContext.set(pageIdentityService.page(canonicalPath, lang));
         return template
                 .data("language", lang)
                 .data("pjaxRequest", pjaxRequest)
@@ -116,7 +121,6 @@ public class CategoryController {
                 .data("detailMode", false)
                 .data("pageTitle", withPageSuffix(pageTitle, currentPage))
                 .data("pageDescription", i18n.t("category.list_description"))
-                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(canonicalPath, lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / categories")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
@@ -176,6 +180,8 @@ public class CategoryController {
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
         Template template = pjaxRequest ? categoryContent : category;
+        pageIdentityContext.set(pageIdentityService.page(
+                "/category/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang));
         return template
                 .data("language", lang)
                 .data("jsonLd", structuredDataService.collection(resolveCategoryName(entity, lang), "/category/" + entity.slug, lang,
@@ -186,8 +192,6 @@ public class CategoryController {
                 .data("pageTitle", withPageSuffix(
                         i18n.format("category.detail_title", resolveCategoryName(entity, lang)), currentPage))
                 .data("pageDescription", categoryDescription(entity, lang))
-                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(
-                        "/category/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / category / " + entity.slug)
                 .data("totalCount", childItems.size())
                 .data("postCount", postCount)

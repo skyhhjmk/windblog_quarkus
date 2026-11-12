@@ -39,11 +39,7 @@
     {/if}
     <link rel="alternate" type="application/rss+xml" title="{config:siteTitle}" href="{languagePrefix}/feed"/>
 
-    {#if canonicalUrl.or(null)}
-        <link rel="canonical" href="{canonicalUrl}" data-site-base="{canonicalBaseUrl}"/>
-    {#else}
-        <link rel="canonical" href="{defaultCanonicalUrl}" data-site-base="{canonicalBaseUrl}"/>
-    {/if}
+    <link rel="canonical" href="{canonicalUrl}" data-site-base="{canonicalBaseUrl}"/>
 
     {#for alternate in seoAlternates}
         <link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}"/>
@@ -63,7 +59,7 @@
         <meta property="og:title" content="{pageTitle ?: config:siteTitle}"/>
         <meta property="og:description" content="{pageDescription ?: config:siteDescription}"/>
         <meta property="og:type" content="website"/>
-        <meta property="og:url" content="{defaultCanonicalUrl}"/>
+        <meta property="og:url" content="{canonicalUrl}"/>
         <meta property="og:site_name" content="{config:siteTitle}"/>
         <meta property="og:locale" content="{ogLocale}"/>
         {#if publisherLogoUrl.or(null)}

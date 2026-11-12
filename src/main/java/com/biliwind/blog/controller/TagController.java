@@ -6,9 +6,10 @@ import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.context.PageIdentityContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.i18n.I18n;
-import com.biliwind.blog.service.CanonicalUrlService;
+import com.biliwind.blog.service.PageIdentityService;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.PostTag;
@@ -62,7 +63,10 @@ public class TagController {
     I18n i18n;
 
     @Inject
-    CanonicalUrlService canonicalUrlService;
+    PageIdentityService pageIdentityService;
+
+    @Inject
+    PageIdentityContext pageIdentityContext;
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -106,6 +110,7 @@ public class TagController {
         if (safeKeyword.isBlank() && currentPage > 1) {
             canonicalPath = canonicalPath + "?page=" + currentPage;
         }
+        pageIdentityContext.set(pageIdentityService.page(canonicalPath, lang));
         return template
                 .data("language", lang)
                 .data("pjaxRequest", pjaxRequest)
@@ -115,7 +120,6 @@ public class TagController {
                 .data("detailMode", false)
                 .data("pageTitle", withPageSuffix(pageTitle, currentPage))
                 .data("pageDescription", i18n.t("tag.list_description"))
-                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(canonicalPath, lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tags")
                 .data("keyword", safeKeyword)
                 .data("totalCount", totalCount)
@@ -176,6 +180,8 @@ public class TagController {
 
         boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
         Template template = pjaxRequest ? tagContent : tag;
+        pageIdentityContext.set(pageIdentityService.page(
+                "/tag/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang));
         return template
                 .data("language", lang)
                 .data("jsonLd", structuredDataService.collection(tagName, "/tag/" + entity.slug, lang,
@@ -186,8 +192,6 @@ public class TagController {
                 .data("detailMode", true)
                 .data("pageTitle", withPageSuffix(i18n.format("tag.detail_title", tagName), currentPage))
                 .data("pageDescription", tagPageDescription(entity, lang))
-                .data("canonicalUrl", canonicalUrlService.buildLocalizedPath(
-                        "/tag/" + entity.slug + (currentPage > 1 ? "?page=" + currentPage : ""), lang))
                 .data("navPath", ConfigTemplateData.siteNavRoot() + " / tag / " + entity.slug)
                 .data("totalCount", totalCount)
                 .data("currentPage", currentPage)

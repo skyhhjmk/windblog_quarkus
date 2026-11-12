@@ -10,13 +10,11 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.CacheControl;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 
-import java.time.OffsetDateTime;
 import java.util.Optional;
 
 @Path("/")
@@ -29,6 +27,12 @@ public class AmpController {
 
     @Inject
     AmpPageService ampPageService;
+
+    @Inject
+    com.biliwind.blog.service.PageIdentityService pageIdentityService;
+
+    @Inject
+    com.biliwind.blog.context.PageIdentityContext pageIdentityContext;
 
     @Inject
     com.biliwind.blog.context.LanguageContext languageContext;
@@ -55,44 +59,38 @@ public class AmpController {
             throw new NotFoundException("AMP page not found");
         }
         AmpPageService.AmpPost post = result.get();
-        EntityTag entityTag = new EntityTag(buildEtag(post));
+        pageIdentityContext.set(post.identity());
+
+        com.biliwind.blog.service.PageRenderModel model =
+                new com.biliwind.blog.service.PageRenderModel()
+                        .put("jsonLd", post.jsonLd())
+                        .put("language", post.language())
+                        .put("title", post.title())
+                        .put("description", post.summary())
+                        .put("postBody", post.html())
+                        .put("canonicalUrl", post.canonicalUrl())
+                        .put("ampUrl", post.ampUrl())
+                        .put("publishedAt", post.lastUpdated())
+                        .put("imageCount", post.imageCount())
+                        .put("repostPolicyName", post.repostPolicyName())
+                        .put("repostPolicySummary", post.repostPolicySummary())
+                        .put("repostPolicyRequiresApplication", post.repostPolicyRequiresApplication())
+                        .put("repostPolicyConditions", post.repostPolicyConditions())
+                        .put("repostPolicyLicenseUrl", post.repostPolicyLicenseUrl())
+                        .put("repostOriginalUrl", post.repostOriginalUrl())
+                        .put("pageIdentity", post.identity())
+                        .put("siteConfig", pageIdentityService.environmentFingerprint());
+
+        EntityTag entityTag = model.validator();
         Response.ResponseBuilder precondition = request.evaluatePreconditions(entityTag);
         if (precondition != null) {
-            CacheControl cacheControl = new CacheControl();
-            cacheControl.setMaxAge(300);
-            return precondition.cacheControl(cacheControl)
-                    .header("Vary", "Accept-Language")
-                    .build();
+            return com.biliwind.blog.service.PageCachePolicy
+                    .publicDocument(precondition, entityTag, 300, 300).build();
         }
 
-        TemplateInstance instance = ampTemplate
-                .data("jsonLd", post.jsonLd())
-                .data("language", post.language())
-                .data("title", post.title())
-                .data("description", post.summary())
-                .data("postBody", post.html())
-                .data("canonicalUrl", post.canonicalUrl())
-                .data("ampUrl", post.ampUrl())
-                .data("publishedAt", post.lastUpdated())
-                .data("imageCount", post.imageCount())
-                .data("repostPolicyName", post.repostPolicyName())
-                .data("repostPolicySummary", post.repostPolicySummary())
-                .data("repostPolicyRequiresApplication", post.repostPolicyRequiresApplication())
-                .data("repostPolicyConditions", post.repostPolicyConditions())
-                .data("repostPolicyLicenseUrl", post.repostPolicyLicenseUrl())
-                .data("repostOriginalUrl", post.repostOriginalUrl());
-        CacheControl cacheControl = new CacheControl();
-        cacheControl.setMaxAge(300);
-        return Response.ok(instance)
-                .tag(entityTag)
-                .cacheControl(cacheControl)
-                .header("Vary", "Accept-Language")
+        TemplateInstance instance = model.render(ampTemplate);
+        return com.biliwind.blog.service.PageCachePolicy
+                .publicDocument(Response.ok(instance), entityTag, 300, 300)
                 .build();
-    }
-
-    private String buildEtag(AmpPageService.AmpPost post) {
-        OffsetDateTime lastUpdated = post.lastUpdated();
-        long epoch = lastUpdated == null ? 0L : lastUpdated.toEpochSecond();
-        return post.slug() + "_" + epoch + "_" + post.language();
     }
 }

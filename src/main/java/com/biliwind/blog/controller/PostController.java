@@ -3,14 +3,14 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.annotation.PasswordProtected;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
-import com.biliwind.blog.common.helper.MarkdownHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.common.helper.PostCoverImageHelper;
-import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.PostAccessPolicy;
+import com.biliwind.blog.service.PageCachePolicy;
+import com.biliwind.blog.service.PageRenderModel;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.qute.Location;
@@ -64,19 +64,12 @@ public class PostController {
     com.biliwind.blog.service.StructuredDataService structuredDataService;
 
     @Inject
-    com.biliwind.blog.service.ConfigManager configManager;
-
-    @Inject
-    com.biliwind.blog.service.PublicUrlService publicUrlService;
-
-    @Inject
     com.biliwind.blog.service.CanonicalUrlService canonicalUrlService;
 
     @Inject com.biliwind.blog.service.SeoAuditService seoAuditService;
-    @Inject com.biliwind.blog.service.SeoManagementService seoManagementService;
-
-    @Inject
-    com.biliwind.blog.service.AmpPageService ampPageService;
+    @Inject com.biliwind.blog.service.SeoPageService seoPageService;
+    @Inject com.biliwind.blog.service.PageIdentityService pageIdentityService;
+    @Inject com.biliwind.blog.context.PageIdentityContext pageIdentityContext;
 
     @Inject
     com.biliwind.blog.service.MediaAccessService mediaAccessService;
@@ -162,7 +155,6 @@ public class PostController {
         Long requestUserId = resolveUserId(httpHeaders);
         String deviceId = httpHeaders.getHeaderString("X-Device-Id");
 
-        // 计算 ETag 逻辑。使用显式 if/else，禁止三目
         java.time.OffsetDateTime lastUpdated = snapshot.updatedAt();
         if (lastUpdated == null) {
             lastUpdated = snapshot.publishedAt();
@@ -170,45 +162,23 @@ public class PostController {
         if (lastUpdated == null) {
             lastUpdated = java.time.OffsetDateTime.now();
         }
-
         long epoch = lastUpdated.toEpochSecond();
-        String etagValue = snapshot.postId() + "_" + epoch + "_" + resolvedLang + "_" + currentRegion
-                + (pjaxRequest ? "_pjax" : "_full")
-                + "_cover3"
-                // The attachment widget and content gate depend on the reader,
-                // so a cached anonymous body must not satisfy a logged-in request.
-                + (requestUserId == null ? "_anon" : "_u" + requestUserId)
-                // RESTEasy splits If-None-Match on commas, so the robots value
-                // (index,follow) must not carry one into the ETag.
-                + "_" + seoManagementService.robots(
-                        ("zh-cn".equalsIgnoreCase(resolvedLang) ? "" : "/" + resolvedLang) + "/post/" + slug)
-                        .replace(',', '_');
-        // The CSP nonce changes on every render, so the validator is weak; a
-        // strong tag would also fail when a CDN normalizes it to W/"...".
-        EntityTag etag = new EntityTag(etagValue, true);
-        boolean protectedPage = snapshot.visibility() == 2;
 
-        // 评估客户端提供的 If-None-Match 首部（仅限未登录访客、非受保护且非推广的公开文章）
-        if (!protectedPage && !trackedReferral && requestUserId == null) {
-            Response.ResponseBuilder responseBuilder = request.evaluatePreconditions(etag);
-            if (responseBuilder != null) {
-                CacheControl cacheControl = new CacheControl();
-                cacheControl.setMaxAge(60); // 浏览器缓存 60 秒
-                cacheControl.setSMaxAge(300); // 共享 CDN 缓存 300 秒
-                return responseBuilder.cacheControl(cacheControl)
-                        .header("Vary", "Accept-Language, Cookie")
-                        .build();
-            }
-        }
-
-        String contentLanguage = LanguageHelper.resolveLocalizedLanguage(snapshot.previewContent(), resolvedLang);
+        com.biliwind.blog.model.SeoPostPolicy seoPolicy = seoPageService.policy(snapshot.postId());
+        com.biliwind.blog.service.PageIdentityService.ArticleIdentity article =
+                pageIdentityService.article(snapshot, snapshot.previewContent(), resolvedLang,
+                        snapshot.visibility() != 0, seoPolicy);
+        com.biliwind.blog.service.PageIdentity identity = article.identity();
+        pageIdentityContext.set(identity);
+        String contentLanguage = article.contentLanguage();
         languageContext.setContentLanguage(contentLanguage);
-        String localizedTitle = LanguageHelper.resolveLocalizedValue(snapshot.title(), resolvedLang);
+        String localizedTitle = article.displayTitle();
         String publicPreview = resolveSnapshotContent(snapshot, resolvedLang);
         String localizedContent = resolveSnapshotContent(snapshot, resolvedLang);
         Post postEntity = Post.find(
                 "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
                 snapshot.postId(), PostStatus.PUBLISHED).firstResult();
+        boolean protectedPage = snapshot.visibility() == 2;
         boolean contentAccessible = snapshot.visibility() == 0;
         boolean hasPurchased = false;
         if (protectedPage) {
@@ -229,10 +199,7 @@ public class PostController {
         }
 
         long postPrice = snapshot.postPrice();
-        String ampUrl = null;
-        if (ampPageService.isEnabled() && snapshot.visibility() == 0 && postPrice <= 0) {
-            ampUrl = buildAmpUrl(slug, contentLanguage);
-        }
+        String ampUrl = identity.ampUrl();
 
         com.biliwind.blog.model.translation.ParagraphTranslationMeta paragraphMeta = null;
         if (postEntity != null && postEntity.publishedRevision != null
@@ -249,15 +216,32 @@ public class PostController {
         }
         boolean isTranslationOutdated = paragraphMeta != null && paragraphMeta.outdated();
 
-        PostBodyView postBody = resolvePostBody(snapshot.renderType(), localizedContent, paragraphMeta);
-        if (postBody.html()) {
-            // Affiliate token issuance is intentionally kept off the public read model;
-            // the source entity is loaded only when active commercial links exist.
-            String rewrittenPostBody = affiliateContentRenderService.rewriteCommercialLinks(
-                    snapshot.postId(), postBody.body());
-            rewrittenPostBody = articleExternalLinkService.rewriteArticleExternalLinks(rewrittenPostBody);
-            postBody = new PostBodyView(rewrittenPostBody, true, postBody.renderType());
-        }
+        final com.biliwind.blog.model.translation.ParagraphTranslationMeta translationMeta = paragraphMeta;
+        final String renderedContent = localizedContent;
+        // Rendering the body mints affiliate/link tokens, so it must never feed
+        // the validator. It stays lazy and runs only when the page is rendered.
+        java.util.concurrent.atomic.AtomicReference<PostBodyView> renderedBodyCache =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.function.Supplier<PostBodyView> renderedBody = () -> {
+            PostBodyView cached = renderedBodyCache.get();
+            if (cached != null) {
+                return cached;
+            }
+            PostBodyView body = resolvePostBody(snapshot.renderType(), renderedContent, translationMeta);
+            if (body.html()) {
+                // Affiliate token issuance is intentionally kept off the public read model;
+                // the source entity is loaded only when active commercial links exist.
+                String rewrittenPostBody = affiliateContentRenderService.rewriteCommercialLinks(
+                        snapshot.postId(), body.body());
+                rewrittenPostBody = articleExternalLinkService.rewriteArticleExternalLinks(rewrittenPostBody);
+                body = new PostBodyView(rewrittenPostBody, true, body.renderType());
+            }
+            renderedBodyCache.set(body);
+            return body;
+        };
+        java.util.function.Supplier<String> publicHtml = () -> snapshot.postPrice() > 0 || protectedPage
+                ? resolvePostBody(snapshot.renderType(), publicPreview, translationMeta).body()
+                : renderedBody.get().body();
 
         String localizedAiSummary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), resolvedLang);
 
@@ -275,56 +259,53 @@ public class PostController {
             }
         }
 
-        List<AttachmentView> attachments = new java.util.ArrayList<>();
-        if (contentAccessible && postEntity != null) {
-            java.util.Set<String> attachmentNames = new java.util.HashSet<>();
-            String attachmentContent = resolveContent(postEntity.publishedRevision, resolvedLang);
-            for (com.biliwind.blog.service.PostAccessService.AttachmentItem item
-                    : postAccessService.resolveAttachmentItems(postEntity, attachmentContent,
-                            requestUserId, deviceId)) {
-                attachments.add(new AttachmentView(item.blockId(), item.name(), item.formattedSize(),
-                        item.price(), item.unlocked(), item.loginRequired(), item.downloadUrl()));
-                attachmentNames.add(item.name());
-            }
-            if (snapshot.attachments() != null && !snapshot.attachments().isEmpty()) {
-                List<PostMedia> legacyAttachments =
-                        PostMedia.list("post.id = ?1 and usageType = 3", postEntity.id);
-                for (PostMedia legacy : legacyAttachments) {
-                    if (legacy.media == null || legacy.media.deletedAt != null) {
-                        continue;
+        final boolean accessibleContent = contentAccessible;
+        final boolean purchased = hasPurchased;
+        java.util.function.Supplier<List<AttachmentView>> attachments = () -> {
+            List<AttachmentView> items = new java.util.ArrayList<>();
+            if (accessibleContent && postEntity != null) {
+                java.util.Set<String> attachmentNames = new java.util.HashSet<>();
+                String attachmentContent = resolveContent(postEntity.publishedRevision, resolvedLang);
+                for (com.biliwind.blog.service.PostAccessService.AttachmentItem item
+                        : postAccessService.resolveAttachmentItems(postEntity, attachmentContent,
+                                requestUserId, deviceId)) {
+                    items.add(new AttachmentView(item.blockId(), item.name(), item.formattedSize(),
+                            item.price(), item.unlocked(), item.loginRequired(), item.downloadUrl()));
+                    attachmentNames.add(item.name());
+                }
+                if (snapshot.attachments() != null && !snapshot.attachments().isEmpty()) {
+                    List<PostMedia> legacyAttachments =
+                            PostMedia.list("post.id = ?1 and usageType = 3", postEntity.id);
+                    for (PostMedia legacy : legacyAttachments) {
+                        if (legacy.media == null || legacy.media.deletedAt != null) {
+                            continue;
+                        }
+                        if (!mediaAccessService.canAccess(legacy.media, regionContext.getCurrentRegion())) {
+                            continue;
+                        }
+                        String fileName = legacy.media.fileName;
+                        if (fileName == null || fileName.isBlank() || !attachmentNames.add(fileName)) {
+                            continue;
+                        }
+                        String formattedSize = formatAttachmentSize(legacy.media.size);
+                        boolean unlocked = purchased;
+                        String downloadUrl = unlocked
+                                ? postAccessService.issueAttachmentDownloadUrl(legacy.media.id,
+                                        postEntity.id, requestUserId, deviceId)
+                                : null;
+                        items.add(new AttachmentView(null, fileName, formattedSize, 0L,
+                                unlocked, false, downloadUrl));
                     }
-                    if (!mediaAccessService.canAccess(legacy.media, regionContext.getCurrentRegion())) {
-                        continue;
-                    }
-                    String fileName = legacy.media.fileName;
-                    if (fileName == null || fileName.isBlank() || !attachmentNames.add(fileName)) {
-                        continue;
-                    }
-                    String formattedSize = formatAttachmentSize(legacy.media.size);
-                    boolean unlocked = hasPurchased;
-                    String downloadUrl = unlocked
-                            ? postAccessService.issueAttachmentDownloadUrl(legacy.media.id,
-                                    postEntity.id, requestUserId, deviceId)
-                            : null;
-                    attachments.add(new AttachmentView(null, fileName, formattedSize, 0L,
-                            unlocked, false, downloadUrl));
                 }
             }
-        }
+            return items;
+        };
 
         String displayTitle = localizedTitle;
-        if (displayTitle == null) {
-            displayTitle = slug;
-        }
-        String publicHtml = snapshot.postPrice() > 0 || protectedPage
-                ? resolvePostBody(snapshot.renderType(), publicPreview, paragraphMeta).body() : postBody.body();
-        String seoTitle = resolveSeoTitle(snapshot, displayTitle, contentLanguage);
-        String pageDescription = resolvePageDescription(
-                snapshot, localizedAiSummary, localizedContent, contentLanguage);
-        String pageKeywords = resolveSeoKeywords(snapshot, contentLanguage);
-        // Canonicalise a fallback render to the language that actually has the
-        // article body; the fallback URL itself must not compete as a duplicate.
-        String canonicalUrl = buildCanonicalUrl(slug, contentLanguage);
+        String seoTitle = article.seoTitle();
+        String pageDescription = article.description();
+        String pageKeywords = article.keywords();
+        String canonicalUrl = identity.canonicalUrl();
 
         int aiSummaryStatusVal = 0;
         if (snapshot.aiSummaryStatus() != null) {
@@ -337,10 +318,9 @@ public class PostController {
 
         String authorAvatar = "/assets/img/avatar-default.svg";
 
-        String renderTypeName = null;
-        if (postBody.renderType() != null) {
-            renderTypeName = postBody.renderType().name();
-        }
+        PostRenderType effectiveRenderType = snapshot.renderType() == null
+                ? PostRenderType.MARKDOWN : snapshot.renderType();
+        String renderTypeName = effectiveRenderType.name();
 
         String postCategory = LanguageHelper.resolveLocalizedValue(snapshot.categoryName(), resolvedLang);
         if (postCategory == null || postCategory.isBlank()) {
@@ -376,9 +356,6 @@ public class PostController {
                         null);
         String postCoverImageUrl = coverInfo.url();
         String postCoverThumbhash = coverInfo.thumbhash();
-
-        int wordCount = com.biliwind.blog.common.helper.PostHelper.calculateWordCount(postBody.body());
-        int readingTimeMinutes = com.biliwind.blog.common.helper.PostHelper.calculateReadingTimeMinutes(wordCount);
 
         com.biliwind.blog.model.ArticleMode articleMode = snapshot.articleMode() == null
                 ? com.biliwind.blog.model.ArticleMode.STANDARD
@@ -420,85 +397,105 @@ public class PostController {
             resourceMirrors = resourceMeta.mirrors() == null ? List.of() : resourceMeta.mirrors();
         }
 
-        TemplateInstance templateInstance = template
-                .data("language", resolvedLang)
-                .data("pjaxRequest", pjaxRequest)
-                .data("contentLanguage", contentLanguage)
-                .data("postSlug", slug)
-                .data("articleMode", articleModeName)
-                .data("tutorialDifficulty", tutorialDifficulty)
-                .data("tutorialEstimatedMinutes", tutorialEstimatedMinutes)
-                .data("tutorialPrerequisites", tutorialPrerequisites)
-                .data("tutorialTargetAudience", tutorialTargetAudience)
-                .data("resourceVersion", resourceVersion)
-                .data("resourceFileSize", resourceFileSize)
-                .data("resourcePlatforms", resourcePlatforms)
-                .data("resourceOfficialUrl", resourceOfficialUrl)
-                .data("resourceLicense", resourceLicense)
-                .data("resourceChecksumSha256", resourceChecksumSha256)
-                .data("resourceChecksumMd5", resourceChecksumMd5)
-                .data("resourceMirrors", resourceMirrors)
-                .data("postCoverImageUrl", postCoverImageUrl)
-                .data("postCoverThumbhash", postCoverThumbhash)
-                .data("wordCount", wordCount)
-                .data("readingTimeMinutes", readingTimeMinutes)
-                .data("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())
-                .data("isTranslationOutdated", isTranslationOutdated)
-                .data("postTitle", displayTitle)
-                .data("pageTitle", seoTitle)
-                .data("pageDescription", pageDescription)
-                .data("pageKeywords", pageKeywords)
-                .data("aiSummary", localizedAiSummary)
-                .data("aiSummaryStatus", aiSummaryStatusVal)
-                .data("postBody", postBody.body())
-                .data("postBodyHtml", postBody.html())
-                .data("publishedAt", snapshot.publishedAt())
-                .data("authorName", authorName)
-                .data("authorAvatar", authorAvatar)
-                .data("postRenderType", renderTypeName)
-                .data("postBodyJson", escapeJavaScript(postBody.body()))
-                .data("postCategory", postCategory)
-                .data("postCategorySlug", postCategorySlug)
-                .data("breadcrumbCategorySlug", snapshot.categorySlug())
-                .data("postCategories", postCategories)
-                .data("postPrice", postPrice)
+        PageRenderModel model = new PageRenderModel()
+                .put("language", resolvedLang)
+                .put("pjaxRequest", pjaxRequest)
+                .put("contentLanguage", contentLanguage)
+                .put("postSlug", slug)
+                .put("articleMode", articleModeName)
+                .put("tutorialDifficulty", tutorialDifficulty)
+                .put("tutorialEstimatedMinutes", tutorialEstimatedMinutes)
+                .put("tutorialPrerequisites", tutorialPrerequisites)
+                .put("tutorialTargetAudience", tutorialTargetAudience)
+                .put("resourceVersion", resourceVersion)
+                .put("resourceFileSize", resourceFileSize)
+                .put("resourcePlatforms", resourcePlatforms)
+                .put("resourceOfficialUrl", resourceOfficialUrl)
+                .put("resourceLicense", resourceLicense)
+                .put("resourceChecksumSha256", resourceChecksumSha256)
+                .put("resourceChecksumMd5", resourceChecksumMd5)
+                .put("resourceMirrors", resourceMirrors)
+                .put("postCoverImageUrl", postCoverImageUrl)
+                .put("postCoverThumbhash", postCoverThumbhash)
+                .derived("wordCount", () -> com.biliwind.blog.common.helper.PostHelper
+                        .calculateWordCount(renderedBody.get().body()))
+                .derived("readingTimeMinutes", () -> com.biliwind.blog.common.helper.PostHelper
+                        .calculateReadingTimeMinutes(com.biliwind.blog.common.helper.PostHelper
+                                .calculateWordCount(renderedBody.get().body())))
+                .put("internalLinkGraphVisible", snapshot.visibility() == 0 && com.biliwind.blog.service.ConfigTemplateData.internalLinkGraphEnabled())
+                .put("isTranslationOutdated", isTranslationOutdated)
+                .put("postTitle", displayTitle)
+                .put("pageTitle", seoTitle)
+                .put("pageDescription", pageDescription)
+                .put("pageKeywords", pageKeywords)
+                .put("aiSummary", localizedAiSummary)
+                .put("aiSummaryStatus", aiSummaryStatusVal)
+                .derived("postBody", () -> renderedBody.get().body())
+                .derived("postBodyHtml", () -> renderedBody.get().html())
+                .put("publishedAt", snapshot.publishedAt())
+                .put("authorName", authorName)
+                .put("authorAvatar", authorAvatar)
+                .put("postRenderType", renderTypeName)
+                .derived("postBodyJson", () -> escapeJavaScript(renderedBody.get().body()))
+                .put("postCategory", postCategory)
+                .put("postCategorySlug", postCategorySlug)
+                .put("breadcrumbCategorySlug", snapshot.categorySlug())
+                .put("postCategories", postCategories)
+                .put("postPrice", postPrice)
                 // Public pages use the read model; protected pages are no-store and may
                 // render authorized content loaded from the published revision.
-                .data("hasPurchased", hasPurchased)
-                .data("postTags", postTags)
-                .data("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
-                .data("attachments", attachments)
-                .data("userAuthenticated", requestUserId != null)
-                .data("attachmentLoginUrl", buildAttachmentLoginUrl(slug, resolvedLang))
-                .data("relatedStoreItems", snapshot.relatedStoreItems())
-                .data("relatedArticles", seoAuditService.related(postEntity, resolvedLang))
-                .data("repostPolicyCode", repostPolicy.code())
-                .data("repostPolicyName", repostPolicy.nameFor(resolvedLang))
-                .data("repostPolicySummary", repostPolicy.summaryFor(resolvedLang))
-                .data("repostPolicyRequiresApplication", repostPolicy.requiresApplication())
-                .data("repostPolicyConditions", repostPolicy.conditionsFor(resolvedLang))
-                .data("repostPolicyLicenseUrl", repostPolicy.licenseUrl())
-                .data("repostDirectCopyText", repostDirectCopyText)
-                .data("repostOriginalUrl", repostOriginalUrl)
-                .data("canonicalUrl", canonicalUrl)
-                .data("ampUrl", ampUrl)
-                .data("ogData", buildOgData(canonicalUrl, seoTitle, pageDescription, publicHtml, snapshot, contentLanguage))
-                .data("jsonLd", structuredDataService.article(snapshot, seoTitle, pageDescription,
-                        canonicalUrl, contentLanguage, publicHtml));
+                .put("hasPurchased", hasPurchased)
+                .put("postTags", postTags)
+                .put("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
+                .derived("attachments", attachments)
+                .put("userAuthenticated", requestUserId != null)
+                .put("attachmentLoginUrl", buildAttachmentLoginUrl(slug, resolvedLang))
+                .put("relatedStoreItems", snapshot.relatedStoreItems())
+                .put("relatedArticles", seoAuditService.related(postEntity, resolvedLang))
+                .put("repostPolicyCode", repostPolicy.code())
+                .put("repostPolicyName", repostPolicy.nameFor(resolvedLang))
+                .put("repostPolicySummary", repostPolicy.summaryFor(resolvedLang))
+                .put("repostPolicyRequiresApplication", repostPolicy.requiresApplication())
+                .put("repostPolicyConditions", repostPolicy.conditionsFor(resolvedLang))
+                .put("repostPolicyLicenseUrl", repostPolicy.licenseUrl())
+                .put("repostDirectCopyText", repostDirectCopyText)
+                .put("repostOriginalUrl", repostOriginalUrl)
+                .put("canonicalUrl", canonicalUrl)
+                .put("ampUrl", ampUrl)
+                .derived("ogData", () -> buildOgData(canonicalUrl, seoTitle, pageDescription,
+                        publicHtml.get(), snapshot, contentLanguage))
+                .derived("jsonLd", () -> structuredDataService.article(snapshot, seoTitle, pageDescription,
+                        canonicalUrl, contentLanguage, publicHtml.get()))
+                .put("pageIdentity", identity)
+                .put("siteConfig", pageIdentityService.environmentFingerprint())
+                .put("requestUser", requestUserId)
+                .put("region", currentRegion)
+                .put("updatedEpoch", epoch)
+                .put("content", localizedContent)
+                .put("publicPreview", publicPreview)
+                .put("translationMeta", translationMeta)
+                .put("contentAccessible", contentAccessible)
+                .put("postEntityId", postEntity == null ? null : postEntity.id)
+                .put("deviceId", deviceId)
+                .put("trackedReferral", trackedReferral);
 
-        Response.ResponseBuilder responseBuilder = Response.ok(templateInstance)
-                .header("Vary", "Accept-Language, Cookie");
+        EntityTag etag = model.validator();
+
+        // 评估客户端提供的 If-None-Match 首部（仅限未登录访客、非受保护且非推广的公开文章）
+        if (!protectedPage && !trackedReferral && requestUserId == null) {
+            Response.ResponseBuilder precondition = request.evaluatePreconditions(etag);
+            if (precondition != null) {
+                return PageCachePolicy.publicDocument(precondition, etag).build();
+            }
+        }
+
+        TemplateInstance templateInstance = model.render(template);
+        Response.ResponseBuilder responseBuilder = Response.ok(templateInstance);
         boolean isPrivateContext = protectedPage || trackedReferral || requestUserId != null || hasPurchased;
         if (isPrivateContext) {
-            responseBuilder.header("X-WindBlog-Private", "true");
-            responseBuilder.header("Cache-Control", "private, no-cache, no-store, must-revalidate")
-                    .header("Pragma", "no-cache")
-                    .header("Expires", "0");
+            responseBuilder = PageCachePolicy.privateNoStore(responseBuilder);
         } else {
-            CacheControl cacheControl = new CacheControl();
-            cacheControl.setMaxAge(60); // 浏览器缓存 60 秒
-            cacheControl.setSMaxAge(300); // 共享 CDN 缓存 300 秒
-            responseBuilder.tag(etag).cacheControl(cacheControl);
+            responseBuilder = PageCachePolicy.publicDocument(responseBuilder, etag);
         }
         return responseBuilder.build();
     }
@@ -518,67 +515,6 @@ public class PostController {
             }
         }
         return labels;
-    }
-
-    private String buildCanonicalUrl(String slug, String language) {
-        return canonicalUrlService.buildLocalizedPath("/post/" + slug, language);
-    }
-
-    private String buildAmpUrl(String slug, String language) {
-        String path = LanguageHelper.localizedPath("/amp/post/" + slug, language,
-                canonicalUrlService.getDefaultLanguage());
-        return publicUrlService.buildPath(path);
-    }
-
-    private String resolveSeoTitle(
-            com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
-            String displayTitle, String language) {
-        String seoTitle = LanguageHelper.lookupIgnoreCase(snapshot.seoTitle(), language);
-        if (seoTitle != null && !seoTitle.isBlank()) {
-            return seoTitle.trim();
-        }
-        return displayTitle;
-    }
-
-    private String resolveSeoKeywords(
-            com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
-            String language) {
-        String keywords = LanguageHelper.lookupIgnoreCase(snapshot.seoKeywords(), language);
-        return keywords == null || keywords.isBlank() ? null : keywords.trim();
-    }
-
-    private String resolvePageDescription(
-                                          com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot snapshot,
-                                          String localizedAiSummary,
-                                          String localizedContent,
-                                          String language) {
-        String seoDescription = LanguageHelper.lookupIgnoreCase(snapshot.seoDescription(), language);
-        if (seoDescription != null && !seoDescription.isBlank()) {
-            return seoDescription.trim();
-        }
-
-        String localizedSummary = LanguageHelper.resolveLocalizedValue(snapshot.summary(), language);
-        if (localizedSummary != null && !localizedSummary.isBlank()) {
-            return limitDescription(localizedSummary);
-        }
-
-        if (localizedAiSummary != null && !localizedAiSummary.isBlank()) {
-            return limitDescription(localizedAiSummary);
-        }
-
-        String searchableContent = SearchContentHelper.toSearchableText(localizedContent, snapshot.renderType());
-        return limitDescription(searchableContent);
-    }
-
-    private String limitDescription(String description) {
-        if (description == null) {
-            return "";
-        }
-        String normalizedDescription = description.replaceAll("\\s+", " ").trim();
-        if (normalizedDescription.length() <= 160) {
-            return normalizedDescription;
-        }
-        return normalizedDescription.substring(0, 160);
     }
 
     private java.util.Map<String, String> buildOgData(String canonicalUrl, String title, String summary,
