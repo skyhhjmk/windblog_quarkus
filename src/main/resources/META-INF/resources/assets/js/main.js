@@ -1335,6 +1335,7 @@
                 cloneElement.appendChild(gradientElement);
             }
             gradientElement.style.opacity = String(sourceCover.gradientOpacity != null ? sourceCover.gradientOpacity : 0);
+            gradientElement.style.zIndex = '3';
 
             return {
                 imgElement: imgElement,
@@ -1465,10 +1466,14 @@
                     if (targetImg && targetImg.classList.contains('is-tall-crop') && preparedItem.coverNodes && preparedItem.coverNodes.imgElement) {
                         preparedItem.coverNodes.imgElement.classList.add('is-tall-crop');
                     }
+                    const computedImgOpacity = targetImg
+                        ? parseFloat(window.getComputedStyle(targetImg).opacity)
+                        : 0.78;
+                    const targetImgOpacity = (!isNaN(computedImgOpacity) && computedImgOpacity > 0)
+                        ? computedImgOpacity
+                        : 0.78;
                     preparedItem.targetCoverState = {
-                        imgOpacity: targetImg
-                            ? (parseFloat(window.getComputedStyle(targetImg).opacity) || 1)
-                            : 1,
+                        imgOpacity: targetImgOpacity,
                         gradientOpacity: preparedItem.targetElement.querySelector('.post-header-cover-gradient') ? 1 : 0
                     };
                 }

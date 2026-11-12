@@ -446,6 +446,7 @@ h1, h2, h3, h4, h5, h6 {
 .post-header-cover-gradient {
     position: absolute;
     inset: 0;
+    z-index: 3;
     background:
         linear-gradient(
             180deg,
@@ -904,9 +905,12 @@ input::placeholder {
     z-index: 2;
 }
 
-.has-thumbhash .post-list-cover-img.is-loaded,
-.has-thumbhash .post-header-cover-img.is-loaded {
+.has-thumbhash .post-list-cover-img.is-loaded {
     opacity: 1 !important;
+}
+
+.has-thumbhash .post-header-cover-img.is-loaded {
+    opacity: 0.78 !important;
 }
 
 .prose img {
