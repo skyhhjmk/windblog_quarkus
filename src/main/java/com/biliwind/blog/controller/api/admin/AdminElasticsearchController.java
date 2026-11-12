@@ -336,9 +336,11 @@ public class AdminElasticsearchController {
             if (page < 1) page = 1;
             if (size < 1 || size > 100) size = 10;
 
-            var searchResult = query == null || query.trim().isEmpty()
-                    ? postSearchService.searchPosts("", page, size, null, null, null, region)
-                    : postSearchService.searchPosts(query, page, size, null, null, null, region);
+            String searchKeyword = query == null ? "" : query.trim();
+            var searchResult = postSearchService.searchPosts(
+                    new ElasticsearchPostSearchService.PostSearchRequest(
+                            searchKeyword, null, null, null, null, "", null, region,
+                            (page - 1) * size, size, searchKeyword));
 
             Map<String, Object> result = new HashMap<>();
             result.put("total", searchResult.total());

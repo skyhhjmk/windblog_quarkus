@@ -1,12 +1,12 @@
 package com.biliwind.blog.controller;
 
-import com.biliwind.blog.controller.SearchController.SearchHit;
+import com.biliwind.blog.service.search.SearchHit;
+import com.biliwind.blog.service.search.SearchHitComparator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,23 +49,7 @@ class SearchHitSortingTest {
 
         List<SearchHit> hits = new ArrayList<>(List.of(hitLowWeight, hitZeroWeight, hitHighWeight));
 
-        // Comparator mirroring SearchController.hitComparator("")
-        Comparator<SearchHit> byDateDesc = Comparator
-                .comparing((SearchHit hit) -> hit.date(), Comparator.nullsLast(Comparator.naturalOrder()))
-                .reversed();
-        Comparator<SearchHit> byTypeWeight = Comparator.comparingInt(hit -> switch (hit.type()) {
-            case "post" -> 0;
-            case "tag" -> 1;
-            case "category" -> 2;
-            default -> 3;
-        });
-        Comparator<SearchHit> byTitle = Comparator.comparing(hit -> hit.title().toLowerCase());
-        Comparator<SearchHit> byWeightDesc = Comparator
-                .comparingInt((SearchHit hit) -> hit.weight())
-                .reversed();
-        Comparator<SearchHit> comparator = byWeightDesc.thenComparing(byTypeWeight).thenComparing(byDateDesc).thenComparing(byTitle);
-
-        hits.sort(comparator);
+        hits.sort(SearchHitComparator.forSort(""));
 
         assertEquals("Article High Weight", hits.get(0).title());
         assertEquals(150, hits.get(0).weight());

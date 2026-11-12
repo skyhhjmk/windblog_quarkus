@@ -4,10 +4,8 @@ import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostAuthorHelper;
-import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.common.dto.SearchHighlightSegment;
-import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
@@ -1168,102 +1166,37 @@ public class ElasticsearchPostSearchService {
     }
 
     /**
-     * Search articles (with pagination)
-     * Throws exception if Elasticsearch is unavailable, caller decides fallback strategy
+     * Search articles with the full intent already pushed into the query:
+     * pagination, sort, date range and parsed filters are all applied by
+     * Elasticsearch before the returned page is built.
      */
-    public SearchResult searchPosts(String query, int page, int size,
-                                    String status, String category, List<String> tags, String region)
-            throws Exception {
-
+    public SearchResult searchPosts(PostSearchRequest request) throws Exception {
         if (!connectionManager.isAvailable()) {
             throw new ElasticsearchUnavailableException("Elasticsearch service is currently unavailable");
         }
 
-        log.debugf("Searching articles: query=%s, page=%d, size=%d, status=%s, category=%s",
-                 query, page, size, status, category);
+        log.debugf("Searching articles: query=%s, from=%d, size=%d, sort=%s",
+                request.freeText(), request.from(), request.size(), request.sort());
 
-        int from = (page - 1) * size;
+        HighlightMarkers highlightMarkers = request.highlightText() != null
+                && !request.highlightText().isBlank() ? HighlightMarkers.create() : null;
+        ObjectNode searchBody = PostSearchRequestBody.build(request,
+                highlightMarkers == null ? null : highlightMarkers.preTag(),
+                highlightMarkers == null ? null : highlightMarkers.postTag());
 
-        StringBuilder searchBody;
-        HighlightMarkers highlightMarkers = null;
-        if (query != null && !query.trim().isEmpty()) {
-            highlightMarkers = HighlightMarkers.create();
-            searchBody = new StringBuilder(String.format("""
-                    {
-                      "from": %d,
-                      "size": %d,
-                      "sort": [
-                        { "_score": { "order": "desc" } },
-                        { "publishedAt": { "order": "desc" } }
-                      ],
-                      "query": {
-                        "bool": {
-                          "must": [
-                            {
-                              "multi_match": {
-                                "query": "%s",
-                                "fields": ["title^3", "content", "summary", "translations^2", "seoTitle^2", "seoDescription", "tags"],
-                                "type": "best_fields"
-                              }
-                            }
-                          ],
-                          "filter": [
-                            { "term": { "status": "PUBLISHED" } },
-                            %s
-                          ]
-                        }
-                      },
-                      "highlight": {
-                        "fields": {
-                          "title": {},
-                          "content": { "fragment_size": 150, "number_of_fragments": 3 },
-                          "summary": {}
-                        },
-                        "pre_tags": ["%s"],
-                        "post_tags": ["%s"]
-                      }
-                    }
-                    """, from, size, escapeJson(query),
-                    RegionVisibility.elasticsearchFilter(BlogRegion.fromCode(region)),
-                    highlightMarkers.preTag(), highlightMarkers.postTag()));
-        } else {
-            searchBody = new StringBuilder(String.format("""
-                {
-                  "from": %d,
-                  "size": %d,
-                  "sort": [
-                    { "publishedAt": { "order": "desc" } }
-                  ],
-                  "query": {
-                    "bool": {
-                      "must": [
-                            { "match_all": {} }
-                      ],
-                      "filter": [
-                            { "term": { "status": "PUBLISHED" } },
-                            %s
-                          ]
-                        }
-                      }
-                    }
-                    """, from, size,
-                    RegionVisibility.elasticsearchFilter(BlogRegion.fromCode(region))));
-        }
+        var httpRequest = HttpRequest.newBuilder()
+                .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_search"))
+                .POST(HttpRequest.BodyPublishers.ofString(searchBody.toString()))
+                .header("Content-Type", "application/json")
+                .build();
 
-        var request = HttpRequest.newBuilder()
-            .uri(connectionManager.resolveUri("/" + POST_INDEX_ALIAS + "/_search"))
-            .POST(HttpRequest.BodyPublishers.ofString(searchBody.toString()))
-            .header("Content-Type", "application/json")
-            .build();
-
-        var response = connectionManager.sendRequest(request);
+        var response = connectionManager.sendRequest(httpRequest);
 
         if (response.statusCode() == 200) {
             return parseSearchResponse(response.body(), highlightMarkers);
-        } else {
-            log.error("Search failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
-            throw new ElasticsearchUnavailableException("Search failed: " + response.statusCode());
         }
+        log.error("Search failed: " + SensitiveMessageSanitizer.sanitize(response.body()));
+        throw new ElasticsearchUnavailableException("Search failed: " + response.statusCode());
     }
 
     /**
@@ -1614,6 +1547,22 @@ public class ElasticsearchPostSearchService {
     }
 
     public record SearchResult(long total, List<SearchedPost> posts) {}
+
+    @RegisterForReflection
+    public record PostSearchRequest(
+            String freeText,
+            String title,
+            String content,
+            String author,
+            String user,
+            String sort,
+            java.time.OffsetDateTime publishedAfter,
+            String region,
+            int from,
+            int size,
+            String highlightText
+    ) {
+    }
 
     public record SearchCategory(String name, String slug) {}
 
