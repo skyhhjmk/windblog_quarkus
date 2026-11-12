@@ -35,7 +35,7 @@ class ReactionApiControllerTest {
         captchaService = new CommentCaptchaService();
         setField(captchaService, "configuredSecret", Optional.of(SECRET));
         setField(captchaService, "eventHashSecret", "unused");
-        setField(captchaService, "configManager", null);
+        setField(captchaService, "settings", null);
         setField(captchaService, "redis", null);
 
         reactionService = new ReactionService();
