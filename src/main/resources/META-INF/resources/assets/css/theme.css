@@ -859,7 +859,8 @@ input::placeholder {
 
 .image-wrapper .placeholder,
 .post-list-cover .placeholder,
-.post-header-cover .placeholder {
+.post-header-cover .placeholder,
+.pjax-article-transition-clone-cover .placeholder {
     position: absolute;
     inset: 0;
     width: 100%;
