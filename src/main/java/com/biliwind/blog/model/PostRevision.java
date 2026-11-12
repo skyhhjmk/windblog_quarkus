@@ -47,6 +47,7 @@ public class PostRevision extends PanacheEntityBase {
     /** 编辑器类型：0Markdown，1HTML，2BlockEditor */
     @Column(name = "editor_type", nullable = false)
     public short editorType;
+    // TODO 这个 BlockEditor 我貌似从来都没做出过
 
     /** 版本号（同一文章内递增） */
     @Column(name = "revision_number", nullable = false)
