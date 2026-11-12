@@ -210,9 +210,11 @@ public class AdminPostApiController {
             return "";
         }
         try {
+            // Bounded so the preview stays interactive; AI uses the provider's
+            // full timeout budget otherwise. On timeout, fall back to pinyin.
             return aiManager.generateSlug(title)
                     .toCompletableFuture()
-                    .join();
+                    .get(8, java.util.concurrent.TimeUnit.SECONDS);
         } catch (Exception e) {
             return com.biliwind.blog.common.helper.SlugHelper.slugify(title);
         }
