@@ -524,14 +524,9 @@
         calculate();
     }
 
-    if (document.readyState !== 'loading') {
-        initSubnetCalculator();
-    } else {
-        document.addEventListener('DOMContentLoaded', initSubnetCalculator);
-    }
-
-    // PJAX compatibility
-    document.addEventListener('page:ready', initSubnetCalculator);
+    WindBlogLifecycle.register('tool-subnet-calculator', {
+        mount: initSubnetCalculator
+    });
 })();
 /**
  * 时间戳与时区转换交互脚本
@@ -758,12 +753,9 @@
         convertDateToStamp();
     }
 
-    if (document.readyState !== 'loading') {
-        initTimestampTool();
-    } else {
-        document.addEventListener('DOMContentLoaded', initTimestampTool);
-    }
-    document.addEventListener('page:ready', initTimestampTool);
+    WindBlogLifecycle.register('tool-timestamp', {
+        mount: initTimestampTool
+    });
 })();
 /**
  * 日志格式化与结构化分析器
@@ -923,12 +915,9 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         parseAndRenderLogs();
     }
 
-    if (document.readyState !== 'loading') {
-        initLogFormatter();
-    } else {
-        document.addEventListener('DOMContentLoaded', initLogFormatter);
-    }
-    document.addEventListener('page:ready', initLogFormatter);
+    WindBlogLifecycle.register('tool-log-formatter', {
+        mount: initLogFormatter
+    });
 })();
 /**
  * Base64 及常见 Base 变体 (Base16, Base32, Base58, Base85) 编解码交互脚本
@@ -1234,12 +1223,9 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         executeConversion();
     }
 
-    if (document.readyState !== 'loading') {
-        initBaseEncoder();
-    } else {
-        document.addEventListener('DOMContentLoaded', initBaseEncoder);
-    }
-    document.addEventListener('page:ready', initBaseEncoder);
+    WindBlogLifecycle.register('tool-base-encoder', {
+        mount: initBaseEncoder
+    });
 
     /* ==========================================================================
        5. Cron 表达式生成与执行时间模拟器 (Cron Expression Generator & Simulator)
@@ -1668,12 +1654,9 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         onExpressionChanged();
     }
 
-    if (document.readyState !== 'loading') {
-        initCronGenerator();
-    } else {
-        document.addEventListener('DOMContentLoaded', initCronGenerator);
-    }
-    document.addEventListener('page:ready', initCronGenerator);
+    WindBlogLifecycle.register('tool-cron-generator', {
+        mount: initCronGenerator
+    });
 
     /* ==========================================================================
        6. 正则表达式在线测试与速查工具 (RegExp Online Tester & Explainer)
@@ -1942,12 +1925,9 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         executeRegex();
     }
 
-    if (document.readyState !== 'loading') {
-        initRegexTester();
-    } else {
-        document.addEventListener('DOMContentLoaded', initRegexTester);
-    }
-    document.addEventListener('page:ready', initRegexTester);
+    WindBlogLifecycle.register('tool-regex-tester', {
+        mount: initRegexTester
+    });
 
     /* ==========================================================================
        7. 现代哈希计算与本地文件校验器 (Hash Calculator & File Verifier)
@@ -2564,12 +2544,9 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         computeHashes();
     }
 
-    if (document.readyState !== 'loading') {
-        initHashCalculator();
-    } else {
-        document.addEventListener('DOMContentLoaded', initHashCalculator);
-    }
-    document.addEventListener('page:ready', initHashCalculator);
+    WindBlogLifecycle.register('tool-hash-calculator', {
+        mount: initHashCalculator
+    });
 
     /* ==========================================================================
        8. JSON 格式化与可视化差分对比 (JSON Formatter & Visual Diff)
@@ -2982,12 +2959,9 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         updateFormatStats();
     }
 
-    if (document.readyState !== 'loading') {
-        initJsonDiff();
-    } else {
-        document.addEventListener('DOMContentLoaded', initJsonDiff);
-    }
-    document.addEventListener('page:ready', initJsonDiff);
+    WindBlogLifecycle.register('tool-json-diff', {
+        mount: initJsonDiff
+    });
 
 
 
@@ -3691,14 +3665,11 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
             .replace(/'/g, '&#39;');
     }
 
-    document.addEventListener('pjax:start', disposeActive);
     window.addEventListener('pagehide', disposeActive);
     window.addEventListener('beforeunload', disposeActive);
 
-    if (document.readyState !== 'loading') {
-        initWebSerial();
-    } else {
-        document.addEventListener('DOMContentLoaded', initWebSerial);
-    }
-    document.addEventListener('page:ready', initWebSerial);
+    WindBlogLifecycle.register('tool-web-serial', {
+        mount: initWebSerial,
+        unmount: disposeActive
+    });
 })();

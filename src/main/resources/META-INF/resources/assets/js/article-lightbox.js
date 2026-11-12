@@ -360,19 +360,10 @@
         }
     }, true);
 
-    document.addEventListener('pjax:start', function () {
-        closeLightbox(true);
+    WindBlogLifecycle.register('article-lightbox', {
+        mount: watchArticleBody,
+        unmount() {
+            closeLightbox(true);
+        }
     });
-    document.addEventListener('pjax:complete', watchArticleBody);
-    document.addEventListener('pjax:end', watchArticleBody);
-
-    function init() {
-        watchArticleBody();
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
 })();

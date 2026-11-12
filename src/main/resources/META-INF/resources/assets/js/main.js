@@ -383,11 +383,12 @@
             registerAnalyticsContainers(root || document);
         }
 
-        document.addEventListener('page:ready', event => {
-            analyticsPageReady(event.detail?.url, document);
+        WindBlogLifecycle.register('analytics-page', {
+            mount(context) {
+                analyticsPageReady(context.url, document);
+            }
         });
         bindAnalyticsGoals();
-        analyticsPageReady(window.location.href, document);
 
         function clearProgressTimers() {
             clearTimeout(progressTimer);
@@ -836,8 +837,6 @@
                 // smooth-scroll CSS rule. Restore the target entry explicitly.
                 scrollToPositionInstantly(options.restoreScrollPosition);
             }
-
-            document.dispatchEvent(new CustomEvent('page:ready', { detail: { url: url } }));
         }
 
         function updatePjaxHeadMetadata(container, url) {
@@ -921,13 +920,13 @@
             // 只有当内容确实改变时才更新，避免闪烁
             if (container.innerHTML.trim() !== nextHtml.trim()) {
                 container.innerHTML = nextHtml;
-                document.dispatchEvent(new CustomEvent('sidebar:updated', { detail: {} }));
+                WindBlogLifecycle.refresh();
             }
         }
 
         function finalizePjaxLoad(url) {
-            document.dispatchEvent(new CustomEvent('pjax:complete', { detail: { url: url } }));
-            document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url } }));
+            WindBlogLifecycle.mountPage({url: url});
+            hideProgress();
         }
 
         function clampRectToViewport(rect) {
@@ -1999,7 +1998,10 @@
             container.style.opacity = '';
             const requestController = new AbortController();
             activePjaxController = requestController;
-            document.dispatchEvent(new CustomEvent('pjax:start', { detail: { url: url } }));
+            showProgress();
+            closeGithubSearchModal();
+            clearInPageHighlights();
+            WindBlogLifecycle.beginNavigation({url: url});
             const previousHtml = container.innerHTML;
             const previousTitle = document.title;
             const previousHead = Array.from(document.head.querySelectorAll('meta, link[rel="canonical"], script[type="application/ld+json"]')).map(node => node.cloneNode(true));
@@ -2052,7 +2054,7 @@
                     document.title = previousTitle;
                     document.head.querySelectorAll('meta, link[rel="canonical"], script[type="application/ld+json"]').forEach(node => node.remove());
                     previousHead.forEach(node => document.head.appendChild(node));
-                    document.dispatchEvent(new CustomEvent('page:ready', { detail: { url: displayedUrl } }));
+                    WindBlogLifecycle.mountPage({url: displayedUrl});
                     throw error;
                 }
                 // Animation failures must never invalidate successful navigation.
@@ -2133,7 +2135,11 @@
                 if (activePjaxController !== requestController || requestController.signal.aborted) {
                     return;
                 }
-                document.dispatchEvent(new CustomEvent('pjax:end', { detail: { url: url, error: error } }));
+                hideProgress();
+                cleanupPaginationGoAnimation();
+                if (committed) {
+                    WindBlogLifecycle.mountPage({url: url});
+                }
                 if (!committed) {
                     fallbackToFullPage(url);
                 }
@@ -2505,26 +2511,30 @@
             loadByPjax(window.location.href, false, resolveArticleTransitionSlug(window.location.href, null));
         });
 
-        document.addEventListener('page:ready', () => {
-            formatTimestamps();
-            decorateCodeBlocks();
-            injectSidebar();
-            decorateShortcutButtons();
-            bindPaginationForms();
-            bindPaginationBoundaryButtons();
-            updateArticleReturnLink();
-            if (restoreMobileFocusOnPageReady) {
-                restoreMobileFocusOnPageReady = false;
-                closeMobileMenu(true);
-            } else {
-                closeMobileMenu();
+        WindBlogLifecycle.register('page-chrome', {
+            mount() {
+                formatTimestamps();
+                decorateCodeBlocks();
+                injectSidebar();
+                decorateShortcutButtons();
+                bindPaginationForms();
+                bindPaginationBoundaryButtons();
+                updateArticleReturnLink();
+                if (restoreMobileFocusOnPageReady) {
+                    restoreMobileFocusOnPageReady = false;
+                    closeMobileMenu(true);
+                } else {
+                    closeMobileMenu();
+                }
             }
         });
 
-        dispatch('page:ready', { url: window.location.href });
-
-        document.addEventListener('pjax:start', showProgress);
-        document.addEventListener('pjax:end', hideProgress);
+        WindBlogLifecycle.setNavigator((url, options) => loadByPjax(
+            url,
+            true,
+            resolveArticleTransitionSlug(url, null),
+            options
+        ));
 
         // Global Form Debouncing
         document.addEventListener('submit', (e) => {
@@ -2848,9 +2858,8 @@
             }, 1150);
         }
 
-        document.addEventListener('pjax:complete', completePaginationGoAnimation);
-        document.addEventListener('pjax:end', event => {
-            if (event.detail?.error) cleanupPaginationGoAnimation();
+        WindBlogLifecycle.register('pagination-go-animation', {
+            mount: completePaginationGoAnimation
         });
 
         function bindPaginationBoundaryButtons(root = document) {
@@ -3754,11 +3763,6 @@
             }
         });
 
-        document.addEventListener('pjax:start', () => {
-            closeGithubSearchModal();
-            clearInPageHighlights();
-        });
-
         // ==========================================
         // TOC & Mobile Floating Controls (Scrollspy, Mobile Drawer, Back to Top)
         // ==========================================
@@ -4346,37 +4350,27 @@
             }
         }
 
-        document.addEventListener('page:ready', () => {
-            initToc();
-            updateScrollProgress();
-            updateStickySidebar(true);
-            initStickySidebarObserver();
-            initPostReactions(document);
+        WindBlogLifecycle.register('toc-and-sidebar', {
+            mount() {
+                initToc();
+                closeMobileTocDrawer();
+                updateScrollProgress();
+                updateStickySidebar(true);
+                initStickySidebarObserver();
+            },
+            refresh() {
+                initToc();
+                updateStickySidebar(true);
+                initStickySidebarObserver();
+            }
         });
-        document.addEventListener('pjax:complete', () => {
-            initToc();
-            closeMobileTocDrawer();
-            updateScrollProgress();
-            updateStickySidebar(true);
-            initStickySidebarObserver();
-            initPostReactions(document);
+        WindBlogLifecycle.register('post-reactions', {
+            mount() {
+                initPostReactions(document);
+            }
         });
-        document.addEventListener('sidebar:updated', () => {
-            initToc();
-            updateStickySidebar(true);
-            initStickySidebarObserver();
-        });
-
-        updateStickySidebar(true);
-        initStickySidebarObserver();
-
-        bindSearchForms();
-        decorateShortcutButtons();
-        initPostReactions(document);
-        document.addEventListener('page:ready', () => {
-            bindSearchForms();
-            decorateShortcutButtons();
-            initPostReactions(document);
+        WindBlogLifecycle.register('search-forms', {
+            mount: bindSearchForms
         });
     });
 })();

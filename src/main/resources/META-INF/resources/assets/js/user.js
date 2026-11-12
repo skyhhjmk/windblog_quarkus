@@ -6,11 +6,6 @@
         window.WindBlogAnalytics?.trackFormResult(formId, successful === true);
     }
 
-    function ready(fn) {
-        if (document.readyState !== 'loading') fn();
-        else document.addEventListener('DOMContentLoaded', fn);
-    }
-
     // Lens hashes this opaque site-scoped identifier and only sends it after
     // the visitor has granted analytics consent. Never pass the username or
     // email address to the tracker.
@@ -1591,13 +1586,8 @@
         });
     }
 
-    ready(() => {
-        init();
-
-        // PJAX 刷新后，重新初始化
-        document.addEventListener('pjax:complete', () => {
-            init();
-        });
+    WindBlogLifecycle.register('user-account', {
+        mount: init
     });
 
     window.addEventListener('pageshow', (event) => {

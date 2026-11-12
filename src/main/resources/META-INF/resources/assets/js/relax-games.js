@@ -1383,18 +1383,6 @@
                     }
                 }
             });
-
-            // 页面 PJAX 路由切换时优雅停止
-            document.addEventListener('pjax:start', () => {
-                if (this.activeGame) {
-                    this.stopGame();
-                }
-            });
-            document.addEventListener('page:ready', () => {
-                if (this.activeGame) {
-                    this.stopGame();
-                }
-            });
         }
 
         toggleMenu() {
@@ -1477,25 +1465,23 @@
                 window.toast.info('正在复原网页...');
             }
             // 优先使用 PJAX 无刷新复原当前网页
-            const currentUrl = window.location.href;
-            if (typeof window.pjaxNavigate === 'function') {
-                window.pjaxNavigate(currentUrl);
-            } else {
-                window.location.reload();
-            }
+            window.WindBlogLifecycle.navigate(window.location.href);
         }
     }
 
-    // 页面加载完成后自动启动管理器
+    let manager = null;
+
     function init() {
-        const manager = new RelaxGameManager();
+        manager = new RelaxGameManager();
         manager.init();
         window.wbRelaxGameManager = manager;
     }
 
-    if (document.readyState !== 'loading') {
-        init();
-    } else {
-        document.addEventListener('DOMContentLoaded', init);
-    }
+    WindBlogLifecycle.register('relax-games', {
+        persistent: true,
+        mount: init,
+        unmount() {
+            manager?.stopGame();
+        }
+    });
 })();

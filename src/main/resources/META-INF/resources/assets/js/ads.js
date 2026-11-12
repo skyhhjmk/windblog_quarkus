@@ -125,7 +125,7 @@
             else render(wrapper, config, token);
         });
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
-    document.addEventListener('pjax:complete', init);
+    WindBlogLifecycle.register('ads', {
+        mount: init
+    });
 })();

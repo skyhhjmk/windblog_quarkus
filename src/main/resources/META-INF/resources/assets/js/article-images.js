@@ -288,11 +288,9 @@
         }
     }
 
-    prepareImages(document);
-    document.addEventListener('pjax:complete', function () {
-        prepareImages(document.getElementById('pjax-container') || document);
-    });
-    document.addEventListener('pjax:end', function () {
-        prepareImages(document.getElementById('pjax-container') || document);
+    WindBlogLifecycle.register('article-images', {
+        mount() {
+            prepareImages(document.getElementById('pjax-container') || document);
+        }
     });
 })();

@@ -6,13 +6,7 @@
     const pageSize = 10;
     let hasMore = true;
     const commentIndex = new Map();
-    let expandListenerBound = false;
     const guestInfoStorageKey = 'windblog.comment.guest-info.v1';
-
-    function ready(fn) {
-        if (document.readyState !== 'loading') fn();
-        else document.addEventListener('DOMContentLoaded', fn);
-    }
 
     function getCommentRoot() {
         return document.getElementById('comment-section');
@@ -642,16 +636,17 @@
         }
     };
 
-    ready(() => {
-        initComments();
-        if (!expandListenerBound) {
+    WindBlogLifecycle.register('comments', {
+        mount: initComments
+    });
+    WindBlogLifecycle.register('comment-replies-expand', {
+        persistent: true,
+        mount() {
             document.addEventListener('click', (event) => {
                 const button = event.target.closest('.expand-replies-btn');
                 if (!button) return;
                 window.toggleReplies(button.dataset.commentId, button);
             });
-            expandListenerBound = true;
         }
-        document.addEventListener('pjax:complete', initComments);
     });
 })();

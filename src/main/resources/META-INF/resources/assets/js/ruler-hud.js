@@ -1753,27 +1753,6 @@
         desktopMedia.addEventListener?.('change', () => scheduleRefresh(20));
         reducedMotionMedia.addEventListener?.('change', () => scheduleRefresh(20));
 
-        // PJAX & dynamic content hooks
-        document.addEventListener('pjax:start', () => {
-            state.pendingNavigationEntrance = true;
-            state.currentSectionsSignature = '';
-            startSectionsExit();
-        });
-        document.addEventListener('page:ready', () => {
-            state.virtualScroll = 0;
-            state.prevPct = -1;
-            state.prevDigits = [-1, -1, -1];
-            state.pendingNavigationEntrance = true;
-            scheduleRefresh(16);
-        });
-        document.addEventListener('pjax:complete', () => scheduleRefresh(40));
-        document.addEventListener('pjax:end', () => {
-            if (sectionNodes.length === 0) {
-                scheduleRefresh(20);
-            }
-        });
-        document.addEventListener('sidebar:updated', () => scheduleRefresh(60));
-
         if (document.fonts && document.fonts.ready) {
             document.fonts.ready.then(() => scheduleRefresh(40)).catch(() => {});
         }
@@ -1811,9 +1790,23 @@
         }
     }
 
-    if (document.readyState !== 'loading') {
-        init();
-    } else {
-        document.addEventListener('DOMContentLoaded', init);
-    }
+    WindBlogLifecycle.register('ruler-hud', {
+        persistent: true,
+        mount: init,
+        unmount() {
+            state.pendingNavigationEntrance = true;
+            state.currentSectionsSignature = '';
+            startSectionsExit();
+        },
+        onPage() {
+            state.virtualScroll = 0;
+            state.prevPct = -1;
+            state.prevDigits = [-1, -1, -1];
+            state.pendingNavigationEntrance = true;
+            scheduleRefresh(40);
+        },
+        refresh() {
+            scheduleRefresh(60);
+        }
+    });
 })();

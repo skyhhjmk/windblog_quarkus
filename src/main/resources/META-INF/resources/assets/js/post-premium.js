@@ -4,9 +4,9 @@
  */
 
 (function () {
-    // Wait for DOM to be ready
-    document.addEventListener('DOMContentLoaded', initPostPremium);
-    document.addEventListener('pjax:complete', initPostPremium);
+    WindBlogLifecycle.register('post-premium', {
+        mount: initPostPremium
+    });
 
     // Global variables (will be initialized from data attributes)
     let config = {

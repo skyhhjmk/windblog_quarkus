@@ -68,8 +68,10 @@
             if (container.isConnected) container.querySelector('[data-graph-status]').textContent = '内部链接图暂时无法加载，请稍后刷新。';
         }
     }
-    document.addEventListener('pjax:start', () => { if (active) active.abort(); });
-    document.addEventListener('pjax:complete', initialize);
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize);
-    else initialize();
+    WindBlogLifecycle.register('internal-link-graph', {
+        mount: initialize,
+        unmount() {
+            if (active) active.abort();
+        }
+    });
 })();

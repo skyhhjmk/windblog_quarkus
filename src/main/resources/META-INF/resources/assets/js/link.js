@@ -323,6 +323,7 @@
         initLinkApplicationForm();
     }
 
-    document.addEventListener('DOMContentLoaded', initPage);
-    document.addEventListener('page:ready', initPage);
+    WindBlogLifecycle.register('link-page', {
+        mount: initPage
+    });
 })();

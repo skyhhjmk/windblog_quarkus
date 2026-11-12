@@ -8,14 +8,6 @@
     // 存储活跃的连线元素关系，便于 resize/scroll 时重新绘制
     const connectionPairs = [];
 
-    function ready(fn) {
-        if (document.readyState !== 'loading') {
-            fn();
-        } else {
-            document.addEventListener('DOMContentLoaded', fn);
-        }
-    }
-
     // 获取块级父元素，限制引用划线操作只在单个段落/块内进行，保障排版完整性
     function getBlockParent(node) {
         let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
@@ -903,20 +895,16 @@
     }
     if (typeof ResizeObserver === 'function') {
         const correctionResizeObserver = new ResizeObserver(scheduleCorrectionRedraw);
-        ready(function () {
-            const bodyContent = document.getElementById('post-body-content');
-            if (bodyContent) correctionResizeObserver.observe(bodyContent);
-        });
-        document.addEventListener('pjax:complete', function () {
-            const bodyContent = document.getElementById('post-body-content');
-            if (bodyContent) correctionResizeObserver.observe(bodyContent);
+        WindBlogLifecycle.register('post-quote-correction-lines', {
+            mount() {
+                const bodyContent = document.getElementById('post-body-content');
+                if (bodyContent) correctionResizeObserver.observe(bodyContent);
+            }
         });
     }
 
-    // 页面完全载入或 PJAX 无刷新跳转载入时触发初始化
-    ready(function () {
-        initPostQuoteSystem();
-        document.addEventListener('pjax:complete', initPostQuoteSystem);
+    WindBlogLifecycle.register('post-quote', {
+        mount: initPostQuoteSystem
     });
 
 })();
