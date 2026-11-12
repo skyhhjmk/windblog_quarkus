@@ -67,6 +67,8 @@ public class WespSyncService {
     @Inject EntityManager entityManager;
     @Inject NodeRoleService nodeRoleService;
     @Inject EdgeSyncDataApplyService syncDataApplyService;
+    @Inject EdgeSyncRegistry registry;
+    @Inject WespSequenceGuard sequenceGuard;
     @Inject EdgeReadOnlyState readOnlyState;
     @Inject StorageService storageService;
     @Inject WespRuntimeConfig runtimeConfig;
@@ -586,7 +588,15 @@ public class WespSyncService {
             if (!priorHash.equals(bodyHash)) {
                 throw new WespProtocolException(Response.Status.CONFLICT, "BATCH_ID_CONFLICT", false);
             }
-            return Map.of("batch_id", batchId, "results", List.of(), "status", "DUPLICATE", "duplicate", true);
+            List<Map<String, Object>> replayResults = new ArrayList<>();
+            for (JsonNode wrapped : operations) {
+                JsonNode signed = wrapped != null && wrapped.isObject() && wrapped.has("signed")
+                        ? wrapped.get("signed") : wrapped;
+                String signature = wrapped != null && wrapped.isObject() ? text(wrapped, "signature") : null;
+                replayResults.add(receiveOperation(signed, signature));
+            }
+            return Map.of("batch_id", batchId, "results", replayResults,
+                    "status", "DUPLICATE", "duplicate", true);
         }
         entityManager.createNativeQuery(
                 "insert into wesp_sync_batches(batch_id, body_hash) values (:batch, :hash)")
@@ -643,8 +653,7 @@ public class WespSyncService {
         if (!effectiveTenantId().equals(tenant)) {
             return result(opId, "REJECTED", "TENANT_NOT_ALLOWED");
         }
-        if (!List.of("POST", "TAG", "CATEGORY", "MEDIA", "MEDIA_MANIFEST", "CLUSTER_PUBLIC_KEY", "SYNC_REQUEST",
-                "SYSTEM_SETTING", "REGION_RULE", "NODE_REGION").contains(entityType)
+        if (!registry.acceptsInbound(entityType)
                 || !List.of("UPSERT", "UPDATE", "FORCE_UPSERT", "DELETE").contains(action)) {
             return result(opId, "REJECTED", "UNSUPPORTED_OPERATION");
         }
@@ -687,63 +696,139 @@ public class WespSyncService {
         operation.updatedAt = operation.createdAt;
         operation.persist();
 
-        if (!"FORCE_UPSERT".equals(action)) {
-            long incomingVersion = parseEntityVersion(payload);
-            WespSyncOperation concurrent = null;
-            if (incomingVersion > 0) {
-                List<WespSyncOperation> priors = WespSyncOperation.find(
-                        "datasetId = ?1 and entityType = ?2 and entityId = ?3 and status = 'APPLIED' and nodeId <> ?4 order by rowId desc",
-                        dataset, entityType, entityId, nodeId).range(0, 4).list();
-                for (WespSyncOperation prior : priors) {
-                    long priorVersion = parseEntityVersion(prior.payload);
-                    if (priorVersion == incomingVersion && !prior.payloadHash.equals(payloadHash)) {
-                        concurrent = prior;
-                        break;
-                    }
-                }
-            } else {
-                concurrent = WespSyncOperation.find(
-                        "datasetId = ?1 and entityType = ?2 and entityId = ?3 and incarnation = ?4 and seq = ?5 and status = 'APPLIED' and nodeId <> ?6 order by rowId desc",
-                        dataset, entityType, entityId, incarnationValue, seq, nodeId).firstResult();
-            }
-            if (concurrent != null && !concurrent.payloadHash.equals(payloadHash)) {
-                operation.status = "CONFLICT";
-                operation.lastError = "concurrent revision requires explicit merge";
-                operation.updatedAt = now();
-                return result(opId, "CONFLICT", "CONCURRENT_REVISION");
-            }
+        WespSequenceGuard.Verdict verdict = sequenceGuard.check(
+                operation.nodeId, operation.incarnation, operation.datasetId, operation.seq);
+        if (verdict == WespSequenceGuard.Verdict.REPLAY) {
+            operation.status = "REJECTED";
+            operation.lastError = "SEQUENCE_REPLAY";
+            operation.updatedAt = now();
+            return result(opId, "REJECTED", "SEQUENCE_REPLAY");
+        }
+        if (verdict == WespSequenceGuard.Verdict.WAITING_DEPENDENCY) {
+            operation.lastError = "SEQUENCE_GAP";
+            operation.updatedAt = now();
+            return result(opId, "WAITING_DEPENDENCY", "SEQUENCE_GAP");
+        }
+        return applyStoredOperation(operation, true);
+    }
+
+    private Map<String, Object> applyStoredOperation(WespSyncOperation operation, boolean drain) {
+        if (hasConcurrentRevision(operation)) {
+            operation.status = "CONFLICT";
+            operation.lastError = "concurrent revision requires explicit merge";
+            operation.updatedAt = now();
+            sequenceGuard.advance(operation.nodeId, operation.incarnation, operation.datasetId, operation.seq);
+            drainDeferred(operation, drain);
+            return result(operation.opId, "CONFLICT", "CONCURRENT_REVISION");
         }
 
         try {
-            if ("SYNC_REQUEST".equals(operation.entityType)) {
+            EdgeSyncEntity.TransportKind transport = registry.transportKind(operation.entityType);
+            Map<String, Object> applied;
+            if (transport == EdgeSyncEntity.TransportKind.FULL_SYNC_REQUEST) {
                 applyFullSyncRequest(operation);
-            } else if ("MEDIA_MANIFEST".equals(operation.entityType)) {
+                applied = result(operation.opId, "APPLIED", null);
+            } else if (transport == EdgeSyncEntity.TransportKind.MEDIA_MANIFEST) {
                 if (!saveManifestInTransaction(operation.payload)) {
                     operation.status = "CONFLICT";
                     operation.lastError = "media manifest revision conflict";
                     operation.updatedAt = now();
-                    return result(opId, "CONFLICT", "MANIFEST_CONFLICT");
+                    sequenceGuard.advance(operation.nodeId, operation.incarnation, operation.datasetId,
+                            operation.seq);
+                    drainDeferred(operation, drain);
+                    return result(operation.opId, "CONFLICT", "MANIFEST_CONFLICT");
                 }
+                applied = result(operation.opId, "APPLIED", null);
             } else {
-                syncDataApplyService.apply(toSyncRequest(operation));
-                if ("MEDIA".equals(operation.entityType) && "UPSERT".equals(operation.action)) {
-                    materializeStoredManifest(operation.entityId);
+                EdgeSyncEntity.ApplyOutcome outcome = syncDataApplyService.apply(toSyncRequest(operation));
+                if (outcome == EdgeSyncEntity.ApplyOutcome.IGNORED) {
+                    operation.status = "REJECTED";
+                    operation.lastError = "UNSUPPORTED_OPERATION";
+                    operation.updatedAt = now();
+                    sequenceGuard.advance(operation.nodeId, operation.incarnation, operation.datasetId,
+                            operation.seq);
+                    drainDeferred(operation, drain);
+                    return result(operation.opId, "REJECTED", "UNSUPPORTED_OPERATION");
+                }
+                if (outcome == EdgeSyncEntity.ApplyOutcome.SKIPPED_STALE) {
+                    applied = result(operation.opId, "DUPLICATE", null);
+                } else {
+                    if ("MEDIA".equals(operation.entityType) && "UPSERT".equals(operation.action)) {
+                        materializeStoredManifest(operation.entityId);
+                    }
+                    applied = result(operation.opId, "APPLIED", null);
                 }
             }
             operation.status = "APPLIED";
             operation.appliedAt = now();
             operation.updatedAt = operation.appliedAt;
-            return result(opId, "APPLIED", null);
+            operation.lastError = null;
+            sequenceGuard.advance(operation.nodeId, operation.incarnation, operation.datasetId, operation.seq);
+            drainDeferred(operation, drain);
+            return applied;
         } catch (WespProtocolException exception) {
+            // A permanently rejected operation must still consume its sequence,
+            // otherwise the sender's later contiguous operations wait forever.
             operation.status = "REJECTED";
             operation.lastError = exception.code;
             operation.updatedAt = now();
-            return result(opId, "REJECTED", exception.code);
+            sequenceGuard.advance(operation.nodeId, operation.incarnation, operation.datasetId, operation.seq);
+            drainDeferred(operation, drain);
+            return result(operation.opId, "REJECTED", exception.code);
         } catch (RuntimeException exception) {
             operation.status = "RECEIVED";
             operation.lastError = safeError(exception.getMessage());
             operation.updatedAt = now();
-            return result(opId, "RECEIVED", "APPLY_RETRY");
+            return result(operation.opId, "RECEIVED", "APPLY_RETRY");
+        }
+    }
+
+    private boolean hasConcurrentRevision(WespSyncOperation operation) {
+        if ("FORCE_UPSERT".equals(operation.action)) {
+            return false;
+        }
+        long incomingVersion = parseEntityVersion(operation.payload);
+        WespSyncOperation concurrent;
+        if (incomingVersion > 0) {
+            concurrent = null;
+            List<WespSyncOperation> priors = WespSyncOperation.find(
+                    "datasetId = ?1 and entityType = ?2 and entityId = ?3 and status = 'APPLIED' and nodeId <> ?4 order by rowId desc",
+                    operation.datasetId, operation.entityType, operation.entityId, operation.nodeId)
+                    .range(0, 4).list();
+            for (WespSyncOperation prior : priors) {
+                long priorVersion = parseEntityVersion(prior.payload);
+                if (priorVersion == incomingVersion && !prior.payloadHash.equals(operation.payloadHash)) {
+                    concurrent = prior;
+                    break;
+                }
+            }
+        } else {
+            concurrent = WespSyncOperation.find(
+                    "datasetId = ?1 and entityType = ?2 and entityId = ?3 and incarnation = ?4 and seq = ?5 and status = 'APPLIED' and nodeId <> ?6 order by rowId desc",
+                    operation.datasetId, operation.entityType, operation.entityId, operation.incarnation,
+                    operation.seq, operation.nodeId).firstResult();
+        }
+        return concurrent != null && !concurrent.payloadHash.equals(operation.payloadHash);
+    }
+
+    private void drainDeferred(WespSyncOperation applied, boolean drain) {
+        if (!drain) {
+            return;
+        }
+        while (true) {
+            long expected = sequenceGuard.appliedThrough(
+                    applied.nodeId, applied.incarnation, applied.datasetId) + 1;
+            WespSyncOperation next = WespSyncOperation.find(
+                    "nodeId = ?1 and incarnation = ?2 and datasetId = ?3 and status = 'RECEIVED' and seq = ?4 order by rowId",
+                    applied.nodeId, applied.incarnation, applied.datasetId, expected).firstResult();
+            if (next == null) {
+                return;
+            }
+            Map<String, Object> outcome = applyStoredOperation(next, false);
+            String status = String.valueOf(outcome.get("status"));
+            if (!"APPLIED".equals(status) && !"DUPLICATE".equals(status)) {
+                return;
+            }
         }
     }
 
@@ -994,34 +1079,21 @@ public class WespSyncService {
         List<WespSyncOperation> received = WespSyncOperation.find(
                 "status = 'RECEIVED' order by rowId").range(0, MAX_BATCH_OPERATIONS - 1).list();
         for (WespSyncOperation operation : received) {
-            try {
-                if ("SYNC_REQUEST".equals(operation.entityType)) {
-                    applyFullSyncRequest(operation);
-                } else if ("MEDIA_MANIFEST".equals(operation.entityType)) {
-                    if (!saveManifestInTransaction(operation.payload)) {
-                        operation.status = "CONFLICT";
-                        operation.lastError = "media manifest revision conflict";
-                        operation.updatedAt = now();
-                        continue;
-                    }
-                } else {
-                    syncDataApplyService.apply(toSyncRequest(operation));
-                    if ("MEDIA".equals(operation.entityType) && "UPSERT".equals(operation.action)) {
-                        materializeStoredManifest(operation.entityId);
-                    }
-                }
-                operation.status = "APPLIED";
-                operation.appliedAt = now();
-                operation.updatedAt = operation.appliedAt;
-                operation.lastError = null;
-            } catch (WespProtocolException exception) {
-                operation.status = "REJECTED";
-                operation.lastError = exception.code;
-                operation.updatedAt = now();
-            } catch (RuntimeException exception) {
-                operation.lastError = safeError(exception.getMessage());
-                operation.updatedAt = now();
+            if (!"RECEIVED".equals(operation.status)) {
+                continue;
             }
+            WespSequenceGuard.Verdict verdict = sequenceGuard.check(
+                    operation.nodeId, operation.incarnation, operation.datasetId, operation.seq);
+            if (verdict == WespSequenceGuard.Verdict.REPLAY) {
+                operation.status = "REJECTED";
+                operation.lastError = "SEQUENCE_REPLAY";
+                operation.updatedAt = now();
+                continue;
+            }
+            if (verdict == WespSequenceGuard.Verdict.WAITING_DEPENDENCY) {
+                continue;
+            }
+            applyStoredOperation(operation, true);
         }
     }
 

@@ -4,7 +4,7 @@ import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
 import com.biliwind.blog.service.edge.EdgeReadOnlyState;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.biliwind.blog.service.edge.RoutedHttpExchange;
-import com.biliwind.blog.service.edge.RoutedRequestPolicy;
+import com.biliwind.blog.service.edge.EdgeRoutingPolicy;
 import com.biliwind.blog.service.edge.WespSyncService;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -46,7 +46,7 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
-        if (!nodeRoleService.isEdgeNode()) {
+        if (!nodeRoleService.routesWritesToPrimary()) {
             return;
         }
 
@@ -55,7 +55,7 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
         }
 
         String path = normalizePath(requestContext.getUriInfo().getPath());
-        if (isLocalWriteAllowed(path)) {
+        if (EdgeRoutingPolicy.isLocalWriteOnEdge(path, wespSyncService.isEnabled())) {
             return;
         }
 
@@ -100,43 +100,6 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
             return true;
         }
         return "DELETE".equalsIgnoreCase(method);
-    }
-
-    private boolean isLocalWriteAllowed(String path) {
-        if (path.equals("/user/api/login")) {
-            return true;
-        }
-        if (path.equals("/user/api/logout")) {
-            return true;
-        }
-        if (path.equals("/api/admin/auth/login")) {
-            return true;
-        }
-        if (path.equals("/api/admin/auth/step-up")) {
-            return true;
-        }
-        // The primary writes the WESP runtime bootstrap only after logging in
-        // to this target node. Keep that authenticated local operation on the
-        // edge; forwarding it would send the request back to the primary.
-        if (path.equals("/api/admin/edge-nodes/connection/bootstrap")) {
-            return true;
-        }
-        if (wespSyncService.isEnabled() && path.matches("/api/admin/edge-nodes/[^/]+/sync")) {
-            return true;
-        }
-        if (path.equals("/api/admin/install")) {
-            return true;
-        }
-        if (path.startsWith("/q/")) {
-            return true;
-        }
-        // WESP receiver endpoints are the authenticated transport boundary.
-        // They must be handled locally so an edge node never forwards a peer's
-        // sync request back through its own write router.
-        if (path.startsWith("/sync/v1/")) {
-            return true;
-        }
-        return path.startsWith("/grpc/");
     }
 
     private byte[] readRequestBody(ContainerRequestContext requestContext) {
@@ -197,7 +160,7 @@ public class EdgeWriteRoutingFilter implements ContainerRequestFilter {
     }
 
     private boolean canForwardHeader(String headerName) {
-        return RoutedRequestPolicy.isForwardableHeader(headerName);
+        return EdgeRoutingPolicy.isForwardableHeader(headerName);
     }
 
     private Response buildResponse(RoutedHttpExchange.Response routedResponse) {

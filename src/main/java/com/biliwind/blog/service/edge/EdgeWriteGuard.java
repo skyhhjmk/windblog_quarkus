@@ -16,7 +16,7 @@ public class EdgeWriteGuard {
     NodeRoleService nodeRoleService;
 
     public void rejectWriteOnEdge(String operationName) {
-        if (!nodeRoleService.isEdgeNode()) {
+        if (!nodeRoleService.routesWritesToPrimary()) {
             return;
         }
         log.warn("边缘节点拒绝写操作: {}", operationName);

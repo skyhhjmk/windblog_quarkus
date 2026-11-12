@@ -165,4 +165,5 @@
     <include file="db/migration/164-add-system-settings-level.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/165-create-ai-usage-logs.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/166-normalize-visibility-regions.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/167-create-wesp-sequence-frontiers.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

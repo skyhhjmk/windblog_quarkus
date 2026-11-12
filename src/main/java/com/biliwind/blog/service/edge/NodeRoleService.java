@@ -23,6 +23,21 @@ public class NodeRoleService {
         return resolveNodeRole() == NodeRole.EDGE;
     }
 
+    /**
+     * Writes are not executed here; they are replayed on the primary.
+     */
+    public boolean routesWritesToPrimary() {
+        return resolveNodeRole() == NodeRole.EDGE;
+    }
+
+    /**
+     * This node consumes the outbox/replication channels and runs their
+     * consumers. Edge nodes do not participate in that fan-out.
+     */
+    public boolean runsReplicationConsumers() {
+        return resolveNodeRole() == NodeRole.PRIMARY;
+    }
+
     public String getNodeId() {
         String enrolledNodeId = wespRuntimeConfig == null ? null
                 : wespRuntimeConfig.nodeId().orElse(null);

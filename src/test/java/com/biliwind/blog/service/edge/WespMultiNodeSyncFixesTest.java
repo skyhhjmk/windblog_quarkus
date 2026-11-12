@@ -6,6 +6,7 @@ import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.RegionRule;
 import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.model.WespSyncOperation;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -314,5 +315,136 @@ class WespMultiNodeSyncFixesTest {
         Media media = Media.findById(mediaId);
         assertNotNull(media);
         assertEquals(7, media.version, "Incoming media version must be stored on edge");
+    }
+
+    @Test
+    @TestTransaction
+    void shouldReturnPerOperationResultsWhenTheSameBatchIsReplayed() throws Exception {
+        long tagId = 993100000L + Math.abs(UUID.randomUUID().getMostSignificantBits() % 100000L);
+        String payload = "{\"id\":" + tagId + ",\"slug\":\"replay-" + tagId
+                + "\",\"name\":{\"zh-CN\":\"重放\"}}";
+        ObjectNode operation = createOperationEnvelope(UUID.randomUUID().toString(), "replay-node",
+                "TAG", "UPSERT", Long.toString(tagId), payload, 1);
+        String batch = buildBatch(List.of(operation));
+
+        Map<String, Object> first = wespSyncService.receiveBatch(batch);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> firstResults = (List<Map<String, Object>>) first.get("results");
+        assertEquals("APPLIED", firstResults.get(0).get("status"));
+        assertNotNull(Tag.findById(tagId));
+
+        Map<String, Object> replay = wespSyncService.receiveBatch(batch);
+        assertEquals("DUPLICATE", replay.get("status"));
+        assertEquals(Boolean.TRUE, replay.get("duplicate"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> replayResults = (List<Map<String, Object>>) replay.get("results");
+        assertEquals(1, replayResults.size(),
+                "A replay must answer each operation instead of returning an indistinguishable empty list");
+        assertEquals("DUPLICATE", replayResults.get(0).get("status"));
+        assertEquals(1L, Tag.count("id = ?1", tagId), "Replaying a batch must not apply it twice");
+    }
+
+    @Test
+    @TestTransaction
+    void shouldNotSkipASequenceThatArrivesOutOfOrder() throws Exception {
+        long firstTag = 993200001L;
+        long missingTag = 993200002L;
+        long laterTag = 993200003L;
+        ObjectNode firstOperation = createOperationEnvelope(UUID.randomUUID().toString(), "order-node",
+                "TAG", "UPSERT", Long.toString(firstTag), tagPayload(firstTag), 1);
+        ObjectNode missingOperation = createOperationEnvelope(UUID.randomUUID().toString(), "order-node",
+                "TAG", "UPSERT", Long.toString(missingTag), tagPayload(missingTag), 2);
+        ObjectNode laterOperation = createOperationEnvelope(UUID.randomUUID().toString(), "order-node",
+                "TAG", "UPSERT", Long.toString(laterTag), tagPayload(laterTag), 3);
+
+        wespSyncService.receiveBatch(buildBatch(List.of(firstOperation)));
+
+        Map<String, Object> gap = wespSyncService.receiveBatch(buildBatch(List.of(laterOperation)));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> gapResults = (List<Map<String, Object>>) gap.get("results");
+        assertEquals("WAITING_DEPENDENCY", gapResults.get(0).get("status"));
+        assertNull(Tag.findById(laterTag), "Sequence 3 must wait for the missing sequence 2");
+
+        Map<String, Object> filled = wespSyncService.receiveBatch(buildBatch(List.of(missingOperation)));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> filledResults = (List<Map<String, Object>>) filled.get("results");
+        assertEquals("APPLIED", filledResults.get(0).get("status"));
+        assertNotNull(Tag.findById(missingTag));
+        assertNotNull(Tag.findById(laterTag), "The buffered sequence must be drained after the gap is filled");
+        WespSyncOperation laterApplied = WespSyncOperation.find(
+                "nodeId = ?1 and seq = ?2", "order-node", 3L).firstResult();
+        assertEquals("APPLIED", laterApplied.status);
+    }
+
+    @Test
+    @TestTransaction
+    void shouldSkipStalePostAndSystemSettingVersionsAtTheApplySeam() {
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        User user = new User();
+        user.username = "version-user-" + suffix;
+        user.email = "version-user-" + suffix + "@example.com";
+        user.password = "test-password-hash";
+        user.status = 1;
+        entityManager.persist(user);
+        entityManager.flush();
+
+        long postId = 993300001L;
+        EdgeSyncEntity.ApplyOutcome firstPost = syncDataApplyService.apply(SyncDataRequest.newBuilder()
+                .setAction("UPSERT").setEntityType("POST").setEntityId(postId)
+                .setPayload(postVersionPayload(postId, 5, "version-five", user.id)).build());
+        EdgeSyncEntity.ApplyOutcome stalePost = syncDataApplyService.apply(SyncDataRequest.newBuilder()
+                .setAction("UPSERT").setEntityType("POST").setEntityId(postId)
+                .setPayload(postVersionPayload(postId, 4, "version-four", user.id)).build());
+        entityManager.flush();
+        entityManager.clear();
+        assertEquals(EdgeSyncEntity.ApplyOutcome.APPLIED, firstPost);
+        assertEquals(EdgeSyncEntity.ApplyOutcome.SKIPPED_STALE, stalePost);
+        Post appliedPost = Post.findById(postId);
+        assertEquals("version-five", appliedPost.slug);
+
+        String settingKey = "version-setting-" + suffix;
+        EdgeSyncEntity.ApplyOutcome firstSetting = syncDataApplyService.apply(SyncDataRequest.newBuilder()
+                .setAction("UPSERT").setEntityType("SYSTEM_SETTING").setEntityId(1L)
+                .setPayload("{\"configKey\":\"" + settingKey + "\",\"configValue\":{\"value\":3},\"version\":3}")
+                .build());
+        EdgeSyncEntity.ApplyOutcome staleSetting = syncDataApplyService.apply(SyncDataRequest.newBuilder()
+                .setAction("UPSERT").setEntityType("SYSTEM_SETTING").setEntityId(1L)
+                .setPayload("{\"configKey\":\"" + settingKey + "\",\"configValue\":{\"value\":2},\"version\":2}")
+                .build());
+        entityManager.clear();
+        assertEquals(EdgeSyncEntity.ApplyOutcome.APPLIED, firstSetting);
+        assertEquals(EdgeSyncEntity.ApplyOutcome.SKIPPED_STALE, staleSetting);
+        assertEquals(3, SystemSetting.findByKey(settingKey).configValue.path("value").asInt());
+    }
+
+    private String tagPayload(long tagId) {
+        return "{\"id\":" + tagId + ",\"slug\":\"order-" + tagId
+                + "\",\"name\":{\"zh-CN\":\"顺序\"}}";
+    }
+
+    private String postVersionPayload(long postId, int version, String slug, long userId) {
+        return """
+                {
+                  "post": {
+                    "id": %d,
+                    "slug": "%s",
+                    "title": {"zh-CN": "%s"},
+                    "status": "PUBLISHED",
+                    "visibility": 0,
+                    "renderType": "MARKDOWN",
+                    "user": {"id": %d},
+                    "authorName": "Version Author",
+                    "version": %d
+                  },
+                  "currentRevision": {
+                    "id": %d,
+                    "title": {"zh-CN": "%s"},
+                    "contentMarkdown": {"zh-CN": "正文"},
+                    "editorType": 1,
+                    "revisionNumber": %d,
+                    "createdBy": {"id": %d}
+                  }
+                }
+                """.formatted(postId, slug, slug, userId, version, postId + version, slug, version, userId);
     }
 }

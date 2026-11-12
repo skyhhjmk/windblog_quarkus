@@ -32,7 +32,7 @@ public class EsSyncConsumer {
     @Blocking
     @Transactional
     public CompletionStage<Void> consume(Message<?> message) {
-        if (nodeRoleService.isEdgeNode()) {
+        if (!nodeRoleService.runsReplicationConsumers()) {
             log.debug("当前节点是边缘节点，忽略 ES 同步任务");
             return message.ack();
         }

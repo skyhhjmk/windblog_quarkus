@@ -62,8 +62,11 @@ public class EdgeDataSyncService {
     @Inject
     WespSyncService wespSyncService;
 
+    @Inject
+    EdgeSyncRegistry syncRegistry;
+
     void onStart(@Observes StartupEvent ev) {
-        if (nodeRoleService.isEdgeNode()) {
+        if (!nodeRoleService.runsReplicationConsumers()) {
             log.info("当前节点是边缘节点，跳过主节点数据广播初始化");
             return;
         }
@@ -90,7 +93,7 @@ public class EdgeDataSyncService {
      * 监听文章同步事件
      */
     public void onPostSynced(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
-        if (nodeRoleService.isEdgeNode() || event.isRemoteSync()) {
+        if (!nodeRoleService.runsReplicationConsumers() || event.isRemoteSync()) {
             return;
         }
 
@@ -102,7 +105,7 @@ public class EdgeDataSyncService {
      * 监听通用同步事件（如标签）
      */
     public void onDataChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) DataSyncEvent event) {
-        if (nodeRoleService.isEdgeNode() || event.isRemoteSync()) {
+        if (!nodeRoleService.runsReplicationConsumers() || event.isRemoteSync()) {
             return;
         }
 
@@ -115,7 +118,7 @@ public class EdgeDataSyncService {
 
     public void onNodeRegionChanged(
             @Observes(during = TransactionPhase.AFTER_SUCCESS) NodeRegionChangedEvent event) {
-        if (nodeRoleService.isEdgeNode() || event.nodeId() == null || event.nodeId().isBlank()) return;
+        if (!nodeRoleService.runsReplicationConsumers() || event.nodeId() == null || event.nodeId().isBlank()) return;
         ObjectNode payload = objectMapper.createObjectNode();
         putText(payload, "nodeId", event.nodeId());
         putText(payload, "region", event.region());
@@ -123,9 +126,7 @@ public class EdgeDataSyncService {
     }
 
     private boolean isOutboxSyncType(String entityType) {
-        return "POST".equals(entityType) || "TAG".equals(entityType)
-                || "CATEGORY".equals(entityType) || "MEDIA".equals(entityType)
-                || "SYSTEM_SETTING".equals(entityType) || "REGION_RULE".equals(entityType);
+        return syncRegistry.isPropagated(entityType);
     }
 
     private void enqueueEdgeSync(String entityType, Long entityId, String action) {
@@ -154,28 +155,18 @@ public class EdgeDataSyncService {
         if (entityId == null || action == null) {
             throw new IllegalArgumentException("EDGE_SYNC payload 不完整");
         }
-        if ("POST".equals(entityType)) {
-            syncPost(entityId);
-        } else if ("TAG".equals(entityType)) {
-            syncTag(entityId, action);
-        } else if ("CATEGORY".equals(entityType)) {
-            syncCategory(entityId, action);
-        } else if ("MEDIA".equals(entityType)) {
-            syncMedia(entityId, action);
-        } else if ("SYSTEM_SETTING".equals(entityType)) {
-            syncSystemSetting(entityId, action);
-        } else if ("REGION_RULE".equals(entityType)) {
-            syncRegionRule(entityId, action);
-        } else {
-            throw new IllegalArgumentException("不支持的 EDGE_SYNC 类型: " + entityType);
+        EdgeSyncEntity.PublishedOperation operation = syncRegistry.snapshot(entityType, entityId, action);
+        if (operation == null) {
+            return;
         }
+        broadcastSync(entityType, operation.action(), entityId.toString(), operation.payload());
     }
 
-    private void syncSystemSetting(Long settingId, String action) {
-        if (!"UPSERT".equals(action)) return;
+    EdgeSyncEntity.PublishedOperation publishSystemSetting(long settingId, String action) {
+        if (!"UPSERT".equals(action)) return null;
         SystemSetting setting = SystemSetting.findById(settingId);
-        if (setting == null) return;
-        broadcastSync("SYSTEM_SETTING", "UPSERT", setting.id.toString(), systemSettingPayload(setting));
+        if (setting == null) return null;
+        return new EdgeSyncEntity.PublishedOperation("UPSERT", systemSettingPayload(setting));
     }
 
     private String systemSettingPayload(SystemSetting setting) {
@@ -205,15 +196,14 @@ public class EdgeDataSyncService {
         return items;
     }
 
-    private void syncRegionRule(Long ruleId, String action) {
+    EdgeSyncEntity.PublishedOperation publishRegionRule(long ruleId, String action) {
         if ("DELETE".equals(action)) {
-            broadcastSync("REGION_RULE", action, ruleId.toString(), "{}");
-            return;
+            return new EdgeSyncEntity.PublishedOperation(action, "{}");
         }
-        if (!"UPSERT".equals(action)) return;
+        if (!"UPSERT".equals(action)) return null;
         RegionRule rule = RegionRule.findById(ruleId);
-        if (rule == null) return;
-        broadcastSync("REGION_RULE", "UPSERT", rule.id.toString(), regionRulePayload(rule));
+        if (rule == null) return null;
+        return new EdgeSyncEntity.PublishedOperation("UPSERT", regionRulePayload(rule));
     }
 
     private String regionRulePayload(RegionRule rule) {
@@ -239,38 +229,37 @@ public class EdgeDataSyncService {
         return items;
     }
 
-    private void syncCategory(Long categoryId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            Category category = Category.findById(categoryId);
-            if (category == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(buildPublicCategoryNode(category));
-            } catch (Exception e) {
-                log.error("Failed to serialize category: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
-                return;
-            }
+    EdgeSyncEntity.PublishedOperation publishCategory(long categoryId, String action) {
+        if (!"UPSERT".equals(action)) {
+            return new EdgeSyncEntity.PublishedOperation(action, "{}");
         }
-        broadcastSync("CATEGORY", action, categoryId.toString(), payload);
+        Category category = Category.findById(categoryId);
+        if (category == null) return null;
+        try {
+            return new EdgeSyncEntity.PublishedOperation(action,
+                    objectMapper.writeValueAsString(buildPublicCategoryNode(category)));
+        } catch (Exception e) {
+            log.error("Failed to serialize category: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
+            return null;
+        }
     }
 
-    private void syncMedia(Long mediaId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            Media media = Media.findById(mediaId);
-            if (media == null) return;
-            if (postAccessService.hasProtectedMediaReference(mediaId)) {
-                broadcastSync("MEDIA", "DELETE", mediaId.toString(), "{}");
-                return;
-            }
-            try {
-                payload = objectMapper.writeValueAsString(buildPublicMediaNode(media));
-            } catch (Exception e) {
-                log.error("Failed to serialize media: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
-                return;
-            }
+    EdgeSyncEntity.PublishedOperation publishMedia(long mediaId, String action) {
+        if (!"UPSERT".equals(action)) {
+            return new EdgeSyncEntity.PublishedOperation(action, "{}");
         }
-        broadcastSync("MEDIA", action, mediaId.toString(), payload);
+        Media media = Media.findById(mediaId);
+        if (media == null) return null;
+        if (postAccessService.hasProtectedMediaReference(mediaId)) {
+            return new EdgeSyncEntity.PublishedOperation("DELETE", "{}");
+        }
+        try {
+            return new EdgeSyncEntity.PublishedOperation("UPSERT",
+                    objectMapper.writeValueAsString(buildPublicMediaNode(media)));
+        } catch (Exception e) {
+            log.error("Failed to serialize media: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
+            return null;
+        }
     }
 
     private ObjectNode buildPublicMediaNode(Media media) {
@@ -374,49 +363,40 @@ public class EdgeDataSyncService {
         }
     }
 
-    private void syncTag(Long tagId, String action) {
-        String payload = "{}";
-        if ("UPSERT".equals(action)) {
-            Tag tag = Tag.findById(tagId);
-            if (tag == null) return;
-            try {
-                payload = objectMapper.writeValueAsString(buildPublicTagNode(tag));
-            } catch (Exception e) {
-                log.error("Failed to serialize tag: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
-                return;
-            }
+    EdgeSyncEntity.PublishedOperation publishTag(long tagId, String action) {
+        if (!"UPSERT".equals(action)) {
+            return new EdgeSyncEntity.PublishedOperation(action, "{}");
         }
-
-        broadcastSync("TAG", action, tagId.toString(), payload);
+        Tag tag = Tag.findById(tagId);
+        if (tag == null) return null;
+        try {
+            return new EdgeSyncEntity.PublishedOperation(action,
+                    objectMapper.writeValueAsString(buildPublicTagNode(tag)));
+        } catch (Exception e) {
+            log.error("Failed to serialize tag: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
+            return null;
+        }
     }
 
-    private void syncPost(Long postId) {
+    EdgeSyncEntity.PublishedOperation publishPost(long postId) {
         Post post = Post.findById(postId);
-        String action = "UPSERT";
-        String payload = "{}";
-
         if (post == null || !canSyncPostToEdge(post)) {
-            action = "DELETE";
-        } else {
-            try {
-                Map<String, Object> bundle = buildPublicPostBundle(post);
-
-                // 包含标签关联
-                List<PostTag> postTags = PostTag.find("post.id = ?1", postId).list();
-                java.util.ArrayList<ObjectNode> tags = new java.util.ArrayList<>();
-                for (PostTag postTag : postTags) {
-                    tags.add(buildPublicTagNode(postTag.tag));
-                }
-                bundle.put("tags", tags);
-
-                payload = objectMapper.writeValueAsString(bundle);
-            } catch (Exception e) {
-                log.error("Failed to serialize post bundle: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
-                return;
-            }
+            return new EdgeSyncEntity.PublishedOperation("DELETE", "{}");
         }
-
-        broadcastSync("POST", action, postId.toString(), payload);
+        try {
+            Map<String, Object> bundle = buildPublicPostBundle(post);
+            List<PostTag> postTags = PostTag.find("post.id = ?1", postId).list();
+            java.util.ArrayList<ObjectNode> tags = new java.util.ArrayList<>();
+            for (PostTag postTag : postTags) {
+                tags.add(buildPublicTagNode(postTag.tag));
+            }
+            bundle.put("tags", tags);
+            return new EdgeSyncEntity.PublishedOperation("UPSERT",
+                    objectMapper.writeValueAsString(bundle));
+        } catch (Exception e) {
+            log.error("Failed to serialize post bundle: {}", SensitiveMessageSanitizer.sanitize(e.getMessage()));
+            return null;
+        }
     }
 
     private Map<String, Object> buildPublicPostBundle(Post post) {

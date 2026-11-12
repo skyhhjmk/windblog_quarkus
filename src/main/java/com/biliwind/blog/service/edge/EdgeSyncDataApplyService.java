@@ -63,39 +63,44 @@ public class EdgeSyncDataApplyService {
     @Inject
     com.biliwind.blog.service.RegionRuleService regionRuleService;
 
+    @Inject
+    EdgeSyncRegistry registry;
+
     @Transactional
-    public void apply(SyncDataRequest request) {
+    public EdgeSyncEntity.ApplyOutcome apply(SyncDataRequest request) {
         if (request == null) {
-            return;
+            return EdgeSyncEntity.ApplyOutcome.IGNORED;
         }
 
         try {
             String action = request.getAction();
             String entityType = request.getEntityType();
 
-            if (!isPublicSyncEntity(entityType)) {
+            if (!registry.isEdgeApplied(entityType)) {
                 LOGGER.warn("拒绝不在同步白名单中的实体: {}", entityType);
-                return;
+                return EdgeSyncEntity.ApplyOutcome.IGNORED;
             }
 
+            EdgeSyncEntity.ApplyOutcome outcome;
             if ("DELETE".equals(action)) {
-                deleteEntity(entityType, request.getEntityId());
-                publishCacheInvalidation(entityType, request.getEntityId(), action);
-                return;
-            }
-
-            if (!"UPSERT".equals(action) && !"FORCE_UPSERT".equals(action) && !"UPDATE".equals(action)) {
+                outcome = registry.delete(entityType, request.getEntityId());
+            } else if ("UPSERT".equals(action) || "FORCE_UPSERT".equals(action) || "UPDATE".equals(action)) {
+                outcome = registry.apply(entityType, request.getEntityId(), request.getPayload());
+            } else {
                 LOGGER.warn("忽略未知同步动作: {}", action);
-                return;
+                return EdgeSyncEntity.ApplyOutcome.IGNORED;
             }
 
-            upsertEntity(entityType, request.getEntityId(), request.getPayload());
+            if (outcome == EdgeSyncEntity.ApplyOutcome.IGNORED) {
+                return outcome;
+            }
             publishCacheInvalidation(entityType, request.getEntityId(), action);
-            if ("SYSTEM_SETTING".equals(entityType)) {
+            if ("SYSTEM_SETTING".equals(entityType) && outcome == EdgeSyncEntity.ApplyOutcome.APPLIED) {
                 JsonNode payload = objectMapper.readTree(request.getPayload());
                 configChangedEvent.fire(new ConfigChangedEvent(
                         payload.path("configKey").asText(), payload.get("configValue")));
             }
+            return outcome;
         } catch (Exception exception) {
             LOGGER.error("应用从主节点收到的同步数据失败: {} {}", request.getEntityType(), request.getEntityId(), exception);
             throw new IllegalStateException("同步数据应用失败", exception);
@@ -114,54 +119,7 @@ public class EdgeSyncDataApplyService {
         }
     }
 
-    private boolean isPublicSyncEntity(String entityType) {
-        return "TAG".equals(entityType)
-                || "CATEGORY".equals(entityType)
-                || "MEDIA".equals(entityType)
-                || "POST".equals(entityType)
-                || "CLUSTER_PUBLIC_KEY".equals(entityType)
-                || "SYSTEM_SETTING".equals(entityType)
-                || "REGION_RULE".equals(entityType)
-                || "NODE_REGION".equals(entityType);
-    }
-
-    private void upsertEntity(String entityType, long entityId, String payload) throws Exception {
-        if ("TAG".equals(entityType)) {
-            upsertPublicTag(entityId, payload);
-            return;
-        }
-        if ("CATEGORY".equals(entityType)) {
-            upsertPublicCategory(entityId, payload);
-            return;
-        }
-        if ("MEDIA".equals(entityType)) {
-            upsertPublicMedia(entityId, payload);
-            return;
-        }
-        if ("POST".equals(entityType)) {
-            upsertPostBundle(entityId, payload);
-            return;
-        }
-        if ("CLUSTER_PUBLIC_KEY".equals(entityType)) {
-            rsaHelper.setClusterPublicKey(payload);
-            return;
-        }
-        if ("SYSTEM_SETTING".equals(entityType)) {
-            upsertSystemSetting(payload);
-            return;
-        }
-        if ("NODE_REGION".equals(entityType)) {
-            upsertNodeRegion(payload);
-            return;
-        }
-        if ("REGION_RULE".equals(entityType)) {
-            upsertRegionRule(entityId, payload);
-            return;
-        }
-        LOGGER.warn("忽略暂不支持的同步实体类型: {}", entityType);
-    }
-
-    private void upsertSystemSetting(String payload) throws Exception {
+    EdgeSyncEntity.ApplyOutcome applySystemSetting(long entityId, String payload) throws Exception {
         JsonNode node = objectMapper.readTree(payload);
         String configKey = readRequiredText(node, "configKey");
         JsonNode configValue = node.get("configValue");
@@ -185,6 +143,17 @@ public class EdgeSyncDataApplyService {
         setting.settingLevel = readOptionalText(node, "settingLevel", "NORMAL");
         setting.persist();
         entityManager.flush();
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
+    }
+
+    long currentSystemSettingVersion(String payload) {
+        try {
+            String configKey = readRequiredText(objectMapper.readTree(payload), "configKey");
+            SystemSetting setting = SystemSetting.findByKey(configKey);
+            return setting == null || setting.version == null ? 0L : setting.version;
+        } catch (Exception exception) {
+            return 0L;
+        }
     }
 
     private String readOptionalText(JsonNode node, String field, String fallback) {
@@ -192,7 +161,7 @@ public class EdgeSyncDataApplyService {
         return value == null || value.isNull() ? fallback : value.asText(fallback);
     }
 
-    private void upsertNodeRegion(String payload) throws Exception {
+    EdgeSyncEntity.ApplyOutcome applyNodeRegion(String payload) throws Exception {
         JsonNode node = objectMapper.readTree(payload);
         String nodeId = readRequiredText(node, "nodeId");
         BlogRegion region = BlogRegion.fromCode(readOptionalText(node, "region", "global"));
@@ -210,9 +179,10 @@ public class EdgeSyncDataApplyService {
         edgeNode.persist();
         entityManager.flush();
         regionRuleService.invalidate();
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
     }
 
-    private void upsertRegionRule(long ruleId, String payload) throws Exception {
+    EdgeSyncEntity.ApplyOutcome applyRegionRule(long ruleId, String payload) throws Exception {
         JsonNode node = objectMapper.readTree(payload);
         RegionRule rule = RegionRule.findById(ruleId);
         boolean newRule = rule == null;
@@ -230,6 +200,7 @@ public class EdgeSyncDataApplyService {
             insertRegionRule(rule);
         }
         entityManager.flush();
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
     }
 
     private void insertRegionRule(RegionRule rule) {
@@ -247,10 +218,10 @@ public class EdgeSyncDataApplyService {
                 .executeUpdate();
     }
 
-    private void upsertPublicTag(long entityId, String payload) throws Exception {
+    EdgeSyncEntity.ApplyOutcome applyTag(long entityId, String payload) throws Exception {
         JsonNode node = readEntityNode(entityId, payload, "标签");
         if (node == null) {
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         Tag tag = Tag.findById(entityId);
@@ -265,12 +236,13 @@ public class EdgeSyncDataApplyService {
         if (newTag) {
             insertPublicTag(tag);
         }
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
     }
 
-    private void upsertPublicCategory(long entityId, String payload) throws Exception {
+    EdgeSyncEntity.ApplyOutcome applyCategory(long entityId, String payload) throws Exception {
         JsonNode node = readEntityNode(entityId, payload, "分类");
         if (node == null) {
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         Category category = Category.findById(entityId);
@@ -293,6 +265,7 @@ public class EdgeSyncDataApplyService {
         if (newCategory) {
             insertPublicCategory(category);
         }
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
     }
 
     private void insertPublicTag(Tag tag) throws Exception {
@@ -352,28 +325,24 @@ public class EdgeSyncDataApplyService {
      * 将主节点公开媒体快照复制到边缘节点，避免把 JSON 直接反序列化到实体。
      * 删除标记、处理失败原因和 ORM 管理字段必须由边缘节点本地维护。
      */
-    private void upsertPublicMedia(long entityId, String payload) throws Exception {
+    EdgeSyncEntity.ApplyOutcome applyMedia(long entityId, String payload) throws Exception {
         if (entityId <= 0) {
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         JsonNode node = objectMapper.readTree(payload);
         if (node == null || !node.isObject() || readRequiredLong(node, "id") != entityId) {
             LOGGER.warn("忽略媒体同步 ID 不匹配的公开快照: {}", entityId);
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         Media media = Media.findById(entityId);
         if (media != null && media.deletedAt != null) {
             LOGGER.warn("忽略覆盖边缘本地已删除媒体的公开快照: {}", entityId);
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         Integer incomingVersion = readOptionalInteger(node, "version");
-        if (media != null && media.version != null && incomingVersion != null
-                && media.version.intValue() > incomingVersion.intValue()) {
-            return;
-        }
 
         boolean newMedia = media == null;
         if (newMedia) {
@@ -423,6 +392,12 @@ public class EdgeSyncDataApplyService {
         if (newMedia) {
             insertPublicMedia(media);
         }
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
+    }
+
+    long currentMediaVersion(long entityId) {
+        Media media = Media.findById(entityId);
+        return media == null || media.version == null ? 0L : media.version;
     }
 
     private void insertPublicMedia(Media media) throws Exception {
@@ -699,35 +674,33 @@ public class EdgeSyncDataApplyService {
         }
     }
 
-    private void upsertPostBundle(long entityId, String payload) throws Exception {
+    EdgeSyncEntity.ApplyOutcome applyPost(long entityId, String payload) throws Exception {
         JsonNode rootNode = objectMapper.readTree(payload);
         JsonNode postNode = rootNode.get("post");
         if (postNode == null || postNode.isNull()) {
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         JsonNode validatedPostNode = readEntityNode(entityId, objectMapper.writeValueAsString(postNode), "文章");
         if (validatedPostNode == null) {
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         Post post = Post.findById(entityId);
         if (post != null && post.deletedAt != null) {
             LOGGER.warn("忽略覆盖边缘本地已删除文章的公开快照: {}", entityId);
-            return;
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
 
         Integer incomingVersion = readOptionalInteger(validatedPostNode, "version");
-        if (post != null && post.version != null && incomingVersion != null
-                && post.version.intValue() > incomingVersion.intValue()) {
-            return;
-        }
 
         boolean newPost = post == null;
         if (newPost) {
             post = new Post();
             post.id = entityId;
         }
+        post.version = incomingVersion != null ? incomingVersion
+                : (post.version != null ? post.version : 0);
 
         post.slug = readRequiredText(validatedPostNode, "slug");
         post.title = readRequiredStringMap(validatedPostNode, "title");
@@ -790,7 +763,12 @@ public class EdgeSyncDataApplyService {
         } else {
             post.publishedRevision = null;
         }
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
+    }
 
+    long currentPostVersion(long entityId) {
+        Post post = Post.findById(entityId);
+        return post == null || post.version == null ? 0L : post.version;
     }
 
     private PostRevision upsertPublicRevision(Post post, JsonNode node) throws Exception {
@@ -865,7 +843,7 @@ public class EdgeSyncDataApplyService {
                 ) values (
                     :id, :slug, cast(:title as jsonb), cast(:summary as jsonb), cast(:aiSummary as jsonb),
                     null, :status, :visibility, :userId, :publishedAt, current_timestamp, current_timestamp,
-                    null, 0, :renderType, null, cast(:seoTitle as jsonb), cast(:seoKeywords as jsonb),
+                    null, :version, :renderType, null, cast(:seoTitle as jsonb), cast(:seoKeywords as jsonb),
                     cast(:seoDescription as jsonb), :categoryId,
                     null, :viewCount, :featured, :allowComment, cast(:extraInfo as jsonb),
                     cast(:visibilityRegions as jsonb), :aiSummaryStatus, cast(:contentDeclarations as jsonb),
@@ -881,6 +859,7 @@ public class EdgeSyncDataApplyService {
                 .setParameter("visibility", post.visibility)
                 .setParameter("userId", post.user.id)
                 .setParameter("publishedAt", post.publishedAt)
+                .setParameter("version", post.version == null ? 0 : post.version)
                 .setParameter("renderType", post.renderType.code())
                 .setParameter("seoTitle", writeJsonValue(post.seoTitle))
                 .setParameter("seoKeywords", writeJsonValue(post.seoKeywords))
@@ -956,29 +935,36 @@ public class EdgeSyncDataApplyService {
         return value.asBoolean();
     }
 
-    private void deleteEntity(String entityType, long entityId) {
-        if (entityId <= 0) {
-            return;
-        }
+    EdgeSyncEntity.ApplyOutcome applyClusterPublicKey(String payload) {
+        rsaHelper.setClusterPublicKey(payload);
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
+    }
 
-        if ("TAG".equals(entityType)) {
-            Tag.deleteById(entityId);
-            return;
+    EdgeSyncEntity.ApplyOutcome deleteTag(long entityId) {
+        return deleteById(entityId, () -> Tag.deleteById(entityId));
+    }
+
+    EdgeSyncEntity.ApplyOutcome deleteCategory(long entityId) {
+        return deleteById(entityId, () -> Category.deleteById(entityId));
+    }
+
+    EdgeSyncEntity.ApplyOutcome deleteMedia(long entityId) {
+        return deleteById(entityId, () -> Media.deleteById(entityId));
+    }
+
+    EdgeSyncEntity.ApplyOutcome deletePost(long entityId) {
+        return deleteById(entityId, () -> Post.deleteById(entityId));
+    }
+
+    EdgeSyncEntity.ApplyOutcome deleteRegionRule(long entityId) {
+        return deleteById(entityId, () -> RegionRule.deleteById(entityId));
+    }
+
+    EdgeSyncEntity.ApplyOutcome deleteById(long entityId, Runnable deletion) {
+        if (entityId <= 0) {
+            return EdgeSyncEntity.ApplyOutcome.APPLIED;
         }
-        if ("CATEGORY".equals(entityType)) {
-            Category.deleteById(entityId);
-            return;
-        }
-        if ("MEDIA".equals(entityType)) {
-            Media.deleteById(entityId);
-            return;
-        }
-        if ("POST".equals(entityType)) {
-            Post.deleteById(entityId);
-            return;
-        }
-        if ("REGION_RULE".equals(entityType)) {
-            RegionRule.deleteById(entityId);
-        }
+        deletion.run();
+        return EdgeSyncEntity.ApplyOutcome.APPLIED;
     }
 }

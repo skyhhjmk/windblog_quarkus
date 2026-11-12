@@ -29,7 +29,7 @@ public class PrimaryRoutedHttpExecutor {
 
     public RoutedHttpExchange.Response execute(RoutedHttpExchange.Request routedRequest) {
         String rejection = routedRequest == null ? "ROUTED_REQUEST_INVALID"
-                : RoutedRequestPolicy.rejectionReason(routedRequest.method(), routedRequest.path(), routedRequest.query());
+                : EdgeRoutingPolicy.rejectionReason(routedRequest.method(), routedRequest.path(), routedRequest.query());
         if (rejection != null) {
             LOGGER.warn("拒绝执行从节点回源请求: {} {} ({})",
                     routedRequest == null ? "" : SensitiveMessageSanitizer.sanitize(routedRequest.method()),
@@ -132,7 +132,7 @@ public class PrimaryRoutedHttpExecutor {
      * X-WindBlog-* value would otherwise be judged as if a proxy set it.
      */
     static boolean isForwardableHeader(String headerName) {
-        return RoutedRequestPolicy.isForwardableHeader(headerName);
+        return EdgeRoutingPolicy.isForwardableHeader(headerName);
     }
 
     private Map<String, String> collectHeaders(HttpResponse<byte[]> response) {

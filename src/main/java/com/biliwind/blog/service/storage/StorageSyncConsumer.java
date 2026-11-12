@@ -31,7 +31,7 @@ public class StorageSyncConsumer {
     @Acknowledgment(Acknowledgment.Strategy.MANUAL)
     @io.smallrye.reactive.messaging.annotations.Blocking
     public CompletionStage<Void> consumeSyncTask(Message<?> message) {
-        if (nodeRoleService.isEdgeNode()) {
+        if (!nodeRoleService.runsReplicationConsumers()) {
             log.info("从节点跳过存储同步消费");
             return message.ack();
         }

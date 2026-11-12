@@ -1,28 +1,75 @@
 package com.biliwind.blog.service.edge;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
- * Decides which edge-routed requests the primary replays against its own
- * loopback listener.
+ * The single routing registry for edge/primary request handling.
  *
- * The replay reaches 127.0.0.1 directly, so it bypasses every proxy-level
- * restriction (for example the management CIDR on /q/). Only the shapes an
- * edge actually produces are accepted: write methods on the application APIs
- * from {@code EdgeWriteRoutingFilter}, and the GET deep-search call from
- * {@code SearchController}. Everything else, including management, sync and
- * gRPC paths and any path the router would normalize differently, is refused.
+ * <p>Each route states, independently, whether an edge handles the request
+ * locally and whether the primary accepts it as an edge replay. Both decisions
+ * default to deny, so a path that matches no grant never becomes a write path
+ * or a replay path by accident.</p>
  */
-public final class RoutedRequestPolicy {
+public final class EdgeRoutingPolicy {
 
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
+    private static final Set<String> READ_METHODS = Set.of("GET");
     private static final String DEEP_SEARCH_PATH = "/search/internal/deep";
 
-    private RoutedRequestPolicy() {
+    private record Route(Pattern pattern, Set<String> methods, boolean edgeLocal,
+                         boolean primaryReplay, boolean wespOnly) {
     }
 
-    /** Returns null when allowed, otherwise a short machine-readable reason. */
+    private static final List<Route> ROUTES = List.of(
+            // Edge-local writes: authentication and transport endpoints that
+            // must be served by the node the client reached.
+            local("/user/api/login"),
+            local("/user/api/logout"),
+            local("/api/admin/auth/login"),
+            local("/api/admin/auth/step-up"),
+            local("/api/admin/edge-nodes/connection/bootstrap"),
+            new Route(Pattern.compile("/api/admin/edge-nodes/[^/]+/sync"), WRITE_METHODS, true, false, true),
+            local("/api/admin/install"),
+            local("/q/.*"),
+            local("/sync/v1/.*"),
+            local("/grpc/.*"),
+            // Primary replay grants: only the shapes an edge produces.
+            replay("/api/.*"),
+            replay("/user/.*"),
+            replay("/a2a"),
+            replay("/a2a/.*"),
+            new Route(Pattern.compile(Pattern.quote(DEEP_SEARCH_PATH)), READ_METHODS, false, true, false)
+    );
+
+    private EdgeRoutingPolicy() {
+    }
+
+    private static Route local(String pattern) {
+        return new Route(Pattern.compile(pattern), WRITE_METHODS, true, false, false);
+    }
+
+    private static Route replay(String pattern) {
+        return new Route(Pattern.compile(pattern), WRITE_METHODS, false, true, false);
+    }
+
+    /** Returns true when the edge must execute this write locally. */
+    public static boolean isLocalWriteOnEdge(String path, boolean wespEnabled) {
+        if (path == null || path.isEmpty()) {
+            return false;
+        }
+        for (Route route : ROUTES) {
+            if (route.edgeLocal() && (!route.wespOnly() || wespEnabled)
+                    && route.pattern().matcher(path).matches()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Returns null when the primary may replay the request, otherwise a reason code. */
     public static String rejectionReason(String method, String path, String query) {
         String normalizedMethod = method == null ? "" : method.trim().toUpperCase(Locale.ROOT);
         if (!isSafePath(path)) {
@@ -31,17 +78,23 @@ public final class RoutedRequestPolicy {
         if (query != null && !isSafeQuery(query)) {
             return "ROUTED_QUERY_INVALID";
         }
-        if ("GET".equals(normalizedMethod)) {
-            return DEEP_SEARCH_PATH.equals(path) ? null : "ROUTED_PATH_NOT_ALLOWED";
+        if (READ_METHODS.contains(normalizedMethod)) {
+            return matchesReplay(normalizedMethod, path) ? null : "ROUTED_PATH_NOT_ALLOWED";
         }
         if (!WRITE_METHODS.contains(normalizedMethod)) {
             return "ROUTED_METHOD_NOT_ALLOWED";
         }
-        if (path.startsWith("/api/") || path.startsWith("/user/") || "/a2a".equals(path)
-                || path.startsWith("/a2a/")) {
-            return null;
+        return matchesReplay(normalizedMethod, path) ? null : "ROUTED_PATH_NOT_ALLOWED";
+    }
+
+    private static boolean matchesReplay(String method, String path) {
+        for (Route route : ROUTES) {
+            if (route.primaryReplay() && route.methods().contains(method)
+                    && route.pattern().matcher(path).matches()) {
+                return true;
+            }
         }
-        return "ROUTED_PATH_NOT_ALLOWED";
+        return false;
     }
 
     static boolean isSafePath(String path) {

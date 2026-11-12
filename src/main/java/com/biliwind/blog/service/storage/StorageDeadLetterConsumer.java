@@ -29,7 +29,7 @@ public class StorageDeadLetterConsumer {
     @Acknowledgment(Acknowledgment.Strategy.MANUAL)
     @jakarta.transaction.Transactional
     public CompletionStage<Void> consumeDeadLetter(Message<?> message) {
-        if (nodeRoleService.isEdgeNode()) {
+        if (!nodeRoleService.runsReplicationConsumers()) {
             return message.ack();
         }
         StorageSyncMessage msg;

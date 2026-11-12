@@ -28,7 +28,7 @@ public class EsSyncDeadLetterConsumer {
     @Incoming("es-sync-tasks-dlq-in")
     @Transactional
     public CompletionStage<Void> consume(org.eclipse.microprofile.reactive.messaging.Message<?> message) {
-        if (nodeRoleService.isEdgeNode()) {
+        if (!nodeRoleService.runsReplicationConsumers()) {
             log.debug("当前节点是边缘节点，忽略 ES 死信同步任务");
             return CompletableFuture.completedFuture(null);
         }
