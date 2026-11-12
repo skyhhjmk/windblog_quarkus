@@ -6,6 +6,7 @@ import java.util.regex.Pattern;
 /** Stable error codes shared by API responses, browser notifications, and docs/error-codes.md. */
 public final class ErrorCodeCatalog {
     public static final String CSRF_VALIDATION_FAILED = "WB-SEC-CSRF-001";
+    public static final String REGION_VALIDATION_FAILED = "WB-REGION-001";
 
     private static final Pattern CODE_IN_MESSAGE = Pattern.compile(
             "(?:错误码|error\\s*code)\\s*[：:]\\s*[A-Z0-9-]+", Pattern.CASE_INSENSITIVE);
@@ -20,6 +21,10 @@ public final class ErrorCodeCatalog {
         if (normalizedMessage.contains("csrf") || normalizedMessage.contains("xsrf")
                 || normalizedMessage.contains("csrf 验证")) {
             return CSRF_VALIDATION_FAILED;
+        }
+
+        if (normalizedMessage.contains("未知的区域代码")) {
+            return REGION_VALIDATION_FAILED;
         }
 
         if (normalizedPath.startsWith("/api/comments")) {

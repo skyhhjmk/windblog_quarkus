@@ -10,6 +10,7 @@ import com.biliwind.blog.common.helper.PostAuthorHelper;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.*;
 import com.biliwind.blog.service.edge.EdgePersistentChannelClient;
@@ -361,11 +362,12 @@ public class SearchController {
         String orderBy = "latest".equals(sort)
                 ? "p.published_at DESC NULLS LAST, p.id DESC"
                 : "p.view_count DESC NULLS LAST, p.published_at DESC NULLS LAST, p.id DESC";
-        String regionPattern = "%\"" + regionContext.getCurrentRegion().getCode() + "\"%";
+        RegionVisibility.NamedFilter regionFilter =
+                RegionVisibility.nativeSqlFilter("p.visibility_regions", regionContext.getCurrentRegion());
 
         SearchQueryParser parsed = SearchQueryParser.parse(keyword);
         Map<String, Object> params = new HashMap<>();
-        String where = buildPostFilterWhere(parsed, keyword, searchPattern, regionPattern, threshold, params);
+        String where = buildPostFilterWhere(parsed, keyword, searchPattern, regionFilter, threshold, params);
 
         String selectSql = "select p.* from posts p where " + where + " order by " + orderBy;
         jakarta.persistence.Query selectQuery = entityManager.createNativeQuery(selectSql, Post.class);
@@ -478,11 +480,11 @@ public class SearchController {
     }
 
     private String buildPostFilterWhere(SearchQueryParser parsed, String keyword, String searchPattern,
-                                        String regionPattern, OffsetDateTime threshold,
+                                        RegionVisibility.NamedFilter regionFilter, OffsetDateTime threshold,
                                         Map<String, Object> params) {
         if (parsed.hasFilters()) {
-            StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern or p.visibility_regions::text like '%\"global\"%') ");
-            params.put("regionPattern", regionPattern);
+            StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and " + regionFilter.fragment() + " ");
+            params.putAll(regionFilter.parameters());
             if (threshold != null) {
                 wb.append("and p.published_at >= :threshold ");
                 params.put("threshold", threshold);
@@ -512,8 +514,8 @@ public class SearchController {
             return wb.toString();
         }
 
-        StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and (p.visibility_regions is null or p.visibility_regions::text like :regionPattern or p.visibility_regions::text like '%\"global\"%') ");
-        params.put("regionPattern", regionPattern);
+        StringBuilder wb = new StringBuilder("p.status = 1 and p.deleted_at is null and p.visibility = 0 and p.published_revision_id is not null and " + regionFilter.fragment() + " ");
+        params.putAll(regionFilter.parameters());
         params.put("keyword", keyword);
         params.put("searchPattern", searchPattern);
         wb.append("and (p.search_document @@ plainto_tsquery('simple', :keyword) or lower(p.slug) like :searchPattern escape '\\' or lower(p.title::text) like :searchPattern escape '\\' or lower(coalesce(p.summary::text, '')) like :searchPattern escape '\\') ");
@@ -527,11 +529,12 @@ public class SearchController {
     private PostFallbackPage findPostFallbackCandidates(
             String keyword, String searchPattern, OffsetDateTime threshold, int limit) {
         String orderBy = "p.published_at DESC NULLS LAST, p.id DESC";
-        String regionPattern = "%\"" + regionContext.getCurrentRegion().getCode() + "\"%";
+        RegionVisibility.NamedFilter regionFilter =
+                RegionVisibility.nativeSqlFilter("p.visibility_regions", regionContext.getCurrentRegion());
 
         SearchQueryParser parsed = SearchQueryParser.parse(keyword);
         Map<String, Object> params = new HashMap<>();
-        String where = buildPostFilterWhere(parsed, keyword, searchPattern, regionPattern, threshold, params);
+        String where = buildPostFilterWhere(parsed, keyword, searchPattern, regionFilter, threshold, params);
 
         jakarta.persistence.Query countQuery = entityManager.createNativeQuery("select count(*) from posts p where " + where);
         for (Map.Entry<String, Object> entry : params.entrySet()) {
@@ -586,17 +589,6 @@ public class SearchController {
         @SuppressWarnings("unchecked")
         List<Category> categories = selectQuery.getResultList();
         return new TaxonomyFallbackPage(List.of(), categories, total);
-    }
-
-    private void setPostFallbackParameters(jakarta.persistence.Query query, String keyword,
-                                            String searchPattern, String regionPattern,
-                                            OffsetDateTime threshold) {
-        query.setParameter(1, keyword);
-        query.setParameter(2, searchPattern);
-        query.setParameter(3, regionPattern);
-        if (threshold != null) {
-            query.setParameter(4, threshold);
-        }
     }
 
     private record PostFallbackPage(List<Post> items, long total) {

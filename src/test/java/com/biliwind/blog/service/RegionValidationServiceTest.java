@@ -7,6 +7,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RegionValidationServiceTest {
@@ -33,7 +34,15 @@ class RegionValidationServiceTest {
         assertEquals(List.of("cn"), service.validateAndFilterRegions(List.of("cn")));
         assertEquals(List.of("cn"), service.validateAndFilterRegions(List.of("china")));
         assertEquals(List.of("cn", "us"), service.validateAndFilterRegions(List.of("cn", "us")));
-        assertEquals(List.of("jp"), service.validateAndFilterRegions(List.of("jp", "invalid_unknown_code")));
+        assertEquals(List.of("jp"), service.validateAndFilterRegions(List.of("jp")));
+    }
+
+    @Test
+    void shouldRejectUnknownRegionCodes() {
+        assertThrows(com.biliwind.blog.common.exception.BadRequestException.class,
+                () -> service.validateAndFilterRegions(List.of("unknown_zone")));
+        assertThrows(com.biliwind.blog.common.exception.BadRequestException.class,
+                () -> service.validateAndFilterRegions(List.of("jp", "invalid_unknown_code")));
     }
 
     @Test

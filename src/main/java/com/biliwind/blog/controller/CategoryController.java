@@ -4,6 +4,7 @@ import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.i18n.I18n;
@@ -153,11 +154,12 @@ public class CategoryController {
         List<Category> children = Category.list("parent.id = ?1 and enabled = true order by createdAt desc", entity.id);
         List<CategoryListItem> childItems = children.stream().map(c -> toCategoryListItem(c, lang)).toList();
 
-        String currentRegion = regionContext.getCurrentRegion().getCode();
+        RegionVisibility.PositionalFilter regionFilter =
+                RegionVisibility.jpqlFilter(3, regionContext.getCurrentRegion());
         String queryStr = "(category = ?1 or ?1 member of categories) and status = ?2 and deletedAt is null and visibility = 0 and publishedRevision is not null "
-                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?3 or cast(visibilityRegions as String) like '%\"global\"%') "
+                + "and " + regionFilter.fragment() + " "
                 + "order by publishedAt desc nulls last, createdAt desc";
-        PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%");
+        PanacheQuery<Post> query = Post.find(queryStr, entity, PostStatus.PUBLISHED, regionFilter.regionPattern());
         long postCount = query.count();
         int totalPages = postCount == 0 ? 1 : (int) Math.ceil((double) postCount / PAGE_SIZE);
         if (currentPage > totalPages) {

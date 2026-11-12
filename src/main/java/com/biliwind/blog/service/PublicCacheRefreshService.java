@@ -2,6 +2,8 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.common.helper.PostCoverImageHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostMedia;
@@ -94,7 +96,7 @@ public class PublicCacheRefreshService {
                 CacheService.Keys.postMeta(slug), PublicPostSnapshot.class);
         if (cached.isPresent()) {
             PublicPostSnapshot snapshot = cached.get();
-            if (isVisibleInRegion(snapshot.visibilityRegions(), regionCode)) {
+            if (RegionVisibility.isVisible(snapshot.visibilityRegions(), BlogRegion.fromCode(regionCode))) {
                 return Optional.of(snapshot);
             }
             return Optional.empty();
@@ -104,7 +106,7 @@ public class PublicCacheRefreshService {
                 "slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
                 slug, com.biliwind.blog.model.PostStatus.PUBLISHED).firstResult();
         if (!isPublicReadModelCandidate(post)
-                || !isVisibleInRegion(post.visibilityRegions, regionCode)) {
+                || !RegionVisibility.isVisible(post.visibilityRegions, BlogRegion.fromCode(regionCode))) {
             return Optional.empty();
         }
 
@@ -143,15 +145,16 @@ public class PublicCacheRefreshService {
             return cached.get();
         }
 
-        String regionPattern = "%\"" + safeRegion(regionCode) + "\"%";
+        RegionVisibility.NamedFilter regionFilter =
+                RegionVisibility.jpqlFilter(BlogRegion.fromCode(safeRegion(regionCode)));
         Map<String, Object> parameters = new java.util.HashMap<>();
         parameters.put("status", PostStatus.PUBLISHED);
-        parameters.put("regionPattern", regionPattern);
+        parameters.putAll(regionFilter.parameters());
 
         StringBuilder queryBuilder = new StringBuilder(
                 "status = :status and deletedAt is null and visibility = 0 "
                         + "and publishedRevision is not null "
-                        + "and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern or cast(visibilityRegions as String) like '%\"global\"%') ");
+                        + "and " + regionFilter.fragment() + " ");
         if (articleMode != null) {
             queryBuilder.append("and articleMode = :articleMode ");
             parameters.put("articleMode", articleMode);
@@ -187,14 +190,15 @@ public class PublicCacheRefreshService {
             return cached.get();
         }
 
-        String regionPattern = "%\"" + safeRegionCode + "\"%";
-        Map<String, Object> parameters = Map.of(
-                "status", PostStatus.PUBLISHED,
-                "regionPattern", regionPattern);
+        RegionVisibility.NamedFilter regionFilter =
+                RegionVisibility.jpqlFilter(BlogRegion.fromCode(safeRegionCode));
+        Map<String, Object> parameters = new java.util.HashMap<>();
+        parameters.put("status", PostStatus.PUBLISHED);
+        parameters.putAll(regionFilter.parameters());
         PanacheQuery<Post> query = Post.find(
                 "status = :status and deletedAt is null and visibility = 0 "
                         + "and publishedRevision is not null "
-                        + "and (visibilityRegions is null or cast(visibilityRegions as String) like :regionPattern or cast(visibilityRegions as String) like '%\"global\"%') "
+                        + "and " + regionFilter.fragment() + " "
                         + "order by publishedAt desc nulls last, createdAt desc, id desc",
                 parameters);
         List<PublicPostListSnapshot> result = toPublicPostListSnapshots(
@@ -265,23 +269,6 @@ public class PublicCacheRefreshService {
 
     static boolean requiresProtectedPreview(Post post, long postPrice) {
         return postPrice > 0 || (post != null && post.visibility == 2);
-    }
-
-    private boolean isVisibleInRegion(List<String> visibilityRegions, String regionCode) {
-        if (visibilityRegions == null || visibilityRegions.isEmpty()) {
-            return true;
-        }
-        String safeRegion = regionCode;
-        if (safeRegion == null || safeRegion.isBlank()) {
-            safeRegion = "GLOBAL";
-        }
-        for (String region : visibilityRegions) {
-            if (region != null && ("GLOBAL".equalsIgnoreCase(region.trim())
-                    || safeRegion.equalsIgnoreCase(region.trim()))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private PublicPostSnapshot toPublicPostSnapshot(Post post) {
@@ -729,6 +716,6 @@ public class PublicCacheRefreshService {
     }
 
     private String safeRegion(String regionCode) {
-        return regionCode == null || regionCode.isBlank() ? "GLOBAL" : regionCode;
+        return BlogRegion.fromCode(regionCode).getCode();
     }
 }

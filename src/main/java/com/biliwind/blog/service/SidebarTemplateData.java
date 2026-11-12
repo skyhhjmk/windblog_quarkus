@@ -2,7 +2,9 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Category;
 import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.model.Post;
@@ -300,10 +302,12 @@ public class SidebarTemplateData {
             return cachedPosts;
         }
 
-        List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like '%\"global\"%')",
+        RegionVisibility.PositionalFilter regionFilter = RegionVisibility.jpqlFilter(2, BlogRegion.fromCode(region));
+        List<Post> posts = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and "
+                        + regionFilter.fragment(),
                         Sort.descending("publishedAt").and("createdAt").descending(),
                         com.biliwind.blog.model.PostStatus.PUBLISHED,
-                        "%\"" + region + "\"%")
+                        regionFilter.regionPattern())
                 .page(0, safeLimit)
                 .list();
 

@@ -164,4 +164,5 @@
     <include file="db/migration/163-remove-event-log-foreign-keys.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/164-add-system-settings-level.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/165-create-ai-usage-logs.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/166-normalize-visibility-regions.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

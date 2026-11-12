@@ -18,4 +18,10 @@ class ErrorCodeCatalogTest {
         assertEquals("WB-AUTH-REGISTER-005",
                 ErrorCodeCatalog.resolve("/user/api/register", 409, "邮箱已被注册"));
     }
+
+    @Test
+    void shouldMapUnknownRegionRejectionToItsOwnCode() {
+        assertEquals("WB-REGION-001",
+                ErrorCodeCatalog.resolve("/api/admin/posts", 400, "未知的区域代码：kr"));
+    }
 }

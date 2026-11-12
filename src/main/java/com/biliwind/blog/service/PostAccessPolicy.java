@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.User;
@@ -52,21 +53,7 @@ public class PostAccessPolicy {
     }
 
     public boolean isVisibleInRegion(Post post, BlogRegion currentRegion) {
-        if (post == null) {
-            return false;
-        }
-        if (post.visibilityRegions == null || post.visibilityRegions.isEmpty()) {
-            return true;
-        }
-        BlogRegion safeRegion = currentRegion == null ? BlogRegion.GLOBAL : currentRegion;
-        String regionCode = safeRegion.getCode();
-        for (String region : post.visibilityRegions) {
-            if (region != null && (BlogRegion.GLOBAL.getCode().equalsIgnoreCase(region.trim())
-                    || regionCode.equalsIgnoreCase(region.trim()))) {
-                return true;
-            }
-        }
-        return false;
+        return post != null && RegionVisibility.isVisible(post.visibilityRegions, currentRegion);
     }
 
     private Long resolveActiveUserId(Long userId) {

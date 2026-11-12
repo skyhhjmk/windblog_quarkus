@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Media;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,15 +25,7 @@ public class MediaAccessService {
             return false;
         }
 
-        if (media.visibilityRegions == null || media.visibilityRegions.isEmpty()) {
-            return true;
-        }
-
-        if (containsRegion(media.visibilityRegions, BlogRegion.GLOBAL.getCode())) {
-            return true;
-        }
-
-        return containsRegion(media.visibilityRegions, regionCode);
+        return RegionVisibility.isVisible(media.visibilityRegions, safeRegion);
     }
 
     private boolean containsRegion(List<String> regions, String expectedRegion) {

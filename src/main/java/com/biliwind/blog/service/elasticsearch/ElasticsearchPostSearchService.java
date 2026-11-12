@@ -4,8 +4,10 @@ import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.common.constant.LanguageConstant;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostAuthorHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.common.helper.SearchContentHelper;
 import com.biliwind.blog.common.dto.SearchHighlightSegment;
+import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
@@ -1207,15 +1209,7 @@ public class ElasticsearchPostSearchService {
                           ],
                           "filter": [
                             { "term": { "status": "PUBLISHED" } },
-                            {
-                              "bool": {
-                                "should": [
-                                  { "bool": { "must_not": { "exists": { "field": "visibilityRegions" } } } },
-                                  { "term": { "visibilityRegions": "%s" } },
-                                  { "term": { "visibilityRegions": "global" } }
-                                ]
-                              }
-                            }
+                            %s
                           ]
                         }
                       },
@@ -1229,7 +1223,8 @@ public class ElasticsearchPostSearchService {
                         "post_tags": ["%s"]
                       }
                     }
-                    """, from, size, escapeJson(query), region,
+                    """, from, size, escapeJson(query),
+                    RegionVisibility.elasticsearchFilter(BlogRegion.fromCode(region)),
                     highlightMarkers.preTag(), highlightMarkers.postTag()));
         } else {
             searchBody = new StringBuilder(String.format("""
@@ -1246,20 +1241,13 @@ public class ElasticsearchPostSearchService {
                       ],
                       "filter": [
                             { "term": { "status": "PUBLISHED" } },
-                            {
-                              "bool": {
-                                "should": [
-                                  { "bool": { "must_not": { "exists": { "field": "visibilityRegions" } } } },
-                                  { "term": { "visibilityRegions": "%s" } },
-                                  { "term": { "visibilityRegions": "global" } }
-                                ]
-                              }
-                            }
+                            %s
                           ]
                         }
                       }
                     }
-                    """, from, size, region));
+                    """, from, size,
+                    RegionVisibility.elasticsearchFilter(BlogRegion.fromCode(region))));
         }
 
         var request = HttpRequest.newBuilder()

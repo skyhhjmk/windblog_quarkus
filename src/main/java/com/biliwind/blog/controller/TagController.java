@@ -4,6 +4,7 @@ import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.i18n.I18n;
@@ -151,10 +152,12 @@ public class TagController {
         String tagName = resolveTagName(entity, lang);
         String tagDescription = resolveTagDescription(entity, lang);
 
-        String currentRegion = regionContext.getCurrentRegion().getCode();
-        var query = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like '%\"global\"%') and id in "
+        RegionVisibility.PositionalFilter regionFilter =
+                RegionVisibility.jpqlFilter(2, regionContext.getCurrentRegion());
+        var query = Post.find("status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null and "
+                        + regionFilter.fragment() + " and id in "
                         + "(select pt.post.id from PostTag pt where pt.tag = ?3) order by publishedAt desc nulls last, createdAt desc",
-                PostStatus.PUBLISHED, "%\"" + currentRegion + "\"%", entity);
+                PostStatus.PUBLISHED, regionFilter.regionPattern(), entity);
 
         long totalCount = query.count();
         int totalPages = totalCount == 0 ? 1 : (int) Math.ceil((double) totalCount / PAGE_SIZE);

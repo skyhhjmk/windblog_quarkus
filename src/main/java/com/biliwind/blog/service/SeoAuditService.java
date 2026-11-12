@@ -2,6 +2,7 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.MarkdownHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.model.*;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.ContextNotActiveException;
@@ -130,12 +131,13 @@ public class SeoAuditService {
 
     public List<Map<String, String>> related(Post post, String language) {
         if (post == null || post.category == null) return List.of();
-        String regionPattern = "%\"" + currentRegionCode() + "\"%";
+        RegionVisibility.PositionalFilter regionFilter =
+                RegionVisibility.jpqlFilter(4, BlogRegion.fromCode(currentRegionCode()));
         List<Post> candidates = Post.find("id <> ?1 and category.id = ?2 and status = ?3 and visibility = 0 "
                 + "and deletedAt is null and publishedRevision is not null "
                 + "and id not in (select policy.postId from SeoPostPolicy policy where policy.noindex = true) "
-                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?4 or cast(visibilityRegions as String) like '%\"global\"%') "
-                + "order by publishedAt desc", post.id, post.category.id, PostStatus.PUBLISHED, regionPattern)
+                + "and " + regionFilter.fragment() + " "
+                + "order by publishedAt desc", post.id, post.category.id, PostStatus.PUBLISHED, regionFilter.regionPattern())
                 .page(io.quarkus.panache.common.Page.ofSize(5)).list();
         return candidates.stream().map(p -> Map.of("title", Objects.toString(LanguageHelper.resolveLocalizedValue(p.publishedRevision.title, language), p.slug),
                 "url", canonical.buildPath(("zh-cn".equalsIgnoreCase(language) ? "" : "/" + language) + "/post/" + p.slug))).toList();

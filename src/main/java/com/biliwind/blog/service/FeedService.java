@@ -1,6 +1,7 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.common.helper.LanguageHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
@@ -67,24 +68,28 @@ public class FeedService {
         }
     }
 
-    private String sitemapPostQuery() {
+    private String sitemapPostQuery(RegionVisibility.PositionalFilter regionFilter) {
         return "status = ?1 and deletedAt is null and visibility = 0 and publishedRevision is not null "
                 + "and id not in (select policy.postId from SeoPostPolicy policy where policy.noindex = true) "
-                + "and (visibilityRegions is null or cast(visibilityRegions as String) like ?2 or cast(visibilityRegions as String) like '%\"global\"%')";
+                + "and " + regionFilter.fragment();
     }
 
     public List<Integer> getPostSitemapPages() {
-        String regionPattern = "%\"" + currentRegionCode() + "\"%";
-        long count = com.biliwind.blog.model.Post.count(sitemapPostQuery(), com.biliwind.blog.model.PostStatus.PUBLISHED, regionPattern);
+        RegionVisibility.PositionalFilter regionFilter =
+                RegionVisibility.jpqlFilter(2, BlogRegion.fromCode(currentRegionCode()));
+        long count = com.biliwind.blog.model.Post.count(sitemapPostQuery(regionFilter),
+                com.biliwind.blog.model.PostStatus.PUBLISHED, regionFilter.regionPattern());
         return java.util.stream.IntStream.rangeClosed(1, Math.max(1, (int) ((count + SITEMAP_PAGE_SIZE - 1) / SITEMAP_PAGE_SIZE)))
                 .boxed().toList();
     }
 
     public List<PostSitemapUrlView> getPostSitemapUrls(int page) {
         if (page < 1 || page > getPostSitemapPages().size()) throw new jakarta.ws.rs.NotFoundException();
-        String regionPattern = "%\"" + currentRegionCode() + "\"%";
+        RegionVisibility.PositionalFilter regionFilter =
+                RegionVisibility.jpqlFilter(2, BlogRegion.fromCode(currentRegionCode()));
         List<com.biliwind.blog.model.Post> posts = com.biliwind.blog.model.Post.find(
-                sitemapPostQuery() + " order by id", com.biliwind.blog.model.PostStatus.PUBLISHED, regionPattern)
+                sitemapPostQuery(regionFilter) + " order by id",
+                com.biliwind.blog.model.PostStatus.PUBLISHED, regionFilter.regionPattern())
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<PostSitemapUrlView> urls = new ArrayList<>();
         if (!config.getBoolean("seo", "index_enabled", true)) return urls;

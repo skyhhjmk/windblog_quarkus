@@ -1,49 +1,28 @@
 package com.biliwind.blog.service;
 
-import com.biliwind.blog.model.BlogRegion;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import jakarta.enterprise.context.ApplicationScoped;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 区域值校验服务，确保 visibilityRegions 等列表中的值都是有效的区域 code
+ * 区域值校验服务，写路径的统一入口：规范化大小写并拒绝未知区域 code。
  */
 @ApplicationScoped
 public class RegionValidationService {
 
     /**
-     * 校验并过滤 visibilityRegions 列表，只保留有效的区域 code。
-     * 若包含 global 或为空，表示全区域可见，返回 null 以保持数据库标准化。
+     * 校验 visibilityRegions/hiddenRegions 等列表：去空白、转小写、兼容 china，
+     * 未知 code 直接拒绝；全区域可见统一存为 null。
      */
     public List<String> validateAndFilterRegions(List<String> regions) {
-        if (regions == null || regions.isEmpty()) {
-            return null;
-        }
-        List<String> result = new ArrayList<>();
-        for (String region : regions) {
-            if (region == null || region.isBlank()) {
-                continue;
-            }
-            BlogRegion blogRegion = BlogRegion.fromCode(region);
-            if (blogRegion != BlogRegion.GLOBAL || "global".equalsIgnoreCase(region.trim())) {
-                result.add(blogRegion.getCode());
-            }
-        }
-        if (result.isEmpty() || result.contains(BlogRegion.GLOBAL.getCode())) {
-            return null;
-        }
-        return result;
+        return RegionVisibility.normalizeForWrite(regions);
     }
 
     /**
-     * 判断单个区域字符串是否有效
+     * 判断单个区域字符串是否为已知区域（允许大小写和 china 兼容写法）。
      */
     public boolean isValidRegion(String regionCode) {
-        if (regionCode == null || regionCode.isBlank()) {
-            return false;
-        }
-        BlogRegion region = BlogRegion.fromCode(regionCode);
-        return region != BlogRegion.GLOBAL || "global".equalsIgnoreCase(regionCode.trim());
+        return RegionVisibility.isKnownRegion(regionCode);
     }
 }
