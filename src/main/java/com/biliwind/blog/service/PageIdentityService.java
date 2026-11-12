@@ -7,6 +7,8 @@ import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.SeoPostPolicy;
 import com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -29,11 +31,13 @@ public class PageIdentityService {
      * fingerprint is part of every page validator, so a configuration change
      * cannot leave a cached page advertising the old title, theme or footer.
      */
-    private static final List<String> RENDER_CONFIG_KEYS = List.of(
-            "site_info", "site_footer", "appearance", "amp", "analytics_tracking",
-            "feature_toggles", "seo", "social_links", "site_language", "google_adsense",
-            "ai_comment_audit", "ai_operation_configs", "ai_translation",
-            "security_network", "comment_security");
+    private static final List<SettingKey> RENDER_CONFIG_KEYS = List.of(
+            SettingKey.SITE_INFO, SettingKey.SITE_FOOTER, SettingKey.APPEARANCE,
+            SettingKey.AMP, SettingKey.ANALYTICS_TRACKING, SettingKey.FEATURE_TOGGLES,
+            SettingKey.SEO, SettingKey.SOCIAL_LINKS, SettingKey.SITE_LANGUAGE,
+            SettingKey.GOOGLE_ADSENSE, SettingKey.AI_COMMENT_AUDIT,
+            SettingKey.AI_OPERATION_CONFIGS, SettingKey.AI_TRANSLATION,
+            SettingKey.SECURITY_NETWORK, SettingKey.COMMENT_SECURITY);
 
     @Inject
     CanonicalUrlService canonical;
@@ -45,7 +49,7 @@ public class PageIdentityService {
     SeoManagementService seoManagement;
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     RegionContext regionContext;
@@ -120,10 +124,10 @@ public class PageIdentityService {
     public String environmentFingerprint() {
         StringBuilder fingerprint = new StringBuilder();
         BlogRegion region = region();
-        for (String key : RENDER_CONFIG_KEYS) {
-            fingerprint.append(key).append('=');
+        for (SettingKey key : RENDER_CONFIG_KEYS) {
+            fingerprint.append(key.key()).append('=');
             try {
-                JsonNode value = configManager.getForRegion(key, region);
+                JsonNode value = settings.resolved(key, region);
                 fingerprint.append(value == null ? "" : value.toString());
             } catch (RuntimeException ignored) {
                 fingerprint.append("");
@@ -146,7 +150,7 @@ public class PageIdentityService {
     }
 
     private boolean ampEnabled() {
-        return configManager.getBoolean("amp", "enabled", true);
+        return settings.flag(SettingKey.AMP, "enabled");
     }
 
     private Set<String> availableLanguages(Map<String, String> title, Map<String, String> content) {

@@ -6,6 +6,8 @@ import com.biliwind.blog.model.*;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import org.jsoup.Jsoup;
@@ -19,7 +21,7 @@ import java.util.function.Function;
 @ApplicationScoped
 public class InternalLinkGraphService {
     private static final int MAX_CONTENT_CHARS = 1_000_000;
-    @Inject ConfigManager config;
+    @Inject SettingsReader settings;
     @Inject CanonicalUrlService canonical;
     @Inject PublicUrlService publicUrl;
     @Inject RegionRuleService regions;
@@ -27,7 +29,7 @@ public class InternalLinkGraphService {
     @Inject PublicContentSanitizer sanitizer;
 
     public boolean enabled() {
-        return config.getBoolean("seo", "internal_link_graph_enabled", false);
+        return settings.flag(SettingKey.SEO, "internal_link_graph_enabled");
     }
 
     public Graph publicGraph(String slug, String language, String region) {

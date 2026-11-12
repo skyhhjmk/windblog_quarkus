@@ -5,6 +5,8 @@ import io.quarkus.redis.datasource.value.SetArgs;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -33,7 +35,6 @@ public class CommentCaptchaService {
 
     private static final Logger LOG = Logger.getLogger(CommentCaptchaService.class);
 
-    static final String CONFIG_KEY = "comment_security";
     static final String USED_KEY_PREFIX = "windblog:comment-captcha-used:";
     static final String CHALLENGE_VERSION = "v1";
     static final int MIN_DIFFICULTY = 12;
@@ -51,7 +52,7 @@ public class CommentCaptchaService {
     private final SecureRandom random = new SecureRandom();
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     RedisDataSource redis;
@@ -185,16 +186,14 @@ public class CommentCaptchaService {
     }
 
     private int difficulty() {
-        Integer configured = configManager == null ? null
-                : configManager.getInt(CONFIG_KEY, "pow_difficulty", DEFAULT_DIFFICULTY);
-        int value = configured == null ? DEFAULT_DIFFICULTY : configured;
+        int value = settings == null ? DEFAULT_DIFFICULTY
+                : settings.number(SettingKey.COMMENT_SECURITY, "pow_difficulty");
         return Math.max(MIN_DIFFICULTY, Math.min(MAX_DIFFICULTY, value));
     }
 
     private int ttlSeconds() {
-        Integer configured = configManager == null ? null
-                : configManager.getInt(CONFIG_KEY, "challenge_ttl_seconds", DEFAULT_TTL_SECONDS);
-        int value = configured == null ? DEFAULT_TTL_SECONDS : configured;
+        int value = settings == null ? DEFAULT_TTL_SECONDS
+                : settings.number(SettingKey.COMMENT_SECURITY, "challenge_ttl_seconds");
         return Math.max(MIN_TTL_SECONDS, Math.min(MAX_TTL_SECONDS, value));
     }
 

@@ -1,5 +1,8 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.service.settings.RegionalSettings;
+import com.biliwind.blog.service.settings.SettingsReader;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -21,11 +24,10 @@ class SeoManagementServiceTest {
     }
 
     @Test void linkInterstitialIsNoindexWhileRegularPagesStayIndexable() {
-        service.config = new ConfigManager() {
-            @Override public Boolean getBoolean(String key, String field, Boolean fallback) {
-                return true;
-            }
+        ConfigManager config = new ConfigManager() {
+            @Override public JsonNode get(String key) { return null; }
         };
+        service.settings = new SettingsReader(config, new RegionalSettings(config));
         assertEquals("noindex,follow", service.robots("/link/go/token"));
         assertEquals("index,follow", service.robots("/tools"));
         assertEquals("noindex,follow", service.robots("/search"));

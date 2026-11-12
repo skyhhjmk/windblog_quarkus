@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import org.jboss.logging.Logger;
 import org.jsoup.Jsoup;
 
@@ -24,7 +26,7 @@ public class StructuredDataService {
     private static final Logger LOG = Logger.getLogger(StructuredDataService.class);
 
     @Inject ObjectMapper mapper;
-    @Inject ConfigManager configManager;
+    @Inject SettingsReader settings;
     @Inject CanonicalUrlService canonicalUrlService;
     @Inject LanguageContext languageContext;
     @Inject I18n i18n;
@@ -41,7 +43,7 @@ public class StructuredDataService {
         ObjectNode website = node("WebSite", home + "#website");
         website.put("url", home);
         website.put("name", siteName());
-        website.put("description", configManager.getString("site_info", "description", ""));
+        website.put("description", settings.text(SettingKey.SITE_INFO, "description"));
         website.put("inLanguage", language);
         website.putObject("publisher").put("@id", home + "#publisher");
         return graph(List.of(website, publisher()));
@@ -81,10 +83,10 @@ public class StructuredDataService {
             author.put("@type", "Person");
             author.put("name", name.trim());
             // Site-owner links must not be assigned to guest or AI authors.
-            if (name.trim().equals(configManager.getString("site_info", "author", "").trim())) {
-                String url = absoluteUrl(configManager.getString("site_info", "author_url", ""), canonicalUrl);
+            if (name.trim().equals(settings.text(SettingKey.SITE_INFO, "author").trim())) {
+                String url = absoluteUrl(settings.text(SettingKey.SITE_INFO, "author_url"), canonicalUrl);
                 if (url != null) author.put("url", url);
-                JsonNode info = configManager.get("site_info");
+                JsonNode info = settings.object(SettingKey.SITE_INFO);
                 JsonNode links = info == null ? null : info.get("author_same_as");
                 if (links != null && links.isArray()) {
                     ArrayNode sameAs = mapper.createArrayNode();
@@ -180,7 +182,7 @@ public class StructuredDataService {
     }
 
     public String publisherLogoUrl() {
-        String configured = configManager.getString("appearance", "logo_url", "");
+        String configured = settings.text(SettingKey.APPEARANCE, "logo_url");
         // Older settings seed this path even though the application ships no such asset.
         if ("/logo.png".equals(configured.trim())
                 && StructuredDataService.class.getResource("/META-INF/resources/logo.png") == null) {
@@ -190,7 +192,7 @@ public class StructuredDataService {
     }
 
     private String siteName() {
-        return configManager.getString("site_info", "title", "WindBlog");
+        return settings.text(SettingKey.SITE_INFO, "title");
     }
 
     private ObjectNode node(String type, String id) {

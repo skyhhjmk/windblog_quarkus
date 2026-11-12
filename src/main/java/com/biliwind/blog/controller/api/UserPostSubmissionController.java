@@ -11,7 +11,8 @@ import com.biliwind.blog.model.PostRevision;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.UserNotificationService;
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.biliwind.blog.service.ai.AiManager;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
@@ -45,7 +46,7 @@ public class UserPostSubmissionController {
     UserNotificationService notificationService;
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     AiManager aiManager;
@@ -351,7 +352,7 @@ public class UserPostSubmissionController {
     }
 
     private void requireSubmissionEnabled() {
-        if (!configManager.getBoolean("feature_toggles", "enable_user_post_submission", true)) {
+        if (!settings.flag(SettingKey.FEATURE_TOGGLES, "enable_user_post_submission")) {
             throw new ForbiddenException("用户投稿功能暂未开放");
         }
     }

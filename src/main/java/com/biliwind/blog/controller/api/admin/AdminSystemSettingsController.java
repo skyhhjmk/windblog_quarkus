@@ -6,6 +6,9 @@ import com.biliwind.blog.model.SystemSettingHistory;
 import com.biliwind.blog.model.AiProviderConfig;
 import com.biliwind.blog.controller.api.admin.dto.SystemSettingView;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
+import com.biliwind.blog.service.settings.SettingCatalogue;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.biliwind.blog.service.SafeModeWatchdog;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +28,6 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.ArrayList;
 
@@ -46,6 +48,9 @@ public class AdminSystemSettingsController {
 
     @Inject
     ObjectMapper mapper;
+
+    @Inject
+    SettingsReader settings;
 
     @Inject
     com.biliwind.blog.service.AuditService auditService;
@@ -125,7 +130,7 @@ public class AdminSystemSettingsController {
         }
 
         JsonNode newValue = mapper.valueToTree(configValueObj);
-        newValue = mergeSecretValues(setting.configKey, setting.configValue, newValue);
+        newValue = settings.mergeSecretValues(SettingKey.fromKey(setting.configKey), setting.configValue, newValue);
         Object reasonObj = body.get("reason");
         String reason = null;
         if (reasonObj != null) {
@@ -149,7 +154,7 @@ public class AdminSystemSettingsController {
         // 更新当前
         setting.configValue = newValue;
         setting.version += 1;
-        boolean requiresVerification = setting.requiresVerification();
+        boolean requiresVerification = SettingCatalogue.requiresVerification(setting.configKey);
         setting.isFrozen = requiresVerification;
         setting.persist();
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
@@ -223,7 +228,7 @@ public class AdminSystemSettingsController {
             Map<String, Object> safeItem = new HashMap<>();
             safeItem.put("id", item.id);
             safeItem.put("configKey", item.configKey);
-            safeItem.put("configValue", maskSecrets(item.configKey, item.configValue));
+            safeItem.put("configValue", settings.masked(SettingKey.fromKey(item.configKey), item.configValue));
             safeItem.put("version", item.version);
             safeItem.put("operatorId", item.operatorId);
             safeItem.put("changeReason", item.changeReason);
@@ -255,7 +260,7 @@ public class AdminSystemSettingsController {
             throw new WebApplicationException("Setting is currently frozen", Response.Status.CONFLICT);
         }
 
-        JsonNode newValue = mergeSecretValues(setting.configKey, setting.configValue, mapper.valueToTree(valueObj));
+        JsonNode newValue = settings.mergeSecretValues(SettingKey.fromKey(setting.configKey), setting.configValue, mapper.valueToTree(valueObj));
 
         // 记录历史
         SystemSettingHistory history = new SystemSettingHistory();
@@ -270,7 +275,7 @@ public class AdminSystemSettingsController {
         // 更新
         setting.configValue = newValue;
         setting.version += 1;
-        boolean requiresVerification = setting.requiresVerification();
+        boolean requiresVerification = SettingCatalogue.requiresVerification(setting.configKey);
         setting.isFrozen = requiresVerification;
         setting.persist();
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
@@ -282,8 +287,8 @@ public class AdminSystemSettingsController {
         }
 
         auditService.log("system_setting", String.valueOf(setting.id), "audit_apply",
-                Map.of("key", key, "value", maskSecrets(key, history.configValue), "version", history.version),
-                Map.of("key", key, "value", maskSecrets(key, newValue), "version", setting.version));
+                Map.of("key", key, "value", settings.masked(SettingKey.fromKey(key), history.configValue), "version", history.version),
+                Map.of("key", key, "value", settings.masked(SettingKey.fromKey(key), newValue), "version", setting.version));
 
         String message = requiresVerification ? "已应用配置并进入验证期" : "已应用配置";
         return Response.ok(Map.of("success", true, "message", message)).build();
@@ -313,41 +318,15 @@ public class AdminSystemSettingsController {
         Map<String, Object> result = new HashMap<>();
         result.put("key", key);
         result.put("version", value.has("version") ? value.get("version").asInt() : null);
-
-        if (isSensitiveKey(key)) {
-            ObjectNode sanitized = mapper.createObjectNode();
-            if (value.isObject()) {
-                value.fieldNames().forEachRemaining(fieldName -> {
-                    if (isSensitiveKey(fieldName)) {
-                        sanitized.put(fieldName, "***REDACTED***");
-                    } else {
-                        sanitized.set(fieldName, value.get(fieldName));
-                    }
-                });
-            }
-            result.put("value", sanitized);
-        } else {
-            result.put("value", value);
-        }
-
+        result.put("value", settings.masked(SettingKey.fromKey(key), value));
         return result;
     }
 
-    private boolean isSensitiveKey(String key) {
-        if (key == null) {
-            return false;
-        }
-        String normalized = key.toLowerCase(Locale.ROOT);
-        return normalized.endsWith("key")
-                || normalized.contains("secret")
-                || normalized.contains("password")
-                || normalized.contains("token");
-    }
-
-    private SystemSettingView toView(SystemSetting setting) {
-        boolean secret = containsSecret(setting.configKey, setting.configValue);
+    SystemSettingView toView(SystemSetting setting) {
+        SettingKey settingKey = SettingKey.fromKey(setting.configKey);
+        boolean secret = settings.containsSecret(settingKey, setting.configValue);
         JsonNode uiSchema = setting.uiSchema;
-        if ("ai_operation_configs".equals(setting.configKey) && uiSchema != null && uiSchema.isObject()) {
+        if (SettingKey.AI_OPERATION_CONFIGS == settingKey && uiSchema != null && uiSchema.isObject()) {
             ObjectNode dynamicSchema = ((ObjectNode) uiSchema).deepCopy();
             JsonNode fields = dynamicSchema.path("fields");
             if (fields.isArray()) {
@@ -372,9 +351,9 @@ public class AdminSystemSettingsController {
             uiSchema = dynamicSchema;
         }
         return new SystemSettingView(setting.id, setting.configKey,
-                maskSecrets(setting.configKey, setting.configValue), setting.configType,
+                settings.masked(settingKey, setting.configValue), setting.configType,
                 setting.groupName, uiSchema, setting.description, setting.version,
-                setting.isFrozen, secret, setting.settingLevel, setting.requiresVerification(),
+                setting.isFrozen, secret, setting.settingLevel, SettingCatalogue.requiresVerification(setting.configKey),
                 setting.createdAt, setting.updatedAt);
     }
 
@@ -397,67 +376,4 @@ public class AdminSystemSettingsController {
         }
     }
 
-    private boolean containsSecret(String key, JsonNode value) {
-        if (isSensitiveKey(key.toLowerCase())) {
-            return true;
-        }
-        if (value == null) {
-            return false;
-        }
-        if (value.isObject()) {
-            java.util.Iterator<String> fields = value.fieldNames();
-            while (fields.hasNext()) {
-                String field = fields.next().toLowerCase();
-                if (isSensitiveKey(field) || containsSecret(field, value.get(field))) {
-                    return true;
-                }
-            }
-        } else if (value.isArray()) {
-            for (JsonNode item : value) {
-                if (containsSecret(key, item)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private JsonNode maskSecrets(String key, JsonNode value) {
-        if (value == null) {
-            return null;
-        }
-        if (isSensitiveKey(key.toLowerCase())) {
-            return mapper.getNodeFactory().textNode("***REDACTED***");
-        }
-        if (!value.isObject()) {
-            if (value.isArray()) {
-                com.fasterxml.jackson.databind.node.ArrayNode result = mapper.createArrayNode();
-                for (JsonNode item : value) {
-                    result.add(maskSecrets(key, item));
-                }
-                return result;
-            }
-            return value.deepCopy();
-        }
-        ObjectNode result = mapper.createObjectNode();
-        value.fields().forEachRemaining(field -> result.set(field.getKey(), maskSecrets(field.getKey(), field.getValue())));
-        return result;
-    }
-
-    private JsonNode mergeSecretValues(String key, JsonNode current, JsonNode submitted) {
-        if (submitted == null || submitted.isNull()) {
-            return current == null ? mapper.createObjectNode() : current.deepCopy();
-        }
-        if (isSensitiveKey(key.toLowerCase())) {
-            return submitted.isTextual() && (submitted.asText().isBlank() || submitted.asText().equals("***REDACTED***"))
-                    ? current.deepCopy() : submitted.deepCopy();
-        }
-        if (!submitted.isObject() || current == null || !current.isObject()) {
-            return submitted.deepCopy();
-        }
-        ObjectNode merged = (ObjectNode) current.deepCopy();
-        submitted.fields().forEachRemaining(field -> merged.set(field.getKey(),
-                mergeSecretValues(field.getKey(), current.get(field.getKey()), field.getValue())));
-        return merged;
-    }
 }

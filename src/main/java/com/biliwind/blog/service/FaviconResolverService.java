@@ -3,9 +3,9 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Media;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.biliwind.blog.service.storage.StorageService;
 import com.biliwind.blog.service.storage.VariantType;
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -21,7 +21,7 @@ import java.util.Locale;
 public class FaviconResolverService {
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     RegionContext regionContext;
@@ -69,28 +69,7 @@ public class FaviconResolverService {
      * Retrieves the raw configured favicon URL, preferring region-specific overrides.
      */
     public String getConfiguredFaviconUrl(BlogRegion region) {
-        String regionCode = region == null ? "global" : region.getCode().toLowerCase(Locale.ROOT);
-
-        // 1. Check appearance.favicon_url_regions.<region>
-        JsonNode appearance = configManager.get("appearance");
-        if (appearance != null && appearance.has("favicon_url_regions")) {
-            JsonNode regNode = appearance.get("favicon_url_regions");
-            if (regNode.has(regionCode)) {
-                String val = regNode.get(regionCode).asText("");
-                if (!val.isBlank()) {
-                    return val.trim();
-                }
-            }
-        }
-
-        // 2. Check appearance.regions.<region>.favicon_url
-        String forRegion = configManager.getStringForRegion("appearance", "favicon_url", "", region);
-        if (forRegion != null && !forRegion.isBlank()) {
-            return forRegion.trim();
-        }
-
-        // 3. Fallback to default appearance.favicon_url
-        return configManager.getString("appearance", "favicon_url", "").trim();
+        return settings.favicon(region);
     }
 
     /**

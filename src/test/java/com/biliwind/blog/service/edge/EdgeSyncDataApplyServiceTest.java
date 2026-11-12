@@ -9,9 +9,12 @@ import com.biliwind.blog.model.SystemSetting;
 import com.biliwind.blog.model.Tag;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
+import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.SystemConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -42,6 +45,35 @@ class EdgeSyncDataApplyServiceTest {
 
     @Inject
     EntityManager entityManager;
+
+    @Inject
+    ConfigManager configManager;
+
+    @Inject
+    SystemConfigService systemConfigService;
+
+    @Test
+    void shouldRefreshConfigCacheAfterEdgeSystemSettingCommit() {
+        String settingKey = "edge-cache-test-" + UUID.randomUUID();
+        try {
+            syncDataApplyService.apply(SyncDataRequest.newBuilder()
+                    .setAction("UPSERT")
+                    .setEntityType("SYSTEM_SETTING")
+                    .setEntityId(1L)
+                    .setPayload("{\"configKey\":\"" + settingKey
+                            + "\",\"configValue\":{\"enabled\":true}}")
+                    .build());
+
+            JsonNode cached = configManager.getLocal(settingKey);
+            assertNotNull(cached, "edge apply must refresh the L1 cache after commit");
+            assertTrue(cached.path("enabled").asBoolean());
+        } finally {
+            QuarkusTransaction.requiringNew().run(() ->
+                    SystemSetting.delete("configKey", settingKey));
+            configManager.applyRemoteConfigChange(settingKey, null);
+            systemConfigService.evictCache(settingKey);
+        }
+    }
 
     @Test
     @TestTransaction

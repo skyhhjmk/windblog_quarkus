@@ -1,25 +1,24 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.SystemSetting;
-import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.event.TransactionPhase;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 配置管理器（旧组件重构版）
- * <p>
- * 现在作为 SystemConfigService 的本地一级缓存包装类。
+ * L1 cache in front of {@link SystemConfigService}. Reads expose raw JSON only;
+ * typed reads and canonical defaults belong to
+ * {@link com.biliwind.blog.service.settings.SettingsReader}.
  */
 @ApplicationScoped
 public class ConfigManager {
@@ -34,7 +33,9 @@ public class ConfigManager {
     @Inject
     protected void init() {
         LOG.info("初始化 ConfigManager (一级本地缓存)...");
-        refreshAll();
+        // The initializer method is not intercepted by @Transactional, so the
+        // transaction must be opened explicitly before loading rows.
+        QuarkusTransaction.requiringNew().run(this::refreshAll);
     }
 
     @Transactional
@@ -53,13 +54,11 @@ public class ConfigManager {
     }
 
     public JsonNode get(String key) {
-        // 1. 尝试本地缓存
         JsonNode local = localCache.get(key);
         if (local != null) {
             return local;
         }
 
-        // 2. 尝试 Redis/DB
         JsonNode val = systemConfigService.getConfig(key);
         if (val != null) {
             localCache.put(key, val);
@@ -68,100 +67,11 @@ public class ConfigManager {
     }
 
     /**
-     * Returns the complete regional override for a setting, falling back to
-     * its complete global value when the requested region has no override.
+     * Cache refresh runs only after the changing transaction commits. A
+     * rollback therefore leaves the previous committed value in L1 and Redis;
+     * a rejected value can never be published to either cache.
      */
-    public JsonNode getForRegion(String key, BlogRegion region) {
-        JsonNode value = get(key);
-        if (value == null || !value.isObject()) {
-            return value;
-        }
-        JsonNode regions = value.get("regions");
-        String regionCode = region == null ? BlogRegion.GLOBAL.getCode()
-                : region.getCode().toLowerCase(Locale.ROOT);
-        if (!BlogRegion.GLOBAL.getCode().equals(regionCode)
-                && regions != null && regions.isObject()) {
-            JsonNode regionalValue = regions.get(regionCode);
-            if (regionalValue != null && regionalValue.isObject()) {
-                return regionalValue;
-            }
-        }
-        ObjectNode globalValue = ((ObjectNode) value).deepCopy();
-        globalValue.remove("regions");
-        return globalValue;
-    }
-
-    public String getStringForRegion(String key, String field, String defaultValue, BlogRegion region) {
-        JsonNode node = getForRegion(key, region);
-        if (node != null && node.has(field)) {
-            JsonNode fieldNode = node.get(field);
-            if (fieldNode.isTextual()) {
-                return fieldNode.asText();
-            }
-            return fieldNode.toString();
-        }
-        return defaultValue;
-    }
-
-    public String getString(String key, String defaultValue) {
-        JsonNode node = get(key);
-        if (node != null && node.isTextual()) {
-            return node.asText();
-        }
-        return defaultValue;
-    }
-
-    public String getString(String key, String field, String defaultValue) {
-        JsonNode node = get(key);
-        if (node != null && node.has(field)) {
-            JsonNode fieldNode = node.get(field);
-            if (fieldNode.isTextual()) {
-                return fieldNode.asText();
-            }
-            return fieldNode.toString();
-        }
-        return defaultValue;
-    }
-
-    public Integer getInt(String key, Integer defaultValue) {
-        JsonNode node = get(key);
-        if (node != null && node.canConvertToInt()) {
-            return node.asInt();
-        }
-        return defaultValue;
-    }
-
-    public Integer getInt(String key, String field, Integer defaultValue) {
-        JsonNode node = get(key);
-        if (node != null && node.has(field)) {
-            JsonNode fieldNode = node.get(field);
-            if (fieldNode.canConvertToInt()) {
-                return fieldNode.asInt();
-            }
-        }
-        return defaultValue;
-    }
-
-    public Boolean getBoolean(String key, Boolean defaultValue) {
-        JsonNode node = get(key);
-        if (node != null && node.isBoolean()) {
-            return node.asBoolean();
-        }
-        return defaultValue;
-    }
-
-    public Boolean getBoolean(String key, String field, Boolean defaultValue) {
-        JsonNode node = get(key);
-        if (node != null && node.has(field)) {
-            return node.get(field).asBoolean();
-        }
-        return defaultValue;
-    }
-
-    /**
-     * 响应配置变更事件
-     */
-    public void onConfigChanged(@Observes ConfigChangedEvent event) {
+    public void onConfigChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) ConfigChangedEvent event) {
         LOG.infof("收到配置变更事件: %s, 更新本地及 Redis 缓存。", event.key);
         if (event.newValue != null) {
             localCache.put(event.key, event.newValue);

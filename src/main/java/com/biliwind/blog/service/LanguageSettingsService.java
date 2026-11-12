@@ -7,7 +7,8 @@ import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.SystemSetting;
 import com.biliwind.blog.model.SystemSettingHistory;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -17,7 +18,6 @@ import jakarta.transaction.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Region-scoped default language. Stored in the {@code site_language} setting:
@@ -34,13 +34,13 @@ import java.util.Locale;
 @ApplicationScoped
 public class LanguageSettingsService {
 
-    public static final String SETTING_KEY = "site_language";
+    public static final String SETTING_KEY = SettingKey.SITE_LANGUAGE.key();
     public static final String FIELD_DEFAULT_LANGUAGE = "default_language";
     private static final String REGIONS = "regions";
     private static final String GLOBAL = "global";
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     ObjectMapper mapper;
@@ -59,32 +59,23 @@ public class LanguageSettingsService {
      * to the site default and then to zh-cn.
      */
     public String defaultLanguage(BlogRegion region) {
-        return resolve(configManager.get(SETTING_KEY), region);
+        return normalize(settings.language(region));
     }
 
     /**
      * Cache-only variant safe for the Vert.x IO thread.
      */
     public String defaultLanguageCached(BlogRegion region) {
-        return resolve(configManager.getLocal(SETTING_KEY), region);
+        return normalize(settings.languageCached(region));
     }
 
-    private String resolve(JsonNode value, BlogRegion region) {
-        BlogRegion effective = region == null ? BlogRegion.GLOBAL : region;
-        String configured = readRegionLanguage(value, effective.getCode());
-        if (configured == null && !BlogRegion.GLOBAL.equals(effective)) {
-            configured = readRegionLanguage(value, GLOBAL);
-        }
-        if (configured == null && value != null) {
-            configured = text(value.get(FIELD_DEFAULT_LANGUAGE));
-        }
+    private String normalize(String configured) {
         String normalized = LanguageHelper.normalizeToSupportedLang(configured);
         return normalized != null ? normalized : LanguageConstant.DEFAULT_LANG;
     }
 
     public boolean hasRegionOverride(BlogRegion region) {
-        return readRegionLanguage(configManager.get(SETTING_KEY),
-                region == null ? GLOBAL : region.getCode()) != null;
+        return settings.hasLanguageOverride(region);
     }
 
     public List<RegionLanguageSetting> listSettings() {
@@ -164,31 +155,6 @@ public class LanguageSettingsService {
         regions.put(BlogRegion.HK.getCode(), LanguageConstant.LANG_ZH_CN);
         regions.put(BlogRegion.TW.getCode(), LanguageConstant.LANG_ZH_CN);
         return value;
-    }
-
-    private String readRegionLanguage(JsonNode value, String regionCode) {
-        if (value == null || regionCode == null) {
-            return null;
-        }
-        JsonNode regions = value.get(REGIONS);
-        if (regions == null || !regions.isObject()) {
-            return null;
-        }
-        JsonNode entry = regions.get(regionCode.toLowerCase(Locale.ROOT));
-        if (entry == null) {
-            return null;
-        }
-        if (entry.isTextual()) {
-            return entry.asText();
-        }
-        if (entry.isObject()) {
-            return text(entry.get(FIELD_DEFAULT_LANGUAGE));
-        }
-        return null;
-    }
-
-    private String text(JsonNode node) {
-        return node != null && node.isTextual() ? node.asText() : null;
     }
 
     public record RegionLanguageSetting(String region,

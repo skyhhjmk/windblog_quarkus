@@ -3,6 +3,8 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.AutoTranslationRequest;
 import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.AutoTranslationStatus;
 import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.biliwind.blog.service.edge.NodeRoleService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +31,9 @@ public class AutoTranslationService {
     private static final int BATCH_SIZE = 10;
 
     @Inject
+    SettingsReader settings;
+
+    @Inject
     EntityManager entityManager;
 
     @Inject
@@ -53,17 +58,13 @@ public class AutoTranslationService {
     @PostConstruct
     void init() {
         try {
-            SystemSetting setting = SystemSetting.findByKey("ai_translation");
-            if (setting != null && setting.configValue != null) {
-                JsonNode val = setting.configValue;
-                if (val.has("autoTranslateEnabled")) {
-                    this.enabled = val.get("autoTranslateEnabled").asBoolean(false);
-                }
-                if (val.has("autoTranslateTargetLanguage") && !val.get("autoTranslateTargetLanguage").asText().isBlank()) {
-                    this.targetLanguage = val.get("autoTranslateTargetLanguage").asText().trim();
-                } else if (val.has("defaultTargetLanguage") && !val.get("defaultTargetLanguage").asText().isBlank()) {
-                    this.targetLanguage = val.get("defaultTargetLanguage").asText().trim();
-                }
+            this.enabled = settings.flag(SettingKey.AI_TRANSLATION, "autoTranslateEnabled");
+            String configuredTarget = settings.text(SettingKey.AI_TRANSLATION, "autoTranslateTargetLanguage");
+            if (configuredTarget != null && !configuredTarget.isBlank()) {
+                this.targetLanguage = configuredTarget.trim();
+            } else {
+                this.targetLanguage = settings.textNonBlank(
+                        SettingKey.AI_TRANSLATION, "defaultTargetLanguage").trim();
             }
         } catch (Exception e) {
             log.warn("初始化自动翻译设置失败: {}", e.getMessage());

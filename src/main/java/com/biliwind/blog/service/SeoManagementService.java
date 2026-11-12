@@ -3,6 +3,8 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.model.*;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
@@ -12,7 +14,7 @@ import java.util.*;
 @ApplicationScoped
 public class SeoManagementService {
     @Inject EntityManager em;
-    @Inject ConfigManager config;
+    @Inject SettingsReader settings;
 
     public String robots(String path) {
         boolean noindex = false;
@@ -38,8 +40,8 @@ public class SeoManagementService {
      * Callers that hold the public snapshot use this to avoid re-querying the post.
      */
     public String robots(boolean noindex, boolean nofollow) {
-        boolean indexDisabled = !config.getBoolean("seo", "index_enabled", true);
-        boolean followDisabled = !config.getBoolean("seo", "follow_enabled", true);
+        boolean indexDisabled = !settings.flag(SettingKey.SEO, "index_enabled");
+        boolean followDisabled = !settings.flag(SettingKey.SEO, "follow_enabled");
         return ((noindex || indexDisabled) ? "noindex" : "index") + ","
                 + ((nofollow || followDisabled) ? "nofollow" : "follow");
     }

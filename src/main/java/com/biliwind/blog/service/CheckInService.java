@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -27,7 +29,7 @@ public class CheckInService {
     private static final Logger LOG = Logger.getLogger(CheckInService.class);
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     WalletService walletService;
@@ -156,7 +158,7 @@ public class CheckInService {
         }
 
         // 获取全局配置
-        JsonNode globalConfig = configManager.get("daily_check_in_rewards");
+        JsonNode globalConfig = settings.object(SettingKey.DAILY_CHECK_IN_REWARDS);
         if (globalConfig == null) {
             // 兜底配置
             ObjectNode defaultReward = objectMapper.createObjectNode();

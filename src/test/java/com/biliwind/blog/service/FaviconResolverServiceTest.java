@@ -2,6 +2,8 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
+import com.biliwind.blog.service.settings.RegionalSettings;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.biliwind.blog.service.storage.StorageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -28,38 +30,14 @@ class FaviconResolverServiceTest {
         resolver.regionContext = regionContext;
 
         configManager = new ConfigManager() {
-            private ObjectNode appearanceNode = mapper.createObjectNode();
+            private final ObjectNode appearanceNode = mapper.createObjectNode();
 
             @Override
             public com.fasterxml.jackson.databind.JsonNode get(String key) {
-                if ("appearance".equals(key)) {
-                    return appearanceNode;
-                }
-                return super.get(key);
-            }
-
-            @Override
-            public String getString(String key, String field, String fallback) {
-                if ("appearance".equals(key)) {
-                    if (appearanceNode.has(field)) {
-                        return appearanceNode.get(field).asText(fallback);
-                    }
-                    if (field.startsWith("favicon_url_regions.")) {
-                        String sub = field.substring("favicon_url_regions.".length());
-                        if (appearanceNode.has("favicon_url_regions") && appearanceNode.get("favicon_url_regions").has(sub)) {
-                            return appearanceNode.get("favicon_url_regions").get(sub).asText(fallback);
-                        }
-                    }
-                }
-                return fallback;
-            }
-
-            @Override
-            public String getStringForRegion(String key, String field, String fallback, BlogRegion region) {
-                return getString(key, field, fallback);
+                return "appearance".equals(key) ? appearanceNode : null;
             }
         };
-        resolver.configManager = configManager;
+        resolver.settings = new SettingsReader(configManager, new RegionalSettings(configManager));
 
         regionRuleService = new RegionRuleService() {
             @Override

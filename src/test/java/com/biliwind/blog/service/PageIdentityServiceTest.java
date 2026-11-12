@@ -5,6 +5,8 @@ import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.model.SeoPostPolicy;
 import com.biliwind.blog.service.PublicCacheRefreshService.PublicPostSnapshot;
+import com.biliwind.blog.service.settings.RegionalSettings;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,23 +61,19 @@ class PageIdentityServiceTest {
 
         ConfigManager config = new ConfigManager() {
             @Override
-            public Boolean getBoolean(String key, String field, Boolean defaultValue) {
-                return defaultValue;
-            }
-
-            @Override
-            public JsonNode getForRegion(String key, com.biliwind.blog.model.BlogRegion region) {
+            public JsonNode get(String key) {
                 return null;
             }
         };
+        SettingsReader settings = new SettingsReader(config, new RegionalSettings(config));
         SeoManagementService seoManagement = new SeoManagementService();
-        seoManagement.config = config;
+        seoManagement.settings = settings;
 
         service = new PageIdentityService();
         service.canonical = canonical;
         service.seoPages = seoPages;
         service.seoManagement = seoManagement;
-        service.configManager = config;
+        service.settings = settings;
         service.regionContext = new RegionContext();
     }
 

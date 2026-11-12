@@ -13,6 +13,8 @@ import io.quarkus.qute.TemplateData;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.ContextNotActiveException;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -40,7 +42,7 @@ public class FeedService {
     @Inject SeoPageService seoPageService;
     @Inject PostAccessService postAccessService;
     @Inject PublicContentSanitizer sanitizer;
-    @Inject ConfigManager config;
+    @Inject SettingsReader settings;
 
     public List<FeedPostView> getPublishedPosts() {
         String language = languageContext.getLang();
@@ -92,7 +94,7 @@ public class FeedService {
                 com.biliwind.blog.model.PostStatus.PUBLISHED, regionFilter.regionPattern())
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<PostSitemapUrlView> urls = new ArrayList<>();
-        if (!config.getBoolean("seo", "index_enabled", true)) return urls;
+        if (!settings.flag(SettingKey.SEO, "index_enabled")) return urls;
         for (var post : posts) {
             String plainPath = "/post/" + encodeSlug(post.slug);
             List<String> languages = new ArrayList<>();
@@ -186,7 +188,7 @@ public class FeedService {
 
     public List<SitemapUrlView> getCategorySitemapUrls() { return getCategorySitemapUrls(1); }
     public List<SitemapUrlView> getCategorySitemapUrls(int page) {
-        if (!config.getBoolean("seo", "index_enabled", true)) return List.of();
+        if (!settings.flag(SettingKey.SEO, "index_enabled")) return List.of();
         if (page < 1 || page > getCategorySitemapPages().size()) throw new jakarta.ws.rs.NotFoundException();
         List<Category> categories = Category.find("enabled = true order by path, id")
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
@@ -200,7 +202,7 @@ public class FeedService {
 
     public List<SitemapUrlView> getTagSitemapUrls() { return getTagSitemapUrls(1); }
     public List<SitemapUrlView> getTagSitemapUrls(int page) {
-        if (!config.getBoolean("seo", "index_enabled", true)) return List.of();
+        if (!settings.flag(SettingKey.SEO, "index_enabled")) return List.of();
         if (page < 1 || page > getTagSitemapPages().size()) throw new jakarta.ws.rs.NotFoundException();
         List<Tag> tags = Tag.find("order by id")
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
@@ -213,7 +215,7 @@ public class FeedService {
     }
 
     public List<SitemapUrlView> getPageSitemapUrls() {
-        if (!config.getBoolean("seo", "index_enabled", true)) return List.of();
+        if (!settings.flag(SettingKey.SEO, "index_enabled")) return List.of();
         List<SitemapUrlView> result = new ArrayList<>();
         for (String path : pagePaths()) {
             addLocalizedEntries(result, path, "");
@@ -230,7 +232,7 @@ public class FeedService {
     }
 
     public List<SitemapUrlView> getLinkSitemapUrls(int page) {
-        if (!config.getBoolean("seo", "index_enabled", true)) return List.of();
+        if (!settings.flag(SettingKey.SEO, "index_enabled")) return List.of();
         if (page < 1 || page > getLinkSitemapPages().size()) {
             throw new jakarta.ws.rs.NotFoundException();
         }

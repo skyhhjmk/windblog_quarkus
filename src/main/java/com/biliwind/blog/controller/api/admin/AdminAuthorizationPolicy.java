@@ -1,5 +1,9 @@
 package com.biliwind.blog.controller.api.admin;
 
+import com.biliwind.blog.service.settings.SettingCatalogue;
+import com.biliwind.blog.service.settings.SettingDefinition;
+import com.biliwind.blog.service.settings.SettingSecrets;
+
 import java.util.Locale;
 
 /** Central resource/action mapping for the administrator authorization boundary. */
@@ -148,11 +152,17 @@ public final class AdminAuthorizationPolicy {
         String prefix = "/api/admin/settings/";
         String remainder = path.substring(prefix.length());
         int slash = remainder.indexOf('/');
-        String key = (slash >= 0 ? remainder.substring(0, slash) : remainder).toLowerCase(Locale.ROOT);
-        return key.contains("secret") || key.contains("password") || key.contains("token")
-                || key.contains("credential") || key.contains("key") || key.contains("auth")
-                || key.contains("security") || key.contains("elasticsearch") || key.contains("redis")
-                || key.contains("database") || key.contains("storage") || key.contains("mail");
+        String key = slash >= 0 ? remainder.substring(0, slash) : remainder;
+        SettingDefinition definition = SettingCatalogue.findByKey(key);
+        if (definition != null) {
+            return definition.requiresVerification()
+                    || definition.secret()
+                    || !definition.secretFields().isEmpty();
+        }
+        // Keys outside the database catalogue (for example mail credentials
+        // stored by another subsystem) still fail closed on the shared
+        // secret-field predicate used by masking.
+        return SettingSecrets.isSecretFieldName(key);
     }
 
     private static String resourceFor(String path) {

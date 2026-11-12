@@ -1,6 +1,7 @@
 package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.BlogRegion;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,5 +25,14 @@ class FooterConfigTest {
         assertEquals("", ConfigTemplateData.safeExternalHttpUrl("javascript:alert(1)"));
         assertEquals("", ConfigTemplateData.safeExternalHttpUrl("/portal/record"));
         assertEquals("", ConfigTemplateData.safeExternalHttpUrl("https://user:pass@example.cn"));
+    }
+
+    @Test
+    void legacyStringKeywordsRenderLikeTheCurrentArrayShape() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        assertEquals("blog, tech", ConfigTemplateData.keywordsText(mapper.readTree("\"blog, tech\"")));
+        assertEquals("blog, tech", ConfigTemplateData.keywordsText(mapper.readTree("[\"blog\",\"tech\"]")));
+        assertEquals("", ConfigTemplateData.keywordsText(null));
     }
 }

@@ -1,6 +1,7 @@
 package com.biliwind.blog.controller;
 
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
@@ -22,7 +23,7 @@ public class FaviconController {
             "/favicon.bmp", "/favicon.tif", "/favicon.tiff");
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     com.biliwind.blog.service.FaviconResolverService faviconResolverService;
@@ -32,7 +33,7 @@ public class FaviconController {
     public Response getFavicon(@PathParam("fileName") String fileName) {
         String target = faviconResolverService != null
                 ? faviconResolverService.resolveFaviconUrl()
-                : configManager.getString("appearance", "favicon_url", "").trim();
+                : settings.text(SettingKey.APPEARANCE, "favicon_url").trim();
 
         if (target == null || target.isBlank()) {
             if ("favicon.svg".equalsIgnoreCase(fileName) || "favicon.png".equalsIgnoreCase(fileName)) {

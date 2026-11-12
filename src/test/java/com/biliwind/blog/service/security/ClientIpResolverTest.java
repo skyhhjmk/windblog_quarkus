@@ -1,6 +1,10 @@
 package com.biliwind.blog.service.security;
 
 import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.settings.RegionalSettings;
+import com.biliwind.blog.service.settings.SettingsReader;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import org.junit.jupiter.api.Test;
 
@@ -32,12 +36,7 @@ class ClientIpResolverTest {
     @Test
     void shouldHandleDirectHttpIpAccessWithoutProxyHeader() {
         ClientIpResolver resolver = new ClientIpResolver();
-        resolver.configManager = new ConfigManager() {
-            @Override
-            public String getString(String key, String field, String defaultValue) {
-                return defaultValue;
-            }
-        };
+        resolver.settings = settings(new ObjectMapper().createObjectNode());
 
         ClientIpResolver.ClientIpResolution resolution = resolver.resolve("10.0.0.100", null);
 
@@ -165,32 +164,23 @@ class ClientIpResolverTest {
 
     private static ClientIpResolver resolver(String source, String header) {
         ClientIpResolver resolver = new ClientIpResolver();
-        resolver.configManager = new ConfigManager() {
-            @Override
-            public String getString(String key, String field, String defaultValue) {
-                if ("client_ip_source".equals(field)) {
-                    return source;
-                }
-                if ("client_ip_header".equals(field)) {
-                    return header;
-                }
-                return defaultValue;
-            }
-        };
+        resolver.settings = settings(new ObjectMapper().createObjectNode()
+                .put("client_ip_source", source)
+                .put("client_ip_header", header));
         return resolver;
     }
 
     private static ClientIpResolver resolverWithSource(String source) {
         ClientIpResolver resolver = new ClientIpResolver();
-        resolver.configManager = new ConfigManager() {
-            @Override
-            public String getString(String key, String field, String defaultValue) {
-                if ("client_ip_source".equals(field)) {
-                    return source;
-                }
-                return defaultValue;
-            }
-        };
+        resolver.settings = settings(new ObjectMapper().createObjectNode()
+                .put("client_ip_source", source));
         return resolver;
+    }
+
+    private static SettingsReader settings(JsonNode securityNetwork) {
+        ConfigManager config = new ConfigManager() {
+            @Override public JsonNode get(String key) { return securityNetwork; }
+        };
+        return new SettingsReader(config, new RegionalSettings(config));
     }
 }

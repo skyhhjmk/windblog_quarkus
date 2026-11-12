@@ -1,66 +1,74 @@
 package com.biliwind.blog.service;
 
-import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.service.settings.SettingCatalogue;
+import com.biliwind.blog.service.settings.SettingDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.runtime.StartupEvent;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
-import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
-import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 
+/**
+ * Applies the catalogue to the database. The catalogue is the only place that
+ * declares a setting; this class never defines a default or a level itself.
+ */
 @ApplicationScoped
 public class ConfigInitializer {
 
     private static final Logger LOG = Logger.getLogger(ConfigInitializer.class);
 
     @Inject
-    ObjectMapper mapper;
-
-    @Inject
     ConfigManager configManager;
 
-    @Transactional
     void onStart(@Observes StartupEvent ignored) {
         LOG.info("Syncing system setting definitions...");
-        List<SettingDefinition> definitions = getDefinitions();
+        SettingCatalogue.validate();
+        QuarkusTransaction.requiringNew().run(this::syncDefinitions);
+        configManager.refreshAll();
+    }
 
-        for (SettingDefinition def : definitions) {
-            SystemSetting setting = SystemSetting.findByKey(def.key);
+    private void syncDefinitions() {
+        for (SettingDefinition def : SettingCatalogue.definitions()) {
+            SystemSetting setting = SystemSetting.findByKey(def.key().key());
             if (setting == null) {
                 setting = new SystemSetting();
-                setting.configKey = def.key;
-                setting.configValue = def.defaultValue;
-                setting.configType = def.type;
-                setting.groupName = def.group;
-                setting.uiSchema = def.uiSchema;
-                setting.description = def.description;
-                setting.settingLevel = def.level;
+                setting.configKey = def.key().key();
+                setting.configValue = def.defaultValue().deepCopy();
+                setting.configType = def.configType();
+                setting.groupName = def.group();
+                setting.uiSchema = def.uiSchema().deepCopy();
+                setting.description = def.description();
+                setting.settingLevel = def.level().name();
                 setting.persist();
-                LOG.infof("Added missing setting: %s", def.key);
+                LOG.infof("Added missing setting: %s", def.key().key());
             } else {
                 boolean definitionChanged = false;
-                if (!setting.uiSchema.equals(def.uiSchema) || !setting.groupName.equals(def.group) || !setting.description.equals(def.description) || !def.level.equalsIgnoreCase(setting.settingLevel)) {
-                    setting.uiSchema = def.uiSchema;
-                    setting.groupName = def.group;
-                    setting.description = def.description;
-                    setting.settingLevel = def.level;
+                if (!setting.uiSchema.equals(def.uiSchema())
+                        || !setting.groupName.equals(def.group())
+                        || !setting.description.equals(def.description())
+                        || !def.level().name().equalsIgnoreCase(setting.settingLevel)
+                        || !def.configType().equals(setting.configType)) {
+                    setting.uiSchema = def.uiSchema().deepCopy();
+                    setting.groupName = def.group();
+                    setting.description = def.description();
+                    setting.settingLevel = def.level().name();
+                    setting.configType = def.configType();
                     definitionChanged = true;
                 }
 
                 boolean defaultValueChanged = false;
-                if (setting.configValue != null && def.defaultValue != null && setting.configValue.isObject() && def.defaultValue.isObject()) {
-                    defaultValueChanged = mergeMissingObjectFields((ObjectNode) setting.configValue, def.defaultValue);
-                    if ("appearance".equals(def.key)) {
+                if (setting.configValue != null && def.defaultValue() != null
+                        && setting.configValue.isObject() && def.defaultValue().isObject()) {
+                    defaultValueChanged = mergeMissingObjectFields(
+                            (ObjectNode) setting.configValue, def.defaultValue());
+                    if ("appearance".equals(def.key().key())) {
                         if ("/favicon.ico".equals(setting.configValue.path("favicon_url").asText())) {
                             ((ObjectNode) setting.configValue).put("favicon_url", "");
                             defaultValueChanged = true;
@@ -74,440 +82,10 @@ public class ConfigInitializer {
 
                 if (definitionChanged || defaultValueChanged) {
                     setting.persist();
-                    LOG.infof("Updated setting definition or default values: %s", def.key);
+                    LOG.infof("Updated setting definition or default values: %s", def.key().key());
                 }
             }
         }
-
-        configManager.refreshAll();
-    }
-
-    private List<SettingDefinition> getDefinitions() {
-        List<SettingDefinition> list = new ArrayList<>();
-
-        // Site Info
-        ObjectNode siteInfoSchema = mapper.createObjectNode();
-        siteInfoSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode siteInfoFields = siteInfoSchema.putArray("fields");
-        siteInfoFields.addObject().put("key", "title").put("label", "站点标题").put("widget", "input").put("required", true);
-        siteInfoFields.addObject().put("key", "subtitle").put("label", "站点副标题").put("widget", "input");
-        siteInfoFields.addObject().put("key", "keywords").put("label", "SEO关键词").put("widget", "tag_input");
-        siteInfoFields.addObject().put("key", "description").put("label", "SEO描述").put("widget", "textarea");
-        siteInfoFields.addObject().put("key", "author").put("label", "站点作者").put("widget", "input");
-        siteInfoFields.addObject().put("key", "author_url").put("label", "作者公开介绍页").put("widget", "input")
-                .put("hint", "填写真实可公开访问的作者主页；仅用于作者姓名与站点作者一致的文章。");
-        siteInfoFields.addObject().put("key", "author_same_as").put("label", "作者身份链接").put("widget", "tag_input")
-                .put("hint", "同一作者的公开社交账号或个人主页 URL，每个链接添加为一个标签。");
-        siteInfoFields.addObject()
-                .put("key", "site_url")
-                .put("label", "本站链接")
-                .put("widget", "input")
-                .put("required", true)
-                .put("hint", "默认链接；用于友链反向链接检测，例如：https://example.com。区域未单独设置时使用此链接。");
-        for (BlogRegion region : BlogRegion.values()) {
-            if (region == BlogRegion.GLOBAL) {
-                continue;
-            }
-            siteInfoFields.addObject()
-                    .put("key", "site_url_regions." + region.getCode())
-                    .put("label", region.getDisplayName() + "本站链接")
-                    .put("widget", "input")
-                    .put("hint", "可选；留空时使用默认链接");
-        }
-
-        ObjectNode siteInfoValue = mapper.createObjectNode();
-        siteInfoValue.put("title", "WindBlog");
-        siteInfoValue.put("subtitle", "极简主义者的技术博客");
-        siteInfoValue.putArray("keywords").add("blog").add("tech").add("quarkus");
-        siteInfoValue.put("description", "基于 Quarkus 和 Flutter 构建的极简博客系统，支持 AI 摘要与多端同步。");
-        siteInfoValue.put("author", "BiliWind");
-        siteInfoValue.put("author_url", "");
-        siteInfoValue.putArray("author_same_as");
-        siteInfoValue.put("site_url", "http://localhost:8080");
-        siteInfoValue.putObject("site_url_regions");
-
-        list.add(new SettingDefinition("site_info", siteInfoValue, "object", "基础设置", siteInfoSchema, "网站基础信息设置"));
-
-        // Footer Settings
-        ObjectNode footerSchema = mapper.createObjectNode();
-        footerSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode footerFields = footerSchema.putArray("fields");
-        footerFields.addObject().put("key", "copyright").put("label", "版权信息").put("widget", "input");
-        footerFields.addObject().put("key", "icp").put("label", "ICP备案号").put("widget", "input");
-        footerFields.addObject()
-                .put("key", "icp_url")
-                .put("label", "ICP备案号链接地址")
-                .put("widget", "input")
-                .put("hint", "可选，填写备案号点击后打开的完整网址");
-        footerFields.addObject().put("key", "public_security_record").put("label", "公安备案号").put("widget", "input");
-        footerFields.addObject()
-                .put("key", "public_security_record_url")
-                .put("label", "公安备案号链接地址")
-                .put("widget", "input")
-                .put("hint", "可选，填写备案号点击后打开的完整网址");
-        ObjectNode recordDisplayRegionField = footerFields.addObject();
-        recordDisplayRegionField.put("key", "record_display_region");
-        recordDisplayRegionField.put("label", "备案号显示区域");
-        recordDisplayRegionField.put("widget", "select");
-        recordDisplayRegionField.put("hint", "仅在识别为所选区域的请求中显示备案号");
-        com.fasterxml.jackson.databind.node.ArrayNode recordDisplayRegionOptions =
-                recordDisplayRegionField.putArray("options");
-        recordDisplayRegionOptions.addObject().put("label", "全部区域").put("value", "all");
-        for (BlogRegion region : BlogRegion.values()) {
-            recordDisplayRegionOptions.addObject()
-                    .put("label", region.getDisplayName())
-                    .put("value", region.getCode());
-        }
-        footerFields.addObject().put("key", "custom_html").put("label", "自定义页脚HTML").put("widget", "textarea");
-
-        ObjectNode footerValue = mapper.createObjectNode();
-        footerValue.put("copyright", "© 2026 WindBlog. All rights reserved.");
-        footerValue.put("icp", "粤ICP备XXXXXXXX号");
-        footerValue.put("icp_url", "");
-        footerValue.put("public_security_record", "公网安备 XXXXXXXXXXXX号");
-        footerValue.put("public_security_record_url", "");
-        footerValue.put("record_display_region", "all");
-        footerValue.put("custom_html", "");
-
-        list.add(new SettingDefinition("site_footer", footerValue, "object", "基础设置", footerSchema, "网站页脚设置"));
-
-        // Region default language. The root value is the fallback; "regions"
-        // maps a region code to its default language. The global entry is the
-        // international default and is inherited by unconfigured regions.
-        ObjectNode languageSchema = mapper.createObjectNode();
-        languageSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode languageFields = languageSchema.putArray("fields");
-        ObjectNode languageField = languageFields.addObject();
-        languageField.put("key", "default_language").put("label", "默认语言").put("widget", "select");
-        com.fasterxml.jackson.databind.node.ArrayNode languageOptions = languageField.putArray("options");
-        languageOptions.addObject().put("label", "简体中文").put("value", "zh-cn");
-        languageOptions.addObject().put("label", "English").put("value", "en-US");
-        ObjectNode languageValue = mapper.createObjectNode();
-        languageValue.put("default_language", "zh-cn");
-        ObjectNode languageRegions = languageValue.putObject("regions");
-        languageRegions.put("global", "en-US");
-        languageRegions.put("cn", "zh-cn");
-        languageRegions.put("hk", "zh-cn");
-        languageRegions.put("tw", "zh-cn");
-        list.add(new SettingDefinition("site_language", languageValue, "object", "基础设置",
-                languageSchema, "多区域默认语言（global 为国际站默认，未单独配置的区域继承 global）"));
-
-        // Appearance
-        ObjectNode appearanceSchema = mapper.createObjectNode();
-        appearanceSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode appearanceFields = appearanceSchema.putArray("fields");
-        appearanceFields.addObject()
-                .put("key", "logo_url")
-                .put("label", "站点Logo（SEO结构化数据与社交分享）")
-                .put("widget", "media_picker")
-                .put("hint", "用于搜索引擎结构化数据（JSON-LD Publisher Logo）及社交媒体分享默认主图（OpenGraph og:image）。支持输入链接或从媒体库选择。");
-        appearanceFields.addObject()
-                .put("key", "favicon_url")
-                .put("label", "Favicon（默认）")
-                .put("widget", "media_picker")
-                .put("hint", "网站默认图标；从媒体库选择图片。页面渲染时会根据访客所在区域自动适配切换 CDN 与域名；也可在下方按区域单独指定。");
-        for (BlogRegion region : BlogRegion.values()) {
-            if (region == BlogRegion.GLOBAL) {
-                continue;
-            }
-            appearanceFields.addObject()
-                    .put("key", "favicon_url_regions." + region.getCode())
-                    .put("label", region.getDisplayName() + " Favicon")
-                    .put("widget", "media_picker")
-                    .put("hint", "可选；留空时自动继承默认 Favicon 并按当前区域自动切换 CDN/域名。");
-        }
-        appearanceFields.addObject().put("key", "theme_color").put("label", "主题色").put("widget", "input");
-
-        ObjectNode appearanceValue = mapper.createObjectNode();
-        appearanceValue.put("logo_url", "");
-        appearanceValue.put("favicon_url", "");
-        appearanceValue.putObject("favicon_url_regions");
-        appearanceValue.put("theme_color", "#1A1A1A");
-
-        list.add(new SettingDefinition("appearance", appearanceValue, "object", "外观设置", appearanceSchema, "外观样式设置"));
-
-        // Social Links
-        ObjectNode socialSchema = mapper.createObjectNode();
-        socialSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode socialFields = socialSchema.putArray("fields");
-        socialFields.addObject().put("key", "github").put("label", "GitHub").put("widget", "input");
-        socialFields.addObject().put("key", "twitter").put("label", "Twitter (X)").put("widget", "input");
-        socialFields.addObject().put("key", "email").put("label", "联系邮箱").put("widget", "input");
-
-        ObjectNode socialValue = mapper.createObjectNode();
-        socialValue.put("github", "https://github.com");
-        socialValue.put("twitter", "");
-        socialValue.put("email", "admin@windblog.local");
-
-        list.add(new SettingDefinition("social_links", socialValue, "object", "外观设置", socialSchema, "社交链接设置"));
-
-        // Sidebar Layout (WordPress-style draggable multi-area widget configuration)
-        ObjectNode sidebarLayoutSchema = mapper.createObjectNode();
-        sidebarLayoutSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode sidebarLayoutFields = sidebarLayoutSchema.putArray("fields");
-        sidebarLayoutFields.addObject()
-                .put("key", "areas")
-                .put("label", "侧边栏场景布局配置")
-                .put("widget", "sidebar_layout_editor")
-                .put("hint", "按场景（首页、分类/标签/搜索、友链、文章详情、通用默认）拖拽排序小工具并配置参数。");
-        ObjectNode sidebarLayoutValue = SidebarTemplateData.buildDefaultSidebarLayoutNode(mapper);
-        list.add(new SettingDefinition(
-                SidebarTemplateData.SIDEBAR_LAYOUT_KEY,
-                sidebarLayoutValue,
-                "object",
-                "外观设置",
-                sidebarLayoutSchema,
-                "侧边栏小工具布局（支持多场景独立拖拽排序、启停与参数配置）"
-        ));
-
-        // Feature Toggle
-        ObjectNode featureSchema = mapper.createObjectNode();
-        featureSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode featureFields = featureSchema.putArray("fields");
-        featureFields.addObject().put("key", "enable_comment").put("label", "开启评论").put("widget", "switch");
-        featureFields.addObject().put("key", "enable_registration").put("label", "开启注册").put("widget", "switch");
-        featureFields.addObject().put("key", "enable_user_post_submission").put("label", "允许用户投稿文章").put("widget", "switch");
-        featureFields.addObject().put("key", "enable_ai_summary").put("label", "开启AI摘要").put("widget", "switch");
-
-        ObjectNode featureValue = mapper.createObjectNode();
-        featureValue.put("enable_comment", true);
-        featureValue.put("enable_registration", true);
-        featureValue.put("enable_user_post_submission", true);
-        featureValue.put("enable_ai_summary", true);
-
-        list.add(new SettingDefinition("feature_toggles", featureValue, "object", "功能设置", featureSchema, "功能开关"));
-
-        ObjectNode ampSchema = mapper.createObjectNode();
-        ampSchema.put("type", "object");
-        ampSchema.putArray("fields").addObject()
-                .put("key", "enabled")
-                .put("label", "启用 AMP 页面")
-                .put("widget", "switch")
-                .put("hint", "关闭后不生成 AMP 页面，也不在文章页提供 AMP 链接；保存后立即生效。");
-        ObjectNode ampValue = mapper.createObjectNode();
-        ampValue.put("enabled", ConfigProvider.getConfig()
-                .getOptionalValue("windblog.amp.enabled", Boolean.class)
-                .orElse(true));
-        list.add(new SettingDefinition("amp", ampValue, "object", "功能设置", ampSchema,
-                "AMP 页面功能设置"));
-
-        ObjectNode analyticsSchema = mapper.createObjectNode();
-        analyticsSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode analyticsFields = analyticsSchema.putArray("fields");
-        analyticsFields.addObject().put("key", "enabled").put("label", "启用访问分析").put("widget", "switch")
-                .put("hint", "关闭后不向第三方分析服务加载脚本或发送访问事件。");
-        analyticsFields.addObject().put("key", "scriptUrl").put("label", "追踪脚本 URL").put("widget", "input")
-                .put("hint", "HTTPS 地址；本地开发可使用 http://localhost:8080/tracker.js。");
-        analyticsFields.addObject().put("key", "siteId").put("label", "Lens 站点 ID").put("widget", "input")
-                .put("hint", "从 SeeRay Lens 的站点集成页面复制 data-site-id 值。");
-        analyticsFields.addObject().put("key", "requireConsent").put("label", "要求访客同意").put("widget", "switch")
-                .put("hint", "与 SeeRay Lens 站点的需要同意策略保持一致；开启后访客选择前不会发送分析数据，并显示接受/拒绝弹窗。");
-        analyticsFields.addObject().put("key", "heatmaps").put("label", "启用行为热图").put("widget", "switch")
-                .put("hint", "仅发送 Lens 已配置采样的页面行为热图；关闭后不加载热图采集器。");
-        analyticsFields.addObject().put("key", "webVitals").put("label", "启用 Web Vitals").put("widget", "switch")
-                .put("hint", "发送当前页面的 LCP、INP、CLS 指标，不读取页面文本或表单值。");
-        analyticsFields.addObject().put("key", "forms").put("label", "启用表单分析").put("widget", "switch")
-                .put("hint", "仅统计显式标记 data-seeray-form 的表单；不会发送字段名、标签或输入值。");
-        analyticsFields.addObject().put("key", "media").put("label", "启用媒体分析").put("widget", "switch")
-                .put("hint", "仅统计显式标记 data-seeray-media 的音视频播放进度，不发送媒体地址或内容。");
-        analyticsFields.addObject().put("key", "errors").put("label", "启用浏览器错误分析").put("widget", "switch")
-                .put("hint", "发送 Lens 脱敏后的浏览器错误摘要；不发送完整堆栈、页面标题或访客标识。");
-        analyticsFields.addObject().put("key", "tagManager").put("label", "启用 Tag Manager").put("widget", "switch")
-                .put("hint", "加载 Lens 中为本站发布的标签容器；仅执行已发布且符合触发条件的标签。");
-        analyticsFields.addObject().put("key", "experiments").put("label", "启用 A/B 实验").put("widget", "switch")
-                .put("hint", "加载 Lens 实验定义；页面通过 data-seeray-experiment 标记申请变体。");
-        analyticsFields.addObject().put("key", "privacyPreferences").put("label", "显示隐私偏好入口").put("widget", "switch")
-                .put("hint", "在页脚提供 Lens 隐私偏好中心入口，允许访客随时修改同意选择。");
-        ObjectNode analyticsValue = mapper.createObjectNode();
-        analyticsValue.put("enabled", false);
-        analyticsValue.put("scriptUrl", "");
-        analyticsValue.put("siteId", "");
-        analyticsValue.put("requireConsent", false);
-        analyticsValue.put("heatmaps", true);
-        analyticsValue.put("webVitals", false);
-        analyticsValue.put("forms", false);
-        analyticsValue.put("media", false);
-        analyticsValue.put("errors", false);
-        analyticsValue.put("tagManager", false);
-        analyticsValue.put("experiments", false);
-        analyticsValue.put("privacyPreferences", true);
-        analyticsValue.putObject("regions");
-        list.add(new SettingDefinition("analytics_tracking", analyticsValue, "object", "访问分析", analyticsSchema,
-                "由数据库管理的 SeeRay Lens 追踪配置；保存后自动更新页面 CSP。"));
-
-        // AI Comment Audit
-        ObjectNode aiAuditSchema = mapper.createObjectNode();
-        aiAuditSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode aiAuditFields = aiAuditSchema.putArray("fields");
-        aiAuditFields.addObject().put("key", "prompt").put("label", "AI 审核提示词").put("widget", "textarea").put("required", true);
-        aiAuditFields.addObject().put("key", "autoAudit").put("label", "自动 AI 审核").put("widget", "switch");
-        aiAuditFields.addObject().put("key", "allowAutoDecision").put("label", "允许 AI 自动通过或拒绝").put("widget", "switch");
-
-        ObjectNode aiAuditValue = mapper.createObjectNode();
-        aiAuditValue.put("prompt", com.biliwind.blog.service.ai.CommentModerationPrompt.DEFAULT_PROMPT);
-        aiAuditValue.put("autoAudit", true);
-        aiAuditValue.put("allowAutoDecision", false);
-
-        list.add(new SettingDefinition("ai_comment_audit", aiAuditValue, "object", "功能设置", aiAuditSchema, "AI 评论审核设置"));
-
-        ObjectNode aiTranslationSchema = mapper.createObjectNode();
-        aiTranslationSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode aiTranslationFields = aiTranslationSchema.putArray("fields");
-        aiTranslationFields.addObject().put("key", "prompt").put("label", "AI 翻译提示词")
-                .put("widget", "textarea").put("required", true);
-        aiTranslationFields.addObject().put("key", "defaultTargetLanguage").put("label", "默认目标语言")
-                .put("widget", "input").put("hint", "例如 en-US；翻译管理页会以此作为默认目标语言。");
-        ObjectNode aiTranslationValue = mapper.createObjectNode();
-        aiTranslationValue.put("prompt", com.biliwind.blog.service.ai.TranslationPrompt.DEFAULT_PROMPT);
-        aiTranslationValue.put("defaultTargetLanguage", "en-US");
-        list.add(new SettingDefinition("ai_translation", aiTranslationValue, "object", "功能设置",
-                aiTranslationSchema, "文章翻译提示词与默认目标语言。提示词会用于所有支持翻译的 AI 提供商和轮询组。"));
-
-        ObjectNode aiOperationConfigSchema = mapper.createObjectNode();
-        aiOperationConfigSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode aiOperationConfigFields = aiOperationConfigSchema.putArray("fields");
-        for (String[] operation : new String[][] {
-                {"moderate", "评论审核 AI 配置"},
-                {"summarize", "AI 摘要配置"},
-                {"translate", "AI 翻译配置"},
-                {"assistant", "写作助手 AI 配置"},
-                {"topic", "话题功能 AI 配置"},
-                {"slug", "Slug 翻译/生成 AI 配置"}
-        }) {
-            ObjectNode field = aiOperationConfigFields.addObject();
-            field.put("key", operation[0]);
-            field.put("label", operation[1]);
-            field.put("widget", "select");
-            field.put("hint", "topic".equals(operation[0])
-                    ? "选择单个提供商或轮询组；留空时自动选择。话题生成、话题池和草稿回写全部由 AI API 完成。"
-                    : ("slug".equals(operation[0])
-                            ? "选择单个提供商或轮询组；留空时自动沿用翻译配置或自动选择。"
-                            : "选择单个提供商或轮询组；留空时自动选择"));
-            field.putArray("options");
-        }
-        ObjectNode aiOperationConfigValue = mapper.createObjectNode();
-        aiOperationConfigValue.put("moderate", "");
-        aiOperationConfigValue.put("summarize", "");
-        aiOperationConfigValue.put("translate", "");
-        aiOperationConfigValue.put("assistant", "");
-        aiOperationConfigValue.put("topic", "");
-        aiOperationConfigValue.put("slug", "");
-        list.add(new SettingDefinition("ai_operation_configs", aiOperationConfigValue, "object", "功能设置",
-                aiOperationConfigSchema, "分别指定 AI 评论审核、摘要、翻译、话题和 Slug 生成功能使用的提供商或轮询组。"));
-
-        ObjectNode elasticsearchSchema = mapper.createObjectNode();
-        elasticsearchSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode elasticsearchFields = elasticsearchSchema.putArray("fields");
-        elasticsearchFields.addObject()
-                .put("key", "enabled")
-                .put("label", "启用 Elasticsearch")
-                .put("widget", "switch")
-                .put("section", "基础设置");
-        elasticsearchFields.addObject()
-                .put("key", "hosts")
-                .put("label", "连接地址")
-                .put("widget", "input")
-                .put("required", true)
-                .put("section", "基础设置")
-                .put("hint", "例如：http://elasticsearch:9200");
-        elasticsearchFields.addObject()
-                .put("key", "username")
-                .put("label", "用户名")
-                .put("widget", "input")
-                .put("section", "基础设置");
-        elasticsearchFields.addObject()
-                .put("key", "password")
-                .put("label", "密码")
-                .put("widget", "password")
-                .put("section", "基础设置");
-        elasticsearchFields.addObject()
-                .put("key", "timeout_seconds")
-                .put("label", "连接超时（秒）")
-                .put("widget", "number")
-                .put("section", "基础设置");
-        com.fasterxml.jackson.databind.node.ObjectNode analyzerField = elasticsearchFields.addObject();
-        analyzerField.put("key", "analyzer");
-        analyzerField.put("label", "分词器");
-        analyzerField.put("widget", "select");
-        analyzerField.put("section", "基础设置");
-        com.fasterxml.jackson.databind.node.ArrayNode analyzerOptions = analyzerField.putArray("options");
-        analyzerOptions.addObject().put("label", "IK 最大词粒度").put("value", "ik_max_word");
-        analyzerOptions.addObject().put("label", "IK 智能分词").put("value", "ik_smart");
-        analyzerOptions.addObject().put("label", "标准分词器").put("value", "standard");
-        elasticsearchFields.addObject()
-                .put("key", "synonyms")
-                .put("label", "同义词规则")
-                .put("widget", "synonym_cards")
-                .put("section", "同义词");
-
-        ObjectNode elasticsearchValue = mapper.createObjectNode();
-        String elasticsearchHosts = ConfigProvider.getConfig()
-                .getOptionalValue("elasticsearch.hosts", String.class)
-                .orElse("http://127.0.0.1:9200");
-        String elasticsearchUsername = ConfigProvider.getConfig()
-                .getOptionalValue("elasticsearch.username", String.class)
-                .orElse("");
-        String elasticsearchPassword = ConfigProvider.getConfig()
-                .getOptionalValue("elasticsearch.password", String.class)
-                .orElse("");
-        int elasticsearchTimeoutSeconds = ConfigProvider.getConfig()
-                .getOptionalValue("elasticsearch.health-check.timeout-seconds", Integer.class)
-                .orElse(5);
-        elasticsearchValue.put("enabled", true);
-        elasticsearchValue.put("hosts", elasticsearchHosts);
-        elasticsearchValue.put("username", elasticsearchUsername);
-        elasticsearchValue.put("password", elasticsearchPassword);
-        elasticsearchValue.put("timeout_seconds", elasticsearchTimeoutSeconds);
-        elasticsearchValue.put("analyzer", "ik_max_word");
-        elasticsearchValue.putArray("synonyms");
-
-        list.add(new SettingDefinition(
-                "elasticsearch",
-                elasticsearchValue,
-                "object",
-                "Elasticsearch",
-                elasticsearchSchema,
-                "Elasticsearch 搜索、分词与同义词设置",
-                com.biliwind.blog.model.SettingLevel.CRITICAL.name()
-        ));
-
-        ObjectNode securityNetworkSchema = mapper.createObjectNode();
-        securityNetworkSchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode securityNetworkFields = securityNetworkSchema.putArray("fields");
-        securityNetworkFields.addObject().put("key", "trusted_proxy_cidrs").put("label", "可信代理 CIDR").put("widget", "textarea").put("required", true);
-        securityNetworkFields.addObject().put("key", "client_ip_header").put("label", "客户端 IP 请求头").put("widget", "input").put("required", true)
-                .put("hint", "支持任意自定义请求头，例如 X-Forwarded-For、Forwarded、X-Real-IP、EO-Connecting-IP（EdgeOne）、CF-Connecting-IP（Cloudflare）。多值头按逗号分隔，可带端口。名称不合法时回退为 X-Forwarded-For。");
-        ObjectNode clientIpSourceField = securityNetworkFields.addObject();
-        clientIpSourceField.put("key", "client_ip_source");
-        clientIpSourceField.put("label", "客户端 IP 获取方式");
-        clientIpSourceField.put("widget", "select");
-        clientIpSourceField.put("required", true);
-        clientIpSourceField.put("hint", "自动：直连来源在可信代理 CIDR 内时读取请求头；网络连接：始终使用 TCP 连接地址；HTTP 头：始终读取请求头，仅在源站只接受可信代理回源时使用，否则请求头可被伪造。读取请求头时从右向左跳过可信代理 CIDR 内的地址，取第一个不可信地址作为访客 IP，因此 CDN 回源地址需加入可信 CIDR，或改用 CDN 提供的单值头。");
-        com.fasterxml.jackson.databind.node.ArrayNode clientIpSourceOptions = clientIpSourceField.putArray("options");
-        clientIpSourceOptions.addObject().put("label", "自动（可信代理时读请求头）").put("value", "auto");
-        clientIpSourceOptions.addObject().put("label", "仅网络连接地址").put("value", "network");
-        clientIpSourceOptions.addObject().put("label", "仅 HTTP 请求头").put("value", "header");
-        ObjectNode securityNetworkValue = mapper.createObjectNode();
-        securityNetworkValue.put("trusted_proxy_cidrs", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16");
-        securityNetworkValue.put("client_ip_header", "X-Forwarded-For");
-        securityNetworkValue.put("client_ip_source", "auto");
-        list.add(new SettingDefinition("security_network", securityNetworkValue, "object", "安全设置", securityNetworkSchema, "可信代理与客户端 IP 解析设置", com.biliwind.blog.model.SettingLevel.CRITICAL.name()));
-
-        ObjectNode commentSecuritySchema = mapper.createObjectNode();
-        commentSecuritySchema.put("type", "object");
-        com.fasterxml.jackson.databind.node.ArrayNode commentSecurityFields = commentSecuritySchema.putArray("fields");
-        ObjectNode powDifficultyField = commentSecurityFields.addObject();
-        powDifficultyField.put("key", "pow_difficulty");
-        powDifficultyField.put("label", "评论工作量证明难度（前导零位数）");
-        powDifficultyField.put("widget", "number");
-        powDifficultyField.put("required", true);
-        powDifficultyField.put("hint", "每增加 1 位，客户端计算量翻倍；建议 14-18，16 约等于普通手机 0.5-1 秒。");
-        commentSecurityFields.addObject().put("key", "challenge_ttl_seconds").put("label", "评论验证有效期（秒）").put("widget", "number").put("required", true);
-        ObjectNode commentSecurityValue = mapper.createObjectNode();
-        commentSecurityValue.put("pow_difficulty", 16);
-        commentSecurityValue.put("challenge_ttl_seconds", 300);
-        list.add(new SettingDefinition("comment_security", commentSecurityValue, "object", "安全设置", commentSecuritySchema, "评论无感工作量证明验证设置", com.biliwind.blog.model.SettingLevel.CRITICAL.name()));
-        return list;
     }
 
     private boolean mergeMissingObjectFields(ObjectNode currentValue, JsonNode defaultValue) {
@@ -522,29 +100,5 @@ public class ConfigInitializer {
             }
         }
         return changed;
-    }
-
-    private static class SettingDefinition {
-        String key;
-        com.fasterxml.jackson.databind.JsonNode defaultValue;
-        String type;
-        String group;
-        com.fasterxml.jackson.databind.JsonNode uiSchema;
-        String description;
-        String level;
-
-        SettingDefinition(String key, com.fasterxml.jackson.databind.JsonNode defaultValue, String type, String group, com.fasterxml.jackson.databind.JsonNode uiSchema, String description) {
-            this(key, defaultValue, type, group, uiSchema, description, com.biliwind.blog.model.SettingLevel.NORMAL.name());
-        }
-
-        SettingDefinition(String key, com.fasterxml.jackson.databind.JsonNode defaultValue, String type, String group, com.fasterxml.jackson.databind.JsonNode uiSchema, String description, String level) {
-            this.key = key;
-            this.defaultValue = defaultValue;
-            this.type = type;
-            this.group = group;
-            this.uiSchema = uiSchema;
-            this.description = description;
-            this.level = level != null ? level : com.biliwind.blog.model.SettingLevel.NORMAL.name();
-        }
     }
 }

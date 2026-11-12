@@ -5,7 +5,8 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.User;
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.biliwind.blog.service.PageRenderModel;
 import com.biliwind.blog.service.PageRenderer;
 import com.biliwind.blog.service.PageView;
@@ -63,7 +64,7 @@ public class UserController {
     PageRenderer pageRenderer;
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     com.biliwind.blog.service.EmailVerificationService emailVerificationService;
@@ -124,7 +125,7 @@ public class UserController {
         if (resolveUserFromCookie(headers) != null) {
             return redirectToUserCenter();
         }
-        if (!configManager.getBoolean("feature_toggles", "enable_registration", true)) {
+        if (!settings.flag(SettingKey.FEATURE_TOGGLES, "enable_registration")) {
             throw new ForbiddenException("注册功能暂未开放");
         }
         String targetRedirect = sanitizeRedirect(redirect);
@@ -196,7 +197,7 @@ public class UserController {
                         .put("expToNextLevel", Math.max(0, currentLevelMaxExp - currentLevelExp))
                         .put("expPercent", expPercent)
                         .put("allowUserPostSubmission",
-                                configManager.getBoolean("feature_toggles", "enable_user_post_submission", true))))
+                                settings.flag(SettingKey.FEATURE_TOGGLES, "enable_user_post_submission"))))
                 .type(MediaType.TEXT_HTML_TYPE)
                 .build();
     }
@@ -221,7 +222,7 @@ public class UserController {
             @FormParam("subscribePromotions") String subscribePromotions,
             @FormParam("redirect") String redirect) {
 
-        if (!configManager.getBoolean("feature_toggles", "enable_registration", true)) {
+        if (!settings.flag(SettingKey.FEATURE_TOGGLES, "enable_registration")) {
             return Response.status(Response.Status.FORBIDDEN)
                     .entity(Map.of("success", false, "message", "注册功能暂未开放"))
                     .build();

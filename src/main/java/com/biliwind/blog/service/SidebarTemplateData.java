@@ -62,9 +62,10 @@ public class SidebarTemplateData {
         return jakarta.enterprise.inject.spi.CDI.current().select(CacheService.class).get();
     }
 
-    private static ConfigManager getConfigManager() {
+    private static com.biliwind.blog.service.settings.SettingsReader getSettings() {
         try {
-            return jakarta.enterprise.inject.spi.CDI.current().select(ConfigManager.class).get();
+            return jakarta.enterprise.inject.spi.CDI.current()
+                    .select(com.biliwind.blog.service.settings.SettingsReader.class).get();
         } catch (RuntimeException ignored) {
             return null;
         }
@@ -72,8 +73,9 @@ public class SidebarTemplateData {
 
     @TemplateExtension(namespace = "sidebar")
     public static List<SidebarWidgetView> widgets(String area) {
-        ConfigManager configManager = getConfigManager();
-        JsonNode layoutConfig = configManager != null ? configManager.get(SIDEBAR_LAYOUT_KEY) : null;
+        com.biliwind.blog.service.settings.SettingsReader settings = getSettings();
+        JsonNode layoutConfig = settings != null
+                ? settings.raw(com.biliwind.blog.service.settings.SettingKey.SIDEBAR_LAYOUT) : null;
         return resolveWidgets(layoutConfig, area);
     }
 

@@ -2,7 +2,8 @@ package com.biliwind.blog.service.ai;
 
 import com.biliwind.blog.model.AiConfigType;
 import com.biliwind.blog.model.AiProviderConfig;
-import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Multi;
@@ -33,6 +34,9 @@ import java.util.concurrent.CompletionStage;
 public class AiCallExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(AiCallExecutor.class);
+
+    @Inject
+    SettingsReader settings;
 
     @Inject
     Instance<AiService> providers;
@@ -424,25 +428,11 @@ public class AiCallExecutor {
     }
 
     private String configuredTranslationPrompt() {
-        SystemSetting setting = SystemSetting.findByKey("ai_translation");
-        if (setting != null && setting.configValue != null) {
-            String prompt = setting.configValue.path("prompt").asText("");
-            if (!prompt.isBlank()) {
-                return prompt;
-            }
-        }
-        return TranslationPrompt.DEFAULT_PROMPT;
+        return settings.textNonBlank(SettingKey.AI_TRANSLATION, "prompt");
     }
 
     private String configuredModerationPrompt() {
-        SystemSetting setting = SystemSetting.findByKey("ai_comment_audit");
-        if (setting != null && setting.configValue != null && setting.configValue.has("prompt")) {
-            String prompt = setting.configValue.get("prompt").asText("");
-            if (!prompt.isBlank()) {
-                return prompt;
-            }
-        }
-        return CommentModerationPrompt.DEFAULT_PROMPT;
+        return settings.textNonBlank(SettingKey.AI_COMMENT_AUDIT, "prompt");
     }
 
     private String moderationPrompt(AiCallRequest request) {

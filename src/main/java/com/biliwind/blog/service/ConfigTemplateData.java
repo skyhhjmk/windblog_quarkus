@@ -1,5 +1,7 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
@@ -16,8 +18,8 @@ import java.util.Locale;
 @ApplicationScoped
 public class ConfigTemplateData {
 
-    private static ConfigManager configManager() {
-        return Arc.container().instance(ConfigManager.class).get();
+    private static SettingsReader settings() {
+        return Arc.container().instance(SettingsReader.class).get();
     }
 
     private static BlogRegion currentRegion() {
@@ -30,12 +32,8 @@ public class ConfigTemplateData {
         }
     }
 
-    private static JsonNode regionalSetting(String key) {
-        return configManager().getForRegion(key, currentRegion());
-    }
-
-    private static String regionalString(String key, String field, String defaultValue) {
-        return configManager().getStringForRegion(key, field, defaultValue, currentRegion());
+    private static String regionalString(SettingKey key, String field) {
+        return settings().regionalText(key, field, currentRegion());
     }
 
     public static String baseUrl() {
@@ -54,7 +52,7 @@ public class ConfigTemplateData {
     }
 
     public static String siteTitle() {
-        return regionalString("site_info", "title", "WindBlog");
+        return regionalString(SettingKey.SITE_INFO, "title");
     }
 
     public static String siteNavRoot() {
@@ -76,50 +74,64 @@ public class ConfigTemplateData {
     }
 
     public static String siteSubtitle() {
-        return regionalString("site_info", "subtitle", "");
+        return regionalString(SettingKey.SITE_INFO, "subtitle");
     }
 
     public static String siteDescription() {
-        return regionalString("site_info", "description", "");
+        return regionalString(SettingKey.SITE_INFO, "description");
     }
 
     public static String siteKeywords() {
-        JsonNode siteInfoNode = regionalSetting("site_info");
-        if (siteInfoNode != null && siteInfoNode.has("keywords") && siteInfoNode.get("keywords").isArray()) {
-            StringBuilder keywordsText = new StringBuilder();
-            for (JsonNode keywordNode : siteInfoNode.get("keywords")) {
-                if (!keywordsText.isEmpty()) {
-                    keywordsText.append(", ");
-                }
-                keywordsText.append(keywordNode.asText());
-            }
-            return keywordsText.toString();
+        JsonNode siteInfoNode = settings().regionalObject(SettingKey.SITE_INFO, currentRegion());
+        return siteInfoNode == null ? "" : keywordsText(siteInfoNode.get("keywords"));
+    }
+
+    /**
+     * Migration 045 seeded a comma-separated string; newer installs store an
+     * array. Both shapes are valid and must render identically.
+     */
+    static String keywordsText(JsonNode keywords) {
+        if (keywords == null) {
+            return "";
         }
-        return "";
+        if (keywords.isTextual()) {
+            return keywords.asText();
+        }
+        if (!keywords.isArray()) {
+            return "";
+        }
+        StringBuilder keywordsText = new StringBuilder();
+        for (JsonNode keywordNode : keywords) {
+            if (!keywordsText.isEmpty()) {
+                keywordsText.append(", ");
+            }
+            keywordsText.append(keywordNode.asText());
+        }
+        return keywordsText.toString();
     }
 
     public static String copyright() {
-        return regionalString("site_footer", "copyright", "© 2026 WindBlog. Built with Quarkus.");
+        return regionalString(SettingKey.SITE_FOOTER, "copyright");
     }
 
     public static String icp() {
-        return regionalString("site_footer", "icp", "");
+        return regionalString(SettingKey.SITE_FOOTER, "icp");
     }
 
     public static String icpUrl() {
-        return safeExternalHttpUrl(regionalString("site_footer", "icp_url", ""));
+        return safeExternalHttpUrl(regionalString(SettingKey.SITE_FOOTER, "icp_url"));
     }
 
     public static String publicSecurityRecord() {
-        return regionalString("site_footer", "public_security_record", "");
+        return regionalString(SettingKey.SITE_FOOTER, "public_security_record");
     }
 
     public static String publicSecurityRecordUrl() {
-        return safeExternalHttpUrl(regionalString("site_footer", "public_security_record_url", ""));
+        return safeExternalHttpUrl(regionalString(SettingKey.SITE_FOOTER, "public_security_record_url"));
     }
 
     public static boolean footerRecordsVisible() {
-        String configuredRegion = regionalString("site_footer", "record_display_region", "all");
+        String configuredRegion = regionalString(SettingKey.SITE_FOOTER, "record_display_region");
         RegionContext regionContext = jakarta.enterprise.inject.spi.CDI.current()
                 .select(RegionContext.class).get();
         return isFooterRecordsVisible(configuredRegion, regionContext.getCurrentRegion());
@@ -157,7 +169,7 @@ public class ConfigTemplateData {
     }
 
     public static String footerHtml() {
-        return regionalString("site_footer", "custom_html", "");
+        return regionalString(SettingKey.SITE_FOOTER, "custom_html");
     }
 
     public static List<RegionRuleService.SiteDomainLink> siteDomains() {
@@ -219,7 +231,7 @@ public class ConfigTemplateData {
     }
 
     public static boolean legalPrivacyAnalyticsOptOutEnabled() {
-        return configManager().getBoolean("legal_privacy", "showAnalyticsOptOut", false)
+        return settings().flag(SettingKey.LEGAL_PRIVACY, "showAnalyticsOptOut")
                 && analyticsTrackingPrivacyPreferencesAvailable();
     }
 
@@ -247,18 +259,18 @@ public class ConfigTemplateData {
     }
 
     public static String adsenseConfig() {
-        JsonNode value = configManager().get("google_adsense");
+        JsonNode value = settings().object(SettingKey.GOOGLE_ADSENSE);
         return value == null ? "{}" : value.toString();
     }
 
     public static String googleAdsensePublisherId() {
-        JsonNode value = configManager().get("google_adsense");
+        JsonNode value = settings().object(SettingKey.GOOGLE_ADSENSE);
         String clientId = value == null ? "" : value.path("clientId").asText("").trim();
         return clientId.matches("ca-pub-\\d{16}") ? clientId : "";
     }
 
     public static String logoUrl() {
-        return configManager().getString("appearance", "logo_url", "/logo.png");
+        return settings().text(SettingKey.APPEARANCE, "logo_url");
     }
 
     public static String faviconUrl() {
@@ -268,24 +280,24 @@ public class ConfigTemplateData {
                 return resolver.resolveFaviconUrl();
             }
         } catch (Exception ignored) {}
-        return configManager().getString("appearance", "favicon_url", "");
+        return settings().favicon(currentRegion());
     }
 
     public static String themeColor() {
-        return configManager().getString("appearance", "theme_color", "#0A0C10");
+        return settings().text(SettingKey.APPEARANCE, "theme_color");
     }
 
     public static String social(String platform) {
-        return configManager().getString("social_links", platform, "");
+        return settings().text(SettingKey.SOCIAL_LINKS, platform);
     }
 
     public static boolean toggle(String key) {
-        return configManager().getBoolean("feature_toggles", key, true);
+        return settings().flag(SettingKey.FEATURE_TOGGLES, key);
     }
     public static String googleSiteVerification() {
-        return configManager().getString("seo", "google_site_verification", "");
+        return settings().text(SettingKey.SEO, "google_site_verification");
     }
     public static boolean internalLinkGraphEnabled() {
-        return configManager().getBoolean("seo", "internal_link_graph_enabled", false);
+        return settings().flag(SettingKey.SEO, "internal_link_graph_enabled");
     }
 }

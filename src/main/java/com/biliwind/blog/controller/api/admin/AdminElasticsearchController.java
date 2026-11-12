@@ -6,6 +6,8 @@ import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.SystemSetting;
 import com.biliwind.blog.model.SystemSettingHistory;
 import com.biliwind.blog.model.dto.ConfigChangedEvent;
+import com.biliwind.blog.service.SafeModeWatchdog;
+import com.biliwind.blog.service.settings.SettingCatalogue;
 import com.biliwind.blog.service.AuditService;
 import com.biliwind.blog.service.edge.DataSyncEvent;
 import com.biliwind.blog.service.elasticsearch.ElasticsearchConnectionManager;
@@ -68,6 +70,8 @@ public class AdminElasticsearchController {
     Event<ConfigChangedEvent> configChangedEvent;
     @Inject
     Event<DataSyncEvent> dataSyncEvent;
+    @Inject
+    SafeModeWatchdog watchdog;
 
     @GET
     @Path("/health")
@@ -704,11 +708,14 @@ public class AdminElasticsearchController {
             history.changeReason = "修改 Elasticsearch 同义词规则（自动应用与重建索引）";
             history.persist();
 
-            // 直接生效，不设置 isFrozen，无需二次确认与密码验证
             setting.configValue = currentValueNode;
             setting.version += 1;
-            setting.isFrozen = false;
+            boolean requiresVerification = SettingCatalogue.requiresVerification(setting.configKey);
+            setting.isFrozen = requiresVerification;
             setting.persist();
+            if (requiresVerification) {
+                watchdog.watch(setting.configKey, 3);
+            }
 
             dataSyncEvent.fire(new DataSyncEvent("SYSTEM_SETTING", setting.id, "UPSERT"));
             configChangedEvent.fire(new ConfigChangedEvent(setting.configKey, currentValueNode));

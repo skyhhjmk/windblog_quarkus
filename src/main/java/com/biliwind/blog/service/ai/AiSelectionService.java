@@ -1,7 +1,8 @@
 package com.biliwind.blog.service.ai;
 
 import com.biliwind.blog.model.AiProviderConfig;
-import com.biliwind.blog.model.SystemSetting;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -10,6 +11,9 @@ import java.util.List;
 
 @ApplicationScoped
 public class AiSelectionService {
+    @Inject
+    SettingsReader settings;
+
     @Inject
     ObjectMapper objectMapper;
 
@@ -77,16 +81,14 @@ public class AiSelectionService {
     String configuredId(String operation) {
         if (operation == null) return null;
         try {
-            SystemSetting setting = SystemSetting.findByKey("ai_operation_configs");
-            if (setting == null || setting.configValue == null) return null;
-            JsonNode selected = setting.configValue.get(operation);
-            if (selected != null && !selected.isNull() && !selected.asText().isBlank()) {
-                return selected.asText().trim();
+            String selected = settings.text(SettingKey.AI_OPERATION_CONFIGS, operation);
+            if (selected != null && !selected.isBlank()) {
+                return selected.trim();
             }
             if ("slug".equalsIgnoreCase(operation)) {
-                JsonNode translate = setting.configValue.get("translate");
-                if (translate != null && !translate.isNull() && !translate.asText().isBlank()) {
-                    return translate.asText().trim();
+                String translate = settings.text(SettingKey.AI_OPERATION_CONFIGS, "translate");
+                if (translate != null && !translate.isBlank()) {
+                    return translate.trim();
                 }
             }
             return null;

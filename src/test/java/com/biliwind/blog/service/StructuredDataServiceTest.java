@@ -3,6 +3,9 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.context.LanguageContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.biliwind.blog.service.settings.RegionalSettings;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,21 +29,13 @@ class StructuredDataServiceTest {
         service.canonicalUrlService = new CanonicalUrlService() {
             @Override public String getBaseUrl() { return ORIGIN; }
         };
-        service.configManager = new ConfigManager() {
-            @Override public String getString(String key, String field, String fallback) {
-                return switch (field) {
-                    case "title" -> "Test Blog";
-                    case "author" -> "Alice";
-                    case "author_url" -> "/about";
-                    case "logo_url" -> "/brand-logo.svg";
-                    default -> fallback;
-                };
-            }
-            @Override public JsonNode get(String key) {
-                return mapper.createObjectNode().set("author_same_as",
-                        mapper.createArrayNode().add("https://social.example/alice").add("javascript:alert(1)"));
-            }
-        };
+        service.settings = reader(mapper, mapper.createObjectNode()
+                .put("title", "Test Blog")
+                .put("author", "Alice")
+                .put("author_url", "/about")
+                .set("author_same_as", mapper.createArrayNode()
+                        .add("https://social.example/alice").add("javascript:alert(1)")),
+                mapper.createObjectNode().put("logo_url", "/brand-logo.svg"));
     }
 
     @Test
@@ -129,11 +124,8 @@ class StructuredDataServiceTest {
 
     @Test
     void missingBundledDefaultLogoIsNotAdvertisedAsAnImage() throws Exception {
-        service.configManager = new ConfigManager() {
-            @Override public String getString(String key, String field, String fallback) {
-                return "logo_url".equals(field) ? "/logo.png" : fallback;
-            }
-        };
+        service.settings = reader(mapper, mapper.createObjectNode(),
+                mapper.createObjectNode().put("logo_url", "/logo.png"));
         assertNull(service.publisherLogoUrl());
         JsonNode publisher = mapper.readTree(service.home(1, "zh-CN")).path("@graph").get(1);
         assertFalse(publisher.has("logo"));
@@ -255,5 +247,16 @@ class StructuredDataServiceTest {
                 Map.of(), null, null, null, null, Map.of("zh-CN", "Tech"), "tech", List.of(), author,
                 OffsetDateTime.parse("2026-10-01T08:00:00+08:00"), null,
                 0L, false, true, (short) 0, price, List.of(), List.of(), List.of(), List.of(), null, List.of());
+    }
+
+    static SettingsReader reader(ObjectMapper mapper, ObjectNode siteInfo, ObjectNode appearance) {
+        ConfigManager config = new ConfigManager() {
+            @Override public JsonNode get(String key) {
+                if ("site_info".equals(key)) return siteInfo;
+                if ("appearance".equals(key)) return appearance;
+                return null;
+            }
+        };
+        return new SettingsReader(config, new RegionalSettings(config));
     }
 }

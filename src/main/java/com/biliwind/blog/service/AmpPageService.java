@@ -5,6 +5,8 @@ import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.PostRenderType;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -21,7 +23,7 @@ public class AmpPageService {
     StructuredDataService structuredDataService;
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     PublicCacheRefreshService publicCacheRefreshService;
@@ -95,7 +97,7 @@ public class AmpPageService {
     }
 
     public boolean isEnabled() {
-        return configManager.getBoolean("amp", "enabled", true);
+        return settings.flag(SettingKey.AMP, "enabled");
     }
 
     private String resolveLanguage(String languageCode) {

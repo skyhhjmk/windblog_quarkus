@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.elasticsearch;
 
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -14,10 +15,10 @@ import java.util.function.Function;
 @ApplicationScoped
 public class ElasticsearchSettingsService {
 
-    public static final String SETTING_KEY = "elasticsearch";
+    public static final String SETTING_KEY = SettingKey.ELASTICSEARCH.key();
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     private final Function<String, Optional<String>> environmentOverrides;
 
@@ -30,7 +31,7 @@ public class ElasticsearchSettingsService {
     }
 
     public ElasticsearchSettings getSettings() {
-        return parse(configManager.get(SETTING_KEY));
+        return parse(settings.raw(SettingKey.ELASTICSEARCH));
     }
 
     public ElasticsearchSettings parse(JsonNode settingValue) {

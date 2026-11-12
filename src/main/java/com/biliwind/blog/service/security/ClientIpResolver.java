@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.security;
 
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -18,12 +19,11 @@ public class ClientIpResolver {
     public static final String SOURCE_NETWORK = "network";
     public static final String SOURCE_HEADER = "header";
 
-    private static final String CONFIG_KEY = "security_network";
     private static final String DEFAULT_TRUSTED_CIDRS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
     private static final String DEFAULT_HEADER = "X-Forwarded-For";
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     public ClientIpResolution resolve(RoutingContext routingContext) {
         String remoteAddress = "unknown";
@@ -69,7 +69,7 @@ public class ClientIpResolver {
     }
 
     public String resolveSource() {
-        String configuredSource = configManager.getString(CONFIG_KEY, "client_ip_source", SOURCE_AUTO);
+        String configuredSource = settings.text(SettingKey.SECURITY_NETWORK, "client_ip_source");
         if (configuredSource == null || configuredSource.isBlank()) {
             return SOURCE_AUTO;
         }
@@ -86,7 +86,7 @@ public class ClientIpResolver {
      * CF-Connecting-IP or X-Real-IP work as well as X-Forwarded-For/Forwarded.
      */
     public String resolveHeaderName() {
-        String configuredHeader = configManager.getString(CONFIG_KEY, "client_ip_header", DEFAULT_HEADER);
+        String configuredHeader = settings.text(SettingKey.SECURITY_NETWORK, "client_ip_header");
         if (configuredHeader == null || configuredHeader.isBlank()) {
             return DEFAULT_HEADER;
         }
@@ -232,7 +232,7 @@ public class ClientIpResolver {
 
     private List<String> trustedCidrs() {
         List<String> cidrs = new ArrayList<>();
-        String configuredCidrs = configManager.getString(CONFIG_KEY, "trusted_proxy_cidrs", DEFAULT_TRUSTED_CIDRS);
+        String configuredCidrs = settings.text(SettingKey.SECURITY_NETWORK, "trusted_proxy_cidrs");
         if (configuredCidrs == null) {
             return cidrs;
         }

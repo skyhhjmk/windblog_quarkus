@@ -2,7 +2,8 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.ContextNotActiveException;
 import jakarta.inject.Inject;
@@ -13,7 +14,7 @@ import java.net.URI;
 @ApplicationScoped
 public class SiteLinkUrlService {
 
-    private final ConfigManager configManager;
+    private final SettingsReader settings;
 
     @Inject
     RegionContext regionContext;
@@ -22,8 +23,8 @@ public class SiteLinkUrlService {
     PublicUrlService publicUrlService;
 
     @Inject
-    public SiteLinkUrlService(ConfigManager configManager) {
-        this.configManager = configManager;
+    public SiteLinkUrlService(SettingsReader settings) {
+        this.settings = settings;
     }
 
     public String currentUrl() {
@@ -39,25 +40,13 @@ public class SiteLinkUrlService {
     }
 
     public String currentSiteName() {
-        String title = configManager.getString("site_info", "title", "WindBlog");
+        String title = settings.text(SettingKey.SITE_INFO, "title");
         return title == null || title.isBlank() ? "WindBlog" : title.trim();
     }
 
     public String urlFor(BlogRegion region) {
-        JsonNode siteInfo = configManager.get("site_info");
-        BlogRegion selectedRegion = region == null ? BlogRegion.GLOBAL : region;
-        if (selectedRegion != BlogRegion.GLOBAL) {
-            String regionalUrl = siteInfo == null ? ""
-                    : siteInfo.path("site_url_regions").path(selectedRegion.getCode()).asText("");
-            String normalizedRegionalUrl = normalizeConfiguredUrl(regionalUrl);
-            if (!normalizedRegionalUrl.isEmpty()) {
-                return normalizedRegionalUrl;
-            }
-        }
-
-        String configuredUrl = siteInfo == null ? "" : siteInfo.path("site_url").asText("");
-        String normalizedConfiguredUrl = normalizeConfiguredUrl(configuredUrl);
-        return normalizedConfiguredUrl.isEmpty() ? publicUrlService.getBaseUrl() : normalizedConfiguredUrl;
+        String configuredUrl = normalizeConfiguredUrl(settings.siteUrl(region));
+        return configuredUrl.isEmpty() ? publicUrlService.getBaseUrl() : configuredUrl;
     }
 
     private String normalizeConfiguredUrl(String value) {

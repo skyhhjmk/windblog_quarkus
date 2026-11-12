@@ -3,6 +3,8 @@ package com.biliwind.blog.service;
 import com.biliwind.blog.model.User;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -15,7 +17,7 @@ public class GamificationService {
     WalletService walletService;
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     // 简单公式计算达到某一等级所需的总经验：(level - 1) * level / 2 * 100
     // L1: 0, L2: 100, L3: 300, L4: 600, L5: 1000
@@ -61,7 +63,7 @@ public class GamificationService {
             LOG.infof("User %d leveled up from %d to %d (Source: %s)", userId, oldLevel, currentLevel, source);
 
             // 发放升级奖励（从配置中读取，默认为每升一级奖励50积分）
-            int rewardPerLevel = configManager.getInt("gamification", "level_up_reward", 50);
+            int rewardPerLevel = settings.number(SettingKey.GAMIFICATION, "level_up_reward");
             int totalReward = rewardPerLevel * (currentLevel - oldLevel);
 
             if (totalReward > 0) {
@@ -79,7 +81,7 @@ public class GamificationService {
     @Transactional
     public void triggerActionReward(Long userId, String actionType) {
         // actionType 例子：comment, checkin
-        int expReward = configManager.getInt("gamification", actionType + "_exp_reward", 10);
+        int expReward = settings.number(SettingKey.GAMIFICATION, actionType + "_exp_reward");
         if (expReward > 0) {
             addExp(userId, expReward, actionType);
         }

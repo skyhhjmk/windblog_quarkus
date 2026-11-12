@@ -5,7 +5,8 @@ import com.biliwind.blog.model.Comment;
 import com.biliwind.blog.model.CommentQuote;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.User;
-import com.biliwind.blog.service.ConfigManager;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -40,7 +41,7 @@ public class CommentApiController {
     com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
 
     @Inject
-    ConfigManager configManager;
+    SettingsReader settings;
 
     @Inject
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
@@ -67,7 +68,7 @@ public class CommentApiController {
     @GET
     @Path("/captcha")
     public Response captcha(@Context io.vertx.ext.web.RoutingContext context) {
-        if (!configManager.getBoolean("feature_toggles", "enable_comment", true)) {
+        if (!settings.flag(SettingKey.FEATURE_TOGGLES, "enable_comment")) {
             return Response.status(Response.Status.FORBIDDEN)
                     .entity(Map.of("success", false, "message", "评论功能已关闭")).build();
         }
@@ -165,7 +166,7 @@ public class CommentApiController {
     public Response create(CommentCreateRequest request, @Context HttpHeaders headers,
                            @Context io.vertx.ext.web.RoutingContext context) {
         checkRate(context, "submit", 10);
-        if (!configManager.getBoolean("feature_toggles", "enable_comment", true)) {
+        if (!settings.flag(SettingKey.FEATURE_TOGGLES, "enable_comment")) {
             return Response.status(Response.Status.FORBIDDEN)
                     .entity(Map.of("success", false, "message", "评论功能已关闭")).build();
         }
@@ -208,9 +209,7 @@ public class CommentApiController {
             comment.status = STATUS_PENDING;
 
             // 触发 AI 审核状态预设
-            com.biliwind.blog.model.SystemSetting auditSetting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
-            if (auditSetting != null && auditSetting.configValue != null
-                    && auditSetting.configValue.path("autoAudit").asBoolean(false)) {
+            if (settings.flag(SettingKey.AI_COMMENT_AUDIT, "autoAudit")) {
                 comment.auditStatus = 1; // 审核中
                 comment.isReviewing = true;
             }

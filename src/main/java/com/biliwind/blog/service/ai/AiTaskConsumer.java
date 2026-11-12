@@ -8,6 +8,8 @@ import io.vertx.core.json.JsonObject;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.control.ActivateRequestContext;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
@@ -24,6 +26,9 @@ public class AiTaskConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(AiTaskConsumer.class);
     private static final String MQ_TAG = "[MQ]";
+
+    @Inject
+    SettingsReader settings;
 
     @Inject
     AiRetryPolicy retryPolicy;
@@ -385,11 +390,7 @@ public class AiTaskConsumer {
                 }
 
                 // 读取配置
-                boolean allowAutoDecision = false;
-                com.biliwind.blog.model.SystemSetting auditSetting = com.biliwind.blog.model.SystemSetting.findByKey("ai_comment_audit");
-                if (auditSetting != null && auditSetting.configValue != null && auditSetting.configValue.has("allowAutoDecision")) {
-                    allowAutoDecision = auditSetting.configValue.get("allowAutoDecision").asBoolean();
-                }
+                boolean allowAutoDecision = settings.flag(SettingKey.AI_COMMENT_AUDIT, "allowAutoDecision");
 
                 short oldStatus = comment.status;
                 short newStatus = oldStatus;

@@ -1,5 +1,7 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.model.BlogRegion;
@@ -11,15 +13,14 @@ import java.net.URI;
 /** Validated, database-backed public analytics embed configuration. */
 @ApplicationScoped
 public class AnalyticsTrackingSettings {
-    private static final String KEY = "analytics_tracking";
 
-    private final ConfigManager configManager;
+    private final SettingsReader settings;
 
     @Inject
     RegionContext regionContext;
 
-    public AnalyticsTrackingSettings(ConfigManager configManager) {
-        this.configManager = configManager;
+    public AnalyticsTrackingSettings(SettingsReader settings) {
+        this.settings = settings;
     }
 
     public Settings current() {
@@ -35,16 +36,8 @@ public class AnalyticsTrackingSettings {
     }
 
     public Settings current(BlogRegion region) {
-        JsonNode value = configManager.get(KEY);
+        JsonNode value = settings.regionalObject(SettingKey.ANALYTICS_TRACKING, region);
         if (value == null || !value.isObject()) return Settings.disabled();
-        BlogRegion selectedRegion = region == null ? BlogRegion.GLOBAL : region;
-        if (selectedRegion != BlogRegion.GLOBAL) {
-            JsonNode regionalSettings = value.path("regions");
-            String regionCode = selectedRegion.getCode();
-            if (regionalSettings.isObject() && regionalSettings.has(regionCode)) {
-                value = regionalSettings.get(regionCode);
-            }
-        }
         return parse(value);
     }
 

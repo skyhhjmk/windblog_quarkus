@@ -50,6 +50,9 @@ import java.util.concurrent.CompletionException;
 public class AdminTranslationService {
 
     @Inject
+    com.biliwind.blog.service.settings.SettingsReader settings;
+
+    @Inject
     EntityManager entityManager;
 
     @Inject
@@ -553,15 +556,8 @@ public class AdminTranslationService {
     }
 
     public String defaultTargetLanguage() {
-        com.biliwind.blog.model.SystemSetting setting =
-                com.biliwind.blog.model.SystemSetting.findByKey("ai_translation");
-        if (setting != null && setting.configValue != null) {
-            String configured = setting.configValue.path("defaultTargetLanguage").asText("");
-            if (!configured.isBlank()) {
-                return configured.trim();
-            }
-        }
-        return LanguageConstant.LANG_EN_US;
+        return settings.textNonBlank(
+                com.biliwind.blog.service.settings.SettingKey.AI_TRANSLATION, "defaultTargetLanguage").trim();
     }
 
     private String normalizeLanguage(String language, String field) {
