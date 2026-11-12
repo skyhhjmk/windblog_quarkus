@@ -3,9 +3,10 @@ package com.biliwind.blog.service.ai;
 import com.biliwind.blog.model.AiProviderConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.subscription.MultiEmitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +14,6 @@ import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,19 +23,12 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Ollama AI 摘要服务
- * 使用 sendAsync 全程异步，不会阻塞 RabbitMQ 消费者线程
+ * Ollama AI 服务。使用 sendAsync 全程异步，不会阻塞调用线程。
  */
 @ApplicationScoped
 public class OllamaAiService implements AiService {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaAiService.class);
-
-    @Inject
-    @ConfigProperty(name = "windblog.ai.timeout", defaultValue = "300S")
-    Duration timeout;
-
-    // 代理选择器及 HttpClient 实例转交由 AiHttpClientHelper 统一维护与缓存
 
     @Inject
     ObjectMapper objectMapper;
@@ -46,133 +39,165 @@ public class OllamaAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<AiResult> summarize(AiProviderConfig config, Map<String, String> content) {
-        if (!isConfigReady(config)) {
-            return CompletableFuture.failedFuture(new RuntimeException("Ollama 配置不可用"));
-        }
-
-        List<CompletableFuture<AiResult>> futures = new ArrayList<>();
-
-        for (Map.Entry<String, String> entry : content.entrySet()) {
-            String lang = entry.getKey();
-            String text = entry.getValue();
-            futures.add(callApiAsync(config, lang, text));
-        }
-
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(ignored -> {
-                    AiResult finalResult = new AiResult();
-                    for (CompletableFuture<AiResult> future : futures) {
-                        try {
-                            AiResult res = future.join();
-                            for (Map.Entry<String, String> entry : res.contents.entrySet()) {
-                                finalResult.contents.put(entry.getKey(), entry.getValue());
-                            }
-                            finalResult.addUsage(res.inputTokens, res.outputTokens, res.totalTokens);
-                        } catch (Exception e) {
-                            // 忽略单个失败
-                        }
-                    }
-                    return finalResult;
-                });
-    }
-
-    @Override
-    public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
-            String targetLanguage, Map<String, String> fields, String promptTemplate) {
+    public CompletionStage<AiResult> complete(AiProviderConfig config, AiProviderRequest request) {
         if (!isConfigReady(config)) {
             return CompletableFuture.failedFuture(new RuntimeException("Ollama 配置不可用"));
         }
         try {
-            String prompt = TranslationPrompt.build(promptTemplate, sourceLanguage, targetLanguage,
-                    fields, objectMapper);
             Map<String, Object> payload = new HashMap<>();
             payload.put("model", chooseModel(config, "llama3"));
-            payload.put("prompt", prompt);
-            payload.put("format", "json");
             payload.put("stream", false);
-            String bodyJson = objectMapper.writeValueAsString(payload);
-            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-                    .uri(resolveUri(config, "/api/generate"))
-                    .timeout(timeout)
+            if (request.jsonResponse()) {
+                payload.put("format", "json");
+            }
+            List<Map<String, Object>> messages = new ArrayList<>();
+            if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+                messages.add(Map.of("role", "system", "content", request.systemPrompt()));
+            }
+            messages.add(Map.of("role", "user", "content",
+                    request.prompt() == null ? "" : request.prompt()));
+            payload.put("messages", messages);
+
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(resolveUri(config, "/api/chat"))
+                    .timeout(AiHttpClientHelper.getAiTimeout())
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-            AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "translate");
-            HttpRequest request = reqBuilder.build();
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
-                    AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
-                if (response.statusCode() >= 400) {
-                    throw new RuntimeException("Ollama 翻译调用失败，code=" + response.statusCode());
-                }
-                try {
-                    JsonNode root = objectMapper.readTree(response.body());
-                    String raw = cleanJsonText(extractTextFromResponse(root));
-                    JsonNode translated = objectMapper.readTree(raw);
-                    AiResult result = new AiResult();
-                    for (String field : fields.keySet()) {
-                        JsonNode value = translated.get(field);
-                        if (value == null || !value.isTextual()) {
-                            throw new RuntimeException("AI 翻译结果缺少字段: " + field);
-                        }
-                        result.contents.put(field, value.asText());
-                    }
-                    return result;
-                } catch (Exception e) {
-                    throw new RuntimeException("解析 Ollama 翻译响应失败", e);
-                }
-            });
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8));
+            AiHttpClientHelper.attachClientFeatureHeaders(builder, request.operation());
 
-    /**
-     * 异步调用 Ollama generate API，不阻塞当前线程
-     */
-    private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String lang, String text) {
-        try {
-            String prompt = buildPrompt(lang, text);
-            URI uri = resolveUri(config, "/api/generate");
-
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("model", chooseModel(config, "llama3"));
-            payload.put("prompt", prompt);
-            payload.put("stream", false);
-
-            String bodyJson = objectMapper.writeValueAsString(payload);
-
-            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(timeout)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-            AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "summarize");
-            HttpRequest request = reqBuilder.build();
-
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
-                    AiHttpClientHelper.boundedStringBodyHandler())
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper),
+                            builder.build(), AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("Ollama 调用失败，code=" + response.statusCode());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
-                            AiResult res = new AiResult();
-                            String extracted = extractTextFromResponse(root);
-                            res.contents.put(lang, extracted.isBlank() ? text : extracted);
-
-                            // Ollama token usage
-                            int promptTokens = root.has("prompt_eval_count") ? root.get("prompt_eval_count").asInt() : 0;
-                            int evalCount = root.has("eval_count") ? root.get("eval_count").asInt() : 0;
-                            res.addUsage(promptTokens, evalCount, promptTokens + evalCount);
-
-                            return res;
-                        } catch (Exception parseEx) {
-                            throw new RuntimeException("解析 Ollama 响应失败", parseEx);
+                            AiResult result = new AiResult();
+                            result.contents.put("text", extractTextFromResponse(root));
+                            result.rawResponse = response.body();
+                            int promptTokens = root.path("prompt_eval_count").asInt(0);
+                            int completionTokens = root.path("eval_count").asInt(0);
+                            result.addUsage(promptTokens, completionTokens,
+                                    promptTokens + completionTokens);
+                            return result;
+                        } catch (Exception exception) {
+                            throw new RuntimeException("解析 Ollama 响应失败", exception);
                         }
                     });
-        } catch (Exception buildEx) {
-            return CompletableFuture.failedFuture(new RuntimeException("构建 Ollama 请求失败", buildEx));
+        } catch (Exception exception) {
+            return CompletableFuture.failedFuture(exception);
+        }
+    }
+
+    @Override
+    public Multi<String> stream(AiProviderConfig config, AiProviderRequest request) {
+        return Multi.createFrom().emitter(emitter -> {
+            if (!isConfigReady(config)) {
+                emitter.fail(new RuntimeException("Ollama 配置不可用"));
+                return;
+            }
+            try {
+                URI uri = resolveUri(config, "/api/chat");
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("model", chooseModel(config, "llama3"));
+                payload.put("stream", request.stream());
+                List<Map<String, Object>> messages = new ArrayList<>();
+                if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+                    messages.add(Map.of("role", "system", "content", request.systemPrompt()));
+                }
+                String prompt = request.prompt() == null ? "" : request.prompt();
+                if (!request.imageUrls().isEmpty()) {
+                    prompt = prompt + "\n[Images: " + String.join(", ", request.imageUrls()) + "]";
+                }
+                messages.add(Map.of("role", "user", "content", prompt));
+                payload.put("messages", messages);
+
+                HttpRequest.Builder builder = HttpRequest.newBuilder()
+                        .uri(uri)
+                        .timeout(AiHttpClientHelper.getAiTimeout())
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(
+                                objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8));
+                AiHttpClientHelper.attachClientFeatureHeaders(builder, "test");
+
+                if (request.stream()) {
+                    streamResponse(config, builder.build(), emitter);
+                } else {
+                    completeResponse(config, builder.build(), emitter);
+                }
+            } catch (Exception exception) {
+                emitter.fail(exception);
+            }
+        });
+    }
+
+    private void streamResponse(AiProviderConfig config, HttpRequest request,
+                                MultiEmitter<? super String> emitter) {
+        AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
+                        HttpResponse.BodyHandlers.ofLines())
+                .whenComplete((response, error) -> {
+                    if (error != null) {
+                        emitter.fail(error);
+                        return;
+                    }
+                    if (response.statusCode() >= 400) {
+                        emitter.fail(new RuntimeException("API 调用失败, code=" + response.statusCode()));
+                        return;
+                    }
+                    try (java.util.stream.Stream<String> lines = response.body()) {
+                        AtomicInteger responseBytes = new AtomicInteger();
+                        lines.forEach(line -> {
+                            AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
+                            if (line.isBlank()) return;
+                            try {
+                                JsonNode root = objectMapper.readTree(line);
+                                String content = root.path("message").path("content").asText("");
+                                emitContent(emitter, content);
+                            } catch (Exception ignored) {
+                                // Ignore provider keep-alives and partial lines.
+                            }
+                        });
+                    } catch (Exception streamException) {
+                        emitter.fail(new IllegalStateException("AI 流响应处理失败"));
+                        return;
+                    }
+                    emitter.complete();
+                });
+    }
+
+    private void completeResponse(AiProviderConfig config, HttpRequest request,
+                                  MultiEmitter<? super String> emitter) {
+        AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
+                        AiHttpClientHelper.boundedStringBodyHandler())
+                .whenComplete((response, error) -> {
+                    if (error != null) {
+                        emitter.fail(error);
+                        return;
+                    }
+                    if (response.statusCode() >= 400) {
+                        emitter.fail(new RuntimeException("API 调用失败，HTTP " + response.statusCode()));
+                        return;
+                    }
+                    try {
+                        JsonNode root = objectMapper.readTree(response.body());
+                        emitContent(emitter, extractTextFromResponse(root));
+                        emitter.complete();
+                    } catch (Exception exception) {
+                        emitter.fail(exception);
+                    }
+                });
+    }
+
+    private void emitContent(MultiEmitter<? super String> emitter, String content) {
+        if (content == null || content.isEmpty()) {
+            return;
+        }
+        try {
+            emitter.emit("{\"type\":\"content\",\"content\":"
+                    + objectMapper.writeValueAsString(content) + "}");
+        } catch (Exception ignored) {
         }
     }
 
@@ -188,7 +213,8 @@ public class OllamaAiService implements AiService {
     }
 
     private boolean isConfigReady(AiProviderConfig config) {
-        return config != null && config.enabled && config.endpoint != null && !config.endpoint.isBlank();
+        return config != null && config.enabled && config.endpoint != null
+                && !config.endpoint.isBlank();
     }
 
     private String chooseModel(AiProviderConfig config, String fallback) {
@@ -198,27 +224,16 @@ public class OllamaAiService implements AiService {
         return config.model;
     }
 
-    private String buildPrompt(String lang, String text) {
-        String languageHint = (lang == null || lang.isBlank()) ? "中文" : lang;
-        return "请用" + languageHint + "简洁地总结以下内容，控制在 120 字以内：\n" + (text == null ? "" : text);
-    }
-
     private String extractTextFromResponse(JsonNode node) {
         if (node == null || node.isNull()) {
             return "";
         }
-
-        // Ollama /api/generate 返回 {"response": "..."}
         if (node.has("response")) {
             return node.get("response").asText("");
         }
-
-        // 兼容 /api/chat 格式
         if (node.has("message") && node.get("message").has("content")) {
             return node.get("message").get("content").asText("");
         }
-
-        // 兼容 OpenAI 格式
         if (node.has("choices") && node.get("choices").isArray()) {
             for (JsonNode choice : node.get("choices")) {
                 JsonNode message = choice.get("message");
@@ -227,154 +242,7 @@ public class OllamaAiService implements AiService {
                 }
             }
         }
-
         return "";
-    }
-
-    @Override
-    public CompletionStage<AiResult> moderate(AiProviderConfig config, String prompt, String content) {
-        String finalPrompt = prompt.replace("{{content}}", content != null ? content : "");
-        if (!prompt.contains("{{content}}")) {
-            finalPrompt = prompt + "\n\n内容如下：\n" + content;
-        }
-
-        try {
-            URI uri = resolveUri(config, "/api/chat");
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("model", chooseModel(config, "llama3"));
-            payload.put("stream", false);
-            payload.put("messages", List.of(Map.of("role", "user", "content", finalPrompt)));
-            payload.put("format", "json");
-
-            String bodyJson = objectMapper.writeValueAsString(payload);
-            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(timeout)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-            AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "moderate");
-            HttpRequest req = reqBuilder.build();
-
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), req,
-                    AiHttpClientHelper.boundedStringBodyHandler())
-                    .thenApply(response -> {
-                        if (response.statusCode() >= 400) {
-                            throw new RuntimeException("Ollama 审核失败，HTTP " + response.statusCode());
-                        }
-                        try {
-                            JsonNode root = objectMapper.readTree(response.body());
-                            String resultText = cleanJsonText(extractTextFromResponse(root));
-                            JsonNode resultJson = objectMapper.readTree(resultText);
-
-                            AiResult res = AiModerationResultParser.parse(resultJson, response.body());
-
-                            // Ollama usage info is usually in prompt_eval_count and eval_count
-                            int promptTokens = root.has("prompt_eval_count") ? root.get("prompt_eval_count").asInt() : 0;
-                            int completionTokens = root.has("eval_count") ? root.get("eval_count").asInt() : 0;
-                            res.addUsage(promptTokens, completionTokens, promptTokens + completionTokens);
-
-                            return res;
-                        } catch (Exception e) {
-                            log.error("解析 Ollama 审核响应失败", e);
-                            throw new IllegalStateException("解析 Ollama 审核响应失败", e);
-                        }
-                    });
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    @Override
-    public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest request) {
-        return io.smallrye.mutiny.Multi.createFrom().emitter(emitter -> {
-            try {
-                URI uri = resolveUri(config, "/api/chat");
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("model", chooseModel(config, "llama3"));
-                payload.put("stream", request.stream());
-                
-                List<Map<String, Object>> messages = new ArrayList<>();
-                if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
-                    messages.add(Map.of("role", "system", "content", request.systemPrompt()));
-                }
-
-                if (request.imageUrls() != null && !request.imageUrls().isEmpty()) {
-                    messages.add(Map.of("role", "user", "content", request.prompt() + "\n[Images: " + String.join(", ", request.imageUrls()) + "]"));
-                } else {
-                    messages.add(Map.of("role", "user", "content", request.prompt()));
-                }
-                payload.put("messages", messages);
-
-                String bodyJson = objectMapper.writeValueAsString(payload);
-                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-                        .uri(uri)
-                        .timeout(timeout)
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-                AiHttpClientHelper.attachClientFeatureHeaders(reqBuilder, "test");
-                HttpRequest req = reqBuilder.build();
-
-                if (request.stream()) {
-                    AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), req,
-                            HttpResponse.BodyHandlers.ofLines())
-                        .whenComplete((res, err) -> {
-                            if (err != null) {
-                                emitter.fail(err);
-                                return;
-                            }
-                            if (res.statusCode() >= 400) {
-                                emitter.fail(new RuntimeException("API 调用失败, code=" + res.statusCode()));
-                                return;
-                            }
-                            try (java.util.stream.Stream<String> lines = res.body()) {
-                                AtomicInteger responseBytes = new AtomicInteger();
-                                lines.forEach(line -> {
-                                    AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
-                                    if (line.isBlank()) return;
-                                    try {
-                                        JsonNode root = objectMapper.readTree(line);
-                                        if (root.has("message") && root.get("message").has("content")) {
-                                            String content = root.get("message").get("content").asText("");
-                                            if (!content.isEmpty()) {
-                                                emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(content) + "}");
-                                            }
-                                        }
-                                    } catch (Exception ex) {
-                                        // Parse error
-                                    }
-                                });
-                            } catch (Exception streamException) {
-                                emitter.fail(new IllegalStateException("AI 流响应处理失败"));
-                                return;
-                            }
-                            emitter.complete();
-                        });
-                } else {
-                    AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), req,
-                            AiHttpClientHelper.boundedStringBodyHandler())
-                            .whenComplete((res, err) -> {
-                                if (err != null) {
-                                    emitter.fail(err);
-                                    return;
-                                }
-                                if (res.statusCode() >= 400) {
-                                    emitter.fail(new RuntimeException("API 调用失败，HTTP " + res.statusCode()));
-                                    return;
-                                }
-                                try {
-                                    JsonNode root = objectMapper.readTree(res.body());
-                                    String text = extractTextFromResponse(root);
-                                    emitter.emit("{\"type\":\"content\",\"content\":" + objectMapper.writeValueAsString(text) + "}");
-                                    emitter.complete();
-                                } catch (Exception e) {
-                                    emitter.fail(e);
-                                }
-                            });
-                }
-            } catch (Exception e) {
-                emitter.fail(e);
-            }
-        });
     }
 
     @Override
@@ -383,13 +251,13 @@ public class OllamaAiService implements AiService {
             URI uri = resolveUri(config, "/api/tags");
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
-                    .timeout(timeout)
+                    .timeout(AiHttpClientHelper.getAiTimeout())
                     .header("Accept", "application/json")
                     .GET()
                     .build();
 
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
-                    AiHttpClientHelper.boundedStringBodyHandler())
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper),
+                            request, AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             log.warn("获取 Ollama 模型列表失败: " + response.statusCode());
@@ -407,23 +275,14 @@ public class OllamaAiService implements AiService {
                             }
                             models.sort(String::compareToIgnoreCase);
                             return models;
-                        } catch (Exception e) {
-                            log.error("解析 Ollama 模型列表失败", e);
+                        } catch (Exception exception) {
+                            log.error("解析 Ollama 模型列表失败", exception);
                             return List.of();
                         }
                     });
-        } catch (Exception e) {
-            log.error("获取 Ollama 模型列表请求异常", e);
+        } catch (Exception exception) {
+            log.error("获取 Ollama 模型列表请求异常", exception);
             return CompletableFuture.completedFuture(List.of());
         }
-    }
-
-    private String cleanJsonText(String raw) {
-        if (raw == null) return "";
-        String text = raw.trim();
-        if (text.startsWith("```")) {
-            text = text.replaceFirst("^```[a-zA-Z]*\\s*", "").replaceFirst("\\s*```$", "").trim();
-        }
-        return text;
     }
 }

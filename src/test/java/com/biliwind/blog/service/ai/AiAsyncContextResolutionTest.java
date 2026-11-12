@@ -14,6 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -22,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * AI 调用刻意脱离事务执行，因此所有降级/轮询节点的数据库解析都必须发生在
- * 调用线程上。一旦放进 {@code exceptionallyCompose} / {@code handle} 回调，
- * 回调线程既没有事务也没有 CDI 请求上下文，Panache 会抛出
+ * 调用线程上。一旦放进 {@code exceptionallyCompose} 回调，回调线程既没有事务
+ * 也没有 CDI 请求上下文，Panache 会抛出
  * "Cannot use the EntityManager/Session because neither a transaction nor a CDI
  * request context is active"，批量翻译任务就会整体失败。
  */
@@ -38,26 +39,20 @@ class AiAsyncContextResolutionTest {
 
         ExecutorService aiThread = Executors.newSingleThreadExecutor();
         try {
-            AiManager manager = new AiManager() {
-                @Override
-                public CompletionStage<AiResult> executeTranslate(AiProviderConfig config, String sourceLanguage,
-                        String targetLanguage, Map<String, String> fields, String promptTemplate) {
-                    usedConfig.set(config.name);
-                    return afterDelay(aiThread, () -> {
-                        if (config == primary) {
-                            throw new IllegalStateException("primary unavailable");
-                        }
-                        return new AiResult();
-                    });
+            AiCallExecutor executor = executorWith(config -> fakeService(aiThread, () -> {
+                usedConfig.set(config.name);
+                if (config == primary) {
+                    throw new IllegalStateException("primary unavailable");
                 }
-            };
-            manager.configService = new AiProviderConfigService() {
+                return new AiResult();
+            }));
+            executor.configService = new AiProviderConfigService() {
                 @Override
                 public List<AiProviderConfig> listAll() {
                     return List.of(primary, fallback);
                 }
             };
-            manager.selectionService = new AiSelectionService() {
+            executor.selectionService = new AiSelectionService() {
                 @Override
                 public AiProviderConfig select(String operation, List<AiProviderConfig> configs) {
                     return primary;
@@ -72,7 +67,8 @@ class AiAsyncContextResolutionTest {
             };
 
             Thread caller = Thread.currentThread();
-            AiResult result = manager.translate("en", "zh", Map.of("title", "hello"), "prompt")
+            AiResult result = executor.call(AiCallRequest.translate("en", "zh",
+                            Map.of("title", "hello"), "prompt"))
                     .toCompletableFuture().join();
 
             assertNotNull(result);
@@ -96,6 +92,24 @@ class AiAsyncContextResolutionTest {
         List<Thread> lookupThreads = new CopyOnWriteArrayList<>();
         ExecutorService aiThread = Executors.newSingleThreadExecutor();
         try {
+            AiCallExecutor executor = executorWith(config -> fakeService(aiThread, () -> {
+                if (config == first) {
+                    throw new IllegalStateException("node unavailable");
+                }
+                return new AiResult();
+            }));
+            executor.configService = new AiProviderConfigService() {
+                @Override
+                public List<AiProviderConfig> listAll() {
+                    return List.of(group);
+                }
+            };
+            executor.selectionService = new AiSelectionService() {
+                @Override
+                public AiProviderConfig select(String operation, List<AiProviderConfig> configs) {
+                    return group;
+                }
+            };
             AiPollingService polling = new AiPollingService();
             polling.objectMapper = new ObjectMapper();
             polling.configService = new AiProviderConfigService() {
@@ -111,20 +125,10 @@ class AiAsyncContextResolutionTest {
                     return Optional.empty();
                 }
             };
-            polling.aiManager = new AiManager() {
-                @Override
-                public CompletionStage<AiResult> executeTranslate(AiProviderConfig config, String sourceLanguage,
-                        String targetLanguage, Map<String, String> fields, String promptTemplate) {
-                    return afterDelay(aiThread, () -> {
-                        if (config == first) {
-                            throw new IllegalStateException("node unavailable");
-                        }
-                        return new AiResult();
-                    });
-                }
-            };
+            executor.pollingService = polling;
 
-            AiResult result = polling.translate(group, "en", "zh", Map.of("title", "hello"), "prompt")
+            AiResult result = executor.call(AiCallRequest.translate("en", "zh",
+                            Map.of("title", "hello"), "prompt"))
                     .toCompletableFuture().join();
 
             assertNotNull(result);
@@ -136,8 +140,102 @@ class AiAsyncContextResolutionTest {
         }
     }
 
+    @Test
+    void resolvesFallbackPollingNodesOnCallingThread() {
+        AiProviderConfig primary = provider(1L, "primary");
+        AiProviderConfig node = provider(11L, "fallback-node");
+        AiProviderConfig group = provider(99L, "fallback-group");
+        group.type = AiConfigType.POLLING_GROUP;
+        group.config = "{\"nodes\":[{\"id\":11}]}";
+
+        Thread caller = Thread.currentThread();
+        List<Thread> lookupThreads = new CopyOnWriteArrayList<>();
+        ExecutorService aiThread = Executors.newSingleThreadExecutor();
+        try {
+            AiCallExecutor executor = executorWith(config -> fakeService(aiThread, () -> {
+                if (config == primary) {
+                    throw new IllegalStateException("primary unavailable");
+                }
+                return new AiResult();
+            }));
+            executor.configService = new AiProviderConfigService() {
+                @Override
+                public List<AiProviderConfig> listAll() {
+                    return List.of(primary, group);
+                }
+            };
+            executor.selectionService = new AiSelectionService() {
+                @Override
+                public AiProviderConfig select(String operation, List<AiProviderConfig> configs) {
+                    return primary;
+                }
+
+                @Override
+                public AiProviderConfig fallback(String operation, List<AiProviderConfig> configs,
+                                                 AiProviderConfig current) {
+                    return group;
+                }
+            };
+            AiPollingService polling = new AiPollingService();
+            polling.objectMapper = new ObjectMapper();
+            polling.configService = new AiProviderConfigService() {
+                @Override
+                public Optional<AiProviderConfig> getById(Long id) {
+                    lookupThreads.add(Thread.currentThread());
+                    return id != null && id == 11L ? Optional.of(node) : Optional.empty();
+                }
+            };
+            executor.pollingService = polling;
+
+            AiResult result = executor.call(AiCallRequest.translate("en", "zh",
+                            Map.of("title", "hello"), "prompt"))
+                    .toCompletableFuture().join();
+
+            assertNotNull(result);
+            assertEquals(1, lookupThreads.size());
+            assertSame(caller, lookupThreads.get(0),
+                    "降级轮询组的节点也必须在调用线程上解析");
+        } finally {
+            aiThread.shutdownNow();
+        }
+    }
+
+    private static AiCallExecutor executorWith(Function<AiProviderConfig, AiService> services) {
+        AiCallExecutor executor = new AiCallExecutor() {
+            @Override
+            AiService findService(AiProviderConfig config) {
+                return services.apply(config);
+            }
+        };
+        executor.rateLimiter = new AiRateLimiter();
+        executor.concurrencyLimiter = new AiConcurrencyLimiter();
+        executor.objectMapper = new ObjectMapper();
+        return executor;
+    }
+
+    private static AiService fakeService(ExecutorService asyncThread,
+                                         java.util.function.Supplier<AiResult> supplier) {
+        return new AiService() {
+            @Override
+            public boolean supports(AiProviderConfig config) {
+                return true;
+            }
+
+            @Override
+            public CompletionStage<AiResult> complete(AiProviderConfig config,
+                                                      AiProviderRequest request) {
+                return afterDelay(asyncThread, () -> {
+                    AiResult result = supplier.get();
+                    result.contents.put("text", request.jsonResponse()
+                            ? "{\"title\":\"translated\"}" : "ok");
+                    return result;
+                });
+            }
+        };
+    }
+
     /**
-     * 延迟完成异步结果，确保后续回调（handle/exceptionallyCompose）真的在
+     * 延迟完成异步结果，确保后续回调（exceptionallyCompose）真的在
      * AI 线程上执行，而不是因为结果已就绪而内联回调用线程。
      */
     private static <T> CompletionStage<T> afterDelay(ExecutorService executor,

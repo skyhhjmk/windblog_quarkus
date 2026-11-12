@@ -4,25 +4,23 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class OpenAiAiServiceTest {
+class AiJsonTest {
 
     @Test
     void shouldCleanJsonTextWithMarkdownFences() {
-        OpenAiAiService service = new OpenAiAiService();
-
-        assertEquals("", service.cleanJsonText(null));
-        assertEquals("", service.cleanJsonText("   "));
+        assertEquals("", AiJson.clean(null));
+        assertEquals("", AiJson.clean("   "));
 
         String normalJson = "{\"title\":\"Hello\",\"content\":\"World\"}";
-        assertEquals(normalJson, service.cleanJsonText(normalJson));
+        assertEquals(normalJson, AiJson.clean(normalJson));
 
         String fencedJson = "```json\n" + normalJson + "\n```";
-        assertEquals(normalJson, service.cleanJsonText(fencedJson));
+        assertEquals(normalJson, AiJson.clean(fencedJson));
 
         String fencedWithoutLang = "```\n" + normalJson + "\n```";
-        assertEquals(normalJson, service.cleanJsonText(fencedWithoutLang));
+        assertEquals(normalJson, AiJson.clean(fencedWithoutLang));
 
         String fencedWithSpaces = "   ```JSON \n  " + normalJson + " \n ```  ";
-        assertEquals(normalJson, service.cleanJsonText(fencedWithSpaces));
+        assertEquals(normalJson, AiJson.clean(fencedWithSpaces));
     }
 }

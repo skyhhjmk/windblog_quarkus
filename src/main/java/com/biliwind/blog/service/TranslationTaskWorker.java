@@ -8,8 +8,6 @@ import com.biliwind.blog.model.TranslationTask;
 import com.biliwind.blog.service.ai.AiConcurrencyLimitException;
 import com.biliwind.blog.service.ai.AiRateLimitException;
 import com.biliwind.blog.service.edge.NodeRoleService;
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.ManagedContext;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.context.api.ManagedExecutorConfig;
@@ -85,13 +83,7 @@ public class TranslationTaskWorker {
     void executeTask(Long id) {
         // 每个异步任务使用独立的请求上下文，保证非事务 Panache 读取
         // （AI 提供商/系统设置）在长时间 AI 调用期间可用。
-        ManagedContext requestContext = Arc.container().requestContext();
-        requestContext.activate();
-        try {
-            runTask(id);
-        } finally {
-            requestContext.terminate();
-        }
+        com.biliwind.blog.service.ai.AiRequestContexts.runWithRequestContext(() -> runTask(id));
     }
 
     private void runTask(Long id) {

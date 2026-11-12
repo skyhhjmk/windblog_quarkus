@@ -1,13 +1,27 @@
 package com.biliwind.blog.service.ai;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
+/**
+ * Deterministic provider used by tests and local installs. It implements the
+ * same two primitives as every real adapter and is invoked by the same
+ * {@link AiCallExecutor} path, including prompt construction, JSON parsing and
+ * usage accounting.
+ */
 @ApplicationScoped
 public class MockAiService implements AiService {
+
+    @Inject
+    ObjectMapper objectMapper;
 
     @Override
     public boolean supports(com.biliwind.blog.model.AiProviderConfig config) {
@@ -15,62 +29,72 @@ public class MockAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<AiResult> summarize(com.biliwind.blog.model.AiProviderConfig config, Map<String, String> contentByLanguage) {
-        AiResult result = new AiResult();
-        for (Map.Entry<String, String> entry : contentByLanguage.entrySet()) {
-            String lang = entry.getKey();
-            String text = entry.getValue();
-            String summary = "AI Summary (" + lang + "): "
-                    + (text.length() > 50 ? text.substring(0, 50) + "..." : text);
-            result.contents.put(lang, summary);
-            result.addUsage(10, 20, 30);
-        }
-        return CompletableFuture.completedStage(result);
-    }
-
-    @Override
-    public CompletionStage<AiResult> translate(com.biliwind.blog.model.AiProviderConfig config,
-            String sourceLanguage, String targetLanguage, Map<String, String> fields, String promptTemplate) {
-        AiResult result = new AiResult();
-        for (Map.Entry<String, String> entry : fields.entrySet()) {
-            result.contents.put(entry.getKey(), "AI Translation (" + targetLanguage + "): " + entry.getValue());
-        }
-        return CompletableFuture.completedStage(result);
-    }
-
-    @Override
-    public CompletionStage<AiResult> moderate(com.biliwind.blog.model.AiProviderConfig config, String prompt, String content) {
-        // Simple mock moderation: if content contains "spam", it's not safe
-        boolean safe = true;
-        if (content != null && content.toLowerCase().contains("spam")) {
-            safe = false;
-        }
-
-        AiResult res = new AiResult();
-        res.isSafe = safe;
-        res.score = safe ? 95 : 20;
-        res.addUsage(5, 5, 10);
-        return CompletableFuture.completedStage(res);
-    }
-
-    @Override
     public CompletionStage<AiResult> complete(com.biliwind.blog.model.AiProviderConfig config,
-            String systemPrompt, String prompt) {
-        AiResult result = new AiResult();
-        if (prompt != null && prompt.startsWith("Title: ")) {
-            result.contents.put("text", "mock-slug-english-result");
+                                              AiProviderRequest request) {
+        String prompt = request.prompt() == null ? "" : request.prompt();
+        String text;
+        if (request.jsonResponse()) {
+            text = "moderate".equals(request.operation())
+                    ? moderationJson(prompt) : translationJson(prompt);
+        } else if (prompt.startsWith("Title: ")) {
+            text = "mock-slug-english-result";
         } else {
-            result.contents.put("text", "This is a mock complete response.");
+            text = "This is a mock complete response.";
         }
+        AiResult result = new AiResult();
+        result.contents.put("text", text);
+        result.rawResponse = text;
+        int promptTokens = Math.max(1, prompt.length() / 4);
+        int completionTokens = Math.max(1, text.length() / 4);
+        result.addUsage(promptTokens, completionTokens, promptTokens + completionTokens);
         return CompletableFuture.completedStage(result);
     }
 
     @Override
-    public io.smallrye.mutiny.Multi<String> testStream(com.biliwind.blog.model.AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest request) {
-        return io.smallrye.mutiny.Multi.createFrom().items(
-                "{\"type\":\"content\",\"content\":\"This is a mock streaming response.\"}\n",
-                "{\"type\":\"content\",\"content\":\" It supports multiple chunks.\"}\n",
-                "{\"type\":\"content\",\"content\":\" End of stream.\"}\n"
-        );
+    public Multi<String> stream(com.biliwind.blog.model.AiProviderConfig config,
+                                AiProviderRequest request) {
+        if (!request.stream()) {
+            return Multi.createFrom().item(chunk("content", "This is a mock streaming response."));
+        }
+        return Multi.createFrom().items(
+                chunk("content", "This is a mock streaming response."),
+                chunk("content", " It supports multiple chunks."),
+                chunk("content", " End of stream."));
+    }
+
+    private String chunk(String type, String content) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("type", type, "content", content));
+        } catch (Exception exception) {
+            throw new IllegalStateException("Mock AI 响应编码失败", exception);
+        }
+    }
+
+    private String moderationJson(String prompt) {
+        boolean safe = !prompt.toLowerCase(java.util.Locale.ROOT).contains("spam");
+        ObjectNode decision = objectMapper.createObjectNode();
+        decision.put("isSafe", safe);
+        decision.put("score", safe ? 95 : 20);
+        decision.put("reason", safe ? "Mock 判定内容安全" : "Mock 判定内容存在风险");
+        return decision.toString();
+    }
+
+    private String translationJson(String prompt) {
+        int start = prompt.lastIndexOf("{\"sourceLanguage\"");
+        if (start < 0) {
+            return "{}";
+        }
+        try {
+            JsonNode input = objectMapper.readTree(prompt.substring(start));
+            JsonNode fields = input.path("fields");
+            String target = input.path("targetLanguage").asText("");
+            ObjectNode output = objectMapper.createObjectNode();
+            fields.fieldNames().forEachRemaining(field ->
+                    output.put(field, "AI Translation (" + target + "): "
+                            + fields.path(field).asText("")));
+            return output.toString();
+        } catch (Exception exception) {
+            return "{}";
+        }
     }
 }

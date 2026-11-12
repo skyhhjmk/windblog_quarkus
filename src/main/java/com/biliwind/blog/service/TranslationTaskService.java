@@ -7,6 +7,7 @@ import com.biliwind.blog.controller.api.admin.dto.AdminTranslationDtos.Translati
 import com.biliwind.blog.context.AdminRequestContext;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.TranslationTask;
+import com.biliwind.blog.service.ai.AiRetryPolicy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -25,10 +26,12 @@ import java.util.UUID;
 public class TranslationTaskService {
 
     private static final int MAX_BATCH_SIZE = 50;
-    private static final int MAX_ATTEMPTS = 5;
 
     @Inject
     EntityManager entityManager;
+
+    @Inject
+    AiRetryPolicy retryPolicy;
 
     @Inject
     AdminTranslationService translationService;
@@ -75,7 +78,7 @@ public class TranslationTaskService {
             task.overwrite = overwrite;
             task.status = "QUEUED";
             task.attempts = 0;
-            task.maxAttempts = MAX_ATTEMPTS;
+            task.maxAttempts = retryPolicy.maxAttempts();
             task.nextAttemptAt = now;
             task.batchId = batchId;
             task.createdBy = userId;
@@ -176,8 +179,9 @@ public class TranslationTaskService {
             task.status = "FAILED";
             task.finishedAt = task.updatedAt;
         } else {
-            long delay = Math.max(5, Math.min(900,
-                    retryAfterSeconds > 0 ? retryAfterSeconds : 15L * task.attempts));
+            long delay = retryAfterSeconds > 0
+                    ? Math.max(5, Math.min(900, retryAfterSeconds))
+                    : retryPolicy.retryDelay(task.attempts).toSeconds();
             task.status = "QUEUED";
             task.nextAttemptAt = task.updatedAt.plusSeconds(delay);
         }

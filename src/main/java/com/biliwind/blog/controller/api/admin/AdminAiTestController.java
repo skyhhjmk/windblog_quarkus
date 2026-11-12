@@ -56,7 +56,11 @@ public class AdminAiTestController {
         StringBuilder outputBuffer = new StringBuilder();
 
         // 调用流式接口
-        return aiManager.testStream(config, request).onItem().invoke(new java.util.function.Consumer<String>() {
+        return aiManager.testStream(config,
+                        com.biliwind.blog.service.ai.AiCallRequest.testStream(
+                                request.prompt(), request.systemPrompt(),
+                                request.imageUrls(), request.stream()))
+                .onItem().invoke(new java.util.function.Consumer<String>() {
             @Override
             public void accept(String chunk) {
                 if (chunk != null) {

@@ -43,6 +43,9 @@ public class AutoTranslationService {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    com.biliwind.blog.service.ai.AiRetryPolicy retryPolicy;
+
     private volatile boolean enabled = false;
     private volatile String targetLanguage = "en-US";
     private volatile OffsetDateTime lastPollAt = null;
@@ -111,7 +114,7 @@ public class AutoTranslationService {
                 + "    select count(*) from translation_tasks t "
                 + "    where t.post_id = p.id and lower(t.target_language) = :targetLanguageLower "
                 + "      and t.status = 'FAILED' "
-                + ") < 5 "
+                + ") < :maxAttempts "
                 + "order by p.updated_at desc, p.id desc limit :batchSize";
 
         @SuppressWarnings("unchecked")
@@ -119,6 +122,7 @@ public class AutoTranslationService {
                 .setParameter("targetLanguage", target)
                 .setParameter("targetLanguageLower", targetLower)
                 .setParameter("batchSize", BATCH_SIZE)
+                .setParameter("maxAttempts", retryPolicy.maxAttempts())
                 .getResultList();
 
         if (ids.isEmpty()) {
@@ -162,11 +166,12 @@ public class AutoTranslationService {
                     + "    select count(*) from translation_tasks t "
                     + "    where t.post_id = p.id and lower(t.target_language) = :targetLanguageLower "
                     + "      and t.status = 'FAILED' "
-                    + ") < 5";
+                    + ") < :maxAttempts";
 
             Number pendingNum = (Number) entityManager.createNativeQuery(countSql)
                     .setParameter("targetLanguage", target)
                     .setParameter("targetLanguageLower", targetLower)
+                    .setParameter("maxAttempts", retryPolicy.maxAttempts())
                     .getSingleResult();
             pending = pendingNum == null ? 0 : pendingNum.intValue();
 

@@ -12,7 +12,6 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,11 +21,11 @@ import java.util.Map;
 @ApplicationScoped
 public class AiArticleDraftRunService {
 
-    private static final Duration QUEUED_TIMEOUT = Duration.ofMinutes(10);
-    private static final Duration RUNNING_TIMEOUT = Duration.ofMinutes(30);
-
     @Inject
     Instance<AiArticleDraftRunService> self;
+
+    @Inject
+    AiRunLifecycle lifecycle;
 
     @Inject
     NodeRoleService nodeRoleService;
@@ -36,6 +35,7 @@ public class AiArticleDraftRunService {
                                       String repostPolicyCode, boolean regenerate, Long operatorId) {
         AiArticleDraftRun run = new AiArticleDraftRun();
         run.topicId = topicId;
+        run.status = AiRunLifecycle.QUEUED;
         run.providerId = providerId;
         run.language = language;
         run.instructions = instructions;
@@ -52,7 +52,7 @@ public class AiArticleDraftRunService {
     public void markStarted(Long runId) {
         AiArticleDraftRun run = AiArticleDraftRun.findById(runId);
         if (run == null) return;
-        run.status = "RUNNING";
+        run.status = AiRunLifecycle.RUNNING;
         run.startedAt = OffsetDateTime.now();
         run.persist();
     }
@@ -61,7 +61,7 @@ public class AiArticleDraftRunService {
     public void complete(Long runId, Long postId, String title, String summary) {
         AiArticleDraftRun run = AiArticleDraftRun.findById(runId);
         if (run == null) return;
-        run.status = "DRAFT_CREATED";
+        run.status = AiRunLifecycle.DRAFT_CREATED;
         run.postId = postId;
         run.title = truncate(title, 512);
         run.summary = summary;
@@ -74,7 +74,7 @@ public class AiArticleDraftRunService {
     public void fail(Long runId, String error) {
         AiArticleDraftRun run = AiArticleDraftRun.findById(runId);
         if (run == null) return;
-        run.status = "FAILED";
+        run.status = AiRunLifecycle.FAILED;
         run.errorMessage = error == null || error.isBlank() ? "未知错误" : truncate(error, 2000);
         run.completedAt = OffsetDateTime.now();
         run.persist();
@@ -85,7 +85,7 @@ public class AiArticleDraftRunService {
     public Map<String, Object> activeForTopic(Long topicId) {
         AiArticleDraftRun run = AiArticleDraftRun.find(
                 "topicId = ?1 and status in ?2 order by id desc",
-                topicId, List.of("QUEUED", "RUNNING")).firstResult();
+                topicId, lifecycle.activeStatuses()).firstResult();
         return run == null ? null : view(run);
     }
 
@@ -113,23 +113,9 @@ public class AiArticleDraftRunService {
     public int recoverStaleRuns() {
         OffsetDateTime now = OffsetDateTime.now();
         List<AiArticleDraftRun> stale = AiArticleDraftRun.<AiArticleDraftRun>find(
-                "status = ?1 or status = ?2", "QUEUED", "RUNNING").page(0, 100).list();
-        int recovered = 0;
-        for (AiArticleDraftRun run : stale) {
-            boolean queued = "QUEUED".equals(run.status);
-            OffsetDateTime anchor = run.startedAt == null ? run.createdAt : run.startedAt;
-            if (anchor == null) anchor = now;
-            Duration timeout = queued ? QUEUED_TIMEOUT : RUNNING_TIMEOUT;
-            if (anchor.plus(timeout).isAfter(now)) continue;
-            run.status = "FAILED";
-            run.errorMessage = queued
-                    ? "任务未被消费（服务重启或调度失败），请重新发起"
-                    : "任务超时，请重新发起";
-            run.completedAt = now;
-            run.persist();
-            recovered++;
-        }
-        return recovered;
+                "status = ?1 or status = ?2", AiRunLifecycle.QUEUED, AiRunLifecycle.RUNNING)
+                .page(0, 100).list();
+        return lifecycle.recoverStale(stale, AiRunKind.ARTICLE_DRAFT, now).size();
     }
 
     @Scheduled(every = "1m", identity = "ai-article-draft-recovery")

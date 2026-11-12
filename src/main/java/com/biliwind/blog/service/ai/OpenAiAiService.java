@@ -4,9 +4,10 @@ import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.model.AiProviderConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.subscription.MultiEmitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.net.URI;
@@ -32,12 +33,6 @@ public class OpenAiAiService implements AiService {
     private static final Logger LOG = Logger.getLogger(OpenAiAiService.class);
 
     @Inject
-    @ConfigProperty(name = "windblog.ai.timeout", defaultValue = "300S")
-    Duration timeout;
-
-    // 代理选择器及 HttpClient 实例转交由 AiHttpClientHelper 统一维护与缓存
-
-    @Inject
     ObjectMapper objectMapper;
 
     @Override
@@ -46,143 +41,203 @@ public class OpenAiAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<AiResult> summarize(AiProviderConfig config, Map<String, String> contentByLanguage) {
+    public CompletionStage<AiResult> complete(AiProviderConfig config, AiProviderRequest request) {
         if (!isConfigReady(config)) {
             return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置未就绪"));
         }
-
-        List<CompletableFuture<AiResult>> futures = new ArrayList<>();
-        for (Map.Entry<String, String> entry : contentByLanguage.entrySet()) {
-            String lang = entry.getKey();
-            String text = entry.getValue();
-            futures.add(callApiAsync(config, lang, text));
-        }
-
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> {
-                    AiResult finalResult = new AiResult();
-                    for (CompletableFuture<AiResult> f : futures) {
-                        try {
-                            AiResult res = f.join();
-                            for (Map.Entry<String, String> entry : res.contents.entrySet()) {
-                                finalResult.contents.put(entry.getKey(), entry.getValue());
-                            }
-                            finalResult.addUsage(res.inputTokens, res.outputTokens, res.totalTokens);
-                        } catch (Exception e) {
-                            LOG.error("获取 AI 结果失败", e);
-                        }
-                    }
-                    return finalResult;
-                });
-    }
-
-    @Override
-    public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
-            String targetLanguage, Map<String, String> fields, String promptTemplate) {
-        if (!isConfigReady(config)) {
-            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置未就绪"));
-        }
-
         try {
-            String prompt = TranslationPrompt.build(promptTemplate, sourceLanguage, targetLanguage,
-                    fields, objectMapper);
-            Map<String, Object> payload = buildPayload(config, prompt, false);
-            payload.put("response_format", Map.of("type", "json_object"));
-            String bodyJson = objectMapper.writeValueAsString(payload);
+            Map<String, Object> payload = basePayload(config, false);
+            List<Map<String, Object>> messages = new ArrayList<>();
+            if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+                messages.add(Map.of("role", "system", "content", request.systemPrompt()));
+            }
+            messages.add(Map.of("role", "user", "content",
+                    request.prompt() == null ? "" : request.prompt()));
+            payload.put("messages", messages);
+            if (request.jsonResponse()) {
+                payload.put("response_format", Map.of("type", "json_object"));
+            }
+
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(resolveUri(config))
-                    .timeout(timeout)
+                    .timeout(AiHttpClientHelper.getAiTimeout())
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-            AiHttpClientHelper.attachClientFeatureHeaders(builder, "translate");
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8));
+            AiHttpClientHelper.attachClientFeatureHeaders(builder, request.operation());
             attachApiKeyHeader(builder, config);
 
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
-                        if (response.statusCode() >= 400) {
-                            throw new RuntimeException("OpenAI 翻译调用失败，HTTP " + response.statusCode());
-                        }
-                        try {
-                            JsonNode root = objectMapper.readTree(response.body());
-                            String rawJson = cleanJsonText(extractTextFromResponse(root));
-                            JsonNode translated = objectMapper.readTree(rawJson);
-                            AiResult result = new AiResult();
-                            for (String field : fields.keySet()) {
-                                JsonNode value = translated.get(field);
-                                if (value == null || !value.isTextual()) {
-                                    throw new RuntimeException("AI 翻译结果缺少字段: " + field);
-                                }
-                                result.contents.put(field, value.asText());
-                            }
-                            if (root.has("usage")) {
-                                JsonNode usage = root.get("usage");
-                                int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
-                                int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
-                                int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
-                                result.addUsage(promptTokens, completionTokens, totalTokens);
-                            }
-                            return result;
-                        } catch (Exception e) {
-                            throw new RuntimeException("解析 OpenAI 翻译响应失败", e);
-                        }
-                    });
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    protected String cleanJsonText(String raw) {
-        if (raw == null) return "";
-        String text = raw.trim();
-        if (text.startsWith("```")) {
-            text = text.replaceFirst("^```[a-zA-Z]*\\s*", "").replaceFirst("\\s*```$", "").trim();
-        }
-        return text;
-    }
-
-    private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String lang, String text) {
-        try {
-            URI uri = resolveUri(config);
-            Map<String, Object> payload = buildPayload(config, buildPrompt(lang, text), false);
-            String bodyJson = objectMapper.writeValueAsString(payload);
-
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(timeout)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-
-            AiHttpClientHelper.attachClientFeatureHeaders(builder, "summarize");
-            attachApiKeyHeader(builder, config);
-
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    AiHttpClientHelper.boundedStringBodyHandler())
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper),
+                            builder.build(), AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             throw new RuntimeException("OpenAI 调用失败，HTTP " + response.statusCode());
                         }
                         try {
                             JsonNode root = objectMapper.readTree(response.body());
-                            AiResult res = new AiResult();
-                            res.contents.put(lang, extractTextFromResponse(root));
-
-                            // 提取 Token 消耗
-                            if (root.has("usage")) {
-                                JsonNode usage = root.get("usage");
-                                int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
-                                int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
-                                int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
-                                res.addUsage(promptTokens, completionTokens, totalTokens);
-                            }
-
-                            return res;
-                        } catch (Exception e) {
-                            throw new RuntimeException("解析 OpenAI 响应失败", e);
+                            AiResult result = new AiResult();
+                            result.contents.put("text", extractTextFromResponse(root));
+                            result.rawResponse = response.body();
+                            applyUsage(root, result);
+                            return result;
+                        } catch (Exception exception) {
+                            throw new RuntimeException("解析 OpenAI 响应失败", exception);
                         }
                     });
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
+        } catch (Exception exception) {
+            return CompletableFuture.failedFuture(exception);
         }
+    }
+
+    @Override
+    public Multi<String> stream(AiProviderConfig config, AiProviderRequest request) {
+        return Multi.createFrom().emitter(emitter -> {
+            if (!isConfigReady(config)) {
+                emitJson(emitter, "error", "OpenAI 配置未就绪");
+                emitter.complete();
+                return;
+            }
+            try {
+                Map<String, Object> payload = basePayload(config, request.stream());
+                List<Map<String, Object>> messages = new ArrayList<>();
+                if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+                    messages.add(Map.of("role", "system", "content", request.systemPrompt()));
+                }
+                if (!request.imageUrls().isEmpty()) {
+                    List<Map<String, Object>> contentList = new ArrayList<>();
+                    contentList.add(Map.of("type", "text", "text",
+                            request.prompt() == null ? "" : request.prompt()));
+                    for (String imageUrl : request.imageUrls()) {
+                        contentList.add(Map.of("type", "image_url",
+                                "image_url", Map.of("url", imageUrl)));
+                    }
+                    messages.add(Map.of("role", "user", "content", contentList));
+                } else {
+                    messages.add(Map.of("role", "user", "content",
+                            request.prompt() == null ? "" : request.prompt()));
+                }
+                payload.put("messages", messages);
+
+                HttpRequest.Builder builder = HttpRequest.newBuilder()
+                        .uri(resolveUri(config))
+                        .timeout(AiHttpClientHelper.getAiTimeout())
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(
+                                objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8));
+                AiHttpClientHelper.attachClientFeatureHeaders(builder, "test");
+                attachApiKeyHeader(builder, config);
+
+                if (request.stream()) {
+                    streamResponse(config, builder.build(), emitter);
+                } else {
+                    completeResponse(config, builder.build(), emitter);
+                }
+            } catch (Exception exception) {
+                emitJson(emitter, "error", "[请求发送异常]: " + safeError(exception));
+                emitter.complete();
+            }
+        });
+    }
+
+    private void streamResponse(AiProviderConfig config, HttpRequest request,
+                                MultiEmitter<? super String> emitter) {
+        AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
+                        HttpResponse.BodyHandlers.ofLines())
+                .whenComplete((response, error) -> {
+                    if (error != null) {
+                        emitJson(emitter, "error", "[接口调用超时或异常]: " + safeError(error));
+                        emitter.complete();
+                        return;
+                    }
+                    if (response.statusCode() >= 400) {
+                        String bodyText = "";
+                        try (java.util.stream.Stream<String> lines = response.body()) {
+                            AtomicInteger responseBytes = new AtomicInteger();
+                            StringBuilder builder = new StringBuilder();
+                            lines.forEach(line -> {
+                                AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
+                                builder.append(line).append("\n");
+                            });
+                            bodyText = builder.toString();
+                        } catch (Exception ignored) {
+                        }
+                        emitJson(emitter, "error", "[接口返回 HTTP " + response.statusCode() + "]: "
+                                + SensitiveMessageSanitizer.sanitize(bodyText));
+                        emitter.complete();
+                        return;
+                    }
+                    try (java.util.stream.Stream<String> lines = response.body()) {
+                        AtomicInteger responseBytes = new AtomicInteger();
+                        lines.forEach(line -> {
+                            AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
+                            if (!line.startsWith("data: ")) {
+                                return;
+                            }
+                            String data = line.substring(6).trim();
+                            if ("[DONE]".equals(data)) {
+                                return;
+                            }
+                            try {
+                                JsonNode root = objectMapper.readTree(data);
+                                JsonNode delta = root.path("choices").path(0).path("delta");
+                                if (!delta.isMissingNode()) {
+                                    emitJson(emitter, "reasoning", delta.path("reasoning_content").asText(""));
+                                    emitJson(emitter, "content", delta.path("content").asText(""));
+                                }
+                            } catch (Exception ignored) {
+                                // Ignore partial json
+                            }
+                        });
+                    } catch (Exception streamException) {
+                        emitJson(emitter, "error", "[接口流响应异常]: " + safeError(streamException));
+                    }
+                    emitter.complete();
+                });
+    }
+
+    private void completeResponse(AiProviderConfig config, HttpRequest request,
+                                  MultiEmitter<? super String> emitter) {
+        AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), request,
+                        AiHttpClientHelper.boundedStringBodyHandler())
+                .whenComplete((response, error) -> {
+                    if (error != null) {
+                        emitJson(emitter, "error", "[接口调用超时或异常]: " + safeError(error));
+                        emitter.complete();
+                        return;
+                    }
+                    if (response.statusCode() >= 400) {
+                        emitJson(emitter, "error", "[接口返回 HTTP " + response.statusCode() + "]");
+                        emitter.complete();
+                        return;
+                    }
+                    try {
+                        JsonNode root = objectMapper.readTree(response.body());
+                        emitJson(emitter, "content", extractTextFromResponse(root));
+                        emitter.complete();
+                    } catch (Exception exception) {
+                        emitJson(emitter, "error", "[解析响应异常]: " + safeError(exception));
+                        emitter.complete();
+                    }
+                });
+    }
+
+    private Map<String, Object> basePayload(AiProviderConfig config, boolean stream) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
+        payload.put("stream", stream);
+        payload.put("temperature", 0.3);
+        return payload;
+    }
+
+    private void applyUsage(JsonNode root, AiResult result) {
+        if (root == null || !root.has("usage")) {
+            return;
+        }
+        JsonNode usage = root.get("usage");
+        int promptTokens = usage.path("prompt_tokens").asInt(0);
+        int completionTokens = usage.path("completion_tokens").asInt(0);
+        int totalTokens = usage.path("total_tokens").asInt(promptTokens + completionTokens);
+        result.addUsage(promptTokens, completionTokens, totalTokens);
     }
 
     protected URI resolveUri(AiProviderConfig config) {
@@ -201,26 +256,13 @@ public class OpenAiAiService implements AiService {
         }
     }
 
-    protected Map<String, Object> buildPayload(AiProviderConfig config, String prompt, boolean stream) {
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
-        payload.put("messages", List.of(Map.of("role", "user", "content", prompt)));
-        payload.put("stream", stream);
-        payload.put("temperature", 0.3);
-        return payload;
-    }
-
     protected String chooseModel(AiProviderConfig config, String defaultModel) {
         return (config.model == null || config.model.isBlank()) ? defaultModel : config.model;
     }
 
-    private String buildPrompt(String lang, String text) {
-        String languageHint = (lang == null || lang.isBlank()) ? "中文" : lang;
-        return "请用" + languageHint + "简洁地总结以下内容，控制在 120 字以内：\n" + (text == null ? "" : text);
-    }
-
     private String extractTextFromResponse(JsonNode root) {
-        if (root.has("choices") && root.get("choices").isArray() && root.get("choices").size() > 0) {
+        if (root != null && root.has("choices") && root.get("choices").isArray()
+                && !root.get("choices").isEmpty()) {
             JsonNode message = root.get("choices").get(0).get("message");
             if (message != null && message.has("content")) {
                 return message.get("content").asText("");
@@ -233,67 +275,10 @@ public class OpenAiAiService implements AiService {
         return config != null && config.enabled && config.apiKey != null && !config.apiKey.isBlank();
     }
 
-    @Override
-    public CompletionStage<AiResult> moderate(AiProviderConfig config, String prompt, String content) {
-        if (!isConfigReady(config)) {
-            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置未就绪"));
+    private void emitJson(MultiEmitter<? super String> emitter, String type, String content) {
+        if (content == null || content.isEmpty()) {
+            return;
         }
-
-        String finalPrompt = prompt.replace("{{content}}", content != null ? content : "");
-        if (!prompt.contains("{{content}}")) {
-            finalPrompt = prompt + "\n\n内容如下：\n" + content;
-        }
-
-        try {
-            URI uri = resolveUri(config);
-            Map<String, Object> payload = buildPayload(config, finalPrompt, false);
-            payload.put("response_format", Map.of("type", "json_object")); // 强制 JSON 输出
-            String bodyJson = objectMapper.writeValueAsString(payload);
-
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(timeout)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-
-            AiHttpClientHelper.attachClientFeatureHeaders(builder, "moderate");
-            attachApiKeyHeader(builder, config);
-
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    AiHttpClientHelper.boundedStringBodyHandler())
-                    .thenApply(response -> {
-                        if (response.statusCode() >= 400) {
-                            throw new RuntimeException("OpenAI 审核调用失败，HTTP " + response.statusCode());
-                        }
-                        try {
-                            JsonNode root = objectMapper.readTree(response.body());
-                            String resultText = cleanJsonText(extractTextFromResponse(root));
-                            JsonNode resultJson = objectMapper.readTree(resultText);
-
-                            AiResult res = AiModerationResultParser.parse(resultJson, response.body());
-
-                            // 提取 Token 消耗
-                            if (root.has("usage")) {
-                                JsonNode usage = root.get("usage");
-                                int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
-                                int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
-                                int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
-                                res.addUsage(promptTokens, completionTokens, totalTokens);
-                            }
-
-                            return res;
-                        } catch (Exception e) {
-                            LOG.error("解析 OpenAI 审核响应失败: "
-                                    + SensitiveMessageSanitizer.sanitize(response.body()), e);
-                            throw new IllegalStateException("解析 OpenAI 审核响应失败", e);
-                        }
-                    });
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    protected void emitJson(io.smallrye.mutiny.subscription.MultiEmitter<? super String> emitter, String type, String content) {
         try {
             Map<String, String> payload = new HashMap<>();
             payload.put("type", type);
@@ -303,210 +288,11 @@ public class OpenAiAiService implements AiService {
         }
     }
 
-    @Override
-    public io.smallrye.mutiny.Multi<String> testStream(AiProviderConfig config, com.biliwind.blog.controller.api.admin.dto.AiTestRequest request) {
-        return io.smallrye.mutiny.Multi.createFrom().emitter(emitter -> {
-            try {
-                URI uri = resolveUri(config);
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
-                payload.put("stream", request.stream());
-                
-                List<Map<String, Object>> messages = new ArrayList<>();
-                if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
-                    messages.add(Map.of("role", "system", "content", request.systemPrompt()));
-                }
-
-                if (request.imageUrls() != null && !request.imageUrls().isEmpty()) {
-                    List<Map<String, Object>> contentList = new ArrayList<>();
-                    contentList.add(Map.of("type", "text", "text", request.prompt()));
-                    for (String imgUrl : request.imageUrls()) {
-                        contentList.add(Map.of("type", "image_url", "image_url", Map.of("url", imgUrl)));
-                    }
-                    messages.add(Map.of("role", "user", "content", contentList));
-                } else {
-                    messages.add(Map.of("role", "user", "content", request.prompt()));
-                }
-                payload.put("messages", messages);
-
-                String bodyJson = objectMapper.writeValueAsString(payload);
-                HttpRequest.Builder builder = HttpRequest.newBuilder()
-                        .uri(uri)
-                        .timeout(timeout)
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-                AiHttpClientHelper.attachClientFeatureHeaders(builder, "test");
-                attachApiKeyHeader(builder, config);
-
-                if (request.stream()) {
-                    AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                            HttpResponse.BodyHandlers.ofLines())
-                        .whenComplete((res, err) -> {
-                            if (err != null) {
-                                emitJson(emitter, "error", "[接口调用超时或异常]: " + safeError(err));
-                                emitter.complete();
-                                return;
-                            }
-                            if (res.statusCode() >= 400) {
-                                String bodyText = "";
-                                try (java.util.stream.Stream<String> lines = res.body()) {
-                                    AtomicInteger responseBytes = new AtomicInteger();
-                                    StringBuilder sb = new StringBuilder();
-                                    lines.forEach(line -> {
-                                        AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
-                                        sb.append(line).append("\n");
-                                    });
-                                    bodyText = sb.toString();
-                                } catch (Exception ignored) {
-                                }
-                                emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]: "
-                                        + SensitiveMessageSanitizer.sanitize(bodyText));
-                                emitter.complete();
-                                return;
-                            }
-                            try (java.util.stream.Stream<String> lines = res.body()) {
-                                AtomicInteger responseBytes = new AtomicInteger();
-                                lines.forEach(line -> {
-                                    AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, line);
-                                    if (line.startsWith("data: ")) {
-                                        String data = line.substring(6).trim();
-                                        if ("[DONE]".equals(data)) {
-                                            return;
-                                        }
-                                        try {
-                                            JsonNode root = objectMapper.readTree(data);
-                                            if (root.has("choices") && root.get("choices").isArray() && root.get("choices").size() > 0) {
-                                                JsonNode delta = root.get("choices").get(0).get("delta");
-                                                if (delta != null) {
-                                                    if (delta.has("reasoning_content")) {
-                                                        String reasoning = delta.get("reasoning_content").asText("");
-                                                        if (!reasoning.isEmpty()) {
-                                                            emitJson(emitter, "reasoning", reasoning);
-                                                        }
-                                                    }
-                                                    if (delta.has("content")) {
-                                                        String content = delta.get("content").asText("");
-                                                        if (!content.isEmpty()) {
-                                                            emitJson(emitter, "content", content);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        } catch (Exception ex) {
-                                            // Ignore partial json
-                                        }
-                                    }
-                                });
-                            } catch (Exception streamException) {
-                                emitJson(emitter, "error", "[接口流响应异常]: " + safeError(streamException));
-                            }
-                            emitter.complete();
-                        });
-                } else {
-                    AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                            AiHttpClientHelper.boundedStringBodyHandler())
-                            .whenComplete((res, err) -> {
-                                if (err != null) {
-                                    emitJson(emitter, "error", "[接口调用超时或异常]: " + safeError(err));
-                                    emitter.complete();
-                                    return;
-                                }
-                                if (res.statusCode() >= 400) {
-                                    emitJson(emitter, "error", "[接口返回 HTTP " + res.statusCode() + "]");
-                                    emitter.complete();
-                                    return;
-                                }
-                                try {
-                                    JsonNode root = objectMapper.readTree(res.body());
-                                    String text = extractTextFromResponse(root);
-                                    emitJson(emitter, "content", text);
-                                    emitter.complete();
-                                } catch (Exception e) {
-                                    emitJson(emitter, "error", "[解析响应异常]: " + safeError(e));
-                                    emitter.complete();
-                                }
-                            });
-                }
-            } catch (Exception e) {
-                emitJson(emitter, "error", "[请求发送异常]: " + safeError(e));
-                emitter.complete();
-            }
-        });
-    }
-
     private String safeError(Throwable throwable) {
         if (throwable == null) {
             return "未知错误";
         }
         return SensitiveMessageSanitizer.sanitize(throwable.getMessage());
-    }
-
-    @Override
-    public CompletionStage<AiResult> complete(AiProviderConfig config, String operation,
-                                              String systemPrompt, String prompt) {
-        if (!isConfigReady(config)) {
-            return CompletableFuture.failedFuture(new RuntimeException("OpenAI 配置未就绪"));
-        }
-        String op = (operation == null || operation.isBlank()) ? "assistant" : operation.trim();
-        try {
-            URI uri = resolveUri(config);
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("model", chooseModel(config, "gpt-3.5-turbo"));
-            payload.put("stream", false);
-
-            List<Map<String, Object>> messages = new ArrayList<>();
-            if (systemPrompt != null && !systemPrompt.isBlank()) {
-                messages.add(Map.of("role", "system", "content", systemPrompt));
-            }
-            messages.add(Map.of("role", "user", "content", prompt));
-            payload.put("messages", messages);
-
-            String bodyJson = objectMapper.writeValueAsString(payload);
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(timeout)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson, StandardCharsets.UTF_8));
-            AiHttpClientHelper.attachClientFeatureHeaders(builder, op);
-            attachApiKeyHeader(builder, config);
-
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    AiHttpClientHelper.boundedStringBodyHandler()).thenApply(response -> {
-                if (response.statusCode() >= 400) {
-                    throw new RuntimeException("OpenAI 调用失败，HTTP " + response.statusCode());
-                }
-                try {
-                    JsonNode root = objectMapper.readTree(response.body());
-                    String text = extractTextFromResponse(root);
-                    if (text.isBlank()) {
-                        throw new IllegalStateException("AI 提供商未返回写作结果");
-                    }
-                    AiResult res = new AiResult();
-                    res.contents.put("text", text);
-                    if (config != null) {
-                        res.modelId = (config.model != null && !config.model.isBlank()) ? config.model : config.name;
-                        res.provider = config.provider;
-                    }
-                    if (root.has("usage")) {
-                        JsonNode usage = root.get("usage");
-                        int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
-                        int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
-                        int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0;
-                        res.addUsage(promptTokens, completionTokens, totalTokens);
-                    }
-                    return res;
-                } catch (Exception e) {
-                    throw new RuntimeException("解析 OpenAI 响应失败", e);
-                }
-            });
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    @Override
-    public CompletionStage<AiResult> complete(AiProviderConfig config, String systemPrompt, String prompt) {
-        return complete(config, "assistant", systemPrompt, prompt);
     }
 
     @Override
@@ -521,7 +307,6 @@ public class OpenAiAiService implements AiService {
             } else if (endpoint.endsWith("/chat/completions/")) {
                 endpoint = endpoint.substring(0, endpoint.length() - "/chat/completions/".length());
             }
-
             if (!endpoint.endsWith("/")) {
                 endpoint = endpoint + "/";
             }
@@ -532,11 +317,10 @@ public class OpenAiAiService implements AiService {
                     .timeout(Duration.ofSeconds(30))
                     .header("Accept", "application/json")
                     .GET();
-
             attachApiKeyHeader(builder, config);
 
-            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper), builder.build(),
-                    AiHttpClientHelper.boundedStringBodyHandler())
+            return AiHttpClientHelper.sendAsync(AiHttpClientHelper.getClient(config, objectMapper),
+                            builder.build(), AiHttpClientHelper.boundedStringBodyHandler())
                     .thenApply(response -> {
                         if (response.statusCode() >= 400) {
                             LOG.warn("获取 OpenAI 模型列表失败，HTTP " + response.statusCode());
@@ -554,13 +338,13 @@ public class OpenAiAiService implements AiService {
                             }
                             models.sort(String::compareToIgnoreCase);
                             return models;
-                        } catch (Exception e) {
-                            LOG.error("解析 OpenAI 模型列表失败", e);
+                        } catch (Exception exception) {
+                            LOG.error("解析 OpenAI 模型列表失败", exception);
                             return List.of();
                         }
                     });
-        } catch (Exception e) {
-            LOG.error("获取 OpenAI 模型列表请求异常", e);
+        } catch (Exception exception) {
+            LOG.error("获取 OpenAI 模型列表请求异常", exception);
             return CompletableFuture.completedFuture(List.of());
         }
     }

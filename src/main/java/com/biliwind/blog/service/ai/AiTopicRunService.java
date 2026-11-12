@@ -13,7 +13,6 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,12 +22,11 @@ import java.util.Map;
 @ApplicationScoped
 public class AiTopicRunService {
 
-    /** A discovery run that never reached the provider is stale much sooner than a running one. */
-    private static final Duration QUEUED_TIMEOUT = Duration.ofMinutes(10);
-    private static final Duration RUNNING_TIMEOUT = Duration.ofMinutes(30);
-
     @Inject
     Instance<AiTopicRunService> self;
+
+    @Inject
+    AiRunLifecycle lifecycle;
 
     @Inject
     NodeRoleService nodeRoleService;
@@ -43,6 +41,7 @@ public class AiTopicRunService {
         run.providerId = providerId;
         run.seedCount = seedCount;
         run.traceId = traceId;
+        run.status = AiRunLifecycle.QUEUED;
         run.createdAt = OffsetDateTime.now();
         run.persist();
         run.flush();
@@ -53,7 +52,7 @@ public class AiTopicRunService {
     public void markStarted(Long runId) {
         AiTopicPoolRun run = AiTopicPoolRun.findById(runId);
         if (run == null) return;
-        run.status = "RUNNING";
+        run.status = AiRunLifecycle.RUNNING;
         run.startedAt = OffsetDateTime.now();
         run.persist();
     }
@@ -63,7 +62,7 @@ public class AiTopicRunService {
         AiTopicPoolRun run = AiTopicPoolRun.findById(runId);
         if (run == null) return;
         OffsetDateTime now = OffsetDateTime.now();
-        run.status = "SUCCEEDED";
+        run.status = AiRunLifecycle.SUCCEEDED;
         run.topicCount = topicCount;
         run.errorMessage = null;
         run.completedAt = now;
@@ -83,7 +82,7 @@ public class AiTopicRunService {
         AiTopicPoolRun run = AiTopicPoolRun.findById(runId);
         if (run == null) return;
         OffsetDateTime now = OffsetDateTime.now();
-        run.status = "FAILED";
+        run.status = AiRunLifecycle.FAILED;
         run.errorMessage = error == null || error.isBlank() ? "未知错误" : truncate(error, 2000);
         run.completedAt = now;
         run.persist();
@@ -100,7 +99,7 @@ public class AiTopicRunService {
     @Transactional
     public Map<String, Object> activeRun() {
         AiTopicPoolRun run = AiTopicPoolRun.find(
-                "status in ?1 order by id desc", List.of("QUEUED", "RUNNING")).firstResult();
+                "status in ?1 order by id desc", lifecycle.activeStatuses()).firstResult();
         return run == null ? null : view(run);
     }
 
@@ -113,20 +112,10 @@ public class AiTopicRunService {
     public int recoverStaleRuns() {
         OffsetDateTime now = OffsetDateTime.now();
         List<AiTopicPoolRun> stale = AiTopicPoolRun.<AiTopicPoolRun>find(
-                "status = ?1 or status = ?2", "QUEUED", "RUNNING").page(0, 100).list();
-        int recovered = 0;
-        for (AiTopicPoolRun run : stale) {
-            boolean queued = "QUEUED".equals(run.status);
-            OffsetDateTime anchor = run.startedAt == null ? run.createdAt : run.startedAt;
-            if (anchor == null) anchor = now;
-            Duration timeout = queued ? QUEUED_TIMEOUT : RUNNING_TIMEOUT;
-            if (anchor.plus(timeout).isAfter(now)) continue;
-            run.status = "FAILED";
-            run.errorMessage = queued
-                    ? "任务未被消费（服务重启或调度失败），请重新发起"
-                    : "任务超时，请重新发起";
-            run.completedAt = now;
-            run.persist();
+                "status = ?1 or status = ?2", AiRunLifecycle.QUEUED, AiRunLifecycle.RUNNING)
+                .page(0, 100).list();
+        List<AiTopicPoolRun> recovered = lifecycle.recoverStale(stale, AiRunKind.TOPIC_DISCOVERY, now);
+        for (AiTopicPoolRun run : recovered) {
             AiTopicPoolSettings settings = AiTopicPoolSettings.findById(1L);
             if (settings != null) {
                 settings.lastRunAt = now;
@@ -134,9 +123,8 @@ public class AiTopicRunService {
                 settings.updatedAt = now;
                 settings.persist();
             }
-            recovered++;
         }
-        return recovered;
+        return recovered.size();
     }
 
     @Scheduled(every = "1m", identity = "ai-topic-run-recovery")

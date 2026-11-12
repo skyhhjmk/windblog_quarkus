@@ -212,7 +212,7 @@ public class AdminPostApiController {
         try {
             return aiManager.generateSlug(title)
                     .toCompletableFuture()
-                    .get(8, java.util.concurrent.TimeUnit.SECONDS);
+                    .join();
         } catch (Exception e) {
             return com.biliwind.blog.common.helper.SlugHelper.slugify(title);
         }

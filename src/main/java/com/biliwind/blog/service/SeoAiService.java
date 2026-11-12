@@ -2,12 +2,10 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.service.ai.*;
-import com.biliwind.blog.controller.api.admin.dto.AiTestRequest;
 import com.fasterxml.jackson.databind.*;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
-import java.time.Duration;
 import java.util.*;
 
 @ApplicationScoped
@@ -30,7 +28,7 @@ public class SeoAiService {
         String prompt = "请优化以下文章的搜索标题、描述和关键词：\n<article>" + text + "</article>";
         auditLog.log("post", post.id, "seo_ai_suggest", null, Map.of("providerId", config.id, "language", language));
         StringBuilder output = new StringBuilder();
-        ai.testStream(config, new AiTestRequest(prompt, system, false, List.of(), false))
+        ai.testStream(config, AiCallRequest.testStream(prompt, system, List.of(), false))
                 .onItem().invoke(chunk -> {
                     try {
                         JsonNode node = mapper.readTree(chunk);
@@ -41,7 +39,7 @@ public class SeoAiService {
                         else output.append(node.path("content").asText(node.path("text").asText("")));
                         if (output.length() > 32000) throw new WebApplicationException("AI 返回内容过长", 502);
                     } catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new WebApplicationException("AI 响应格式无效", 502); }
-                }).collect().asList().await().atMost(Duration.ofSeconds(90));
+                }).collect().asList().await().atMost(AiHttpClientHelper.getAiTimeout());
         String raw = output.toString().trim().replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
         try {
             JsonNode result = mapper.readTree(raw);

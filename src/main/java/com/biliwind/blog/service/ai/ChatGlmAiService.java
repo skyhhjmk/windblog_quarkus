@@ -15,11 +15,10 @@ import ai.z.openapi.service.model.ModelData;
 import ai.z.openapi.service.model.PromptTokensDetails;
 import ai.z.openapi.service.model.ResponseFormat;
 import ai.z.openapi.service.model.ToolCalls;
+import ai.z.openapi.service.model.Usage;
 import ai.z.openapi.service.model.ZAiError;
 import ai.z.openapi.service.model.ZAiHttpException;
-import ai.z.openapi.service.model.Usage;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
-import com.biliwind.blog.controller.api.admin.dto.AiTestRequest;
 import com.biliwind.blog.model.AiProviderConfig;
 import com.biliwind.blog.service.security.ExternalHttpEndpointPolicy;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,7 +34,6 @@ import org.jboss.logging.Logger;
 
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -84,106 +82,26 @@ public class ChatGlmAiService implements AiService {
     }
 
     @Override
-    public CompletionStage<AiResult> summarize(AiProviderConfig config,
-            Map<String, String> contentByLanguage) {
+    public CompletionStage<AiResult> complete(AiProviderConfig config, AiProviderRequest request) {
         if (!isConfigReady(config)) {
             return CompletableFuture.failedFuture(new IllegalStateException("ChatGLM 配置未就绪"));
         }
-
-        List<CompletableFuture<AiResult>> futures = new ArrayList<>();
-        for (Map.Entry<String, String> entry : contentByLanguage.entrySet()) {
-            futures.add(callApiAsync(config, entry.getKey(), entry.getValue()));
-        }
-
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(ignored -> {
-                    AiResult result = new AiResult();
-                    for (CompletableFuture<AiResult> future : futures) {
-                        AiResult languageResult = future.join();
-                        result.contents.putAll(languageResult.contents);
-                        result.addUsage(languageResult.inputTokens, languageResult.outputTokens,
-                                languageResult.totalTokens);
-                    }
-                    return result;
-                });
-    }
-
-    @Override
-    public CompletionStage<AiResult> translate(AiProviderConfig config, String sourceLanguage,
-            String targetLanguage, Map<String, String> fields, String promptTemplate) {
-        if (!isConfigReady(config)) {
-            return CompletableFuture.failedFuture(new IllegalStateException("ChatGLM 配置未就绪"));
-        }
-
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String prompt = TranslationPrompt.build(promptTemplate, sourceLanguage, targetLanguage,
-                        fields, objectMapper);
-                ModelData data = complete(config, List.of(userMessage(prompt)), false, true);
-                JsonNode translated = objectMapper.readTree(extractText(data));
-
+                ModelData data = chat(config, messages(request), false, request.jsonResponse());
                 AiResult result = new AiResult();
-                for (String field : fields.keySet()) {
-                    JsonNode value = translated.get(field);
-                    if (value == null || !value.isTextual()) {
-                        throw new IllegalStateException("AI 翻译结果缺少字段: " + field);
-                    }
-                    result.contents.put(field, value.asText());
-                }
+                result.contents.put("text", extractText(data));
+                result.rawResponse = objectMapper.writeValueAsString(data);
                 addUsage(data, result);
                 return result;
             } catch (Exception exception) {
-                throw asCompletionException("ChatGLM 翻译调用失败", exception);
-            }
-        });
-    }
-
-    private CompletableFuture<AiResult> callApiAsync(AiProviderConfig config, String language,
-            String text) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                ModelData data = complete(config, List.of(userMessage(buildPrompt(language, text))), false, false);
-                AiResult result = new AiResult();
-                result.contents.put(language, extractText(data));
-                addUsage(data, result);
-                return result;
-            } catch (Exception exception) {
-                throw asCompletionException("ChatGLM 摘要调用失败", exception);
+                throw asCompletionException("ChatGLM 调用失败", exception);
             }
         });
     }
 
     @Override
-    public CompletionStage<AiResult> moderate(AiProviderConfig config, String prompt, String content) {
-        if (!isConfigReady(config)) {
-            return CompletableFuture.failedFuture(new IllegalStateException("ChatGLM 配置未就绪"));
-        }
-
-        String sourcePrompt = prompt == null ? "" : prompt;
-        String finalPrompt = sourcePrompt.replace("{{content}}", content == null ? "" : content);
-        if (!sourcePrompt.contains("{{content}}")) {
-            finalPrompt = sourcePrompt + "\n\n内容如下：\n" + (content == null ? "" : content);
-        }
-        String moderationPrompt = finalPrompt;
-
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                ModelData data = complete(config, List.of(userMessage(moderationPrompt)), false, true);
-                String responseText = extractText(data);
-                JsonNode decision = objectMapper.readTree(responseText);
-                AiResult result = AiModerationResultParser.parse(decision,
-                        objectMapper.writeValueAsString(data));
-                addUsage(data, result);
-                return result;
-            } catch (Exception exception) {
-                LOG.error("解析 ChatGLM 审核响应失败", exception);
-                throw asCompletionException("ChatGLM 审核调用失败", exception);
-            }
-        });
-    }
-
-    @Override
-    public Multi<String> testStream(AiProviderConfig config, AiTestRequest request) {
+    public Multi<String> stream(AiProviderConfig config, AiProviderRequest request) {
         return Multi.createFrom().emitter(emitter -> {
             AtomicBoolean terminated = new AtomicBoolean();
             AtomicInteger responseBytes = new AtomicInteger();
@@ -204,12 +122,7 @@ public class ChatGlmAiService implements AiService {
                 return;
             }
 
-            List<ChatMessage> messages = new ArrayList<>();
-            if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
-                messages.add(message(ChatMessageRole.SYSTEM, request.systemPrompt()));
-            }
-            messages.add(userMessage(request.prompt()));
-
+            List<ChatMessage> messages = messages(request);
             String baseUrl;
             try {
                 baseUrl = resolveBaseUrl(config);
@@ -218,7 +131,7 @@ public class ChatGlmAiService implements AiService {
                 return;
             }
 
-            LOG.infof("开始 ChatGLM SDK 连通性测试, stream: %b, endpoint: %s", request.stream(), baseUrl);
+            LOG.infof("开始 ChatGLM SDK 调用, stream: %b, endpoint: %s", request.stream(), baseUrl);
             CompletableFuture.supplyAsync(() -> {
                 ZhipuAiClient client = createClient(config, baseUrl);
                 try {
@@ -233,7 +146,7 @@ public class ChatGlmAiService implements AiService {
                 if (error != null) {
                     if (!terminated.get()) {
                         Throwable cause = unwrap(error);
-                        LOG.error("ChatGLM SDK 连通性测试失败", cause);
+                        LOG.error("ChatGLM SDK 调用失败", cause);
                         emitTestError(emitter, responseBytes, cause);
                     }
                     return;
@@ -246,11 +159,6 @@ public class ChatGlmAiService implements AiService {
                 }
 
                 ChatCompletionResponse response = call.response();
-                if (request.stream()) {
-                    LOG.info("ChatGLM SDK 测试流已初始化");
-                } else {
-                    LOG.infof("ChatGLM SDK 测试响应状态码: %d", response.getCode());
-                }
                 if (!response.isSuccess()) {
                     closeClient(clientRef.getAndSet(null));
                     emitTestError(emitter, responseBytes, new IllegalStateException("API 调用失败: "
@@ -268,14 +176,14 @@ public class ChatGlmAiService implements AiService {
                     Disposable disposable = response.getFlowable().subscribe(
                             data -> emitStreamData(data, responseBytes, emitter),
                             streamError -> {
-                                LOG.error("ChatGLM SDK 测试流请求失败", streamError);
+                                LOG.error("ChatGLM SDK 流式调用失败", streamError);
                                 closeClient(clientRef.getAndSet(null));
                                 if (!terminated.get()) {
                                     emitTestError(emitter, responseBytes, streamError);
                                 }
                             },
                             () -> {
-                                LOG.info("ChatGLM SDK 测试流结束");
+                                LOG.info("ChatGLM SDK 流结束");
                                 closeClient(clientRef.getAndSet(null));
                                 if (!terminated.get()) {
                                     emitter.complete();
@@ -302,6 +210,19 @@ public class ChatGlmAiService implements AiService {
         });
     }
 
+    private List<ChatMessage> messages(AiProviderRequest request) {
+        List<ChatMessage> messages = new ArrayList<>();
+        if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+            messages.add(message(ChatMessageRole.SYSTEM, request.systemPrompt()));
+        }
+        String prompt = request.prompt() == null ? "" : request.prompt();
+        if (!request.imageUrls().isEmpty()) {
+            prompt = prompt + "\n[Images: " + String.join(", ", request.imageUrls()) + "]";
+        }
+        messages.add(userMessage(prompt));
+        return messages;
+    }
+
     private void emitTestError(MultiEmitter<? super String> emitter, AtomicInteger responseBytes,
             Throwable error) {
         Throwable cause = unwrap(error);
@@ -320,19 +241,19 @@ public class ChatGlmAiService implements AiService {
             if (detail == null || detail.isBlank()) {
                 detail = cause.getClass().getSimpleName();
             }
-            message = "ChatGLM 测试失败: " + SensitiveMessageSanitizer.sanitize(detail);
+            message = "ChatGLM 调用失败: " + SensitiveMessageSanitizer.sanitize(detail);
         }
 
         try {
             emitter.emit(encodeChunk("error", message, responseBytes));
             emitter.complete();
         } catch (Exception emitError) {
-            LOG.error("发送 ChatGLM 测试错误事件失败", emitError);
+            LOG.error("发送 ChatGLM 错误事件失败", emitError);
             emitter.fail(emitError);
         }
     }
 
-    private ModelData complete(AiProviderConfig config, List<ChatMessage> messages,
+    private ModelData chat(AiProviderConfig config, List<ChatMessage> messages,
             boolean stream, boolean jsonObject) {
         String baseUrl = resolveBaseUrl(config);
         ZhipuAiClient client = createClient(config, baseUrl);
@@ -361,11 +282,12 @@ public class ChatGlmAiService implements AiService {
 
     private ZhipuAiClient createClient(AiProviderConfig config, String baseUrl) {
         ensureProxySupported(config);
+        int timeoutSeconds = (int) Math.max(1, AiHttpClientHelper.getAiTimeout().toSeconds());
         return ZhipuAiClient.builder()
                 .ofZHIPU()
                 .apiKey(config.apiKey.trim())
                 .baseUrl(baseUrl)
-                .networkConfig(600, 60, 300, 60, TimeUnit.SECONDS)
+                .networkConfig(timeoutSeconds, 60, timeoutSeconds, 60, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -461,14 +383,9 @@ public class ChatGlmAiService implements AiService {
     private void addUsage(ModelData data, AiResult result) {
         Usage usage = data == null ? null : data.getUsage();
         if (usage != null) {
-            result.addUsage(usage.getPromptTokens(), usage.getCompletionTokens(), usage.getTotalTokens());
+            result.addUsage(usage.getPromptTokens(), usage.getCompletionTokens(),
+                    usage.getTotalTokens());
         }
-    }
-
-    private String buildPrompt(String language, String text) {
-        String languageHint = language == null || language.isBlank() ? "中文" : language;
-        return "请用" + languageHint + "简洁地总结以下内容，控制在 120 字以内：\n"
-                + (text == null ? "" : text);
     }
 
     private ChatMessage userMessage(String content) {
@@ -496,6 +413,9 @@ public class ChatGlmAiService implements AiService {
 
     private void emitContent(String content, AtomicInteger responseBytes,
             MultiEmitter<? super String> emitter) throws Exception {
+        if (content == null || content.isEmpty()) {
+            return;
+        }
         emitter.emit(encodeChunk("content", content, responseBytes));
     }
 
@@ -511,7 +431,8 @@ public class ChatGlmAiService implements AiService {
         }
     }
 
-    private String encodeChunk(String type, String content, AtomicInteger responseBytes) throws Exception {
+    private String encodeChunk(String type, String content, AtomicInteger responseBytes)
+            throws Exception {
         String encoded = objectMapper.writeValueAsString(Map.of("type", type, "content", content));
         AiHttpClientHelper.consumeStreamingResponseBudget(responseBytes, encoded);
         return encoded;

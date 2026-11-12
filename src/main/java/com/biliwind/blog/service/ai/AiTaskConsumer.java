@@ -14,24 +14,19 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @ApplicationScoped
 public class AiTaskConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(AiTaskConsumer.class);
     private static final String MQ_TAG = "[MQ]";
-    private static final int DEFAULT_MAX_RETRIES = 3;
-    private static final Duration DEFAULT_TASK_TIMEOUT = Duration.ofSeconds(300);
 
     @Inject
-    @ConfigProperty(name = "windblog.ai.task.timeout", defaultValue = "300S")
-    Duration taskTimeout;
+    AiRetryPolicy retryPolicy;
 
     @Inject
     com.biliwind.blog.service.ReliableAiTaskService reliableAiTaskService;
@@ -56,21 +51,12 @@ public class AiTaskConsumer {
     }
 
     private long taskTimeoutSeconds() {
-        return taskTimeout == null ? DEFAULT_TASK_TIMEOUT.toSeconds() : Math.max(10, taskTimeout.toSeconds());
+        return Math.max(10, AiHttpClientHelper.getAiTimeout().toSeconds());
     }
 
     private int getMaxRetries() {
         if (maxRetries == 0) {
-            String envValue = System.getenv("AI_SUMMARY_MAX_RETRIES");
-            if (envValue != null && !envValue.isBlank()) {
-                try {
-                    maxRetries = Integer.parseInt(envValue.trim());
-                } catch (NumberFormatException e) {
-                    maxRetries = DEFAULT_MAX_RETRIES;
-                }
-            } else {
-                maxRetries = DEFAULT_MAX_RETRIES;
-            }
+            maxRetries = retryPolicy.maxAttempts();
         }
         return maxRetries;
     }

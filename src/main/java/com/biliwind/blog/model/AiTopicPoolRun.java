@@ -1,5 +1,6 @@
 package com.biliwind.blog.model;
 
+import com.biliwind.blog.service.ai.AiRunRecord;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,7 +14,7 @@ import java.time.OffsetDateTime;
 /** Asynchronous topic discovery run for the WindBlog-owned topic pool. */
 @Entity
 @Table(name = "ai_topic_pool_runs")
-public class AiTopicPoolRun extends PanacheEntityBase {
+public class AiTopicPoolRun extends PanacheEntityBase implements AiRunRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
@@ -47,4 +48,31 @@ public class AiTopicPoolRun extends PanacheEntityBase {
 
     @Column(name = "completed_at")
     public OffsetDateTime completedAt;
+
+    @Override
+    public String runStatus() {
+        return status;
+    }
+
+    @Override
+    public OffsetDateTime runCreatedAt() {
+        return createdAt;
+    }
+
+    @Override
+    public OffsetDateTime runStartedAt() {
+        return startedAt;
+    }
+
+    @Override
+    public void markRunFailed(String message, OffsetDateTime now) {
+        status = "FAILED";
+        errorMessage = message;
+        completedAt = now;
+    }
+
+    @Override
+    public void persistRun() {
+        persist();
+    }
 }

@@ -176,7 +176,6 @@ public class UserPostSubmissionController {
 
     @POST
     @Path("/translate")
-    @Transactional
     @Blocking
     @Operation(summary = "前台用户使用 AI 翻译文章内容")
     public Response translate(PostTranslationRequest request, @Context HttpHeaders headers) {
