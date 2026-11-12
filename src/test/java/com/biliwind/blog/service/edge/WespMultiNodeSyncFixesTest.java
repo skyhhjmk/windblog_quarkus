@@ -14,6 +14,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusTestProfile;
+import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -30,7 +32,21 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
+@TestProfile(WespMultiNodeSyncFixesTest.SigningProfile.class)
 class WespMultiNodeSyncFixesTest {
+
+    /**
+     * WESP signs operations with the configured token. Supplying a test-only
+     * token here keeps the signature assertions independent of the untracked
+     * .env (worktrees do not inherit it).
+     */
+    public static class SigningProfile implements QuarkusTestProfile {
+        @Override
+        public Map<String, String> getConfigOverrides() {
+            return Map.of("windblog.wesp.auth-token",
+                    "test-wesp-auth-token-0123456789abcdef0123456789abcdef");
+        }
+    }
 
     @Inject
     WespSyncService wespSyncService;
