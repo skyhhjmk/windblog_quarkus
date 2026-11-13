@@ -277,12 +277,17 @@ public class PublicCacheRefreshService {
             long postPrice = postAccessService.getPostPrice(post);
             boolean contentRequiresUnlock = requiresProtectedPreview(post, postPrice);
             int freeLines = postAccessService.getFreeLines(post);
+            // Provenance, not content: only revisions applied from a primary sync
+            // payload already hold the rendered preview. Everything else is
+            // authored content and must be rendered and truncated here.
+            boolean previewAlreadyRendered = post.publishedRevision.publicPreviewRendered;
             for (Map.Entry<String, String> entry : post.publishedRevision.contentMarkdown.entrySet()) {
-                String preview = postAccessService.getPreviewOnlyContent(
-                        entry.getValue(), freeLines, contentRequiresUnlock, post.id, postPrice, null,
-                        post.renderType);
-                previewByLanguage.put(entry.getKey(),
-                        com.biliwind.blog.common.helper.MarkdownHelper.unwrapRenderedHtml(preview));
+                String preview = previewAlreadyRendered
+                        ? entry.getValue()
+                        : postAccessService.getPreviewOnlyContent(
+                                entry.getValue(), freeLines, contentRequiresUnlock, post.id, postPrice, null,
+                                post.renderType);
+                previewByLanguage.put(entry.getKey(), preview);
             }
         }
         String categorySlug = post.category == null ? null : post.category.slug;

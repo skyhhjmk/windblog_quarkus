@@ -55,23 +55,20 @@ public final class MarkdownHelper {
             .addProtocols("img", "src", "http", "https");
 
     /**
-     * Marks public content that has already been sanitized and had its
-     * server-generated purchase controls injected. Downstream renderers must
-     * pass such content through untouched: sanitizing it again would strip the
-     * template-owned buttons along with author-supplied ones.
+     * Legacy in-band marker from an earlier revision of the preview pipeline.
+     * It is never trusted; it is stripped from authored input so no downstream
+     * code can mistake author-controlled text for server-rendered content.
      */
-    public static final String RENDERED_HTML_MARKER = "<!--windblog:rendered-html:v1-->";
+    public static final String LEGACY_RENDERED_HTML_MARKER = "<!--windblog:rendered-html:v1-->";
 
-    public static String markRenderedHtml(String html) {
-        return RENDERED_HTML_MARKER + (html == null ? "" : html);
-    }
+    private static final Pattern LEADING_LEGACY_RENDERED_MARKER = Pattern.compile(
+            "^\\s*" + Pattern.quote(LEGACY_RENDERED_HTML_MARKER) + "\\s*");
 
-    public static boolean isRenderedHtml(String content) {
-        return content != null && content.startsWith(RENDERED_HTML_MARKER);
-    }
-
-    public static String unwrapRenderedHtml(String content) {
-        return isRenderedHtml(content) ? content.substring(RENDERED_HTML_MARKER.length()) : content;
+    public static String stripLegacyRenderedMarker(String content) {
+        if (content == null || content.isEmpty()) {
+            return content;
+        }
+        return LEADING_LEGACY_RENDERED_MARKER.matcher(content).replaceFirst("");
     }
 
     public MarkdownHelper() {

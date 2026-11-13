@@ -557,7 +557,7 @@ public class UserPostContentController {
      */
     private PostBodyView resolveRenderedPostBody(PostRenderType renderType, String content) {
         PostRenderType effective = renderType == null ? PostRenderType.MARKDOWN : renderType;
-        String body = MarkdownHelper.unwrapRenderedHtml(content);
+        String body = content;
         return new PostBodyView(body == null ? "" : body, true, effective);
     }
 

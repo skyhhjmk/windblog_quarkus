@@ -475,6 +475,9 @@ public class EdgeDataSyncService {
                     post.renderType));
         }
         revision.set("contentMarkdown", objectMapper.valueToTree(publicContent));
+        // The content above is the sanitized public preview, not authored Markdown.
+        // The flag travels with the data so edge readers trust it by provenance.
+        revision.put("publicPreviewRendered", true);
         return revision;
     }
 

@@ -88,9 +88,6 @@ public class PostAccessService {
     @Inject
     PublicContentSanitizer publicContentSanitizer;
 
-    @Inject
-    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
-
     public Post findBySlug(String slug) {
         return Post.find("slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
                         slug,
@@ -899,7 +896,7 @@ public class PostAccessService {
                     .render() + "\n\n";
         });
 
-        return com.biliwind.blog.common.helper.MarkdownHelper.markRenderedHtml(html);
+        return html;
     }
 
     /**
@@ -1063,9 +1060,8 @@ public class PostAccessService {
         }
 
         int freeLines = getFreeLines(post);
-        String previewContent = com.biliwind.blog.common.helper.MarkdownHelper.unwrapRenderedHtml(
-                getPreviewOnlyContent(localizedContent, freeLines, postPrice > 0, post.id, postPrice, null,
-                        post.renderType));
+        String previewContent = getPreviewOnlyContent(localizedContent, freeLines, postPrice > 0,
+                post.id, postPrice, null, post.renderType);
 
         cacheService.set(cacheKey, previewContent, java.time.Duration.ofDays(7));
         return previewContent;
@@ -1078,17 +1074,11 @@ public class PostAccessService {
 
     /**
      * 获取仅包含免费预览内容的版本（用于初始页面加载）。
-     * 返回已净化的最终 HTML（带渲染标记），模板按钮不会再被下游净化器移除。
+     * 返回已净化的最终 HTML，模板按钮不会再被下游净化器移除。
      */
     public String getPreviewOnlyContent(String content, int freeLines, boolean isPaid, Long postId, long postPrice,
                                         Long userId, com.biliwind.blog.model.PostRenderType renderType) {
         if (content == null) return null;
-        // Edge nodes only receive the already-rendered public preview; re-rendering it
-        // here would push the template buttons back through the sanitizer.
-        if (nodeRoleService.isEdgeNode()
-                && com.biliwind.blog.common.helper.MarkdownHelper.isRenderedHtml(content)) {
-            return content;
-        }
         // 预览模式下假设未支付任何积分
         if (!isPaid) {
             String filteredFreeContent = filterHiddenContent(content, -1, false, postId, postPrice, userId, renderType);
@@ -1200,7 +1190,7 @@ public class PostAccessService {
     private String filterHiddenContentForPreview(String rawContent, Long postId, long postPrice, Long userId,
                                                  com.biliwind.blog.model.PostRenderType renderType) {
         if (rawContent == null || rawContent.isEmpty()) {
-            return com.biliwind.blog.common.helper.MarkdownHelper.markRenderedHtml("");
+            return "";
         }
         String postRef = resolvePostRef(postId);
 
@@ -1249,7 +1239,7 @@ public class PostAccessService {
                     .render() + "\n\n";
         });
 
-        return com.biliwind.blog.common.helper.MarkdownHelper.markRenderedHtml(html);
+        return html;
     }
 
     /**

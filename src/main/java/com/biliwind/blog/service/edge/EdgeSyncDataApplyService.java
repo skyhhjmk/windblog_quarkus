@@ -796,6 +796,7 @@ public class EdgeSyncDataApplyService {
         revision.revisionNumber = revisionNumber;
         Long createdById = readReferenceId(node, "createdBy");
         revision.createdBy = resolveOrCreatePostAuthor(createdById, post.authorName);
+        revision.publicPreviewRendered = Boolean.TRUE.equals(readOptionalBoolean(node, "publicPreviewRendered"));
         if (newRevision) {
             insertPublicRevision(revision);
             return PostRevision.findById(revisionId);
@@ -881,10 +882,11 @@ public class EdgeSyncDataApplyService {
     private void insertPublicRevision(PostRevision revision) throws Exception {
         entityManager.createNativeQuery("""
                 insert into post_revisions (
-                    id, post_id, title, content_markdown, editor_type, revision_number, created_by, created_at
+                    id, post_id, title, content_markdown, editor_type, revision_number, created_by,
+                    created_at, public_preview_rendered
                 ) values (
                     :id, :postId, cast(:title as jsonb), cast(:contentMarkdown as jsonb),
-                    :editorType, :revisionNumber, :createdBy, current_timestamp
+                    :editorType, :revisionNumber, :createdBy, current_timestamp, :publicPreviewRendered
                 )
                 """)
                 .setParameter("id", revision.id)
@@ -894,6 +896,7 @@ public class EdgeSyncDataApplyService {
                 .setParameter("editorType", revision.editorType)
                 .setParameter("revisionNumber", revision.revisionNumber)
                 .setParameter("createdBy", revision.createdBy.id)
+                .setParameter("publicPreviewRendered", revision.publicPreviewRendered)
                 .executeUpdate();
         synchronizeSequence("post_revisions");
     }

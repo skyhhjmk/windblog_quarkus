@@ -627,8 +627,10 @@ public class PostController {
 
     /**
      * Snapshot preview content is already sanitized HTML with server-owned
-     * purchase controls. Sending it through the Markdown sanitizer again would
-     * delete those controls, so it is served as-is.
+     * purchase controls. It is served as-is: sanitizing again would delete
+     * those controls, and the per-paragraph outdated-translation renderer
+     * ignores the truncated preview entirely (it would also bypass the
+     * paywall). Raw, non-preview bodies keep their outdated markers.
      */
     private PostBodyView resolveSnapshotPreviewBody(PostRenderType renderType, String content) {
         PostRenderType effective = renderType == null ? PostRenderType.MARKDOWN : renderType;

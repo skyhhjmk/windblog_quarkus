@@ -101,6 +101,8 @@ public class PostHelper {
         if (content == null || content.isEmpty()) {
             return content;
         }
+        // Authored content must never carry the legacy rendered-preview marker.
+        content = MarkdownHelper.stripLegacyRenderedMarker(content);
 
         // 匹配 [hide-text ...] 或 [hide-attachment ...]
         Pattern p = Pattern.compile("\\[\\s*(hide-text|hide-attachment)(.*?)\\]", Pattern.CASE_INSENSITIVE);
