@@ -109,9 +109,10 @@ public class AdminCommentController {
 
         long totalCount = query.count();
 
+        Map<Long, CommentQuote> quotes = loadQuotes(comments);
         List<AdminCommentItem> items = new ArrayList<AdminCommentItem>();
         for (Comment comment : comments) {
-            AdminCommentItem item = toItem(comment);
+            AdminCommentItem item = toItem(comment, quotes.get(comment.id));
             items.add(item);
         }
 
@@ -212,6 +213,39 @@ public class AdminCommentController {
     }
 
     private AdminCommentItem toItem(Comment comment) {
+        return toItem(comment, CommentQuote.find(
+                "comment.id = ?1 order by id desc", comment.id).firstResult());
+    }
+
+    /**
+     * Loads the quote rows for one page of comments in a single query so the
+     * admin list does not issue one lookup per row.
+     */
+    private Map<Long, CommentQuote> loadQuotes(List<Comment> comments) {
+        if (comments.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> commentIds = new ArrayList<Long>(comments.size());
+        for (Comment comment : comments) {
+            if (comment.id != null) {
+                commentIds.add(comment.id);
+            }
+        }
+        if (commentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<CommentQuote> quotes = CommentQuote.find(
+                "comment.id in ?1 order by id desc", commentIds).list();
+        Map<Long, CommentQuote> byCommentId = new HashMap<Long, CommentQuote>();
+        for (CommentQuote quote : quotes) {
+            if (quote.comment != null) {
+                byCommentId.putIfAbsent(quote.comment.id, quote);
+            }
+        }
+        return byCommentId;
+    }
+
+    private AdminCommentItem toItem(Comment comment, CommentQuote quote) {
         String displayTitle = "Deleted Post";
         if (comment.post != null) {
             try {
@@ -248,7 +282,12 @@ public class AdminCommentController {
                 comment.auditStatus,
                 comment.aiReviewData,
                 comment.isReviewing,
-                comment.createdAt);
+                comment.createdAt,
+                quote != null ? quote.id : null,
+                quote != null ? quote.quoteType : null,
+                quote != null ? quote.quoteText : null,
+                quote != null ? quote.anchorData : null,
+                quote != null ? quote.status : null);
     }
 
     private String resolveLocalizedTitle(Map<String, String> titles) {

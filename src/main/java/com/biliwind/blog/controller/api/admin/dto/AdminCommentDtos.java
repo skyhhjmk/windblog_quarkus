@@ -17,7 +17,12 @@ public class AdminCommentDtos {
             short auditStatus,
             Object aiReviewData,
             boolean isReviewing,
-            OffsetDateTime createdAt) {
+            OffsetDateTime createdAt,
+            Long quoteId,
+            String quoteType,
+            String quoteText,
+            Object quoteAnchorData,
+            Short quoteStatus) {
     }
 
     public record CommentUpdateRequest(

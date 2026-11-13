@@ -417,7 +417,7 @@
         try {
             const response = await fetch('/api/comments/captcha', {cache: 'no-store', credentials: 'same-origin', headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(10000)});
             const result = await response.json().catch(() => null);
-            if (root.dataset.captchaVersion !== version) return;
+            if (root.dataset.captchaVersion !== version) return false;
             if (!response.ok || !result?.success || !result.data?.id) {
                 const message = result?.message || window.wbTf('js.http_error', response.status, '验证码服务返回 HTTP {0}，未提供错误详情');
                 const failure = new Error(message);
@@ -427,8 +427,9 @@
             root.dataset.captchaId = result.data.id;
             root.dataset.captchaLoadedAt = String(Date.now());
             await solveProof(root, version, result.data.id, Number(result.data.difficulty) || 16);
+            return true;
         } catch (error) {
-            if (root.dataset.captchaVersion !== version) return;
+            if (root.dataset.captchaVersion !== version) return false;
             root.dataset.captchaId = '';
             root.dataset.captchaLoadedAt = '0';
             root.dataset.powNonce = '';
@@ -451,12 +452,37 @@
             setFeedback(root, window.formatErrorMessage
                 ? window.formatErrorMessage(message, errorCode)
                 : message, 'error', errorCode);
+            return false;
         } finally {
             if (root.dataset.captchaVersion === version) {
                 root.dataset.captchaLoading = 'false';
                 updateSubmitState(root);
             }
         }
+    }
+
+    /**
+     * Reserves one proof-of-work challenge for a caller outside the comment form
+     * (currently the correction dialog, which posts to the same endpoint). The
+     * challenge is single-use, so the comment form is given a fresh one.
+     */
+    async function acquireCommentProof() {
+        const root = getCommentRoot();
+        if (!root) return null;
+        if (!hasFreshProof(root)) {
+            await loadChallenge(root);
+        }
+        if (!hasFreshProof(root)) return null;
+        const proof = {
+            captchaId: root.dataset.captchaId,
+            powNonce: root.dataset.powNonce
+        };
+        root.dataset.captchaId = '';
+        root.dataset.powNonce = '';
+        root.dataset.captchaLoadedAt = '0';
+        updateSubmitState(root);
+        ensureChallenge(root);
+        return proof;
     }
 
     function bindVerificationTrigger(root) {
@@ -635,6 +661,9 @@
             btn.textContent = window.wbTf('js.expand_replies', count, '展开 {0} 条回复');
         }
     };
+
+    window.acquireCommentProof = acquireCommentProof;
+    window.initComments = initComments;
 
     WindBlogLifecycle.register('comments', {
         mount: initComments

@@ -394,9 +394,15 @@
                 return;
             }
 
+            const correctionLabel = window.wbT('js.correction_feedback', '纠错反馈');
+            let content = `[读者${correctionLabel}] 指出错误: “${selection.exact}” \n\n纠错理由: ${explanation}`;
+            if (content.length > 4000) {
+                content = content.slice(0, 3997) + '...';
+            }
+
             const payload = {
                 postSlug: postSlug,
-                content: "[读者${window.wbT('js.correction_feedback', '纠错反馈')}] 指出错误: “" + selection.exact + "” \n\n纠错理由: " + explanation,
+                content: content,
                 quoteType: 'CORRECTION',
                 quoteText: selection.exact,
                 anchorDataJson: JSON.stringify({
@@ -412,6 +418,17 @@
             submitBtn.textContent = "提交中...";
 
             try {
+                // The correction dialog posts to the same endpoint as the comment
+                // form, so it must carry the same invisible verification proof.
+                const proof = typeof window.acquireCommentProof === 'function'
+                    ? await window.acquireCommentProof()
+                    : null;
+                if (!proof) {
+                    throw new Error(window.wbT('js.comment_verification_preparing', '正在准备安全校验，请稍候再提交。'));
+                }
+                payload.captchaId = proof.captchaId;
+                payload.powNonce = proof.powNonce;
+
                 const response = await fetch('/api/comments', {
                     method: 'POST',
                     headers: {
@@ -470,7 +487,9 @@
             if (url === '/api/comments' && options && options.method === 'POST') {
                 try {
                     const body = JSON.parse(options.body);
-                    if (form.dataset.quoteType) {
+                    // Never overwrite an explicit quote type: the correction
+                    // dialog posts through this same fetch wrapper.
+                    if (!body.quoteType && form.dataset.quoteType) {
                         body.quoteType = form.dataset.quoteType;
                         body.quoteText = form.dataset.quoteText;
                         body.anchorDataJson = form.dataset.anchorData;
