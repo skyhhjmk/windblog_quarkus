@@ -295,15 +295,18 @@ public class CommentApiController {
 
     private String normalizeGuestName(String value) {
         String name = value == null ? "" : value.trim();
-        if (name.isBlank() || name.length() > 80) {
-            throw new BadRequestException("请填写昵称（最多 80 个字符）");
+        if (name.length() > 80) {
+            throw new BadRequestException("昵称最多 80 个字符");
         }
-        return name;
+        return name.isEmpty() ? null : name;
     }
 
     private String normalizeGuestEmail(String value) {
         String email = value == null ? "" : value.trim();
-        if (email.isBlank() || email.length() > 255
+        if (email.isEmpty()) {
+            return null;
+        }
+        if (email.length() > 255
                 || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
             throw new BadRequestException("请填写有效的邮箱地址");
         }

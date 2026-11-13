@@ -359,6 +359,13 @@
                     <div class="post-quote-modal-title">${window.wbT('js.correction_title', '反馈文章内容争议/错误')}</div>
                     <div class="post-quote-modal-label">${window.wbT('js.quoted_text', '被引用文字：')}</div>
                     <div class="post-quote-modal-text-preview" id="correction-preview-text"></div>
+                    <div id="correction-guest-fields" hidden>
+                        <p class="post-quote-modal-hint">${window.wbT('js.comment_identity_hint', '建议填写完整信息以提高审核通过概率。')}</p>
+                        <label class="post-quote-modal-label" for="correction-guest-name">${window.wbT('post.comment_nickname', '昵称')} <span>${window.wbT('js.comment_optional', '选填')}</span></label>
+                        <input class="post-quote-modal-input" type="text" id="correction-guest-name" maxlength="80" autocomplete="nickname" placeholder="${window.wbT('js.comment_name_placeholder', '您的昵称')}">
+                        <label class="post-quote-modal-label" for="correction-guest-email">${window.wbT('post.comment_email_label', '邮箱')} <span>${window.wbT('js.comment_optional', '选填')}</span></label>
+                        <input class="post-quote-modal-input" type="email" id="correction-guest-email" maxlength="255" autocomplete="email" placeholder="you@example.com">
+                    </div>
                     <div class="post-quote-modal-label">${window.wbT('js.correction_reason', '您的修改意见 / 纠错说明：')}</div>
                     <textarea class="post-quote-modal-textarea" id="correction-textarea" rows="4" placeholder="请详细写下这里存在的错误或修改建议..."></textarea>
                     <div class="post-quote-modal-actions">
@@ -377,6 +384,20 @@
         document.getElementById('correction-preview-text').textContent = selection.exact;
         const textarea = document.getElementById('correction-textarea');
         textarea.value = '';
+
+        const commentRoot = document.getElementById('comment-section');
+        const loggedIn = commentRoot?.dataset.commentLoggedIn === 'true';
+        const guestFields = document.getElementById('correction-guest-fields');
+        if (guestFields) guestFields.hidden = loggedIn;
+        const guestNameInput = document.getElementById('correction-guest-name');
+        const guestEmailInput = document.getElementById('correction-guest-email');
+        if (guestNameInput && !guestNameInput.value.trim()) {
+            guestNameInput.value = commentRoot?.querySelector('#comment-guest-name')?.value.trim() || '';
+        }
+        if (guestEmailInput && !guestEmailInput.value.trim()) {
+            guestEmailInput.value = commentRoot?.querySelector('#comment-guest-email')?.value.trim() || '';
+        }
+
         overlay.classList.add('active');
 
         document.getElementById('correction-btn-submit').onclick = async function () {
@@ -392,6 +413,24 @@
             if (!postSlug) {
                 window.showToast("未能获取到文章标识", "error", 8000, "WB-UI-CORRECTION-POST-001");
                 return;
+            }
+
+            const loggedIn = commentSection?.dataset.commentLoggedIn === 'true';
+            let guestName = '';
+            let guestEmail = '';
+            if (!loggedIn) {
+                guestName = (document.getElementById('correction-guest-name')?.value || '').trim();
+                guestEmail = (document.getElementById('correction-guest-email')?.value || '').trim();
+                if (guestName.length > 80) {
+                    window.showToast(window.wbT('js.correction_name_too_long', '昵称最多 80 个字符'), 'error', 6000, 'WB-UI-CORRECTION-NAME-001');
+                    document.getElementById('correction-guest-name')?.focus();
+                    return;
+                }
+                if (guestEmail && (guestEmail.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail))) {
+                    window.showToast(window.wbT('js.correction_email_invalid', '请填写有效的邮箱地址'), 'error', 6000, 'WB-UI-CORRECTION-EMAIL-001');
+                    document.getElementById('correction-guest-email')?.focus();
+                    return;
+                }
             }
 
             const correctionLabel = window.wbT('js.correction_feedback', '纠错反馈');
@@ -410,7 +449,9 @@
                     prefix: selection.prefix,
                     suffix: selection.suffix,
                     paragraphIndex: selection.paragraphIndex
-                })
+                }),
+                guestName: guestName,
+                guestEmail: guestEmail
             };
 
             const submitBtn = document.getElementById('correction-btn-submit');

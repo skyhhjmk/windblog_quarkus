@@ -374,6 +374,30 @@
     border-color: rgb(239, 68, 68);
 }
 
+.post-quote-modal-input {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-main);
+    font-size: 14px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    transition: border-color 0.2s ease;
+}
+
+.post-quote-modal-input:focus {
+    outline: none;
+    border-color: rgb(239, 68, 68);
+}
+
+.post-quote-modal-hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-meta);
+    margin-bottom: 12px;
+}
+
 .post-quote-modal-actions {
     display: flex;
     justify-content: flex-end;
