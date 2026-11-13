@@ -170,6 +170,7 @@ public class PostController {
         String localizedTitle = article.displayTitle();
         String publicPreview = resolveSnapshotContent(snapshot, resolvedLang);
         String localizedContent = resolveSnapshotContent(snapshot, resolvedLang);
+        boolean localizedContentRendered = true;
         Post postEntity = Post.find(
                 "id = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
                 snapshot.postId(), PostStatus.PUBLISHED).firstResult();
@@ -183,6 +184,7 @@ public class PostController {
             if (access.allowed() && postEntity != null) {
                 contentAccessible = true;
                 localizedContent = resolveContent(postEntity.publishedRevision, resolvedLang);
+                localizedContentRendered = false;
                 hasPurchased = postAccessService.hasPurchasedPost(requestUserId, postEntity.id);
                 localizedContent = postAccessService.rewriteProtectedMediaReferences(
                         postEntity, localizedContent, requestUserId, hasPurchased, deviceId);
@@ -213,6 +215,7 @@ public class PostController {
 
         final com.biliwind.blog.model.translation.ParagraphTranslationMeta translationMeta = paragraphMeta;
         final String renderedContent = localizedContent;
+        final boolean renderedContentIsPreview = localizedContentRendered;
         // Rendering the body mints affiliate/link tokens, so it must never feed
         // the validator. It stays lazy and runs only when the page is rendered.
         java.util.concurrent.atomic.AtomicReference<PostBodyView> renderedBodyCache =
@@ -222,7 +225,9 @@ public class PostController {
             if (cached != null) {
                 return cached;
             }
-            PostBodyView body = resolvePostBody(snapshot.renderType(), renderedContent, translationMeta);
+            PostBodyView body = renderedContentIsPreview
+                    ? resolveSnapshotPreviewBody(snapshot.renderType(), renderedContent)
+                    : resolvePostBody(snapshot.renderType(), renderedContent, translationMeta);
             if (body.html()) {
                 // Affiliate token issuance is intentionally kept off the public read model;
                 // the source entity is loaded only when active commercial links exist.
@@ -235,7 +240,7 @@ public class PostController {
             return body;
         };
         java.util.function.Supplier<String> publicHtml = () -> snapshot.postPrice() > 0 || protectedPage
-                ? resolvePostBody(snapshot.renderType(), publicPreview, translationMeta).body()
+                ? resolveSnapshotPreviewBody(snapshot.renderType(), publicPreview).body()
                 : renderedBody.get().body();
 
         String localizedAiSummary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), resolvedLang);
@@ -618,6 +623,16 @@ public class PostController {
             case HTML, V_BUILDER, GUTENBERG, FLUTTER_QUILL, TUTORIAL_BLOCK ->
                     new PostBodyView(publicContentSanitizer.sanitize(content), true, effective);
         };
+    }
+
+    /**
+     * Snapshot preview content is already sanitized HTML with server-owned
+     * purchase controls. Sending it through the Markdown sanitizer again would
+     * delete those controls, so it is served as-is.
+     */
+    private PostBodyView resolveSnapshotPreviewBody(PostRenderType renderType, String content) {
+        PostRenderType effective = renderType == null ? PostRenderType.MARKDOWN : renderType;
+        return new PostBodyView(content == null ? "" : content, true, effective);
     }
 
     private String resolveSnapshotContent(

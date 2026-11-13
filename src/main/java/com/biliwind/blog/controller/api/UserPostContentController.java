@@ -145,7 +145,7 @@ public class UserPostContentController {
 
         String resolvedLang = languageContext.getLang();
         String localizedContent = resolveContent(post.publishedRevision, resolvedLang);
-        localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postId, postPrice, userId);
+        localizedContent = postAccessService.filterHiddenContent(localizedContent, maxPointsPaid, isAuthor, postId, postPrice, userId, post.renderType);
 
         // 全站买断判定：只依赖明确的全文购买记录，不用 maxPointsPaid 比较
         boolean hasPurchased = isAuthor
@@ -154,7 +154,7 @@ public class UserPostContentController {
         localizedContent = postAccessService.rewriteProtectedMediaReferences(
                 post, localizedContent, userId, hasPurchased, headers.getHeaderString("X-Device-Id"));
 
-        PostBodyView postBody = resolvePostBody(post.renderType, localizedContent);
+        PostBodyView postBody = resolveRenderedPostBody(post.renderType, localizedContent);
 
         List<AttachmentView> attachments = hasPurchased ? PostMedia.<PostMedia>list("post.id = ?1", postId).stream()
                 .filter(pm -> pm.usageType == 3)
@@ -549,6 +549,16 @@ public class UserPostContentController {
             return null;
         }
         return LanguageHelper.resolveLocalizedValue(revision.contentMarkdown, lang);
+    }
+
+    /**
+     * filterHiddenContent already sanitized the authored segments and injected
+     * the server-owned purchase controls; rendering it again would strip them.
+     */
+    private PostBodyView resolveRenderedPostBody(PostRenderType renderType, String content) {
+        PostRenderType effective = renderType == null ? PostRenderType.MARKDOWN : renderType;
+        String body = MarkdownHelper.unwrapRenderedHtml(content);
+        return new PostBodyView(body == null ? "" : body, true, effective);
     }
 
     private PostBodyView resolvePostBody(PostRenderType renderType, String content) {

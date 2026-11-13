@@ -278,8 +278,11 @@ public class PublicCacheRefreshService {
             boolean contentRequiresUnlock = requiresProtectedPreview(post, postPrice);
             int freeLines = postAccessService.getFreeLines(post);
             for (Map.Entry<String, String> entry : post.publishedRevision.contentMarkdown.entrySet()) {
-                previewByLanguage.put(entry.getKey(), postAccessService.getPreviewOnlyContent(
-                        entry.getValue(), freeLines, contentRequiresUnlock, post.id, postPrice, null));
+                String preview = postAccessService.getPreviewOnlyContent(
+                        entry.getValue(), freeLines, contentRequiresUnlock, post.id, postPrice, null,
+                        post.renderType);
+                previewByLanguage.put(entry.getKey(),
+                        com.biliwind.blog.common.helper.MarkdownHelper.unwrapRenderedHtml(preview));
             }
         }
         String categorySlug = post.category == null ? null : post.category.slug;

@@ -260,7 +260,9 @@ public class CacheService {
         public static final String INDEX_PAGE_PREFIX = "index:v2:page:";
         public static final String PUBLIC_FEED_PREFIX = "feed:v2:";
         // Versioned after moving public article rendering to an explicit read model.
-        public static final String POST_META_PREFIX = "post:meta:v6:";
+        // v7: public preview content is now sanitized, fully rendered HTML rather
+        // than markdown with pre-sanitization template fragments.
+        public static final String POST_META_PREFIX = "post:meta:v7:";
         public static final String MEDIA_META_PREFIX = "media:meta:v2:";
         public static final String SEARCH_CACHE_PREFIX = "search:v1:";
         public static final String ARTICLE_MAP_RELATED_PREFIX = "article-map:related:v1:";

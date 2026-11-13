@@ -471,7 +471,8 @@ public class EdgeDataSyncService {
         int freeLines = postAccessService.getFreeLines(post);
         for (Map.Entry<String, String> entry : source.contentMarkdown.entrySet()) {
             publicContent.put(entry.getKey(), postAccessService.getPreviewOnlyContent(
-                    entry.getValue(), freeLines, postPrice > 0, post.id, postPrice, null));
+                    entry.getValue(), freeLines, postPrice > 0, post.id, postPrice, null,
+                    post.renderType));
         }
         revision.set("contentMarkdown", objectMapper.valueToTree(publicContent));
         return revision;

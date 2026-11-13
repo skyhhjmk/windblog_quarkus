@@ -54,6 +54,26 @@ public final class MarkdownHelper {
             .addProtocols("a", "href", "http", "https", "mailto")
             .addProtocols("img", "src", "http", "https");
 
+    /**
+     * Marks public content that has already been sanitized and had its
+     * server-generated purchase controls injected. Downstream renderers must
+     * pass such content through untouched: sanitizing it again would strip the
+     * template-owned buttons along with author-supplied ones.
+     */
+    public static final String RENDERED_HTML_MARKER = "<!--windblog:rendered-html:v1-->";
+
+    public static String markRenderedHtml(String html) {
+        return RENDERED_HTML_MARKER + (html == null ? "" : html);
+    }
+
+    public static boolean isRenderedHtml(String content) {
+        return content != null && content.startsWith(RENDERED_HTML_MARKER);
+    }
+
+    public static String unwrapRenderedHtml(String content) {
+        return isRenderedHtml(content) ? content.substring(RENDERED_HTML_MARKER.length()) : content;
+    }
+
     public MarkdownHelper() {
     }
 

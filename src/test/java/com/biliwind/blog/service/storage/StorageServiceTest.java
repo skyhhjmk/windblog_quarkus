@@ -20,7 +20,7 @@ public class StorageServiceTest {
         String name = storageService.getPrimaryProviderName();
         assertNotNull(name);
         assertFalse(name.isBlank(), "Primary provider name should not be blank");
-        assertEquals("local_fs", name);
+        assertEquals("local", name);
     }
 
     @Test
@@ -28,6 +28,7 @@ public class StorageServiceTest {
         java.util.List<com.biliwind.blog.model.StorageClassEntity> entities = storageService.getAllProviderEntities();
         assertNotNull(entities);
         assertFalse(entities.isEmpty(), "Should contain at least the default local_fs provider");
-        assertTrue(entities.stream().anyMatch(e -> "local_fs".equals(e.name)), "Should include local_fs entity");
+        assertTrue(entities.stream().anyMatch(e -> "local".equals(e.name)
+                && "local_fs".equals(e.providerType)), "Should include the local local_fs entity");
     }
 }

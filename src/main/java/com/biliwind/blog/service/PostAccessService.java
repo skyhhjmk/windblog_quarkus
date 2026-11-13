@@ -24,6 +24,26 @@ public class PostAccessService {
             "<a\\b[^>]*\\bhref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
             java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
 
+    // Authored content is sanitized segment by segment; server-owned templates are
+    // appended afterwards so the sanitizer can never strip their purchase controls.
+    private static final java.util.regex.Pattern HIDDEN_BLOCK_PATTERN = java.util.regex.Pattern.compile(
+            "\\[\\s*(hide-text|hide-attachment)\\b(.*?)\\](.*?)\\[\\s*/\\s*\\1\\s*\\]",
+            java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern HIDDEN_BLOCK_OPEN_PATTERN = java.util.regex.Pattern.compile(
+            "\\[\\s*(hide-text|hide-attachment)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern INLINE_TEMPLATE_PATTERN = java.util.regex.Pattern.compile(
+            "\\[\\s*store-item\\s+id\\s*=\\s*(?:\"([^\"]*)\"|([^\\s\\]]+))\\s*\\]"
+                    + "|\\[\\s*hide-image\\s+url\\s*=\\s*\"([^\"]+)\"\\s*\\]"
+                    + "|\\[\\s*attachment\\s+id\\s*=\\s*\"([^\"]+)\"\\s*\\]",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final String LEGACY_HIDE_IMAGE_HTML =
+            "\n\n<div class=\"md-region md-region-info\"><div class=\"md-region-icon\"></div>"
+                    + "<div class=\"md-region-content\"><strong>付费图片已隐藏</strong>：购买文章后解锁。</div></div>\n\n";
+    private static final String LEGACY_ATTACHMENT_HTML =
+            "\n\n<div class=\"md-region md-region-info\"><div class=\"md-region-icon\"></div>"
+                    + "<div class=\"md-region-content\"><strong>专属附件已隐藏</strong>：购买文章后解锁。</div></div>\n\n";
+
     /**
      * A [hide-attachment] shortcode. Free blocks still require a login; priced
      * blocks require the matching block purchase (or the whole article).
@@ -64,6 +84,12 @@ public class PostAccessService {
 
     @Inject
     ContentAccessTicketService contentAccessTicketService;
+
+    @Inject
+    PublicContentSanitizer publicContentSanitizer;
+
+    @Inject
+    com.biliwind.blog.service.edge.NodeRoleService nodeRoleService;
 
     public Post findBySlug(String slug) {
         return Post.find("slug = ?1 and status = ?2 and deletedAt is null and publishedRevision is not null",
@@ -777,6 +803,25 @@ public class PostAccessService {
      * @return 处理后的内容
      */
     public String filterHiddenContent(String rawContent, long maxPointsPaid, boolean isAuthor, Long postId, long postPrice, Long userId) {
+        return filterHiddenContent(rawContent, maxPointsPaid, isAuthor, postId, postPrice, userId,
+                com.biliwind.blog.model.PostRenderType.MARKDOWN);
+    }
+
+    /**
+     * 根据购买状态过滤文章内容中的隐藏短代码，并渲染为最终 HTML。
+     * 支持 [hide-text price=100]...[/hide-text]
+     * 支持 [hide-attachment price=200]...[/hide-attachment]
+     *
+     * @param rawContent    原始 Markdown 内容
+     * @param maxPointsPaid 用户已支付的最高积分
+     * @param isAuthor      是否为文章作者
+     * @param postId        文章 ID
+     * @param postPrice     文章价格
+     * @param userId        用户 ID
+     * @return 处理后的内容
+     */
+    public String filterHiddenContent(String rawContent, long maxPointsPaid, boolean isAuthor, Long postId,
+                                      long postPrice, Long userId, com.biliwind.blog.model.PostRenderType renderType) {
         if (rawContent == null || rawContent.isEmpty()) return rawContent;
         String postRef = resolvePostRef(postId);
 
@@ -784,83 +829,27 @@ public class PostAccessService {
         boolean fullUnlocked = isAuthor
                 || hasPurchasedPost(userId, postId);
 
-        // 处理 [hide-text]
-        java.util.regex.Pattern textPattern = java.util.regex.Pattern.compile(
-                "\\[\\s*hide-text(.*?)\\](.*?)\\[\\s*/hide-text\\s*\\]",
-                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
-        );
-        java.util.regex.Matcher textMatcher = textPattern.matcher(rawContent);
-        StringBuilder sb = new StringBuilder();
-        while (textMatcher.find()) {
-            String attrStr = textMatcher.group(1);
-            String content = textMatcher.group(2);
-
+        String html = renderHiddenBlocks(rawContent, renderType, (blockType, attrStr, body, effectiveRenderType) -> {
+            boolean attachment = "hide-attachment".equals(blockType);
             String idAttr = extractAttribute(attrStr, "id");
-            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
-            
+            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, body);
+
             String priceStr = extractAttribute(attrStr, "price");
             long requiredPrice = (priceStr != null && !priceStr.isEmpty()) ? Long.parseLong(priceStr) : 0;
 
             // 解锁逻辑：或者是全站买断（fullUnlocked），或者已经购买过这个特定的 blockId，或者是免费区块
-            boolean isUnlocked = fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId);
+            boolean isUnlocked = attachment
+                    ? fullUnlocked || hasPurchasedBlock(userId, postId, blockId)
+                            || (requiredPrice == 0 && userId != null)
+                    : fullUnlocked || (requiredPrice == 0) || hasPurchasedBlock(userId, postId, blockId);
 
             if (isUnlocked) {
                 // 已解锁：保留 Flutter 预览中的区块外壳
-                textMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
-                        renderUnlockedBlock("hide-text", blockId, attrStr, content)));
-            } else {
-                // 未解锁：显示占位符
-                String title = extractAttribute(attrStr, "show");
-                if (title == null) title = "专享内容已锁定";
-
-                boolean isFree = requiredPrice == 0;
-                String displayPrice = String.valueOf(requiredPrice > 0 ? requiredPrice : postPrice);
-                String buttonText = isFree ? "免费解锁" : ("支付 " + displayPrice + " 积分解锁区块");
-                String descText = isFree ? "当前为免费专享区块，解锁后即可阅读隐藏内容" : "解锁该区块即可查看精彩内容，或购买全文解锁更多";
-
-                String replacement = "\n\n" + premiumCardTemplate
-                        .data("fullHide", false)
-                        .data("title", title)
-                        .data("desc", descText)
-                        .data("showButton", true)
-                        .data("postRef", postRef)
-                        .data("price", displayPrice)
-                        .data("blockId", blockId)
-                        .data("buttonText", buttonText)
-                        .render() + "\n\n";
-                textMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
+                return renderUnlockedBlock(blockType, blockId, attrStr,
+                        renderAuthoredMarkup(body, effectiveRenderType));
             }
-        }
-        textMatcher.appendTail(sb);
-        String filtered = sb.toString();
 
-        // 处理 [hide-attachment]
-        java.util.regex.Pattern attachPattern = java.util.regex.Pattern.compile(
-                "\\[\\s*hide-attachment(.*?)\\](.*?)\\[\\s*/hide-attachment\\s*\\]",
-                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
-        );
-        java.util.regex.Matcher attachMatcher = attachPattern.matcher(filtered);
-        sb = new StringBuilder();
-        while (attachMatcher.find()) {
-            String attrStr = attachMatcher.group(1);
-            String content = attachMatcher.group(2);
-
-            String idAttr = extractAttribute(attrStr, "id");
-            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
-
-            String priceStr = extractAttribute(attrStr, "price");
-            long requiredPrice = (priceStr != null && !priceStr.isEmpty()) ? Long.parseLong(priceStr) : 0;
-
-            // 免费附件同样需要登录；付费附件按区块购买状态解锁。
-            boolean isUnlocked = fullUnlocked
-                    || hasPurchasedBlock(userId, postId, blockId)
-                    || (requiredPrice == 0 && userId != null);
-
-            if (isUnlocked) {
-                // 已解锁：保留 Flutter 预览中的区块外壳
-                attachMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
-                        renderUnlockedBlock("hide-attachment", blockId, attrStr, content)));
-            } else {
+            if (attachment) {
                 // 未解锁：显示占位符
                 boolean requiresLogin = requiredPrice == 0;
                 String showName = extractAttribute(attrStr, "show");
@@ -877,7 +866,7 @@ public class PostAccessService {
                         ? "该附件仅登录用户可查看，登录后即可获取下载链接"
                         : "解锁该资源即可获取下载链接，或购买全文解锁更多";
 
-                String replacement = "\n\n" + premiumAttachmentTemplate
+                return "\n\n" + premiumAttachmentTemplate
                         .data("title", label)
                         .data("desc", descText)
                         .data("showButton", true)
@@ -887,14 +876,30 @@ public class PostAccessService {
                         .data("blockId", blockId)
                         .data("buttonText", buttonText)
                         .render() + "\n\n";
-                attachMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
             }
 
-        }
-        attachMatcher.appendTail(sb);
-        filtered = sb.toString();
+            // 未解锁：显示占位符
+            String title = extractAttribute(attrStr, "show");
+            if (title == null) title = "专享内容已锁定";
 
-        return processStoreItems(filtered);
+            boolean isFree = requiredPrice == 0;
+            String displayPrice = String.valueOf(requiredPrice > 0 ? requiredPrice : postPrice);
+            String buttonText = isFree ? "免费解锁" : ("支付 " + displayPrice + " 积分解锁区块");
+            String descText = isFree ? "当前为免费专享区块，解锁后即可阅读隐藏内容" : "解锁该区块即可查看精彩内容，或购买全文解锁更多";
+
+            return "\n\n" + premiumCardTemplate
+                    .data("fullHide", false)
+                    .data("title", title)
+                    .data("desc", descText)
+                    .data("showButton", true)
+                    .data("postRef", postRef)
+                    .data("price", displayPrice)
+                    .data("blockId", blockId)
+                    .data("buttonText", buttonText)
+                    .render() + "\n\n";
+        });
+
+        return com.biliwind.blog.common.helper.MarkdownHelper.markRenderedHtml(html);
     }
 
     /**
@@ -1050,7 +1055,7 @@ public class PostAccessService {
                 }
             }
         }
-        String cacheKey = "post:preview:v2:" + post.id + ":" + lang + ":" + revisionStr;
+        String cacheKey = "post:preview:v3:" + post.id + ":" + lang + ":" + revisionStr;
 
         java.util.Optional<String> cached = cacheService.get(cacheKey, String.class);
         if (cached.isPresent()) {
@@ -1058,29 +1063,46 @@ public class PostAccessService {
         }
 
         int freeLines = getFreeLines(post);
-        String previewContent = getPreviewOnlyContent(localizedContent, freeLines, postPrice > 0, post.id, postPrice, null);
+        String previewContent = com.biliwind.blog.common.helper.MarkdownHelper.unwrapRenderedHtml(
+                getPreviewOnlyContent(localizedContent, freeLines, postPrice > 0, post.id, postPrice, null,
+                        post.renderType));
 
         cacheService.set(cacheKey, previewContent, java.time.Duration.ofDays(7));
         return previewContent;
     }
 
-    /**
-     * 获取仅包含免费预览内容的版本（用于初始页面加载）
-     * 所有付费内容将被替换为占位符，且移除硬编码的HTML按钮
-     */
     public String getPreviewOnlyContent(String content, int freeLines, boolean isPaid, Long postId, long postPrice, Long userId) {
+        return getPreviewOnlyContent(content, freeLines, isPaid, postId, postPrice, userId,
+                com.biliwind.blog.model.PostRenderType.MARKDOWN);
+    }
+
+    /**
+     * 获取仅包含免费预览内容的版本（用于初始页面加载）。
+     * 返回已净化的最终 HTML（带渲染标记），模板按钮不会再被下游净化器移除。
+     */
+    public String getPreviewOnlyContent(String content, int freeLines, boolean isPaid, Long postId, long postPrice,
+                                        Long userId, com.biliwind.blog.model.PostRenderType renderType) {
         if (content == null) return null;
+        // Edge nodes only receive the already-rendered public preview; re-rendering it
+        // here would push the template buttons back through the sanitizer.
+        if (nodeRoleService.isEdgeNode()
+                && com.biliwind.blog.common.helper.MarkdownHelper.isRenderedHtml(content)) {
+            return content;
+        }
         // 预览模式下假设未支付任何积分
         if (!isPaid) {
-            String filteredFreeContent = filterHiddenContent(content, -1, false, postId, postPrice, userId);
+            String filteredFreeContent = filterHiddenContent(content, -1, false, postId, postPrice, userId, renderType);
             return removeProtectedMediaReferences(postId, filteredFreeContent);
         }
 
-        // 先过滤隐藏内容（都替换为占位符）
-        String filtered = filterHiddenContentForPreview(content, postId, postPrice, userId);
-
-        // 应用免费预览行数限制
-        String preview = applyFreePreviewForPreview(filtered, freeLines, postId, postPrice);
+        String preview;
+        if (freeLines > 0 && freeLines >= content.split("\r?\n", -1).length) {
+            preview = filterHiddenContentForPreview(content, postId, postPrice, userId, renderType);
+        } else {
+            String truncated = truncateRawForFreePreview(content, freeLines);
+            preview = filterHiddenContentForPreview(truncated, postId, postPrice, userId, renderType)
+                    + renderFullLockCard(postId, postPrice, freeLines);
+        }
         return removeProtectedMediaReferences(postId, preview);
     }
 
@@ -1173,35 +1195,49 @@ public class PostAccessService {
     }
 
     /**
-     * 为预览版过滤隐藏内容（使用更简洁的占位符，无硬编码按钮）
+     * 为预览版过滤隐藏内容：所有受保护区块都渲染为锁定占位符。
      */
-    private String filterHiddenContentForPreview(String rawContent, Long postId, long postPrice, Long userId) {
-        if (rawContent == null || rawContent.isEmpty()) return rawContent;
+    private String filterHiddenContentForPreview(String rawContent, Long postId, long postPrice, Long userId,
+                                                 com.biliwind.blog.model.PostRenderType renderType) {
+        if (rawContent == null || rawContent.isEmpty()) {
+            return com.biliwind.blog.common.helper.MarkdownHelper.markRenderedHtml("");
+        }
         String postRef = resolvePostRef(postId);
 
-        // 处理 [hide-text]
-        java.util.regex.Pattern textPattern = java.util.regex.Pattern.compile(
-                "\\[\\s*hide-text(.*?)\\](.*?)\\[\\s*/hide-text\\s*\\]",
-                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
-        );
-        java.util.regex.Matcher textMatcher = textPattern.matcher(rawContent);
-        StringBuilder sb = new StringBuilder();
-        while (textMatcher.find()) {
-            String attrStr = textMatcher.group(1);
-            String content = textMatcher.group(2);
-
+        String html = renderHiddenBlocks(rawContent, renderType, (blockType, attrStr, body, effectiveRenderType) -> {
             String idAttr = extractAttribute(attrStr, "id");
-            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
-            
-            String show = extractAttribute(attrStr, "show");
-            String title = (show != null) ? show : "专享内容已锁定";
+            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, body);
             String priceAttr = extractAttribute(attrStr, "price");
             boolean isFree = priceAttr == null || priceAttr.equals("0") || priceAttr.isEmpty();
             String displayPrice = isFree ? String.valueOf(postPrice) : priceAttr;
+
+            if ("hide-attachment".equals(blockType)) {
+                String buttonText = isFree ? "登录后查看附件"
+                        : ("支付 " + displayPrice + " 积分解锁附件");
+                String showName = extractAttribute(attrStr, "show");
+                String title = (showName == null || showName.isBlank()) ? "专属附件已隐藏" : showName.trim();
+                String descText = isFree
+                        ? "该附件仅登录用户可查看，登录后即可获取下载链接"
+                        : "您可以解锁当前区块或购买整篇文章后查看该专属附件。";
+
+                return "\n\n" + premiumAttachmentTemplate
+                        .data("title", title)
+                        .data("desc", descText)
+                        .data("showButton", true)
+                        .data("requiresLogin", isFree)
+                        .data("postRef", postRef)
+                        .data("price", displayPrice)
+                        .data("blockId", blockId)
+                        .data("buttonText", buttonText)
+                        .render() + "\n\n";
+            }
+
+            String show = extractAttribute(attrStr, "show");
+            String title = (show != null) ? show : "专享内容已锁定";
             String buttonText = isFree ? "免费解锁" : ("支付 " + displayPrice + " 积分解锁区块");
             String descText = isFree ? "当前为免费专享区块，解锁后即可阅读隐藏内容" : "解锁该区块即可查看精彩内容，或购买全文解锁更多";
 
-            String replacement = "\n\n" + premiumCardTemplate
+            return "\n\n" + premiumCardTemplate
                     .data("fullHide", false)
                     .data("title", title)
                     .data("desc", descText)
@@ -1211,140 +1247,144 @@ public class PostAccessService {
                     .data("blockId", blockId)
                     .data("buttonText", buttonText)
                     .render() + "\n\n";
-            textMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
-        }
-        textMatcher.appendTail(sb);
-        String filtered = sb.toString();
+        });
 
-        // 处理 [hide-attachment]
-        java.util.regex.Pattern attachPattern = java.util.regex.Pattern.compile(
-                "\\[\\s*hide-attachment(.*?)\\](.*?)\\[\\s*/hide-attachment\\s*\\]",
-                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE
-        );
-        java.util.regex.Matcher attachMatcher = attachPattern.matcher(filtered);
-        sb = new StringBuilder();
-        while (attachMatcher.find()) {
-            String attrStr = attachMatcher.group(1);
-            String content = attachMatcher.group(2);
-            String idAttr = extractAttribute(attrStr, "id");
-            String blockId = (idAttr != null && !idAttr.isEmpty()) ? idAttr : generateBlockId(attrStr, content);
-            String priceAttr = extractAttribute(attrStr, "price");
-            boolean isFree = priceAttr == null || priceAttr.equals("0") || priceAttr.isEmpty();
-            String displayPrice = isFree ? String.valueOf(postPrice) : priceAttr;
-            String buttonText = isFree ? "登录后查看附件"
-                    : ("支付 " + displayPrice + " 积分解锁附件");
-            String showName = extractAttribute(attrStr, "show");
-            String title = (showName == null || showName.isBlank()) ? "专属附件已隐藏" : showName.trim();
-            String descText = isFree
-                    ? "该附件仅登录用户可查看，登录后即可获取下载链接"
-                    : "您可以解锁当前区块或购买整篇文章后查看该专属附件。";
-
-            String replacement = "\n\n" + premiumAttachmentTemplate
-                    .data("title", title)
-                    .data("desc", descText)
-                    .data("showButton", true)
-                    .data("requiresLogin", isFree)
-                    .data("postRef", postRef)
-                    .data("price", displayPrice)
-                    .data("blockId", blockId)
-                    .data("buttonText", buttonText)
-                    .render() + "\n\n";
-            attachMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
-        }
-        attachMatcher.appendTail(sb);
-        filtered = sb.toString();
-
-        // 处理 [store-item id=XXX] (预览版也显示)
-        java.util.regex.Pattern storePattern = java.util.regex.Pattern.compile(
-                "\\[\\s*store-item\\s+id\\s*=\\s*(?:\"([^\"]*)\"|([^\\s\\]]+))\\s*\\]",
-                java.util.regex.Pattern.CASE_INSENSITIVE
-        );
-        java.util.regex.Matcher storeMatcher = storePattern.matcher(filtered);
-        sb = new StringBuilder();
-        while (storeMatcher.find()) {
-            String idStr = storeMatcher.group(1) != null ? storeMatcher.group(1) : storeMatcher.group(2);
-            try {
-                Long itemId = Long.parseLong(idStr);
-                com.biliwind.blog.model.StoreItem item = com.biliwind.blog.model.StoreItem.findById(itemId);
-                if (item != null) {
-                    String itemHtml = "\n\n" + storeItemCardTemplate
-                            .data("name", item.name)
-                            .data("price", item.price)
-                            .data("desc", item.description != null ? item.description : "暂无描述")
-                            .render() + "\n\n";
-                    storeMatcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(itemHtml));
-                } else {
-                    storeMatcher.appendReplacement(sb, "<!-- Store Item " + itemId + " Not Found -->");
-                }
-            } catch (Exception e) {
-                storeMatcher.appendReplacement(sb, "<!-- Invalid Store Item ID: " + idStr + " -->");
-            }
-        }
-        storeMatcher.appendTail(sb);
-        return sb.toString();
+        return com.biliwind.blog.common.helper.MarkdownHelper.markRenderedHtml(html);
     }
 
-
     /**
-     * 为预览版应用免费预览逻辑（使用data属性而非硬编码函数调用）
+     * 为付费文章预览截断正文：按原始 Markdown 行数保留免费部分，避免在渲染后的
+     * HTML 中按行截断而切坏标签或模板按钮。
      */
-    private String applyFreePreviewForPreview(String content, int freeLines, Long postId, long postPrice) {
-        if (content == null) return null;
-        String postRef = resolvePostRef(postId);
-
-        String[] lines = content.split("\r?\n");
-        if (lines.length <= freeLines && freeLines > 0) return content;
-
-        StringBuilder sb = new StringBuilder();
-        int limit = Math.max(0, freeLines);
-        for (int i = 0; i < Math.min(lines.length, limit); i++) {
-            sb.append(lines[i]).append("\n");
+    private String truncateRawForFreePreview(String content, int freeLines) {
+        if (content == null || content.isEmpty() || freeLines <= 0) {
+            return "";
         }
+        String[] lines = content.split("\r?\n", -1);
+        if (lines.length <= freeLines) {
+            return content;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < freeLines; i++) {
+            if (i > 0) sb.append('\n');
+            sb.append(lines[i]);
+        }
+        return dropUnterminatedHiddenBlock(sb.toString());
+    }
 
-        String placeholder = "\n\n" + premiumCardTemplate
-                .data("fullHide", limit == 0)
-                .data("title", limit == 0 ? "本文内容已锁定" : "专享内容已锁定")
-                .data("desc", limit == 0 ? "这是一篇付费专享文章，解锁后即可阅读全文内容" : "解锁全文即可查看此处及后续所有精彩内容")
+    private String dropUnterminatedHiddenBlock(String prefix) {
+        java.util.regex.Matcher matcher = HIDDEN_BLOCK_OPEN_PATTERN.matcher(prefix);
+        int lastUnterminated = -1;
+        while (matcher.find()) {
+            String close = "[/" + matcher.group(1) + "]";
+            if (prefix.toLowerCase(java.util.Locale.ROOT)
+                    .indexOf(close.toLowerCase(java.util.Locale.ROOT), matcher.end()) < 0) {
+                lastUnterminated = matcher.start();
+            }
+        }
+        return lastUnterminated >= 0 ? prefix.substring(0, lastUnterminated) : prefix;
+    }
+
+    private String renderFullLockCard(Long postId, long postPrice, int freeLines) {
+        boolean fullHide = freeLines <= 0;
+        return "\n\n" + premiumCardTemplate
+                .data("fullHide", fullHide)
+                .data("title", fullHide ? "本文内容已锁定" : "专享内容已锁定")
+                .data("desc", fullHide ? "这是一篇付费专享文章，解锁后即可阅读全文内容" : "解锁全文即可查看此处及后续所有精彩内容")
                 .data("showButton", true)
-                .data("postRef", postRef)
+                .data("postRef", resolvePostRef(postId))
                 .data("price", postPrice)
                 .data("blockId", null)
                 .data("buttonText", "立即解锁全文")
                 .render() + "\n\n";
+    }
 
-        sb.append(placeholder);
-        return sb.toString();
+    @FunctionalInterface
+    private interface HiddenBlockRenderer {
+        String render(String blockType, String attrStr, String body,
+                      com.biliwind.blog.model.PostRenderType renderType);
     }
 
     /**
-     * 应用免费预览逻辑（保持原有方法用于向后兼容）
+     * Replaces hidden-content shortcodes with server-owned templates. Authored
+     * segments are sanitized independently and only then concatenated with the
+     * generated HTML, so the sanitizer never sees (and can never strip) the
+     * template's purchase controls while author-supplied buttons are still
+     * removed.
      */
-    public String applyFreePreview(String content, int freeLines, boolean isPaid) {
-        if (content == null) return null;
-        if (!isPaid) return content;
-
-        String[] lines = content.split("\r?\n");
-        if (lines.length <= freeLines && freeLines > 0) return content;
-
-        StringBuilder sb = new StringBuilder();
-        int limit = Math.max(0, freeLines);
-        for (int i = 0; i < Math.min(lines.length, limit); i++) {
-            sb.append(lines[i]).append("\n");
+    private String renderHiddenBlocks(String rawContent,
+                                      com.biliwind.blog.model.PostRenderType renderType,
+                                      HiddenBlockRenderer renderer) {
+        java.util.regex.Matcher matcher = HIDDEN_BLOCK_PATTERN.matcher(rawContent);
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        while (matcher.find()) {
+            out.append(renderAuthoredMarkup(rawContent.substring(cursor, matcher.start()), renderType));
+            out.append(renderer.render(
+                    matcher.group(1).toLowerCase(java.util.Locale.ROOT),
+                    matcher.group(2),
+                    matcher.group(3),
+                    renderType));
+            cursor = matcher.end();
         }
+        out.append(renderAuthoredMarkup(rawContent.substring(cursor), renderType));
+        return out.toString();
+    }
 
-        String placeholder = "\n\n" + premiumCardTemplate
-                .data("fullHide", limit == 0)
-                .data("title", limit == 0 ? "本文内容已锁定" : "专享内容已锁定")
-                .data("desc", limit == 0 ? "这是一篇付费专享文章，解锁后即可阅读全文内容" : "解锁全文即可查看此处及后续所有精彩内容")
-                .data("showButton", true)
-                .data("postRef", null)
-                .data("price", null)
-                .data("blockId", null)
-                .data("buttonText", "立即解锁全文")
-                .render() + "\n\n";
+    /** Substitutes self-closing templates without exposing them to the sanitizer. */
+    private String renderAuthoredMarkup(String content,
+                                        com.biliwind.blog.model.PostRenderType renderType) {
+        if (content == null || content.isEmpty()) {
+            return "";
+        }
+        java.util.regex.Matcher matcher = INLINE_TEMPLATE_PATTERN.matcher(content);
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        while (matcher.find()) {
+            out.append(renderAuthoredText(content.substring(cursor, matcher.start()), renderType));
+            out.append(resolveInlineTemplate(matcher));
+            cursor = matcher.end();
+        }
+        out.append(renderAuthoredText(content.substring(cursor), renderType));
+        return out.toString();
+    }
 
-        sb.append(placeholder);
-        return sb.toString();
+    private String renderAuthoredText(String authoredContent,
+                                      com.biliwind.blog.model.PostRenderType renderType) {
+        if (authoredContent == null || authoredContent.isBlank()) {
+            return "";
+        }
+        com.biliwind.blog.model.PostRenderType effective = renderType == null
+                ? com.biliwind.blog.model.PostRenderType.MARKDOWN : renderType;
+        return switch (effective) {
+            case MARKDOWN, FLUTTER_MARKDOWN_PLUS ->
+                    com.biliwind.blog.common.helper.MarkdownHelper.toHtml(authoredContent);
+            default -> publicContentSanitizer.sanitize(authoredContent);
+        };
+    }
+
+    private String resolveInlineTemplate(java.util.regex.Matcher matcher) {
+        if (matcher.group(1) != null || matcher.group(2) != null) {
+            String idStr = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            try {
+                Long itemId = Long.parseLong(idStr);
+                com.biliwind.blog.model.StoreItem item = com.biliwind.blog.model.StoreItem.findById(itemId);
+                if (item == null) {
+                    return "<!-- Store Item " + itemId + " Not Found -->";
+                }
+                return "\n\n" + storeItemCardTemplate
+                        .data("name", item.name)
+                        .data("price", item.price)
+                        .data("desc", item.description != null ? item.description : "暂无描述")
+                        .render() + "\n\n";
+            } catch (Exception exception) {
+                return "<!-- Invalid Store Item ID: " + idStr + " -->";
+            }
+        }
+        if (matcher.group(3) != null) {
+            return LEGACY_HIDE_IMAGE_HTML;
+        }
+        return LEGACY_ATTACHMENT_HTML;
     }
 
     /**
