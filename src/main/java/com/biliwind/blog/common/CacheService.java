@@ -17,6 +17,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.random.RandomGenerator;
 
 @ApplicationScoped
 public class CacheService {
@@ -24,6 +28,12 @@ public class CacheService {
     private static final Logger LOG = Logger.getLogger(CacheService.class);
     private static final String CACHE_PREFIX = "windblog:cache:";
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(30);
+    private static final Duration NEGATIVE_TTL = Duration.ofSeconds(60);
+    private static final Duration LOAD_LOCK_TTL = Duration.ofSeconds(10);
+    private static final long LOAD_LOCK_RETRY_MILLIS = 50L;
+    private static final int LOAD_LOCK_RETRIES = 20;
+    private static final String NEGATIVE_SUFFIX = ":absent";
+    private static final String LOAD_LOCK_SUFFIX = ":lock";
 
     private final ObjectMapper objectMapper;
     private final Instance<RedisDataSource> redisDataSourceInstance;
@@ -60,11 +70,140 @@ public class CacheService {
         if (!isRedisAvailable()) return;
         try {
             String json = objectMapper.writeValueAsString(value);
-            valueCommands.set(cachePrefix + key, json, new SetArgs().ex(ttl.toSeconds()));
+            valueCommands.set(cachePrefix + key, json, new SetArgs().ex(withJitter(ttl).toSeconds()));
         } catch (Exception e) {
             markUnavailable();
             LOG.warnf("Failed to set cache value: %s", e.getMessage());
         }
+    }
+
+    /**
+     * Cache-aside read through one seam: serve a hit, negative-cache an
+     * authoritative miss, and let a single loader rebuild a missing key while
+     * the other callers wait for it. Falls back to the loader when Redis is
+     * unavailable, so callers never need a Redis-specific branch.
+     */
+    public <T> Optional<T> getOrLoad(String key, Class<T> type, Duration ttl, Supplier<T> loader) {
+        return getOrLoad(key, k -> get(k, type), ttl, loader);
+    }
+
+    public <T> Optional<T> getOrLoad(String key, TypeReference<T> typeRef, Duration ttl, Supplier<T> loader) {
+        return getOrLoad(key, k -> get(k, typeRef), ttl, loader);
+    }
+
+    private <T> Optional<T> getOrLoad(String key, Function<String, Optional<T>> reader, Duration ttl,
+                                      Supplier<T> loader) {
+        Optional<T> cached = reader.apply(key);
+        if (cached.isPresent()) {
+            return cached;
+        }
+        if (!isRedisAvailable()) {
+            return Optional.ofNullable(loader.get());
+        }
+        if (hasNegativeMarker(key)) {
+            return Optional.empty();
+        }
+
+        String lockKey = key + LOAD_LOCK_SUFFIX;
+        boolean lockHeld = acquireLoadLock(lockKey);
+        if (!lockHeld) {
+            for (int attempt = 0; attempt < LOAD_LOCK_RETRIES; attempt++) {
+                // Redis just went away: do not make the request wait for a lock
+                // nobody can release.
+                if (!isRedisAvailable()) {
+                    break;
+                }
+                sleepFor(LOAD_LOCK_RETRY_MILLIS);
+                cached = reader.apply(key);
+                if (cached.isPresent()) {
+                    return cached;
+                }
+                if (hasNegativeMarker(key)) {
+                    return Optional.empty();
+                }
+            }
+            // The holder may have died; load instead of failing the request.
+        }
+
+        try {
+            T value = loader.get();
+            if (value == null) {
+                writeNegativeMarker(key);
+                return Optional.empty();
+            }
+            set(key, value, ttl);
+            return Optional.of(value);
+        } finally {
+            if (lockHeld) {
+                releaseLoadLock(lockKey);
+            }
+        }
+    }
+
+    private boolean acquireLoadLock(String lockKey) {
+        try {
+            return valueCommands.setAndChanged(cachePrefix + lockKey, "1",
+                    new SetArgs().nx().ex(LOAD_LOCK_TTL.toSeconds()));
+        } catch (Exception e) {
+            markUnavailable();
+            LOG.warnf("Failed to acquire cache load lock: %s", e.getMessage());
+            return false;
+        }
+    }
+
+    private void releaseLoadLock(String lockKey) {
+        try {
+            keyCommands.del(cachePrefix + lockKey);
+        } catch (Exception e) {
+            markUnavailable();
+            LOG.warnf("Failed to release cache load lock: %s", e.getMessage());
+        }
+    }
+
+    private boolean hasNegativeMarker(String key) {
+        try {
+            return keyCommands.exists(cachePrefix + key + NEGATIVE_SUFFIX);
+        } catch (Exception e) {
+            markUnavailable();
+            LOG.warnf("Failed to read cache negative marker: %s", e.getMessage());
+            return false;
+        }
+    }
+
+    private void writeNegativeMarker(String key) {
+        try {
+            valueCommands.set(cachePrefix + key + NEGATIVE_SUFFIX, "1",
+                    new SetArgs().ex(NEGATIVE_TTL.toSeconds()));
+        } catch (Exception e) {
+            markUnavailable();
+            LOG.warnf("Failed to write cache negative marker: %s", e.getMessage());
+        }
+    }
+
+    private static void sleepFor(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** Spreads expirations by +/-10% so a warm cache cannot expire as one wave. */
+    static Duration withJitter(Duration ttl) {
+        return withJitter(ttl, ThreadLocalRandom.current());
+    }
+
+    static Duration withJitter(Duration ttl, RandomGenerator random) {
+        if (ttl == null || ttl.isNegative() || ttl.isZero()) {
+            return ttl;
+        }
+        long seconds = ttl.toSeconds();
+        if (seconds <= 1L) {
+            return ttl;
+        }
+        long spread = Math.max(1L, seconds / 10L);
+        long offset = random.nextLong(-spread, spread + 1L);
+        return Duration.ofSeconds(Math.max(1L, seconds + offset));
     }
 
     public <T> Optional<T> get(String key, Class<T> type) {
@@ -266,12 +405,28 @@ public class CacheService {
         public static final String MEDIA_META_PREFIX = "media:meta:v2:";
         public static final String SEARCH_CACHE_PREFIX = "search:v1:";
         public static final String ARTICLE_MAP_RELATED_PREFIX = "article-map:related:v1:";
-        
-        public static final String ALL_CATEGORIES = "categories:all";
-        public static final String ALL_TAGS = "tags:all";
-        public static final String TAG_POST_COUNT_PREFIX = "tags:postCount:";
-        public static final String CATEGORY_POST_COUNT_PREFIX = "categories:postCount:";
-        public static final String ALL_POSTS = "posts:all";
+        // Public category/tag read models; lists are page+language, details add
+        // the reader region because their post lists are region-filtered.
+        public static final String PUBLIC_CATEGORY_LIST_PREFIX = "category:v1:list:";
+        public static final String PUBLIC_TAG_LIST_PREFIX = "tag:v1:list:";
+        public static final String PUBLIC_CATEGORY_DETAIL_PREFIX = "category:v1:detail:";
+        public static final String PUBLIC_TAG_DETAIL_PREFIX = "tag:v1:detail:";
+
+        public static String categoryListPage(int page, String lang) {
+            return PUBLIC_CATEGORY_LIST_PREFIX + lang + ":" + page;
+        }
+
+        public static String tagListPage(int page, String lang) {
+            return PUBLIC_TAG_LIST_PREFIX + lang + ":" + page;
+        }
+
+        public static String categoryDetail(String slug, String lang, String region, int page) {
+            return PUBLIC_CATEGORY_DETAIL_PREFIX + lang + ":" + region + ":" + page + ":" + slug;
+        }
+
+        public static String tagDetail(String slug, String lang, String region, int page) {
+            return PUBLIC_TAG_DETAIL_PREFIX + lang + ":" + region + ":" + page + ":" + slug;
+        }
 
         public static String indexPage(int page, String lang) {
             return INDEX_PAGE_PREFIX + page + ":lang:" + lang;
