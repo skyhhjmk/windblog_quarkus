@@ -488,18 +488,9 @@
                 window.showToast(window.wbT('js.correction_success', '纠错成功，已提交审核，感谢反馈！'), "success");
                 overlay.classList.remove('active');
 
-                // 如果页面上有评论模块，重新加载一下评论
-                if (commentSection) {
-                    const initMethod = window.initComments;
-                    if (typeof initMethod === 'function') {
-                        initMethod();
-                    } else {
-                        // 兜底刷新页面
-                        setTimeout(function () {
-                            window.location.reload();
-                        }, 1000);
-                    }
-                }
+                // A new correction stays pending until moderation, so the public
+                // comment list has nothing new to show. Reloading or rebuilding
+                // the list here only made the page jump and hid the toast.
             } catch (error) {
                 const detail = error.message || "网络请求失败，未收到服务端响应";
                 const message = detail.startsWith("纠错提交失败") ? detail : `纠错提交失败：${detail}`;
