@@ -41,6 +41,7 @@ public class AdminSeoController {
     @DELETE @Path("/redirects/{id}") @Transactional
     public void deleteRedirect(@PathParam("id") Long id) {
         if (!SeoRedirect.deleteById(id)) throw new NotFoundException();
+        seo.invalidateRedirectCache();
     }
 
     @GET @Path("/not-found")

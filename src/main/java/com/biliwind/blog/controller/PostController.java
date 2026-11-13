@@ -267,8 +267,10 @@ public class PostController {
                     attachmentNames.add(item.name());
                 }
                 if (snapshot.attachments() != null && !snapshot.attachments().isEmpty()) {
-                    List<PostMedia> legacyAttachments =
-                            PostMedia.list("post.id = ?1 and usageType = 3", postEntity.id);
+                    List<PostMedia> legacyAttachments = PostMedia.find(
+                            "select pm from PostMedia pm join fetch pm.media "
+                                    + "where pm.post.id = ?1 and pm.usageType = 3",
+                            postEntity.id).list();
                     for (PostMedia legacy : legacyAttachments) {
                         if (legacy.media == null || legacy.media.deletedAt != null) {
                             continue;

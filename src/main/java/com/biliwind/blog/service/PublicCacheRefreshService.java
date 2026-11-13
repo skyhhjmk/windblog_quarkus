@@ -7,6 +7,8 @@ import com.biliwind.blog.common.helper.PostCoverImageHelper;
 import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Category;
+import com.biliwind.blog.model.Link;
+import com.biliwind.blog.model.LinkType;
 import com.biliwind.blog.model.Media;
 import com.biliwind.blog.model.Post;
 import com.biliwind.blog.model.PostMedia;
@@ -14,8 +16,10 @@ import com.biliwind.blog.model.PostTag;
 import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.StoreItem;
 import com.biliwind.blog.model.Tag;
+import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.edge.DataSyncEvent;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
+import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.StartupEvent;
@@ -71,6 +75,7 @@ public class PublicCacheRefreshService {
         } else if ("MEDIA".equals(entityType)) {
             refreshMediaCache(event.getEntityId(), event.getAction());
         } else if ("LINK".equals(entityType)) {
+            cacheService.deletePattern(CacheService.Keys.PUBLIC_LINKS_PREFIX + "*");
             refreshListCaches();
         }
     }
@@ -335,9 +340,10 @@ public class PublicCacheRefreshService {
         }
         List<Category> children = Category.list(
                 "parent.id = ?1 and enabled = true order by createdAt desc", entity.id);
+        Map<Long, Long> childCounts = loadEnabledChildCounts(children);
         List<PublicCategoryListItem> childItems = children.stream()
                 .map(child -> toCategoryListItem(child, language,
-                        Category.count("parent.id", child.id)))
+                        childCounts.getOrDefault(child.id, 0L)))
                 .toList();
 
         RegionVisibility.PositionalFilter regionFilter =
@@ -407,6 +413,41 @@ public class PublicCacheRefreshService {
 
         return new PublicTagDetailPage(currentPage, totalPages, totalCount,
                 toTagDetailItem(entity, language), postItems);
+    }
+
+    /**
+     * Cached public link list. Region filtering happens while building the
+     * snapshot, so the region is part of the key.
+     */
+    @Transactional
+    public List<PublicLinkItem> findPublicLinks(String regionCode) {
+        String region = safeRegion(regionCode);
+        return cacheService.getOrLoad(CacheService.Keys.publicLinks(region),
+                        new com.fasterxml.jackson.core.type.TypeReference<List<PublicLinkItem>>() {},
+                        CATEGORY_TAG_TTL,
+                        () -> loadPublicLinks(region))
+                .orElseGet(List::of);
+    }
+
+    private List<PublicLinkItem> loadPublicLinks(String region) {
+        BlogRegion blogRegion = BlogRegion.fromCode(region);
+        return Link.<Link>list("status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
+                        (short) 1, LinkType.EXTERNAL_ARTICLE)
+                .stream()
+                .filter(LinkMonitorPolicy::isVisibleOnPublicPage)
+                .filter(item -> LinkMonitorPolicy.isVisibleInRegion(item, blogRegion))
+                .map(item -> new PublicLinkItem(
+                        item.id,
+                        item.name,
+                        item.url,
+                        item.icon,
+                        item.description,
+                        item.redirectType,
+                        item.target,
+                        LinkMonitorPolicy.publicMonitorLabel(item),
+                        item.createdAt,
+                        item.type))
+                .toList();
     }
 
     private PublicCategoryListItem toCategoryListItem(Category category, String language, long childCount) {
@@ -654,8 +695,9 @@ public class PublicCacheRefreshService {
 
     private PublicPostSnapshot toPublicPostSnapshot(Post post) {
         Map<String, String> previewByLanguage = new LinkedHashMap<>();
+        // One price read serves both the preview decision and the snapshot field.
+        long postPrice = postAccessService.getPostPrice(post);
         if (post.publishedRevision != null && post.publishedRevision.contentMarkdown != null) {
-            long postPrice = postAccessService.getPostPrice(post);
             boolean contentRequiresUnlock = requiresProtectedPreview(post, postPrice);
             int freeLines = postAccessService.getFreeLines(post);
             // Provenance, not content: only revisions applied from a primary sync
@@ -715,14 +757,14 @@ public class PublicCacheRefreshService {
                 categoryName,
                 categorySlug,
                 categories,
-                resolveAuthorName(post),
+                resolveAuthorName(post, Map.of()),
                 post.publishedAt,
                 post.updatedAt,
                 post.viewCount,
                 post.featured,
                 post.allowComment,
                 post.visibility,
-                postAccessService.getPostPrice(post),
+                postPrice,
                 tags,
                 attachments,
                 copyList(post.visibilityRegions),
@@ -753,6 +795,7 @@ public class PublicCacheRefreshService {
         }
 
         Map<Long, PostCoverImageHelper.CoverImageInfo> featuredInfos = PostCoverImageHelper.findFeaturedImageInfos(postIds);
+        Map<Long, String> authorNames = loadAuthorNames(posts);
         List<PublicPostListSnapshot> result = new ArrayList<>();
         for (Post post : posts) {
             Map<String, String> categoryName = post.category == null
@@ -778,7 +821,7 @@ public class PublicCacheRefreshService {
                     categoryName,
                     categorySlug,
                     categories,
-                    resolveAuthorName(post),
+                    resolveAuthorName(post, authorNames),
                     tagsByPost.getOrDefault(post.id, List.of()),
                     copyList(post.visibilityRegions),
                     coverInfo.url(),
@@ -790,12 +833,34 @@ public class PublicCacheRefreshService {
         return result;
     }
 
-    private String resolveAuthorName(Post post) {
+    /** Resolves author labels for a page of posts with one query instead of one per post. */
+    private Map<Long, String> loadAuthorNames(List<Post> posts) {
+        java.util.Set<Long> userIds = new java.util.HashSet<>();
+        for (Post post : posts) {
+            if (post.user != null && (post.authorName == null || post.authorName.isBlank())) {
+                userIds.add(post.user.id);
+            }
+        }
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> names = new java.util.HashMap<>();
+        for (User user : User.<User>find("id in ?1", userIds).list()) {
+            names.put(user.id, user.username);
+        }
+        return names;
+    }
+
+    private String resolveAuthorName(Post post, Map<Long, String> authorNames) {
         if (post != null && post.authorName != null && !post.authorName.isBlank()) {
             return post.authorName.trim();
         }
         if (post == null || post.user == null) {
             return resolveWespAuthorName(post);
+        }
+        String prefetched = authorNames.get(post.user.id);
+        if (prefetched != null && !prefetched.isBlank()) {
+            return prefetched;
         }
         try {
             return post.user.username == null ? "Unknown" : post.user.username;
@@ -1137,6 +1202,20 @@ public class PublicCacheRefreshService {
     }
 
     @RegisterForReflection
+    public record PublicLinkItem(
+            Long id,
+            String name,
+            String url,
+            String icon,
+            String description,
+            short redirectType,
+            String target,
+            String publicMonitorLabel,
+            OffsetDateTime createdAt,
+            LinkType type) {
+    }
+
+    @RegisterForReflection
     public record PublicCategoryRef(String name, String slug) {
     }
 
@@ -1215,6 +1294,7 @@ public class PublicCacheRefreshService {
         cacheService.deletePattern(CacheService.Keys.PUBLIC_TAG_LIST_PREFIX + "*");
         cacheService.deletePattern(CacheService.Keys.PUBLIC_CATEGORY_DETAIL_PREFIX + "*");
         cacheService.deletePattern(CacheService.Keys.PUBLIC_TAG_DETAIL_PREFIX + "*");
+        cacheService.deletePattern(CacheService.Keys.SITEMAP_PREFIX + "*");
     }
 
     private String safeLanguage(String language) {

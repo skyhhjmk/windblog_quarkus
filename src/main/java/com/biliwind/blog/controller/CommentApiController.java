@@ -109,13 +109,14 @@ public class CommentApiController {
         Map<Long, CommentNode> nodeIndex = new LinkedHashMap<>();
         List<CommentNode> resultRoots = new ArrayList<>();
         Set<Long> rootIds = new LinkedHashSet<>();
+        Map<Long, String> userNames = new LinkedHashMap<>(loadUserNames(roots));
         for (Comment root : roots) {
-            CommentNode rootNode = toNode(root);
+            CommentNode rootNode = toNode(root, userNames);
             nodeIndex.put(root.id, rootNode);
             resultRoots.add(rootNode);
             rootIds.add(root.id);
         }
-        loadReplies(post, rootIds, nodeIndex);
+        loadReplies(post, rootIds, nodeIndex, userNames);
 
         return Response.ok(Map.of(
                 "success", true,
@@ -131,7 +132,8 @@ public class CommentApiController {
      * depth and node count keeps a crafted thread from turning one list request
      * into an unbounded query.
      */
-    private void loadReplies(Post post, Set<Long> rootIds, Map<Long, CommentNode> nodeIndex) {
+    private void loadReplies(Post post, Set<Long> rootIds, Map<Long, CommentNode> nodeIndex,
+                             Map<Long, String> userNames) {
         Set<Long> frontier = new LinkedHashSet<>(rootIds);
         int depth = 0;
         while (!frontier.isEmpty() && depth < MAX_REPLY_DEPTH && nodeIndex.size() < MAX_COMMENT_NODES) {
@@ -141,6 +143,7 @@ public class CommentApiController {
             if (children.isEmpty()) {
                 return;
             }
+            userNames.putAll(loadUserNames(children));
             Set<Long> nextFrontier = new LinkedHashSet<>();
             for (Comment child : children) {
                 CommentNode parentNode = child.parent == null ? null : nodeIndex.get(child.parent.id);
@@ -149,7 +152,7 @@ public class CommentApiController {
                 if (parentNode == null || nodeIndex.containsKey(child.id)) {
                     continue;
                 }
-                CommentNode node = toNode(child);
+                CommentNode node = toNode(child, userNames);
                 nodeIndex.put(child.id, node);
                 parentNode.replies().add(node);
                 nextFrontier.add(child.id);
@@ -337,13 +340,35 @@ public class CommentApiController {
         return trimmed;
     }
 
-    private CommentNode toNode(Comment comment) {
+    /** Loads usernames for a batch of comments in one query instead of one per comment. */
+    private Map<Long, String> loadUserNames(java.util.Collection<Comment> comments) {
+        Set<Long> userIds = new LinkedHashSet<>();
+        for (Comment comment : comments) {
+            if (comment.user != null) {
+                userIds.add(comment.user.id);
+            }
+        }
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> names = new LinkedHashMap<>();
+        for (User user : User.<User>find("id in ?1", userIds).list()) {
+            names.put(user.id, user.username);
+        }
+        return names;
+    }
+
+    private CommentNode toNode(Comment comment, Map<Long, String> userNames) {
+        Long userId = comment.user != null ? comment.user.id : null;
+        String userName = userId == null ? resolveGuestName(comment) : userNames.get(userId);
+        if (userName == null) {
+            userName = comment.user != null ? comment.user.username : resolveGuestName(comment);
+        }
         return new CommentNode(
                 comment.id,
                 comment.parent != null ? comment.parent.id : null,
-                comment.user != null ? comment.user.id : null,
-                comment.user != null ? comment.user.username
-                        : (comment.guestName == null || comment.guestName.isBlank() ? "Guest" : comment.guestName),
+                userId,
+                userName,
                 comment.guestWebsite,
                 comment.clientOs,
                 comment.clientBrowser,
@@ -351,6 +376,10 @@ public class CommentApiController {
                 CommentMarkdownHelper.toSafeHtml(comment.content),
                 comment.createdAt,
                 new ArrayList<>());
+    }
+
+    private String resolveGuestName(Comment comment) {
+        return comment.guestName == null || comment.guestName.isBlank() ? "Guest" : comment.guestName;
     }
 
     private User resolveUserFromCookie(HttpHeaders headers) {
@@ -377,9 +406,11 @@ public class CommentApiController {
     public Response listQuotesByPost(@PathParam("slug") String slug) {
         Post post = findPublicPost(slug);
 
-        List<CommentQuote> quotes = CommentQuote.list(
-                "post = ?1 and comment.status = ?2 and comment.deletedAt is null and (quoteType = 'QUOTE' or (quoteType = 'CORRECTION' and status = 0))",
-                post, STATUS_APPROVED);
+        List<CommentQuote> quotes = CommentQuote.find(
+                "select q from CommentQuote q join fetch q.comment c left join fetch c.user "
+                        + "where q.post = ?1 and c.status = ?2 and c.deletedAt is null "
+                        + "and (q.quoteType = 'QUOTE' or (q.quoteType = 'CORRECTION' and q.status = 0))",
+                post, STATUS_APPROVED).list();
 
         List<Map<String, Object>> resultList = new ArrayList<>();
         for (CommentQuote q : quotes) {

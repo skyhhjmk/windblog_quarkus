@@ -9,6 +9,8 @@ import com.biliwind.blog.model.LinkType;
 import com.biliwind.blog.service.PageRenderModel;
 import com.biliwind.blog.service.PageRenderer;
 import com.biliwind.blog.service.PageView;
+import com.biliwind.blog.service.PublicCacheRefreshService;
+import com.biliwind.blog.service.PublicCacheRefreshService.PublicLinkItem;
 import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -45,6 +47,9 @@ public class LinkController {
     @Inject
     com.biliwind.blog.service.link.LinkPublicTokenService linkPublicTokenService;
 
+    @Inject
+    PublicCacheRefreshService publicCacheRefreshService;
+
         @GET
         @Produces(MediaType.TEXT_HTML)
         public TemplateInstance index(
@@ -64,25 +69,18 @@ public class LinkController {
     }
 
         private TemplateInstance render(HttpHeaders httpHeaders, String type) {
-                List<Link> eligibleLinks = Link.<Link>list(
-                                "status = ?1 and type != ?2 order by sortOrder asc, createdAt desc",
-                                (short) 1,
-                                LinkType.EXTERNAL_ARTICLE)
-                        .stream()
-                        .filter(LinkMonitorPolicy::isVisibleOnPublicPage)
-                        .filter(item -> LinkMonitorPolicy.isVisibleInRegion(item,
-                                regionContext.getCurrentRegion() == null ? BlogRegion.GLOBAL
-                                        : regionContext.getCurrentRegion()))
-                        .peek(item -> item.publicMonitorLabel = LinkMonitorPolicy.publicMonitorLabel(item))
-                        .toList();
-                List<Link> links;
+                BlogRegion region = regionContext.getCurrentRegion() == null
+                        ? BlogRegion.GLOBAL : regionContext.getCurrentRegion();
+                List<PublicLinkItem> eligibleLinks =
+                        publicCacheRefreshService.findPublicLinks(region.getCode());
+                List<PublicLinkItem> links;
             if (type == null || type.isBlank() || type.equalsIgnoreCase("All")) {
                 links = eligibleLinks;
                 } else {
                         LinkType linkType = parseLinkType(type);
                 if (linkType != null && linkType != LinkType.EXTERNAL_ARTICLE) {
                                 links = eligibleLinks.stream()
-                                        .filter(item -> item.type == linkType)
+                                        .filter(item -> item.type() == linkType)
                                         .toList();
                         } else {
                     links = eligibleLinks;
@@ -91,7 +89,7 @@ public class LinkController {
 
             // 只获取当前数据库中已存在的链接分类，且排除文章外部链接
             List<LinkType> activeTypes = eligibleLinks.stream()
-                    .map(item -> item.type)
+                    .map(PublicLinkItem::type)
                     .distinct()
                     .toList();
                 

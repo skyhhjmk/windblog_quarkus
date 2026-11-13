@@ -1,5 +1,6 @@
 package com.biliwind.blog.service;
 
+import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.common.helper.LanguageHelper;
 import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.context.LanguageContext;
@@ -44,6 +45,11 @@ public class FeedService {
     @Inject PublicContentSanitizer sanitizer;
     @Inject SettingsReader settings;
 
+    @Inject
+    CacheService cacheService;
+
+    private static final java.time.Duration SITEMAP_CACHE_TTL = java.time.Duration.ofMinutes(30);
+
     public List<FeedPostView> getPublishedPosts() {
         String language = languageContext.getLang();
         String region = regionContext.getCurrentRegion().getCode();
@@ -77,8 +83,16 @@ public class FeedService {
     }
 
     public List<Integer> getPostSitemapPages() {
+        String region = currentRegionCode();
+        return cacheService.getOrLoad(CacheService.Keys.sitemapPostPages(region),
+                        new com.fasterxml.jackson.core.type.TypeReference<List<Integer>>() {}, SITEMAP_CACHE_TTL,
+                        () -> loadPostSitemapPages(region))
+                .orElseGet(List::of);
+    }
+
+    private List<Integer> loadPostSitemapPages(String region) {
         RegionVisibility.PositionalFilter regionFilter =
-                RegionVisibility.jpqlFilter(2, BlogRegion.fromCode(currentRegionCode()));
+                RegionVisibility.jpqlFilter(2, BlogRegion.fromCode(region));
         long count = com.biliwind.blog.model.Post.count(sitemapPostQuery(regionFilter),
                 com.biliwind.blog.model.PostStatus.PUBLISHED, regionFilter.regionPattern());
         return java.util.stream.IntStream.rangeClosed(1, Math.max(1, (int) ((count + SITEMAP_PAGE_SIZE - 1) / SITEMAP_PAGE_SIZE)))
@@ -87,14 +101,23 @@ public class FeedService {
 
     public List<PostSitemapUrlView> getPostSitemapUrls(int page) {
         if (page < 1 || page > getPostSitemapPages().size()) throw new jakarta.ws.rs.NotFoundException();
+        if (!settings.flag(SettingKey.SEO, "index_enabled")) return List.of();
+        String region = currentRegionCode();
+        return cacheService.getOrLoad(CacheService.Keys.sitemapPostUrls(region, page),
+                        new com.fasterxml.jackson.core.type.TypeReference<List<PostSitemapUrlView>>() {},
+                        SITEMAP_CACHE_TTL,
+                        () -> loadPostSitemapUrls(page, region))
+                .orElseGet(List::of);
+    }
+
+    private List<PostSitemapUrlView> loadPostSitemapUrls(int page, String region) {
         RegionVisibility.PositionalFilter regionFilter =
-                RegionVisibility.jpqlFilter(2, BlogRegion.fromCode(currentRegionCode()));
+                RegionVisibility.jpqlFilter(2, BlogRegion.fromCode(region));
         List<com.biliwind.blog.model.Post> posts = com.biliwind.blog.model.Post.find(
                 sitemapPostQuery(regionFilter) + " order by id",
                 com.biliwind.blog.model.PostStatus.PUBLISHED, regionFilter.regionPattern())
                 .page(io.quarkus.panache.common.Page.of(page - 1, SITEMAP_PAGE_SIZE)).list();
         List<PostSitemapUrlView> urls = new ArrayList<>();
-        if (!settings.flag(SettingKey.SEO, "index_enabled")) return urls;
         for (var post : posts) {
             String plainPath = "/post/" + encodeSlug(post.slug);
             List<String> languages = new ArrayList<>();
@@ -296,6 +319,7 @@ public class FeedService {
     ) {}
 
     @TemplateData
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record PostSitemapUrlView(String loc, String lastmod, List<String> images, List<SeoPageService.Alternate> alternates) {}
 
     @TemplateData

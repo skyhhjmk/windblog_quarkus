@@ -135,6 +135,7 @@ public class SeoPageService {
     }
 
     @TemplateData
+    @io.quarkus.runtime.annotations.RegisterForReflection
     public record Alternate(String language, String url) {
     }
 }

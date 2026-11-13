@@ -1,7 +1,6 @@
 package com.biliwind.blog.filter;
 
 import com.biliwind.blog.common.helper.LanguageHelper;
-import com.biliwind.blog.model.SeoRedirect;
 import com.biliwind.blog.service.SeoManagementService;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
@@ -23,12 +22,10 @@ public class SeoRedirectFilter {
                 || path.startsWith("/uploads/") || path.equals("/sw.js")
                 || path.equals("/manifest.webmanifest")) return Uni.createFrom().nullItem();
         return Uni.createFrom().item(() -> {
-            SeoRedirect rule = SeoRedirect.find("source = ?1 and enabled = true", path).firstResult();
-            if (rule == null) return (Response) null;
-            String target = seo.redirectTarget(path);
-            if (target == null || target.equals(path)) return (Response) null;
-            target = preserveLanguage(path, target, request);
-            return Response.status(rule.status).location(java.net.URI.create(target))
+            SeoManagementService.RedirectResolution resolution = seo.resolveRedirect(path);
+            if (resolution == null) return (Response) null;
+            String target = preserveLanguage(path, resolution.target(), request);
+            return Response.status(resolution.status()).location(java.net.URI.create(target))
                     .header("Cache-Control", "no-store").build();
         }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }

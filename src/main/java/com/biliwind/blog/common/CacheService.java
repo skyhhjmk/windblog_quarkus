@@ -411,6 +411,12 @@ public class CacheService {
         public static final String PUBLIC_TAG_LIST_PREFIX = "tag:v1:list:";
         public static final String PUBLIC_CATEGORY_DETAIL_PREFIX = "category:v1:detail:";
         public static final String PUBLIC_TAG_DETAIL_PREFIX = "tag:v1:detail:";
+        // Sitemaps are rebuilt from a 1000-post page that re-renders every body,
+        // so the crawler-facing pages are read through one shared prefix.
+        public static final String SITEMAP_PREFIX = "sitemap:v1:";
+        // The link page scans the whole table on every request and is filtered
+        // per reader region, so the visible list is cached per region.
+        public static final String PUBLIC_LINKS_PREFIX = "link:v1:public:";
 
         public static String categoryListPage(int page, String lang) {
             return PUBLIC_CATEGORY_LIST_PREFIX + lang + ":" + page;
@@ -462,6 +468,18 @@ public class CacheService {
 
         public static String articleMapRelated(Long postId, String language, int limit) {
             return ARTICLE_MAP_RELATED_PREFIX + postId + ":" + language + ":" + limit;
+        }
+
+        public static String sitemapPostPages(String region) {
+            return SITEMAP_PREFIX + "post-pages:" + region;
+        }
+
+        public static String sitemapPostUrls(String region, int page) {
+            return SITEMAP_PREFIX + "post-urls:" + region + ":" + page;
+        }
+
+        public static String publicLinks(String region) {
+            return PUBLIC_LINKS_PREFIX + region;
         }
     }
 }

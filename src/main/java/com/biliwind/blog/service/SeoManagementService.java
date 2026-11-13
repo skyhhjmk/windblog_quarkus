@@ -16,6 +16,14 @@ public class SeoManagementService {
     @Inject EntityManager em;
     @Inject SettingsReader settings;
 
+    /**
+     * The redirect table is read on every request and rewritten a handful of
+     * times a month, so a short-lived snapshot replaces a query per request.
+     * Saves and deletes invalidate it; other nodes converge within the TTL.
+     */
+    private static final long REDIRECT_SNAPSHOT_TTL_MILLIS = 60_000L;
+    private volatile RedirectSnapshot redirectSnapshot;
+
     public String robots(String path) {
         boolean noindex = false;
         boolean nofollow = false;
@@ -83,6 +91,7 @@ public class SeoManagementService {
         if (rule == null) throw new jakarta.ws.rs.NotFoundException();
         rule.source = source; rule.target = target; rule.status = status; rule.enabled = enabled;
         rule.persist();
+        invalidateRedirectCache();
         return rule;
     }
 
@@ -103,15 +112,73 @@ public class SeoManagementService {
         }
     }
 
+    /**
+     * Resolves a chain of enabled redirects. Returns {@code path} unchanged when
+     * no rule matches, and {@code null} when the chain cycles.
+     */
     public String redirectTarget(String path) {
+        Map<String, RedirectRule> rules = enabledRedirectRules();
+        if (!rules.containsKey(path)) {
+            return path;
+        }
+        return followRedirect(rules, path);
+    }
+
+    /**
+     * One lookup for the request filter: the first hop decides the status code,
+     * the last hop decides the location. Returns {@code null} when nothing
+     * matches or the chain cycles.
+     */
+    public RedirectResolution resolveRedirect(String path) {
+        Map<String, RedirectRule> rules = enabledRedirectRules();
+        RedirectRule first = rules.get(path);
+        if (first == null) {
+            return null;
+        }
+        String target = followRedirect(rules, path);
+        return target == null ? null : new RedirectResolution(first.status(), target);
+    }
+
+    private static String followRedirect(Map<String, RedirectRule> rules, String path) {
         Set<String> seen = new HashSet<>();
         String current = path;
         while (seen.add(current)) {
-            SeoRedirect rule = SeoRedirect.find("source = ?1 and enabled = true", current).firstResult();
-            if (rule == null) return current;
-            current = rule.target;
+            RedirectRule rule = rules.get(current);
+            if (rule == null) {
+                return current;
+            }
+            current = rule.target();
         }
         return null;
+    }
+
+    /** Drops the rule snapshot so a saved or deleted redirect takes effect immediately. */
+    public void invalidateRedirectCache() {
+        redirectSnapshot = null;
+    }
+
+    private Map<String, RedirectRule> enabledRedirectRules() {
+        RedirectSnapshot snapshot = redirectSnapshot;
+        long now = System.currentTimeMillis();
+        if (snapshot != null && snapshot.expiresAtMillis() > now) {
+            return snapshot.rules();
+        }
+        Map<String, RedirectRule> rules = new HashMap<>();
+        for (SeoRedirect rule : SeoRedirect.<SeoRedirect>list("enabled = true")) {
+            rules.put(rule.source, new RedirectRule(rule.target, rule.status));
+        }
+        snapshot = new RedirectSnapshot(Map.copyOf(rules), now + REDIRECT_SNAPSHOT_TTL_MILLIS);
+        redirectSnapshot = snapshot;
+        return snapshot.rules();
+    }
+
+    public record RedirectResolution(int status, String target) {
+    }
+
+    private record RedirectRule(String target, int status) {
+    }
+
+    private record RedirectSnapshot(Map<String, RedirectRule> rules, long expiresAtMillis) {
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
