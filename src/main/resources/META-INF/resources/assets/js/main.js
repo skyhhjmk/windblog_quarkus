@@ -1158,9 +1158,36 @@
             };
         }
 
+        function getArticleTransitionScrollOffset() {
+            return {
+                x: window.scrollX || window.pageXOffset || 0,
+                y: window.scrollY || window.pageYOffset || 0
+            };
+        }
+
+        function toArticleTransitionDocumentRect(rect, scrollOffset) {
+            // Clones are absolutely positioned on document.body, so every rect
+            // they animate between must be expressed in document coordinates.
+            // `getBoundingClientRect()` alone is viewport-relative: if the user
+            // scrolls during the morph, a viewport rect would leave the clone
+            // glued to the screen while the page moves underneath it.
+            if (!rect) {
+                return null;
+            }
+            const offset = scrollOffset || getArticleTransitionScrollOffset();
+            return {
+                left: rect.left + offset.x,
+                top: rect.top + offset.y,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+
         function getArticleTransitionTargetSignature(preparedItems, container) {
             const parts = preparedItems.map(function (preparedItem) {
-                const rect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
+                const rect = toArticleTransitionDocumentRect(
+                    getArticleTransitionTargetRect(preparedItem.targetElement, container)
+                );
                 const computedStyle = window.getComputedStyle(preparedItem.targetElement);
                 // Round away sub-pixel float noise: the container transform is
                 // interpolated per frame, and rect minus matrix would otherwise
@@ -1177,7 +1204,9 @@
                 ].join('|');
             });
             if (preparedItems.backdropItem && preparedItems.backdropItem.targetElement) {
-                const cardRect = getArticleTransitionTargetRect(preparedItems.backdropItem.targetElement, container);
+                const cardRect = toArticleTransitionDocumentRect(
+                    getArticleTransitionTargetRect(preparedItems.backdropItem.targetElement, container)
+                );
                 parts.push([
                     cardRect.left.toFixed(1),
                     cardRect.top.toFixed(1),
@@ -1237,7 +1266,7 @@
             cloneElement.style.minHeight = '0';
             cloneElement.style.maxHeight = 'none';
             cloneElement.style.margin = '0';
-            cloneElement.style.position = 'fixed';
+            cloneElement.style.position = 'absolute';
             cloneElement.style.overflow = 'hidden';
 
             const sourceCover = capturedItem.coverState || {};
@@ -1318,17 +1347,24 @@
                 return preparedItems;
             }
 
+            // Source rects were captured in viewport coordinates before the DOM
+            // swap. Anchor them now, with the scroll position the destination
+            // page actually has (a pushed article starts at 0; a restored list
+            // entry keeps its saved offset), so the parked clones still appear
+            // at the screen position the source element occupied.
+            const scrollOffset = getArticleTransitionScrollOffset();
             const targetCardElement = findArticleTransitionCardElement(document, slug);
-            if (capturedItems.cardSourceRect && targetCardElement) {
+            const cardSourceRect = toArticleTransitionDocumentRect(capturedItems.cardSourceRect, scrollOffset);
+            if (cardSourceRect && targetCardElement) {
                 targetCardElement.classList.add('pjax-article-transition-target-card');
                 const backdropElement = document.createElement('div');
                 backdropElement.className = 'pjax-article-transition-backdrop';
                 backdropElement.setAttribute('aria-hidden', 'true');
                 backdropElement.style.transform = 'translate3d('
-                    + capturedItems.cardSourceRect.left + 'px, '
-                    + capturedItems.cardSourceRect.top + 'px, 0)';
-                backdropElement.style.width = capturedItems.cardSourceRect.width + 'px';
-                backdropElement.style.height = capturedItems.cardSourceRect.height + 'px';
+                    + cardSourceRect.left + 'px, '
+                    + cardSourceRect.top + 'px, 0)';
+                backdropElement.style.width = cardSourceRect.width + 'px';
+                backdropElement.style.height = cardSourceRect.height + 'px';
                 backdropElement.style.opacity = '1';
                 if (capturedItems.cardSourceStyle) {
                     applyArticleCardStyleSnapshot(backdropElement, capturedItems.cardSourceStyle);
@@ -1336,7 +1372,7 @@
                 document.body.appendChild(backdropElement);
                 preparedItems.backdropItem = {
                     element: backdropElement,
-                    sourceRect: capturedItems.cardSourceRect,
+                    sourceRect: cardSourceRect,
                     sourceStyle: capturedItems.cardSourceStyle,
                     targetElement: targetCardElement,
                     targetRect: null,
@@ -1376,17 +1412,19 @@
                     cloneElement.style.zIndex = '10001';
                 }
 
+                const sourceRect = toArticleTransitionDocumentRect(capturedItem.sourceRect, scrollOffset);
+
                 // Park the clone where the source element was visible while the
                 // destination geometry settles in the hidden container.
-                cloneElement.style.transform = 'translate3d(' + capturedItem.sourceRect.left + 'px, ' + capturedItem.sourceRect.top + 'px, 0)';
-                cloneElement.style.width = capturedItem.sourceRect.width + 'px';
-                cloneElement.style.height = capturedItem.sourceRect.height + 'px';
+                cloneElement.style.transform = 'translate3d(' + sourceRect.left + 'px, ' + sourceRect.top + 'px, 0)';
+                cloneElement.style.width = sourceRect.width + 'px';
+                cloneElement.style.height = sourceRect.height + 'px';
                 applyArticleTransitionStyleSnapshot(cloneElement, capturedItem.sourceStyle);
                 document.body.appendChild(cloneElement);
 
                 preparedItems.push({
                     partName: capturedItem.partName,
-                    sourceRect: capturedItem.sourceRect,
+                    sourceRect: sourceRect,
                     sourceStyle: capturedItem.sourceStyle,
                     coverState: capturedItem.coverState,
                     coverNodes: coverNodes,
@@ -1408,10 +1446,10 @@
         function measureArticleTransitionTargets(preparedItems, container) {
             const measuredItems = [];
             if (preparedItems && preparedItems.backdropItem) {
-                const targetCardRect = getArticleCardViewportRect(
+                const targetCardRect = toArticleTransitionDocumentRect(getArticleCardViewportRect(
                     preparedItems.backdropItem.targetElement,
                     container
-                );
+                ));
                 if (targetCardRect && targetCardRect.width > 0 && targetCardRect.height > 0) {
                     preparedItems.backdropItem.targetRect = targetCardRect;
                     preparedItems.backdropItem.targetStyle = getArticleCardStyleSnapshot(preparedItems.backdropItem.targetElement);
@@ -1423,7 +1461,9 @@
             }
 
             preparedItems.forEach(function (preparedItem) {
-                const targetRect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
+                const targetRect = toArticleTransitionDocumentRect(
+                    getArticleTransitionTargetRect(preparedItem.targetElement, container)
+                );
                 if (targetRect.width <= 0 || targetRect.height <= 0) {
                     cleanupArticleTransitionItems([preparedItem]);
                     return;
@@ -1711,10 +1751,10 @@
             // final rect instead of snapping when the real element is revealed.
             const corrections = [];
             if (preparedItems.backdropItem && preparedItems.backdropItem.targetElement && preparedItems.backdropItem.targetRect) {
-                const targetCardRect = getArticleCardViewportRect(
+                const targetCardRect = toArticleTransitionDocumentRect(getArticleCardViewportRect(
                     preparedItems.backdropItem.targetElement,
                     container
-                );
+                ));
                 if (targetCardRect) {
                     const moved = Math.abs(targetCardRect.left - preparedItems.backdropItem.targetRect.left) > 0.5
                         || Math.abs(targetCardRect.top - preparedItems.backdropItem.targetRect.top) > 0.5
@@ -1741,7 +1781,9 @@
                 }
             }
             preparedItems.forEach(function (preparedItem) {
-                const targetRect = getArticleTransitionTargetRect(preparedItem.targetElement, container);
+                const targetRect = toArticleTransitionDocumentRect(
+                    getArticleTransitionTargetRect(preparedItem.targetElement, container)
+                );
                 const moved = Math.abs(targetRect.left - preparedItem.targetRect.left) > 0.5
                     || Math.abs(targetRect.top - preparedItem.targetRect.top) > 0.5
                     || Math.abs(targetRect.width - preparedItem.targetRect.width) > 0.5

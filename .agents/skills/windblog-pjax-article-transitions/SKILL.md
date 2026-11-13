@@ -123,7 +123,9 @@ sequenceDiagram
 - **CSS 类定义** (`src/main/resources/META-INF/resources/assets/css/ui.css` 与 `theme.css`)：
   - `#pjax-container` (`position: relative; z-index: 35`)
   - 面包屑导航 (`position: relative; z-index: 40`，位于卡片外部且高于过渡层)
-  - `.pjax-article-transition-backdrop` (`z-index: 30`)
+  - `.pjax-article-transition-backdrop` (`position: absolute`, `z-index: 30`)
+  - `.pjax-article-transition-clone*` (`position: absolute`, `z-index: 9998`–`10001`)
+  - **不要把这些过渡层改回 `position: fixed`**：它们使用文档坐标系，动画期间用户滚动时必须随页面内容一起移动（见 4.3）。
   - `.pjax-article-transition-clone-cover` (`z-index: 9998`, `overflow: hidden`)
   - `.pjax-article-transition-clone-summary` (`z-index: 9999`, `overflow: hidden`)
   - `.pjax-article-transition-clone-meta` (`z-index: 10000`, `overflow: hidden`)
@@ -131,6 +133,12 @@ sequenceDiagram
   - `.post-title-stage` / `.post-header-cover` / `.post-header-cover-gradient`：详情页标题下方紧凑封面条与 `--card-bg` 多向透明度渐变遮罩。
 
 ### 4.3 滚动与回退位置处理
+- 过渡层（`backdrop` 与各类 `clone`）是**文档坐标系**的 `position: absolute`，不是 `fixed`。动画运行期间用户滚动页面时，克隆体会像普通页面内容一样跟随滚动；若使用 `fixed`，克隆会钉在视口上、页面内容从它下方滑过，表现为“滚动异常”。
+- 坐标换算规则：
+  - `captureArticleTransitionItems()` / `getArticleTransitionTargetRect()` / `getArticleCardViewportRect()` 仍产出**视口坐标**（后者还保留按视口裁剪卡片可见区域的语义）；
+  - 写入动画关键帧或克隆的初始位置前，一律经 `toArticleTransitionDocumentRect(rect)` 加上当前 `scrollX/scrollY` 转成文档坐标；
+  - 源坐标在 `prepareArticleTransitionTargets()` 执行时用**当时的滚动位置**锚定：进入文章时页面已瞬时滚到顶部（偏移为 0），返回列表时已瞬时恢复历史滚动位置，因此克隆仍出现在过渡开始那一刻的屏幕位置。
+- `settleArticleTransitionTargets()` 的稳定性签名也使用文档坐标，因此 settle 期间滚动不会让签名逐帧变化、拖满整个等待窗口。
 - 从列表页进入文章页时：
   1. 记录列表页当前滚动位置（`windblogScroll`）存入 `history.state`。
   2. 记住列表来源 URL（`windblog:last-article-list-url`），用于文章详情页的“返回”按钮。
@@ -142,11 +150,11 @@ Tailwind 在本项目中是**运行时**加载的（`assets/vendor/tailwind/tail
 - 在 `updatePjaxContainerState()` 之后**同步**调用 `getBoundingClientRect()` 会拿到未应用样式的几何。实测文章标题会从 `24px/40px`（默认 h1）变成 `60px/180px`，克隆会停在错误位置，真实元素随后“跳”到正确位置，表现为文字错位。
 - 修复方式：先把克隆**停在源位置**（不测量目标），再执行 `settleArticleTransitionTargets()`：
   - 逐帧读取目标元素的 rect 与 `fontSize/lineHeight/fontWeight/letterSpacing`；
-  - 连续两帧签名一致才认为布局已稳定（签名数值取 1 位小数，消除 rect 与容器 transform 相减产生的亚像素抖动）；
-  - 最长等待 240ms，避免样式缺失时导航卡住；
+  - 连续两帧签名一致才认为布局已稳定（签名使用文档坐标，取 1 位小数，消除 rect 与容器 transform 相减产生的亚像素抖动，也避免用户滚动被误判为布局变化）；
+  - 最长等待 180ms，避免样式缺失时导航卡住；
   - 测量时必须扣掉 `#pjax-container` 入场动画（`translateY(6px)`）的当前位移（`getArticleTransitionContainerOffset`），否则目标坐标会带上动画中的偏移。
 - `pjax:complete` 会在动画开始前派发，让广告位等“标题上方”的初始化内容先就位，再锁定目标坐标。
-- 动画结束后 `reconcileArticleTransitionTargets()` 会再测一次；若目标仍有超过 0.5px 的位移，用 140ms 把克隆平滑补位后再显示真实元素（惰性图片、晚到的布局初始化等兜底）。
+- 动画结束后 `reconcileArticleTransitionTargets()` 会再测一次；若目标仍有超过 0.5px 的位移，用 120ms 把克隆平滑补位后再显示真实元素（惰性图片、晚到的布局初始化等兜底）。
 
 ---
 

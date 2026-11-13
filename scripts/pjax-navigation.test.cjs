@@ -8,14 +8,15 @@ const navigation = source.slice(source.indexOf('        async function loadByPja
 
 function harness(fetch) {
     const events = [], commits = [], failures = [], history = [], analytics = [];
-    const container = { innerHTML: 'original', getAnimations: () => [] };
+    const container = { innerHTML: 'original', style: {}, getAnimations: () => [] };
     const context = {
         URL, AbortController, console: { warn() {} },
         CustomEvent: class { constructor(type) { this.type = type; } },
         window: {
             location: { href: 'http://localhost/', origin: 'http://localhost' },
             history: { state: {}, replaceState: (state, _, url) => history.push(url) },
-            matchMedia: () => ({ matches: true })
+            matchMedia: () => ({ matches: true }),
+            wbT: (key, fallback) => fallback
         },
         document: {
             title: 'Original', head: { querySelectorAll: () => [] },
@@ -26,8 +27,13 @@ function harness(fetch) {
         displayedUrl: 'http://localhost/', displayedHistoryState: {},
         getCurrentScrollPosition: () => ({ left: 0, top: 100 }),
         getHistoryScrollPosition: () => ({ left: 0, top: 0 }),
+        replaceCurrentHistoryState: fields => Object.assign(context.window.history.state, fields || {}),
         isArticleDetailUrl: () => false, rememberArticleListUrl: () => '',
         cleanupArticleTransitionItems() {}, scrollToPositionInstantly() {},
+        showProgress() {}, hideProgress() {},
+        closeGithubSearchModal() {}, clearInPageHighlights() {},
+        cleanupPaginationGoAnimation() {},
+        WindBlogLifecycle: { beginNavigation() {}, mountPage() {} },
         fallbackToFullPage: url => failures.push({ url }),
         extractPjaxHtml: html => { if (html === 'invalid') throw Error('Invalid fragment'); return html; },
         hasArticleTransitionSource: () => false, logArticleTransitionMode() {},
@@ -61,11 +67,14 @@ test('full-page fallback reloads the current URL and assigns a different target'
     const calls = [];
     const context = {
         URL, navigationStatus: {},
-        window: { location: {
-            href: 'http://localhost/tag',
-            reload: () => calls.push('reload'),
-            assign: url => calls.push(url)
-        } }
+        window: {
+            wbT: (key, fallback) => fallback,
+            location: {
+                href: 'http://localhost/tag',
+                reload: () => calls.push('reload'),
+                assign: url => calls.push(url)
+            }
+        }
     };
     const start = source.indexOf('        function fallbackToFullPage(');
     const end = source.indexOf('        function showProgress()', start);
@@ -139,10 +148,19 @@ test('same-address clicks are intercepted, while modifier clicks keep native beh
         document: { addEventListener: (_, listener) => { handler = listener; } },
         window: { location: { href: 'http://localhost/', pathname: '/', search: '' }, history: { state: {} } },
         canUsePjax: () => true,
+        getArticleListReturnUrl: () => '',
+        isArticleDetailUrl: () => false,
+        areSameInternalUrls: () => false,
+        switchLanguage() {},
         loadByPjax: () => { navigations++; }
     };
     vm.runInNewContext(source.slice(start, end), context);
-    const event = { button: 0, target: { closest: () => anchor }, preventDefault: () => { prevented++; } };
+    const event = {
+        button: 0,
+        target: { closest: selector => selector === 'a' ? anchor : null },
+        preventDefault: () => { prevented++; },
+        stopPropagation: () => {}
+    };
     handler(event);
     assert.equal(prevented, 1);
     assert.equal(navigations, 0);
