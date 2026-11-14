@@ -2,11 +2,15 @@ package com.biliwind.blog.controller.api;
 
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.service.security.ProofOfWorkService;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
@@ -40,11 +44,21 @@ class UserRepostLicenseControllerTest {
             bootstrap.then().statusCode(200);
             String csrfToken = bootstrap.getCookie("XSRF-TOKEN");
 
+            Response powResp = given()
+                    .queryParam("action", "login")
+                    .get("/user/api/pow/challenge");
+            powResp.then().statusCode(200);
+            String challengeId = powResp.jsonPath().getString("data.id");
+            int difficulty = powResp.jsonPath().getInt("data.difficulty");
+            String powNonce = solvePow(challengeId, difficulty);
+
             Response login = given()
                     .cookie("XSRF-TOKEN", csrfToken)
                     .header("X-XSRF-TOKEN", csrfToken)
                     .formParam("account", username)
                     .formParam("password", password)
+                    .formParam("challengeId", challengeId)
+                    .formParam("powNonce", powNonce)
                     .post("/user/api/login");
             login.then().statusCode(200);
 
@@ -86,6 +100,21 @@ class UserRepostLicenseControllerTest {
                     .body("banned", equalTo(true));
         } finally {
             QuarkusTransaction.requiringNew().run(() -> User.delete("username", username));
+        }
+    }
+
+    private static String solvePow(String id, int difficulty) {
+        try {
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            for (long nonce = 0; ; nonce++) {
+                String proof = Long.toString(nonce);
+                byte[] digest = sha.digest((id + ":" + proof).getBytes(StandardCharsets.UTF_8));
+                if (ProofOfWorkService.hasLeadingZeroBits(digest, difficulty)) {
+                    return proof;
+                }
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
         }
     }
 }

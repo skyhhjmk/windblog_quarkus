@@ -329,9 +329,8 @@
         }
     }
 
-    const POW_WORKER_URL = '/assets/js/comment-pow-worker.js?v=comment-pow-20261104';
-    const POW_SOLVE_TIMEOUT_MS = 20000;
-    let powWorker = null;
+    const POW_SOLVE_TIMEOUT_MS = 30000;
+    let powAbortController = null;
 
     function setVerificationStatus(root, key, fallback) {
         const status = root.querySelector('#comment-verification-status');
@@ -339,9 +338,9 @@
     }
 
     function cancelPendingProof(root) {
-        if (powWorker) {
-            powWorker.terminate();
-            powWorker = null;
+        if (powAbortController) {
+            powAbortController.abort();
+            powAbortController = null;
         }
         root.dataset.powNonce = '';
     }
@@ -358,51 +357,31 @@
         loadChallenge(root);
     }
 
-    function solveProof(root, version, challenge, difficulty) {
-        return new Promise((resolve, reject) => {
-            if (typeof Worker === 'undefined') {
-                reject(new Error('worker unsupported'));
-                return;
+    async function solveProof(root, version, challenge, difficulty) {
+        if (!window.WindBlogPow || typeof window.WindBlogPow.solve !== 'function') {
+            throw new Error('worker unsupported');
+        }
+        if (powAbortController) {
+            powAbortController.abort();
+            powAbortController = null;
+        }
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        powAbortController = controller;
+        try {
+            const nonce = await window.WindBlogPow.solve(challenge, difficulty, {
+                timeoutMs: POW_SOLVE_TIMEOUT_MS,
+                signal: controller ? controller.signal : undefined
+            });
+            if (root.dataset.captchaVersion === version) {
+                root.dataset.powNonce = String(nonce);
+                setVerificationStatus(root, 'js.comment_verification_ready', '安全校验已就绪。');
+                updateSubmitState(root);
             }
-            if (powWorker) {
-                powWorker.terminate();
-                powWorker = null;
+        } finally {
+            if (powAbortController === controller) {
+                powAbortController = null;
             }
-            let worker;
-            try {
-                worker = new Worker(POW_WORKER_URL);
-            } catch (error) {
-                reject(error);
-                return;
-            }
-            powWorker = worker;
-            const timer = window.setTimeout(() => {
-                worker.terminate();
-                if (powWorker === worker) powWorker = null;
-                reject(new Error('pow timeout'));
-            }, POW_SOLVE_TIMEOUT_MS);
-            worker.onmessage = (event) => {
-                const data = event.data || {};
-                window.clearTimeout(timer);
-                worker.terminate();
-                if (powWorker === worker) powWorker = null;
-                if (data.ok && data.nonce !== undefined && root.dataset.captchaVersion === version) {
-                    root.dataset.powNonce = String(data.nonce);
-                    setVerificationStatus(root, 'js.comment_verification_ready', '安全校验已就绪。');
-                    updateSubmitState(root);
-                    resolve();
-                    return;
-                }
-                reject(new Error('pow failed'));
-            };
-            worker.onerror = () => {
-                window.clearTimeout(timer);
-                worker.terminate();
-                if (powWorker === worker) powWorker = null;
-                reject(new Error('pow error'));
-            };
-            worker.postMessage({challenge: challenge, difficulty: difficulty});
-        });
+        }
     }
 
     async function loadChallenge(root) {

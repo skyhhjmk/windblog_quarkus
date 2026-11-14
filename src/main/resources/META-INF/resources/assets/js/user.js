@@ -109,12 +109,44 @@
         });
     }
 
+    function createFormPowManager(action, statusElement) {
+        if (!window.WindBlogPow || typeof window.WindBlogPow.createChallengeManager !== 'function') {
+            return null;
+        }
+        return window.WindBlogPow.createChallengeManager({
+            challengeUrl: '/user/api/pow/challenge?action=' + encodeURIComponent(action),
+            onStatus: (state) => {
+                if (!statusElement) return;
+                if (state === 'preparing') {
+                    statusElement.textContent = window.wbT
+                        ? window.wbT('js.pow_preparing', '正在准备安全校验...')
+                        : '正在准备安全校验...';
+                } else if (state === 'ready') {
+                    statusElement.textContent = window.wbT
+                        ? window.wbT('js.pow_ready', '安全校验已就绪')
+                        : '安全校验已就绪';
+                } else if (state === 'error') {
+                    statusElement.textContent = window.wbT
+                        ? window.wbT('js.pow_failed', '安全校验准备失败，提交时将重试')
+                        : '安全校验准备失败，提交时将重试';
+                }
+            }
+        });
+    }
+
     function bindLoginForm() {
         const form = document.getElementById('loginForm');
         const errorDiv = document.getElementById('errorMessage');
+        const statusDiv = document.getElementById('loginPowStatus');
         const submitBtn = form?.querySelector('button[type="submit"]');
 
         if (!form) return;
+
+        const powManager = createFormPowManager('login', statusDiv);
+        if (powManager) {
+            powManager.ensure().catch(() => {});
+            form.addEventListener('focusin', () => powManager.ensure().catch(() => {}), { passive: true });
+        }
 
         form.onsubmit = async function (e) {
             e.preventDefault();
@@ -136,6 +168,12 @@
 
             let isRedirecting = false;
             try {
+                if (powManager) {
+                    const proof = await powManager.acquire();
+                    formData.set('challengeId', proof.challengeId);
+                    formData.set('powNonce', proof.powNonce);
+                }
+
                 const response = await fetch('/user/api/login', {
                     method: 'POST',
                     headers: {
@@ -156,6 +194,7 @@
                     }, 1000);
                 } else {
                     analyticsFormResult('login', false);
+                    if (powManager) powManager.refresh().catch(() => {});
                     const message = result.message || window.i18n.login_failed || '登录失败';
                     window.showToast(message, 'error', 8000, result.errorCode || 'WB-UI-AUTH-LOGIN-001');
                     if (errorDiv) {
@@ -167,7 +206,10 @@
                 }
             } catch (err) {
                 analyticsFormResult('login', false);
-                const message = window.i18n.network_error || '登录请求失败，网络连接异常';
+                if (powManager) powManager.refresh().catch(() => {});
+                const message = (err && err.message && err.message !== 'Failed to fetch')
+                    ? err.message
+                    : (window.i18n.network_error || '登录请求失败，网络连接异常');
                 window.showToast(message, 'error', 8000, 'WB-UI-AUTH-LOGIN-002');
                 if (errorDiv) {
                     errorDiv.textContent = window.formatErrorMessage
@@ -951,11 +993,18 @@
     function bindRegisterForm() {
         const form = document.getElementById('registerForm');
         const errorDiv = document.getElementById('errorMessage');
+        const statusDiv = document.getElementById('registerPowStatus');
         const password = document.getElementById('password');
         const confirmPassword = document.getElementById('confirmPassword');
         const submitBtn = document.getElementById('registerSubmit');
 
         if (!form) return;
+
+        const powManager = createFormPowManager('register', statusDiv);
+        if (powManager) {
+            powManager.ensure().catch(() => {});
+            form.addEventListener('focusin', () => powManager.ensure().catch(() => {}), { passive: true });
+        }
 
         form.onsubmit = async function (e) {
             e.preventDefault();
@@ -989,6 +1038,12 @@
 
             let isRedirecting = false;
             try {
+                if (powManager) {
+                    const proof = await powManager.acquire();
+                    formData.set('challengeId', proof.challengeId);
+                    formData.set('powNonce', proof.powNonce);
+                }
+
                 const response = await fetch('/user/api/register', {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -1011,6 +1066,7 @@
                     }, 1500);
                 } else {
                     analyticsFormResult('register', false);
+                    if (powManager) powManager.refresh().catch(() => {});
                     const message = result.message || window.i18n.register_failed || '注册失败';
                     window.showToast(message, 'error', 8000, result.errorCode || 'WB-UI-AUTH-REGISTER-001');
                     if (errorDiv) {
@@ -1022,7 +1078,10 @@
                 }
             } catch (err) {
                 analyticsFormResult('register', false);
-                const message = window.i18n.network_error || '注册请求失败，网络连接异常';
+                if (powManager) powManager.refresh().catch(() => {});
+                const message = (err && err.message && err.message !== 'Failed to fetch')
+                    ? err.message
+                    : (window.i18n.network_error || '注册请求失败，网络连接异常');
                 window.showToast(message, 'error', 8000, 'WB-UI-AUTH-REGISTER-009');
                 if (errorDiv) {
                     errorDiv.textContent = window.formatErrorMessage

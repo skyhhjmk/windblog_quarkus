@@ -73,7 +73,7 @@ public class CommentApiController {
                     .entity(Map.of("success", false, "message", "评论功能已关闭")).build();
         }
         checkRate(context, "captcha", 30);
-        return Response.ok(Map.of("success", true, "data", captchaService.issue()))
+        return Response.ok(Map.of("success", true, "data", captchaService.issueForRequest(context)))
                 .header("Cache-Control", "no-store").build();
     }
 
@@ -184,7 +184,7 @@ public class CommentApiController {
         final String userAgent = headers.getHeaderString("User-Agent");
         final String clientOs = com.biliwind.blog.common.helper.CommentClientHelper.operatingSystem(userAgent);
         final String clientBrowser = com.biliwind.blog.common.helper.CommentClientHelper.browser(userAgent);
-        captchaService.verify(request.captchaId(), request.powNonce());
+        captchaService.verifyForRequest(request.captchaId(), request.powNonce(), context);
 
         final Post post = findPublicPost(request.postSlug());
         final Comment parent = resolveParent(post, request.parentId());

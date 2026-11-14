@@ -13,6 +13,8 @@ import com.biliwind.blog.service.PageRenderModel;
 import com.biliwind.blog.service.PageRenderer;
 import com.biliwind.blog.service.PageView;
 import com.biliwind.blog.service.security.ClientIpResolver;
+import com.biliwind.blog.service.security.ProofOfWorkService;
+import com.biliwind.blog.service.security.ProofOfWorkService.PowScene;
 import com.biliwind.blog.service.security.SecurityRateLimitService;
 import io.vertx.ext.web.RoutingContext;
 import io.quarkus.qute.TemplateInstance;
@@ -91,6 +93,9 @@ public class UserController {
 
     @Inject
     SecurityRateLimitService securityRateLimitService;
+
+    @Inject
+    ProofOfWorkService proofOfWorkService;
 
     @Inject
     UserProfileReviewService profileReviewService;
@@ -215,6 +220,33 @@ public class UserController {
     // ==================== API接口 ====================
 
     /**
+     * 获取登录/注册工作量证明挑战
+     */
+    @GET
+    @Path("/api/pow/challenge")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response powChallenge(@QueryParam("action") @DefaultValue("login") String action) {
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        if (!securityRateLimitService.tryAcquire("user-pow-challenge:" + clientIp, 60, Duration.ofMinutes(1))) {
+            return rateLimitedResponse("安全校验请求过于频繁，请稍后重试", 60);
+        }
+        PowScene scene;
+        if ("register".equalsIgnoreCase(action)) {
+            scene = PowScene.REGISTER;
+        } else if ("login".equalsIgnoreCase(action)) {
+            scene = PowScene.LOGIN;
+        } else {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", "不支持的校验场景"))
+                    .build();
+        }
+        ProofOfWorkService.Challenge challenge = proofOfWorkService.issueForRequest(scene, routingContext);
+        return Response.ok(Map.of("success", true, "data", challenge))
+                .header("Cache-Control", "no-store")
+                .build();
+    }
+
+    /**
      * 用户注册
      */
     @POST
@@ -230,7 +262,9 @@ public class UserController {
             @FormParam("agreement") String agreement,
             @FormParam("subscribeArticleUpdates") String subscribeArticleUpdates,
             @FormParam("subscribePromotions") String subscribePromotions,
-            @FormParam("redirect") String redirect) {
+            @FormParam("redirect") String redirect,
+            @FormParam("challengeId") String challengeId,
+            @FormParam("powNonce") String powNonce) {
 
         if (!settings.flag(SettingKey.FEATURE_TOGGLES, "enable_registration")) {
             return Response.status(Response.Status.FORBIDDEN)
@@ -238,12 +272,22 @@ public class UserController {
                     .build();
         }
 
+        try {
+            proofOfWorkService.verifyForRequest(challengeId, powNonce, PowScene.REGISTER, routingContext);
+        } catch (BadRequestException exception) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", exception.getMessage()))
+                    .build();
+        }
+
         if (!"on".equalsIgnoreCase(agreement) && !"true".equalsIgnoreCase(agreement)) {
+            proofOfWorkService.recordFailure(PowScene.REGISTER, routingContext);
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(Map.of("success", false, "message", "请先同意用户协议和隐私政策"))
                     .build();
         }
         if (confirmPassword == null || !Objects.equals(password, confirmPassword)) {
+            proofOfWorkService.recordFailure(PowScene.REGISTER, routingContext);
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(Map.of("success", false, "message", "两次输入的密码不一致"))
                     .build();
@@ -254,6 +298,7 @@ public class UserController {
 
         String clientIp = clientIpResolver.resolve(routingContext).clientIp();
         if (!securityRateLimitService.tryAcquire("user-register-ip:" + clientIp, 5, Duration.ofHours(1))) {
+            proofOfWorkService.recordFailure(PowScene.REGISTER, routingContext);
             return rateLimitedResponse("注册尝试过于频繁，请一小时后重试", 3600);
         }
 
@@ -261,6 +306,7 @@ public class UserController {
         boolean usernameTaken = User.find("username = ?1 and deletedAt is null", normalizedUsername).firstResult() != null;
         boolean emailTaken = User.find("email = ?1 and deletedAt is null", normalizedEmail).firstResult() != null;
         if (usernameTaken || emailTaken) {
+            proofOfWorkService.recordFailure(PowScene.REGISTER, routingContext);
             return Response.status(Response.Status.CONFLICT)
                     .entity(Map.of("success", false, "message", "用户名或邮箱已被使用，请更换后重试"))
                     .build();
@@ -308,7 +354,9 @@ public class UserController {
             @FormParam("account") @NotBlank String account,
             @FormParam("password") @NotBlank String password,
             @FormParam("remember") String remember,
-            @FormParam("redirect") String redirect) {
+            @FormParam("redirect") String redirect,
+            @FormParam("challengeId") String challengeId,
+            @FormParam("powNonce") String powNonce) {
 
         String normalizedAccount = account.trim().toLowerCase(Locale.ROOT);
         String clientIp = clientIpResolver.resolve(routingContext).clientIp();
@@ -319,7 +367,16 @@ public class UserController {
         Duration loginLimitWindow = Duration.ofMinutes(15);
         if (!securityRateLimitService.tryAcquire(accountLimitKey, 10, loginLimitWindow)
                 || !securityRateLimitService.tryAcquire(ipLimitKey, 20, loginLimitWindow)) {
+            proofOfWorkService.recordFailure(PowScene.LOGIN, routingContext);
             return rateLimitedResponse("登录尝试过于频繁，请15分钟后重试", 900);
+        }
+
+        try {
+            proofOfWorkService.verifyForRequest(challengeId, powNonce, PowScene.LOGIN, routingContext);
+        } catch (BadRequestException exception) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", exception.getMessage()))
+                    .build();
         }
 
         // 查找用户（支持用户名或邮箱登录）
@@ -327,6 +384,7 @@ public class UserController {
                 account.trim(), normalizedAccount).firstResult();
 
         if (user == null || user.status != 1) {
+            proofOfWorkService.recordFailure(PowScene.LOGIN, routingContext);
             return Response.status(Response.Status.UNAUTHORIZED)
                     .entity(Map.of("success", false, "message", "账号或密码错误"))
                     .build();
@@ -334,6 +392,7 @@ public class UserController {
 
         // 验证密码
         if (!passwordHasher.matches(password, user.password)) {
+            proofOfWorkService.recordFailure(PowScene.LOGIN, routingContext);
             return Response.status(Response.Status.UNAUTHORIZED)
                     .entity(Map.of("success", false, "message", "账号或密码错误"))
                     .build();

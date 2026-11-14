@@ -4050,52 +4050,26 @@
         // ==========================================
         // Post Reactions & Article Share with PoW Anti-Spam
         // ==========================================
-        let reactionPowWorker = null;
+        let reactionPowAbort = null;
         let cachedReactionChallenge = null;
         let currentReactionPowPromise = null;
 
         function solveReactionPow(challenge, difficulty) {
-            return new Promise((resolve, reject) => {
-                if (typeof Worker === 'undefined') {
-                    reject(new Error('PoW worker unsupported'));
-                    return;
-                }
-
-                if (reactionPowWorker) {
-                    reactionPowWorker.terminate();
-                    reactionPowWorker = null;
-                }
-
-                try {
-                    const worker = new Worker('/assets/js/comment-pow-worker.js?v=reaction-pow-1');
-                    reactionPowWorker = worker;
-                    const timer = setTimeout(() => {
-                        worker.terminate();
-                        if (reactionPowWorker === worker) reactionPowWorker = null;
-                        reject(new Error('PoW solve timeout'));
-                    }, 10000);
-
-                    worker.onmessage = (e) => {
-                        clearTimeout(timer);
-                        worker.terminate();
-                        if (reactionPowWorker === worker) reactionPowWorker = null;
-                        if (e.data && e.data.ok && e.data.nonce !== undefined) {
-                            resolve(String(e.data.nonce));
-                        } else {
-                            reject(new Error(e.data?.reason || 'PoW failed'));
-                        }
-                    };
-
-                    worker.onerror = (err) => {
-                        clearTimeout(timer);
-                        worker.terminate();
-                        if (reactionPowWorker === worker) reactionPowWorker = null;
-                        reject(err);
-                    };
-
-                    worker.postMessage({ challenge: challenge, difficulty: difficulty });
-                } catch (err) {
-                    reject(err);
+            if (reactionPowAbort) {
+                reactionPowAbort.abort();
+                reactionPowAbort = null;
+            }
+            if (!window.WindBlogPow || typeof window.WindBlogPow.solve !== 'function') {
+                return Promise.reject(new Error('PoW module unavailable'));
+            }
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            reactionPowAbort = controller;
+            return window.WindBlogPow.solve(challenge, difficulty, {
+                timeoutMs: 25000,
+                signal: controller ? controller.signal : undefined
+            }).finally(() => {
+                if (reactionPowAbort === controller) {
+                    reactionPowAbort = null;
                 }
             });
         }

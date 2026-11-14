@@ -3,6 +3,7 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.service.CommentCaptchaService;
 import com.biliwind.blog.service.ReactionService;
 import com.biliwind.blog.service.security.ClientIpResolver;
+import com.biliwind.blog.service.security.ProofOfWorkService;
 import com.biliwind.blog.service.security.SecurityRateLimitService;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
@@ -37,6 +38,9 @@ public class ReactionApiController {
     CommentCaptchaService captchaService;
 
     @Inject
+    ProofOfWorkService proofOfWorkService;
+
+    @Inject
     ReactionService reactionService;
 
     @Inject
@@ -56,7 +60,9 @@ public class ReactionApiController {
     @Path("/challenge")
     public Response challenge(@Context io.vertx.ext.web.RoutingContext context) {
         checkRate(context, "challenge", 60);
-        CommentCaptchaService.Challenge challenge = captchaService.issue(REACTION_POW_DIFFICULTY);
+        Object challenge = proofOfWorkService != null
+                ? proofOfWorkService.issueForRequest(ProofOfWorkService.PowScene.REACTION, REACTION_POW_DIFFICULTY, context)
+                : captchaService.issue(REACTION_POW_DIFFICULTY);
         return Response.ok(Map.of("success", true, "data", challenge))
                 .header("Cache-Control", "no-store").build();
     }
@@ -95,7 +101,12 @@ public class ReactionApiController {
                     || request.powNonce() == null || request.powNonce().isBlank()) {
                 throw new BadRequestException("缺少 PoW 工作量证明参数");
             }
-            captchaService.verify(request.challengeId(), request.powNonce());
+            if (proofOfWorkService != null) {
+                proofOfWorkService.verifyForRequest(request.challengeId(), request.powNonce(),
+                        ProofOfWorkService.PowScene.REACTION, context);
+            } else {
+                captchaService.verify(request.challengeId(), request.powNonce());
+            }
         }
 
         Map<String, Long> updated = reactionService.updateReaction(slug, request.reactionType(), request.action());

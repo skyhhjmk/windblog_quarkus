@@ -108,6 +108,63 @@ public class SecurityRateLimitService {
         }
     }
 
+    /**
+     * Increments the counter for {@code key} within {@code windowDuration} and returns
+     * the updated count. Useful for adaptive security policies that escalate friction
+     * based on burst volume without hard-blocking at a single fixed threshold.
+     */
+    public long incrementAndGet(String key, Duration windowDuration) {
+        if (key == null || key.isBlank() || windowDuration == null
+                || windowDuration.isNegative() || windowDuration.isZero()) {
+            return 0L;
+        }
+        if (cacheService != null && cacheService.isAvailable()) {
+            long distributedCount = cacheService.increment("security:rate:" + key, windowDuration);
+            if (distributedCount >= 0) {
+                return distributedCount;
+            }
+        }
+        cleanupLocalWindows();
+        long now = System.currentTimeMillis();
+        Window window = windows.computeIfAbsent(key, ignored -> new Window(now));
+        synchronized (window) {
+            window.lastAccessAt = now;
+            if (now - window.startedAt >= windowDuration.toMillis()) {
+                window.startedAt = now;
+                window.count = 0;
+            }
+            window.count = window.count + 1;
+            return window.count;
+        }
+    }
+
+    /**
+     * Reads the current counter value for {@code key} without incrementing it.
+     */
+    public long currentCount(String key, Duration windowDuration) {
+        if (key == null || key.isBlank() || windowDuration == null
+                || windowDuration.isNegative() || windowDuration.isZero()) {
+            return 0L;
+        }
+        if (cacheService != null && cacheService.isAvailable()) {
+            long distributedCount = cacheService.getLong("security:rate:" + key);
+            if (distributedCount >= 0) {
+                return distributedCount;
+            }
+        }
+        Window window = windows.get(key);
+        if (window == null) {
+            return 0L;
+        }
+        long now = System.currentTimeMillis();
+        synchronized (window) {
+            if (now - window.startedAt >= windowDuration.toMillis()) {
+                return 0L;
+            }
+            return window.count;
+        }
+    }
+
     @Scheduled(every = "5m", identity = "security-rate-limit-local-cleanup")
     void cleanupLocalWindows() {
         long now = System.currentTimeMillis();
