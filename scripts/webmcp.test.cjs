@@ -33,7 +33,7 @@ function harness(entry = 'navigator', options = {}) {
             documentElement: {lang: 'zh-CN'}
         },
         location: {origin: 'https://example.com', pathname: '/post/current-post', assign: url => destinations.push(url)},
-        window: {addEventListener: (name, fn) => events[name] = fn},
+        window: {addEventListener: (name, fn) => events[name] = fn, getCsrfToken: () => 'csrf-test-token'},
         localStorage: mockLocalStorage,
         DOMParser: class {
             parseFromString() {
@@ -99,6 +99,7 @@ test('public comments omit credentials and propagate execution cancellation', as
     await h.tools.get('get_post_comments').execute({slug: 'hello world', page: 0}, {signal: controller.signal});
     assert.equal(h.requests[0].url, '/api/comments/post/hello%20world?page=0&size=10');
     assert.equal(h.requests[0].options.credentials, 'omit');
+    assert.equal(h.requests[0].options.headers['X-XSRF-TOKEN'], undefined);
     controller.abort();
     assert.equal(h.requests[0].options.signal.aborted, true);
     await h.tools.get('get_post_comments').execute({slug: 'hello'}, {});
@@ -124,6 +125,11 @@ test('get_session_status reports active login session', async () => {
     assert.equal(status.authenticated, true);
     assert.equal(status.type, 'user');
     assert.equal(status.user.username, 'testuser');
+    const profileReq = h.requests.find(r => r.url === '/user/api/profile');
+    assert.ok(profileReq);
+    assert.equal(profileReq.options.method, 'GET');
+    assert.equal(profileReq.options.credentials, 'include');
+    assert.equal(profileReq.options.headers['X-XSRF-TOKEN'], undefined);
 });
 
 test('get_article_for_translation infers from active document if no args provided', async () => {
@@ -147,6 +153,8 @@ test('translate_article calls user translation endpoint using login credentials'
     const lastReq = h.requests.find(r => r.url === '/user/api/posts/translate');
     assert.ok(lastReq);
     assert.equal(lastReq.options.credentials, 'include');
+    assert.equal(lastReq.options.method, 'POST');
+    assert.equal(lastReq.options.headers['X-XSRF-TOKEN'], 'csrf-test-token');
     const body = JSON.parse(lastReq.options.body);
     assert.equal(body.sourceLanguage, 'zh-CN');
     assert.equal(body.targetLanguage, 'en-US');
@@ -168,6 +176,7 @@ test('save_article_translation sends translated version to blog using session cr
     assert.ok(saveReq);
     assert.equal(saveReq.options.method, 'PUT');
     assert.equal(saveReq.options.credentials, 'include');
+    assert.equal(saveReq.options.headers['X-XSRF-TOKEN'], 'csrf-test-token');
     const body = JSON.parse(saveReq.options.body);
     assert.equal(body.targetLanguage, 'en-US');
     assert.equal(body.title, 'English Title');

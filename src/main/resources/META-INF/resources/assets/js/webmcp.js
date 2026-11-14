@@ -22,15 +22,6 @@
         if (value === '.' || value === '..' || /[\\/]/.test(value)) throw new Error('Invalid slug');
         return '/post/' + encodeURIComponent(value);
     }
-    function getAdminToken() {
-        try {
-            return (typeof localStorage !== 'undefined' && (
-                localStorage.getItem('windblog_admin_token') ||
-                localStorage.getItem('admin_auth_token') ||
-                localStorage.getItem('token')
-            )) || '';
-        } catch (_) { return ''; }
-    }
 
     async function retrieve(path, options = {}, json = false) {
         const signal = options.signal ? AbortSignal.any([options.signal, lifetime.signal]) : lifetime.signal;
@@ -54,9 +45,9 @@
     async function apiRequest(path, options = {}) {
         const signal = options.signal ? AbortSignal.any([options.signal, lifetime.signal]) : lifetime.signal;
         const headers = {'Accept': 'application/json', ...(options.headers || {})};
-        const adminToken = getAdminToken();
-        if (adminToken && !headers['Authorization']) {
-            headers['Authorization'] = 'Bearer ' + adminToken;
+        const method = options.method || 'GET';
+        if (method !== 'GET' && typeof window !== 'undefined' && typeof window.getCsrfToken === 'function') {
+            headers['X-XSRF-TOKEN'] = window.getCsrfToken();
         }
         let body = options.body;
         if (body && typeof body === 'object') {
@@ -64,7 +55,7 @@
             body = JSON.stringify(body);
         }
         const response = await fetch(path, {
-            method: options.method || 'GET',
+            method,
             credentials: 'include',
             signal,
             headers,
@@ -130,16 +121,12 @@
             {name: 'get_session_status', description: 'Check the current login session in WindBlog using browser credentials. Returns user details, role, and authentication status.',
                 inputSchema: schema(),
                 execute: async (input, options) => {
-                    const adminToken = getAdminToken();
                     try {
                         const userRes = await apiRequest('/user/api/profile', options);
                         if (userRes && (userRes.success || userRes.data)) {
                             return {authenticated: true, type: 'user', user: userRes.data || userRes};
                         }
                     } catch (_) {}
-                    if (adminToken) {
-                        return {authenticated: true, type: 'admin', hasAdminToken: true};
-                    }
                     return {authenticated: false, type: 'anonymous'};
                 }},
             {name: 'get_article_for_translation', description: 'Retrieve article title, summary, markdown content, and language for translation. If no slug/postId is provided, extracts from the current viewing article page.',
@@ -184,7 +171,6 @@
                     const title = (input.title || current?.title || '').trim();
                     const summary = (input.summary || '').trim();
                     const contentMarkdown = (input.contentMarkdown || current?.contentMarkdown || '').trim();
-                    const postId = input.postId || current?.postId;
                     if (!title) throw new Error('Article title is required for translation');
                     if (!contentMarkdown) throw new Error('Article content is required for translation');
 
@@ -196,15 +182,8 @@
                         contentMarkdown
                     };
 
-                    const adminToken = getAdminToken();
-                    if (adminToken && postId) {
-                        return apiRequest('/api/admin/posts/' + postId + '/translation', {method: 'POST', body: payload, signal: options.signal});
-                    } else if (adminToken) {
-                        return apiRequest('/api/admin/posts/translate', {method: 'POST', body: payload, signal: options.signal});
-                    } else {
-                        const res = await apiRequest('/user/api/posts/translate', {method: 'POST', body: payload, signal: options.signal});
-                        return res.data || res;
-                    }
+                    const res = await apiRequest('/user/api/posts/translate', {method: 'POST', body: payload, signal: options.signal});
+                    return res.data || res;
                 }},
             {name: 'save_article_translation', description: 'Save a translated edition (targetLanguage, title, summary, contentMarkdown) of an article back to WindBlog using the authenticated session.',
                 inputSchema: schema({
@@ -223,13 +202,8 @@
                         summary: input.summary || '',
                         contentMarkdown: text(input.contentMarkdown, 'contentMarkdown', 5000000)
                     };
-                    const adminToken = getAdminToken();
-                    if (adminToken) {
-                        return apiRequest('/api/admin/posts/' + postId + '/translation', {method: 'PUT', body: payload, signal: options.signal});
-                    } else {
-                        const res = await apiRequest('/user/api/posts/' + postId + '/translation', {method: 'PUT', body: payload, signal: options.signal});
-                        return res.data || res;
-                    }
+                    const res = await apiRequest('/user/api/posts/' + postId + '/translation', {method: 'PUT', body: payload, signal: options.signal});
+                    return res.data || res;
                 }}
         ];
     }

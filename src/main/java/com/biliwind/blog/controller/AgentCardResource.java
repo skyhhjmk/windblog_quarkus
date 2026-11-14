@@ -47,7 +47,7 @@ public class AgentCardResource {
                         Map.of(
                                 "id", "public-article-discovery",
                                 "name", "Public article discovery",
-                                "description", "Provides a public article search URL for a supplied search phrase.",
+                                "description", "Returns up to five matching public articles with titles, absolute URLs and summaries, plus a public search URL.",
                                 "tags", List.of("articles", "search", "titles"),
                                 "examples", List.of("Find public articles matching a search phrase.")
                         ),

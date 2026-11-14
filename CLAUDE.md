@@ -116,6 +116,7 @@ Errors use stable `WB-*` codes from `ErrorCodeCatalog`, returned as JSON `errorC
 - `docs/ai-topic-automation.md`, `docs/fake-ai-api.md` — AI topic/draft automation and test double
 - `docs/admin-api.md` — admin API overview and Swagger/OpenAPI locations
 - `docs/web-serial.md` — browser-only Web Serial toolbox (xterm, browser support, PJAX notes)
+- `docs/agent-integration.md` — A2A, WebMCP, Flutter MCP and agent discovery
 - `docs/error-codes.md`, `docs/markdown-negotiation.md`, `docs/regional-canonical.md`, `docs/seo-management.md`, `docs/structured-data-seo.md`, `docs/article-reference-cards.md`
 
 ## Agent skills

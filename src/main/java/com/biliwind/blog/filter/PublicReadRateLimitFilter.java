@@ -28,6 +28,7 @@ public class PublicReadRateLimitFilter implements ContainerRequestFilter {
 
     private static final Duration WINDOW = Duration.ofMinutes(1);
     private static final int RETRY_AFTER_SECONDS = 60;
+    private static final String A2A_SEND_PATH = "/a2a/message:send";
 
     @Inject
     SecurityRateLimitService securityRateLimitService;
@@ -52,11 +53,7 @@ public class PublicReadRateLimitFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
-        if (!isReadMethod(requestContext.getMethod())) {
-            return;
-        }
-
-        ReadRoute route = classify(requestContext.getUriInfo().getPath());
+        ReadRoute route = routeFor(requestContext.getMethod(), requestContext.getUriInfo().getPath());
         if (route == ReadRoute.NONE) {
             return;
         }
@@ -98,6 +95,20 @@ public class PublicReadRateLimitFilter implements ContainerRequestFilter {
         return ReadRoute.NONE;
     }
 
+    /**
+     * A2A message submission is the one non-read request that performs public search
+     * work, so it shares the search budget. Every other write method stays untouched.
+     */
+    static ReadRoute routeFor(String method, String rawPath) {
+        if (isReadMethod(method)) {
+            return classify(rawPath);
+        }
+        if ("POST".equalsIgnoreCase(method) && A2A_SEND_PATH.equals(normalizePath(rawPath))) {
+            return ReadRoute.SEARCH;
+        }
+        return ReadRoute.NONE;
+    }
+
     static String digest(String value) {
         String normalized = value == null || value.isBlank() ? "unknown" : value.trim();
         try {
@@ -126,7 +137,7 @@ public class PublicReadRateLimitFilter implements ContainerRequestFilter {
         return 1;
     }
 
-    private boolean isReadMethod(String method) {
+    private static boolean isReadMethod(String method) {
         return "GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method);
     }
 
