@@ -129,6 +129,15 @@ public class ToolsController {
                     "/tools/serial",
                     "开发运维",
                     "cyan"
+            ),
+            new ToolItem(
+                    "file-transfer",
+                    "免服务器 P2P 文件快传",
+                    "基于 WebRTC DataChannel 与零服务器手动/二维码信令的点对点文件与文本快传。支持 ECDH+AES-GCM 防监听加密、Rust WASM Reed-Solomon 纠错、大文件流式落盘与 SHA-256 校验。",
+                    "fa-solid fa-paper-plane",
+                    "/tools/file-transfer",
+                    "网络工具",
+                    "emerald"
             )
     );
 
@@ -230,6 +239,16 @@ public class ToolsController {
                 "Web Serial 串口终端 - 浏览器内 USB 串口调试控制台",
                 "纯前端 Web Serial 串口终端。无需安装驱动或客户端，直接在浏览器内配置波特率、数据位、校验位、停止位和流控，连接 USB 串口设备并进行 xterm 终端调试，数据完全留在本机。",
                 "Web Serial,串口终端,在线串口调试,USB串口,波特率,xterm,串口助手"));
+    }
+
+    @GET
+    @Path("/file-transfer")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance fileTransfer(@Context HttpHeaders headers) {
+        return pageRenderer.render(PageView.TOOLS_FILE_TRANSFER, headers, toolModel(headers,
+                "免服务器 P2P 文件快传 - WebRTC 端到端加密与 WASM 纠错传输",
+                "纯前端免服务器 P2P 文件快传工具。通过二维码或压缩连接码完成零服务器信令配对，支持 ECDH 密钥交换与 AES-GCM 防监听加密、Rust WASM Reed-Solomon 前向纠错、大文件流式落盘与 SHA-256 完整性校验。",
+                "P2P文件传输,免服务器快传,WebRTC文件传输,二维码配对,端到端加密,ECDH,Reed-Solomon,WASM"));
     }
 
     private PageRenderModel toolModel(HttpHeaders headers, String pageTitle,

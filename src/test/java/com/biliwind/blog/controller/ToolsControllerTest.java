@@ -138,6 +138,32 @@ class ToolsControllerTest {
     }
 
     @Test
+    void shouldReturnFileTransferPage() {
+        given()
+                .when().get("/tools/file-transfer")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("免服务器 P2P 文件快传"))
+                .body(containsString("fileTransferToolApp"))
+                .body(containsString("ftE2eeToggle"))
+                .body(containsString("ftEccSelect"))
+                .body(containsString("tools.js"));
+
+        given()
+                .when().get("/assets/js/file-transfer.js")
+                .then()
+                .statusCode(200)
+                .body(containsString("WindBlogFileTransfer"))
+                .body(containsString("rsReconstruct"));
+
+        given()
+                .when().get("/assets/vendor/file-transfer-wasm/file_transfer_ecc.wasm")
+                .then()
+                .statusCode(200);
+    }
+
+    @Test
     void shouldSupportPjaxHeader() {
         given()
                 .header("X-PJAX", "true")

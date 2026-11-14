@@ -1,0 +1,5 @@
+{#include "base.html"}
+    {#title}{pageTitle ?: '免服务器 P2P 文件快传'}{/title}
+    {#navPath}{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / file-transfer{/navPath}
+    {#content}{#include "tools/file-transfer.content.html"}{/include}{/content}
+{/include}

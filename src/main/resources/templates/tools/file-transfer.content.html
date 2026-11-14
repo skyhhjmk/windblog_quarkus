@@ -1,0 +1,391 @@
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / file-transfer</div>
+
+    <style nonce="{cspNonce}">
+        .ft-dropzone.ft-dragover {
+            border-color: var(--accent, #10b981);
+            background-color: rgba(16, 185, 129, 0.08);
+        }
+        #ftQrVideo {
+            transform: scaleX(1);
+        }
+    </style>
+
+    <section class="space-y-6" id="fileTransferToolApp">
+        <!-- Header -->
+        <header class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">WEBRTC P2P</span>
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <i class="fa-solid fa-server text-[9px] mr-1"></i>零服务器直传
+                    </span>
+                    <span id="ftWasmBadge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-card border border-border text-meta">
+                        <i class="fa-solid fa-microchip text-[9px] mr-1"></i>WASM 加载中…
+                    </span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">免服务器 P2P 文件快传</h1>
+                <p class="text-body text-xs md:text-sm max-w-3xl leading-relaxed">
+                    通过浏览器 WebRTC DataChannel 建立点对点直连，信令通过二维码或压缩口令交换，文件与消息完全不经过任何后端服务器。
+                    内置 ECDH P-256 + AES-256-GCM 防监听加密、Rust WASM Reed-Solomon 前向纠错、大文件流式落盘与 SHA-256 完整性校验。
+                </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs font-mono shrink-0">
+                <button type="button" id="ftNatProbeBtn" class="px-3 py-2 rounded-xl bg-card border border-border text-main hover:border-accent transition-colors cursor-pointer" title="通过 STUN 探测当前网络 NAT 类型">
+                    <i class="fa-solid fa-network-wired mr-1.5 text-accent"></i><span id="ftNatProbeLabel">检测 NAT 类型</span>
+                </button>
+                <span id="ftConnBadge" class="px-3 py-2 rounded-xl bg-card border border-border text-meta">
+                    <i class="fa-solid fa-circle text-[8px] mr-1.5 text-slate-400"></i>未配对
+                </span>
+                <button type="button" id="ftDisconnectBtn" class="hidden px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer">
+                    <i class="fa-solid fa-link-slash mr-1"></i>断开连接
+                </button>
+            </div>
+        </header>
+
+        <!-- NAT Probe Result Banner (hidden until probed) -->
+        <div id="ftNatResultBox" class="hidden rounded-2xl border p-3.5 text-xs font-mono flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <i id="ftNatResultIcon" class="fa-solid fa-circle-info"></i>
+                <span id="ftNatResultTitle" class="font-bold"></span>
+                <span id="ftNatResultDesc" class="text-body font-sans"></span>
+            </div>
+            <span id="ftNatResultDetail" class="text-[11px] text-meta"></span>
+        </div>
+
+        <!-- Security & Network Settings Bar -->
+        <div class="bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-xs font-bold text-main font-mono flex items-center gap-2 uppercase tracking-wider">
+                    <i class="fa-solid fa-shield-halved text-accent"></i>传输安全与网络参数
+                </h2>
+                <button type="button" id="ftToggleAdvancedBtn" class="text-xs font-mono text-meta hover:text-accent transition-colors cursor-pointer">
+                    <i class="fa-solid fa-sliders mr-1"></i><span>展开/收起配置</span>
+                </button>
+            </div>
+
+            <div id="ftAdvancedPanel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                <!-- E2EE Toggle -->
+                <div class="p-3 rounded-xl bg-input-bg border border-border/80 flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-xs font-semibold text-main flex items-center gap-1.5">
+                            <i class="fa-solid fa-lock text-emerald-400 text-[11px]"></i>
+                            <span>防监听加密</span>
+                        </div>
+                        <div class="text-[11px] text-meta truncate">ECDH + AES-256-GCM</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="ftE2eeToggle" class="sr-only peer" checked>
+                        <div class="w-9 h-5 bg-border rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></div>
+                    </label>
+                </div>
+
+                <!-- Reed-Solomon ECC Mode -->
+                <div class="p-3 rounded-xl bg-input-bg border border-border/80 space-y-1">
+                    <label for="ftEccSelect" class="text-[11px] font-mono text-meta flex items-center justify-between">
+                        <span>Reed-Solomon ECC</span>
+                        <span class="text-[10px] text-accent">WASM</span>
+                    </label>
+                    <select id="ftEccSelect" class="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-main font-mono text-xs focus:border-accent outline-none">
+                        <option value="std" selected>标准纠错 (16+3, 18.8%冗余)</option>
+                        <option value="high">高冗余 (12+4, 33.3%冗余)</option>
+                        <option value="off">关闭 ECC (零冗余)</option>
+                    </select>
+                </div>
+
+                <!-- NAT / STUN Mode -->
+                <div class="p-3 rounded-xl bg-input-bg border border-border/80 space-y-1">
+                    <label for="ftIceMode" class="text-[11px] font-mono text-meta">NAT 穿透 / STUN</label>
+                    <select id="ftIceMode" class="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-main font-mono text-xs focus:border-accent outline-none">
+                        <option value="public" selected>默认公共 STUN (跨网穿透)</option>
+                        <option value="lan">仅局域网 (禁用 STUN，零外联)</option>
+                        <option value="custom">自定义 STUN / TURN</option>
+                    </select>
+                </div>
+
+                <!-- Optional Signaling Passphrase -->
+                <div class="p-3 rounded-xl bg-input-bg border border-border/80 space-y-1">
+                    <label for="ftSignalPass" class="text-[11px] font-mono text-meta">信令口令 (可选加密连接码)</label>
+                    <input id="ftSignalPass" type="password" autocomplete="off" placeholder="留空则不加密连接码"
+                           class="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-main font-mono text-xs focus:border-accent outline-none">
+                </div>
+
+                <!-- Custom ICE servers input (hidden unless custom) -->
+                <div id="ftCustomIceWrap" class="hidden md:col-span-2 lg:col-span-2 p-3 rounded-xl bg-input-bg border border-border/80 space-y-1">
+                    <label for="ftCustomIceInput" class="text-[11px] font-mono text-meta">自定义 ICE 服务器 JSON 或逗号分隔 STUN URL</label>
+                    <input id="ftCustomIceInput" type="text" placeholder="stun:stun.qq.com:3478, stun:stun.miwifi.com:3478"
+                           class="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-main font-mono text-xs focus:border-accent outline-none">
+                </div>
+
+                <!-- DataChannel Reliability Mode -->
+                <div class="p-3 rounded-xl bg-input-bg border border-border/80 space-y-1">
+                    <label for="ftChannelMode" class="text-[11px] font-mono text-meta">DataChannel 通道模式</label>
+                    <select id="ftChannelMode" class="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-main font-mono text-xs focus:border-accent outline-none">
+                        <option value="reliable" selected>可靠有序 (SCTP 重传 + ECC)</option>
+                        <option value="unreliable">快速抗丢包 (无序不重传 + ECC恢复)</option>
+                    </select>
+                </div>
+
+                <!-- Auto Accept Switch -->
+                <div class="p-3 rounded-xl bg-input-bg border border-border/80 flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-xs font-semibold text-main">自动接收文件</div>
+                        <div class="text-[11px] text-meta truncate">关闭则需逐个点击保存</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="ftAutoAccept" class="sr-only peer">
+                        <div class="w-9 h-5 bg-border rounded-full peer peer-checked:bg-accent after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 1: Zero-Server Signaling / Pairing -->
+        <div id="ftPairingSection" class="bg-card border border-border rounded-2xl p-5 space-y-5 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+                <div class="flex items-center gap-2">
+                    <button type="button" id="ftRoleHostBtn" class="px-3.5 py-1.5 rounded-xl text-xs font-mono font-semibold bg-accent text-white transition-colors cursor-pointer">
+                        <i class="fa-solid fa-tower-broadcast mr-1.5"></i>1. 我是发起方 (创建连接)
+                    </button>
+                    <button type="button" id="ftRoleJoinBtn" class="px-3.5 py-1.5 rounded-xl text-xs font-mono font-semibold bg-input-bg text-meta border border-border hover:text-main transition-colors cursor-pointer">
+                        <i class="fa-solid fa-qrcode mr-1.5"></i>2. 我是加入方 (扫码/粘贴)
+                    </button>
+                </div>
+                <span class="text-[11px] font-mono text-meta">零服务器信令 · 复制口令或面对面扫码</span>
+            </div>
+
+            <!-- Host Panel -->
+            <div id="ftHostPanel" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-main font-mono">步骤 A：生成邀请连接码 (Offer)</span>
+                        <button type="button" id="ftCreateOfferBtn" class="px-3.5 py-1.5 rounded-xl bg-accent hover:opacity-90 text-white text-xs font-semibold transition-all cursor-pointer">
+                            <i class="fa-solid fa-bolt mr-1"></i>生成连接码 &amp; 二维码
+                        </button>
+                    </div>
+                    <textarea id="ftOfferOut" readonly rows="4" placeholder="点击上方按钮生成压缩后的 WebRTC Offer 连接码…"
+                              class="w-full bg-input-bg border border-border rounded-xl p-3 text-xs font-mono text-main focus:border-accent outline-none resize-none"></textarea>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" id="ftCopyOfferBtn" disabled class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main hover:border-accent disabled:opacity-40 cursor-pointer">
+                            <i class="fa-regular fa-copy mr-1"></i>复制连接码
+                        </button>
+                        <button type="button" id="ftCopyOfferLinkBtn" disabled class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main hover:border-accent disabled:opacity-40 cursor-pointer">
+                            <i class="fa-solid fa-link mr-1"></i>复制直达链接
+                        </button>
+                        <span id="ftOfferStats" class="text-[11px] font-mono text-meta"></span>
+                    </div>
+                    <div id="ftOfferQrWrap" class="hidden p-3 rounded-xl bg-white inline-flex flex-col items-center gap-2 border border-border">
+                        <canvas id="ftOfferQrCanvas" width="220" height="220"></canvas>
+                        <span class="text-[10px] font-mono text-slate-600">对方扫码即可直接加入</span>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-main font-mono">步骤 B：输入或扫描对方应答码 (Answer)</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" id="ftScanAnswerCamBtn" class="px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                <i class="fa-solid fa-camera mr-1"></i>扫码
+                            </button>
+                            <label class="px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                <i class="fa-regular fa-image mr-1"></i>选图
+                                <input type="file" id="ftScanAnswerImgInput" accept="image/*" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+                    <textarea id="ftAnswerIn" rows="4" placeholder="粘贴对方发回的 Answer 连接码，或点击右上角扫码识别…"
+                              class="w-full bg-input-bg border border-border rounded-xl p-3 text-xs font-mono text-main focus:border-accent outline-none resize-none"></textarea>
+                    <button type="button" id="ftAcceptAnswerBtn" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors cursor-pointer">
+                        <i class="fa-solid fa-plug-circle-check mr-1.5"></i>完成配对并建立 P2P 直连
+                    </button>
+                </div>
+            </div>
+
+            <!-- Join Panel -->
+            <div id="ftJoinPanel" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-main font-mono">步骤 A：输入或扫描发起方连接码 (Offer)</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" id="ftScanOfferCamBtn" class="px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                <i class="fa-solid fa-camera mr-1"></i>扫码
+                            </button>
+                            <label class="px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                <i class="fa-regular fa-image mr-1"></i>选图
+                                <input type="file" id="ftScanOfferImgInput" accept="image/*" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+                    <textarea id="ftOfferIn" rows="4" placeholder="粘贴发起方的 Offer 连接码（若通过直达链接打开会自动填入）…"
+                              class="w-full bg-input-bg border border-border rounded-xl p-3 text-xs font-mono text-main focus:border-accent outline-none resize-none"></textarea>
+                    <button type="button" id="ftCreateAnswerBtn" class="w-full py-2.5 rounded-xl bg-accent hover:opacity-90 text-white text-xs font-semibold transition-all cursor-pointer">
+                        <i class="fa-solid fa-reply mr-1.5"></i>生成应答码 (Answer) 并等待直连
+                    </button>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-main font-mono">步骤 B：把应答码传回给发起方</span>
+                        <button type="button" id="ftCopyAnswerBtn" disabled class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main hover:border-accent disabled:opacity-40 cursor-pointer">
+                            <i class="fa-regular fa-copy mr-1"></i>复制应答码
+                        </button>
+                    </div>
+                    <textarea id="ftAnswerOut" readonly rows="4" placeholder="生成后将此 Answer 码发回给发起方，或让发起方扫描下方二维码…"
+                              class="w-full bg-input-bg border border-border rounded-xl p-3 text-xs font-mono text-main focus:border-accent outline-none resize-none"></textarea>
+                    <div id="ftAnswerQrWrap" class="hidden p-3 rounded-xl bg-white inline-flex flex-col items-center gap-2 border border-border">
+                        <canvas id="ftAnswerQrCanvas" width="220" height="220"></canvas>
+                        <span class="text-[10px] font-mono text-slate-600">发起方扫码即可完成连接</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inline Camera Scanner -->
+            <div id="ftScannerBox" class="hidden p-4 rounded-xl bg-input-bg border border-accent/40 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-mono text-accent"><i class="fa-solid fa-camera mr-1.5"></i>正在扫描二维码…</span>
+                    <button type="button" id="ftCloseScannerBtn" class="px-2.5 py-1 rounded-lg bg-card border border-border text-xs font-mono text-meta hover:text-main cursor-pointer">
+                        关闭摄像头
+                    </button>
+                </div>
+                <div class="relative max-w-sm mx-auto rounded-xl overflow-hidden bg-black aspect-square">
+                    <video id="ftQrVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
+                    <canvas id="ftQrScanCanvas" class="hidden"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Session Security & ECC Telemetry (Visible when connected) -->
+        <div id="ftSessionBar" class="hidden bg-card border border-emerald-500/30 rounded-2xl p-4 sm:p-5 space-y-3 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono text-emerald-400 flex items-center gap-2">
+                        <i class="fa-solid fa-shield-check"></i>
+                        <span id="ftSessionEncLabel">ECDH P-256 + AES-256-GCM 已启用</span>
+                    </div>
+                    <div class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main flex items-center gap-2" title="请与对方核对会话安全指纹，一致即确认无中间人监听">
+                        <span class="text-meta">安全指纹:</span>
+                        <span id="ftSasEmoji" class="text-base tracking-widest">🔐🛡️✨⚡</span>
+                        <span id="ftSasCode" class="text-accent font-bold">------</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 text-xs font-mono">
+                    <button type="button" id="ftRuntimeEncBtn" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-main hover:border-accent transition-colors cursor-pointer">
+                        <i class="fa-solid fa-key mr-1"></i><span>切换传输加密</span>
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px] font-mono">
+                <div class="p-2.5 rounded-xl bg-input-bg border border-border/60">
+                    <div class="text-meta">ECC 引擎</div>
+                    <div id="ftStatEccEngine" class="text-main font-semibold mt-0.5">Rust WASM</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-input-bg border border-border/60">
+                    <div class="text-meta">已处理条带 / 校验块</div>
+                    <div id="ftStatStripes" class="text-main font-semibold mt-0.5">0 / 0</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-input-bg border border-border/60">
+                    <div class="text-meta">ECC 自动修复分片</div>
+                    <div id="ftStatRecovered" class="text-emerald-400 font-semibold mt-0.5">0</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-input-bg border border-border/60">
+                    <div class="text-meta">CRC32 损坏拦截</div>
+                    <div id="ftStatCrcBad" class="text-amber-400 font-semibold mt-0.5">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Bidirectional Transfer Workspace -->
+        <div id="ftWorkspace" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <!-- Left: Send Files & Text -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                        <i class="fa-solid fa-paper-plane text-accent"></i>发送文件与文本
+                    </h2>
+                    <span id="ftSendReadyHint" class="text-[11px] font-mono text-meta">等待建立 P2P 连接</span>
+                </div>
+
+                <label id="ftDropzone" class="ft-dropzone block border-2 border-dashed border-border hover:border-accent/60 rounded-2xl p-6 text-center cursor-pointer transition-colors">
+                    <input type="file" id="ftFileInput" multiple class="hidden">
+                    <div class="space-y-2">
+                        <div class="w-11 h-11 rounded-xl bg-accent/10 text-accent mx-auto flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <div class="text-sm font-semibold text-main">拖拽文件到此处，或点击选择多文件</div>
+                        <div class="text-xs text-meta">支持任意大小文件 · 分片流式发送 · 背压自动流控</div>
+                    </div>
+                </label>
+
+                <div class="space-y-2 pt-2 border-t border-border/60">
+                    <label for="ftTextMsgInput" class="text-xs font-mono text-meta">文本 / 剪贴板快传</label>
+                    <div class="flex gap-2">
+                        <textarea id="ftTextMsgInput" rows="2" placeholder="输入文本、命令或代码片段直接发给对方…"
+                                  class="flex-1 bg-input-bg border border-border rounded-xl p-2.5 text-xs font-mono text-main focus:border-accent outline-none resize-none"></textarea>
+                        <button type="button" id="ftSendTextBtn" disabled class="px-4 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer shrink-0">
+                            发送
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Transfer Queue & Received Items -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                        <i class="fa-solid fa-right-left text-accent"></i>传输队列与接收记录
+                    </h2>
+                    <button type="button" id="ftClearDoneBtn" class="text-[11px] font-mono text-meta hover:text-main cursor-pointer">
+                        清理已完成
+                    </button>
+                </div>
+
+                <div id="ftTransferList" class="space-y-3 flex-1 min-h-[220px] max-h-[520px] overflow-y-auto pr-1">
+                    <div id="ftEmptyState" class="h-full min-h-[200px] flex flex-col items-center justify-center text-center text-meta text-xs space-y-2">
+                        <i class="fa-solid fa-inbox text-2xl opacity-40"></i>
+                        <p>暂无传输任务。建立 P2P 连接后即可互传文件或文本。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Usage Guide -->
+        <details class="bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-sm group" open>
+            <summary class="flex items-center justify-between cursor-pointer list-none text-xs font-bold text-main font-mono">
+                <span class="flex items-center gap-2">
+                    <i class="fa-solid fa-book-open text-accent"></i>使用引导与 NAT 穿透说明
+                </span>
+                <i class="fa-solid fa-chevron-down text-meta group-open:rotate-180 transition-transform"></i>
+            </summary>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-body leading-relaxed">
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
+                    <div class="font-bold text-main font-mono">1. 零服务器三步配对</div>
+                    <p>① 发起方点击「生成连接码 &amp; 二维码」，将连接码/链接发给对方或展示二维码；</p>
+                    <p>② 加入方扫码、选图或粘贴连接码后点击「生成应答码」，把应答码传回发起方；</p>
+                    <p>③ 发起方填入或扫描应答码并点击「完成配对」，即可建立浏览器直连。</p>
+                </div>
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
+                    <div class="font-bold text-main font-mono">2. 防监听加密与 WASM ECC</div>
+                    <p>默认开启 <strong>ECDH P-256 + AES-256-GCM</strong> 端到端加密，连接后可核对顶部 4 位 Emoji 安全指纹防中间人监听（也可随时切换开关）。</p>
+                    <p><strong>Reed-Solomon ECC</strong> 由隔离的 Rust WASM 驱动，在“快速抗丢包”模式或分片损坏时自动恢复数据，并配合 SHA-256 校验完整性。</p>
+                </div>
+                <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
+                    <div class="font-bold text-main font-mono">3. NAT 类型与连接建议</div>
+                    <p>点击右上角「检测 NAT 类型」可快速判断当前网络环境：</p>
+                    <p>• <strong>圆锥型 NAT / 直连</strong>：跨网 P2P 穿透成功率高；</p>
+                    <p>• <strong>对称型 NAT</strong>：跨公网可能无法直接打洞，建议两台设备连入同一 Wi-Fi/手机热点（可切为“仅局域网”），或在高级设置中填写自定义 TURN 中继。</p>
+                </div>
+            </div>
+        </details>
+    </section>
+</div>

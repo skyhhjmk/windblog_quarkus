@@ -3672,4 +3672,24 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         mount: initWebSerial,
         unmount: disposeActive
     });
+
+    WindBlogLifecycle.register('tool-file-transfer', {
+        mount: function () {
+            if (!document.getElementById('fileTransferToolApp')) return;
+            loadScriptOnce('/assets/js/file-transfer.js?v=20261114')
+                .then(() => {
+                    if (document.getElementById('fileTransferToolApp') && window.WindBlogFileTransfer) {
+                        window.WindBlogFileTransfer.mount();
+                    }
+                })
+                .catch((err) => {
+                    console.error('[FileTransfer] Failed to load module:', err);
+                });
+        },
+        unmount: function () {
+            if (window.WindBlogFileTransfer) {
+                window.WindBlogFileTransfer.unmount();
+            }
+        }
+    });
 })();

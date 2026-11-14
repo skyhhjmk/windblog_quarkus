@@ -22,6 +22,7 @@ public enum PageView {
     TOOLS_HASH("tools/hash.html", "tools/hash.content.html"),
     TOOLS_JSON_DIFF("tools/json-diff.html", "tools/json-diff.content.html"),
     TOOLS_SERIAL("tools/serial.html", "tools/serial.content.html"),
+    TOOLS_FILE_TRANSFER("tools/file-transfer.html", "tools/file-transfer.content.html"),
     LEGAL_TERMS("legal/terms.html", "legal/terms.content.html"),
     LEGAL_PRIVACY("legal/privacy.html", "legal/privacy.content.html"),
     LINK("blog/link.html", "blog/link.content.html"),
