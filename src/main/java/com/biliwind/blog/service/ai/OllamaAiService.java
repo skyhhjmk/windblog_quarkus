@@ -108,10 +108,27 @@ public class OllamaAiService implements AiService {
                     messages.add(Map.of("role", "system", "content", request.systemPrompt()));
                 }
                 String prompt = request.prompt() == null ? "" : request.prompt();
+                Map<String, Object> userMsg = new HashMap<>();
+                userMsg.put("role", "user");
                 if (!request.imageUrls().isEmpty()) {
-                    prompt = prompt + "\n[Images: " + String.join(", ", request.imageUrls()) + "]";
+                    List<String> base64Images = new ArrayList<>();
+                    List<String> externalUrls = new ArrayList<>();
+                    for (String imageUrl : request.imageUrls()) {
+                        if (imageUrl != null && imageUrl.startsWith("data:") && imageUrl.contains(",")) {
+                            base64Images.add(imageUrl.substring(imageUrl.indexOf(',') + 1));
+                        } else if (imageUrl != null && !imageUrl.isBlank()) {
+                            externalUrls.add(imageUrl);
+                        }
+                    }
+                    if (!base64Images.isEmpty()) {
+                        userMsg.put("images", base64Images);
+                    }
+                    if (!externalUrls.isEmpty()) {
+                        prompt = prompt + "\n[Images: " + String.join(", ", externalUrls) + "]";
+                    }
                 }
-                messages.add(Map.of("role", "user", "content", prompt));
+                userMsg.put("content", prompt);
+                messages.add(userMsg);
                 payload.put("messages", messages);
 
                 HttpRequest.Builder builder = HttpRequest.newBuilder()

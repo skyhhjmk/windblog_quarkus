@@ -203,6 +203,37 @@
                     promotions.disabled = true;
                     if (saveButton) saveButton.disabled = true;
                     hint.textContent = '请先完成邮箱验证后再管理订阅。';
+                    const resendBtn = document.getElementById('resendVerificationInCenterBtn');
+                    if (resendBtn) {
+                        resendBtn.classList.remove('hidden');
+                        if (resendBtn.dataset.bound !== 'true') {
+                            resendBtn.dataset.bound = 'true';
+                            resendBtn.onclick = async () => {
+                                const email = resendBtn.dataset.userEmail || document.querySelector('[data-user-email]')?.textContent?.trim() || '';
+                                if (!email) {
+                                    window.showToast?.('未找到当前账号邮箱', 'error');
+                                    return;
+                                }
+                                window.setLoading(resendBtn, true, {text: '发送中...'});
+                                try {
+                                    const res = await fetch('/user/api/resend-verification', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/x-www-form-urlencoded',
+                                            'X-XSRF-TOKEN': window.getCsrfToken()
+                                        },
+                                        body: new URLSearchParams({email}).toString()
+                                    });
+                                    const data = await res.json();
+                                    window.showToast?.(data.message || '验证邮件已发送', data.success ? 'success' : 'error');
+                                } catch (_) {
+                                    window.showToast?.('发送验证邮件失败，请稍后重试', 'error');
+                                } finally {
+                                    window.setLoading(resendBtn, false);
+                                }
+                            };
+                        }
+                    }
                 }
             })
             .catch(error => {
@@ -1266,6 +1297,280 @@
             var itemClose = modal.querySelector('.item-modal-close');
             if (itemOverlay) itemOverlay.onclick = closeItem;
             if (itemClose) itemClose.onclick = closeItem;
+
+            var useBtn = document.getElementById('itemModalUseBtn');
+            if (useBtn) {
+                useBtn.disabled = false;
+                useBtn.onclick = async function () {
+                    if (!id) return;
+                    window.setLoading(useBtn, true, {text: '使用中...'});
+                    try {
+                        const key = (window.crypto && window.crypto.randomUUID)
+                            ? window.crypto.randomUUID()
+                            : ('use-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+                        const res = await fetch('/api/user/inventory/items/' + encodeURIComponent(id) + '/use', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Idempotency-Key': key,
+                                'X-XSRF-TOKEN': window.getCsrfToken()
+                            },
+                            body: '{}'
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) {
+                            throw new Error(data.message || '使用物品失败');
+                        }
+                        window.showToast?.(data.message || '物品已使用', 'success');
+                        closeItem();
+                        document.getElementById('inventoryRefresh')?.click();
+                    } catch (err) {
+                        window.showToast?.(err.message || '使用物品失败', 'error');
+                    } finally {
+                        window.setLoading(useBtn, false);
+                    }
+                };
+            }
+        };
+    }
+
+    function bindPurchasedPosts() {
+        const listEl = document.getElementById('purchasedPostsList');
+        if (!listEl || listEl.dataset.bound === 'true') return;
+        listEl.dataset.bound = 'true';
+        fetch('/api/user/purchased-posts', {headers: {'Accept': 'application/json'}})
+            .then(r => r.json())
+            .then(result => {
+                if (!result.success) throw new Error(result.message || '加载失败');
+                const items = Array.isArray(result.data) ? result.data : [];
+                if (items.length === 0) {
+                    listEl.innerHTML = '<p class="text-sm text-gray-500">暂无已购文章或解锁记录。</p>';
+                    return;
+                }
+                listEl.replaceChildren();
+                items.forEach(item => {
+                    const card = document.createElement('a');
+                    card.href = '/posts/' + encodeURIComponent(item.slug);
+                    card.className = 'flex items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--bg)]/60 p-4 transition-colors hover:border-[var(--accent)]';
+                    const left = document.createElement('div');
+                    left.className = 'min-w-0';
+                    const title = document.createElement('div');
+                    title.className = 'truncate font-semibold text-main';
+                    title.textContent = item.title || item.slug;
+                    const meta = document.createElement('div');
+                    meta.className = 'mt-1 text-xs text-gray-500';
+                    const scope = item.blockId ? ('解锁区块 ' + item.blockId) : '全文解锁';
+                    meta.textContent = `${scope} · ${item.pointsPaid || 0} 积分`;
+                    left.append(title, meta);
+                    const arrow = document.createElement('span');
+                    arrow.className = 'shrink-0 text-xs text-[var(--accent)]';
+                    arrow.textContent = '阅读 →';
+                    card.append(left, arrow);
+                    listEl.appendChild(card);
+                });
+            })
+            .catch(err => {
+                listEl.textContent = err.message || '加载已购文章失败，请刷新重试。';
+                listEl.classList.add('text-red-400');
+            });
+    }
+
+    async function compressAvatarFile(file) {
+        const MAX_BYTES = 2 * 1024 * 1024;
+        if (!file || !file.type || !file.type.startsWith('image/')) {
+            throw new Error('请选择有效的图片文件');
+        }
+        let bitmap = null;
+        let objectUrl = null;
+        try {
+            if (typeof createImageBitmap === 'function') {
+                bitmap = await createImageBitmap(file);
+            } else {
+                objectUrl = URL.createObjectURL(file);
+                bitmap = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = () => reject(new Error('图片解码失败'));
+                    img.src = objectUrl;
+                });
+            }
+            const srcWidth = bitmap.width || bitmap.naturalWidth;
+            const srcHeight = bitmap.height || bitmap.naturalHeight;
+            if (!srcWidth || !srcHeight) {
+                throw new Error('无法读取图片尺寸');
+            }
+
+            const steps = [
+                {maxDim: 1024, quality: 0.85, mime: 'image/webp'},
+                {maxDim: 1024, quality: 0.72, mime: 'image/webp'},
+                {maxDim: 800, quality: 0.62, mime: 'image/webp'},
+                {maxDim: 640, quality: 0.50, mime: 'image/jpeg'},
+                {maxDim: 512, quality: 0.40, mime: 'image/jpeg'},
+                {maxDim: 384, quality: 0.35, mime: 'image/jpeg'}
+            ];
+
+            for (const step of steps) {
+                const scale = Math.min(1, step.maxDim / Math.max(srcWidth, srcHeight));
+                const width = Math.max(1, Math.round(srcWidth * scale));
+                const height = Math.max(1, Math.round(srcHeight * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    throw new Error('浏览器不支持 Canvas 压缩');
+                }
+                ctx.drawImage(bitmap, 0, 0, width, height);
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, step.mime, step.quality));
+                if (blob && blob.size > 0 && blob.size <= MAX_BYTES) {
+                    return blob;
+                }
+            }
+            throw new Error('头像过大：多次压缩后仍超过 2 MiB，请更换更小的图片');
+        } finally {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+        }
+    }
+
+    function bindProfileEditor() {
+        const form = document.getElementById('profileEditForm');
+        if (!form || form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
+
+        const nicknameInput = document.getElementById('profileNickname');
+        const bioInput = document.getElementById('profileBio');
+        const avatarInput = document.getElementById('profileAvatarInput');
+        const avatarHint = document.getElementById('profileAvatarHint');
+        const previewBox = document.getElementById('profileAvatarPreviewBox');
+        const feedback = document.getElementById('profileEditFeedback');
+        const banner = document.getElementById('profileReviewBanner');
+        const submitBtn = document.getElementById('saveProfileReviewBtn');
+
+        let compressedBlob = null;
+        let avatarError = null;
+
+        const showFeedback = (msg, isError) => {
+            if (!feedback) return;
+            feedback.textContent = msg;
+            feedback.classList.remove('hidden', 'border-red-500/40', 'text-red-400', 'border-emerald-500/40', 'text-emerald-400');
+            feedback.classList.add(isError ? 'border-red-500/40' : 'border-emerald-500/40', isError ? 'text-red-400' : 'text-emerald-400');
+        };
+
+        const loadReviewStatus = () => {
+            fetch('/user/api/profile/review', {cache: 'no-store'})
+                .then(r => r.json())
+                .then(result => {
+                    if (!banner || !result.success || !result.data || !result.data.status) return;
+                    const d = result.data;
+                    banner.classList.remove('hidden', 'border-amber-500/40', 'bg-amber-500/10', 'text-amber-300',
+                        'border-red-500/40', 'bg-red-500/10', 'text-red-300',
+                        'border-emerald-500/40', 'bg-emerald-500/10', 'text-emerald-300');
+                    banner.replaceChildren();
+                    if (d.status === 'PENDING') {
+                        banner.classList.add('border-amber-500/40', 'bg-amber-500/10', 'text-amber-300');
+                        const title = document.createElement('p');
+                        title.className = 'font-semibold';
+                        title.textContent = '您有正在审核中的资料变更（全站当前仍展示旧资料）：';
+                        banner.appendChild(title);
+                        const detail = document.createElement('p');
+                        detail.className = 'mt-1 text-xs opacity-90';
+                        detail.textContent = `拟修改昵称：${d.newNickname || '(未设置)'} · AI 状态：${d.aiStatus || 'PENDING'}`;
+                        banner.appendChild(detail);
+                        if (d.hasPendingAvatar) {
+                            const wrap = document.createElement('div');
+                            wrap.className = 'mt-2 flex items-center gap-2 text-xs';
+                            const img = document.createElement('img');
+                            img.src = '/user/api/profile/pending-avatar?t=' + Date.now();
+                            img.alt = '待审核头像';
+                            img.className = 'h-10 w-10 rounded-lg object-cover border border-amber-500/40';
+                            wrap.append(img, document.createTextNode('待审核头像预览（仅本人与管理员可见）'));
+                            banner.appendChild(wrap);
+                        }
+                    } else if (d.status === 'REJECTED') {
+                        banner.classList.add('border-red-500/40', 'bg-red-500/10', 'text-red-300');
+                        banner.textContent = `最近一次资料修改未通过审核：${d.reviewNote || d.aiReason || '请调整后重新提交'}`;
+                    } else {
+                        banner.classList.add('hidden');
+                    }
+                })
+                .catch(() => {});
+        };
+
+        loadReviewStatus();
+
+        if (avatarInput) {
+            avatarInput.addEventListener('change', async () => {
+                const file = avatarInput.files && avatarInput.files[0];
+                compressedBlob = null;
+                avatarError = null;
+                if (!file) return;
+                if (avatarHint) {
+                    avatarHint.textContent = '正在压缩头像…';
+                    avatarHint.classList.remove('text-red-400');
+                }
+                try {
+                    const blob = await compressAvatarFile(file);
+                    compressedBlob = blob;
+                    const kb = (blob.size / 1024).toFixed(1);
+                    if (avatarHint) {
+                        avatarHint.textContent = `压缩成功（${kb} KiB，符合 2 MiB 限制），提交后进入审核。`;
+                    }
+                    if (previewBox) {
+                        const url = URL.createObjectURL(blob);
+                        previewBox.innerHTML = '';
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.alt = '新头像预览';
+                        img.className = 'h-full w-full object-cover';
+                        previewBox.appendChild(img);
+                    }
+                } catch (err) {
+                    avatarError = err.message || '头像过大或压缩失败';
+                    if (avatarHint) {
+                        avatarHint.textContent = avatarError;
+                        avatarHint.classList.add('text-red-400');
+                    }
+                    window.showToast?.(avatarError, 'error');
+                }
+            });
+        }
+
+        form.onsubmit = async (event) => {
+            event.preventDefault();
+            if (avatarError) {
+                showFeedback(avatarError, true);
+                return;
+            }
+            window.setLoading(submitBtn, true, {text: '提交中...'});
+            try {
+                const fd = new FormData();
+                fd.append('nickname', nicknameInput ? nicknameInput.value : '');
+                fd.append('bio', bioInput ? bioInput.value : '');
+                if (compressedBlob) {
+                    const ext = compressedBlob.type === 'image/jpeg' ? 'jpg' : 'webp';
+                    fd.append('avatar', compressedBlob, `avatar.${ext}`);
+                }
+                const res = await fetch('/user/api/profile/review', {
+                    method: 'POST',
+                    headers: {'X-XSRF-TOKEN': window.getCsrfToken()},
+                    body: fd
+                });
+                const result = await res.json();
+                if (!res.ok || !result.success) {
+                    throw new Error(result.message || '提交资料审核失败');
+                }
+                showFeedback(result.message || '资料修改已提交审核', false);
+                window.showToast?.(result.message || '资料修改已提交审核', 'success');
+                compressedBlob = null;
+                if (avatarInput) avatarInput.value = '';
+                loadReviewStatus();
+            } catch (err) {
+                showFeedback(err.message || '提交资料审核失败', true);
+                window.showToast?.(err.message || '提交资料审核失败', 'error');
+            } finally {
+                window.setLoading(submitBtn, false);
+            }
         };
     }
 
@@ -1284,6 +1589,8 @@
         bindUserTabs();
         bindSubscriptions();
         bindAccountSettings();
+        bindProfileEditor();
+        bindPurchasedPosts();
         bindFavoriteButton();
         bindUserPosts();
         bindFavoriteList();

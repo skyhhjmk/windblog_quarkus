@@ -24,7 +24,9 @@ public class AiSelectionService {
             try {
                 long id = Long.parseLong(selectedId);
                 for (AiProviderConfig config : configs) {
-                    if (config.id != null && config.id == id && config.enabled && allows(config, operation)) {
+                    if (config.id != null && config.id == id && config.enabled
+                            && allows(config, operation)
+                            && satisfiesModality(config, operation, configs)) {
                         return config;
                     }
                 }
@@ -34,7 +36,9 @@ public class AiSelectionService {
             return null;
         }
         for (AiProviderConfig config : configs) {
-            if (config.enabled && allows(config, operation)) return config;
+            if (config.enabled && allows(config, operation) && satisfiesModality(config, operation, configs)) {
+                return config;
+            }
         }
         return null;
     }
@@ -46,9 +50,48 @@ public class AiSelectionService {
         if (configs == null) return null;
         for (AiProviderConfig config : configs) {
             if (config != primary && config.enabled
-                    && allows(config, operation)) return config;
+                    && allows(config, operation)
+                    && satisfiesModality(config, operation, configs)) return config;
         }
         return null;
+    }
+
+    private boolean satisfiesModality(AiProviderConfig config, String operation, List<AiProviderConfig> allConfigs) {
+        if (!"avatar_audit".equalsIgnoreCase(operation)) {
+            return true;
+        }
+        return supportsInputModality(config, "IMAGE", allConfigs);
+    }
+
+    public boolean supportsInputModality(AiProviderConfig config, String modality, List<AiProviderConfig> allConfigs) {
+        if (config == null || modality == null) {
+            return false;
+        }
+        if (config.type == com.biliwind.blog.model.AiConfigType.POLLING_GROUP) {
+            if (config.config == null || config.config.isBlank() || allConfigs == null) {
+                return false;
+            }
+            try {
+                JsonNode root = objectMapper.readTree(config.config);
+                JsonNode members = root.has("providerIds") ? root.get("providerIds") : root.get("members");
+                if (members != null && members.isArray()) {
+                    for (JsonNode member : members) {
+                        long memberId = member.isObject() ? member.path("id").asLong(-1) : member.asLong(-1);
+                        for (AiProviderConfig candidate : allConfigs) {
+                            if (candidate.id != null && candidate.id == memberId && candidate.enabled
+                                    && supportsInputModality(candidate, modality, allConfigs)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                return false;
+            }
+            return false;
+        }
+        AiModelCapability capability = AiModelCapability.resolve(config, config.model, objectMapper);
+        return capability != null && capability.supportsInput(modality);
     }
 
     private boolean allows(AiProviderConfig config, String operation) {

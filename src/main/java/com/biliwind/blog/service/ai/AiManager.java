@@ -51,6 +51,14 @@ public class AiManager {
         return call(AiCallRequest.moderate(content));
     }
 
+    public CompletionStage<AiResult> moderateProfile(String content) {
+        return call(AiCallRequest.moderateProfile(content));
+    }
+
+    public CompletionStage<AiResult> moderateAvatar(String prompt, List<String> imageUrls) {
+        return call(AiCallRequest.moderateAvatar(prompt, imageUrls));
+    }
+
     public CompletionStage<AiResult> complete(Long providerId, String systemPrompt, String prompt) {
         return complete(providerId, "assistant", systemPrompt, prompt);
     }

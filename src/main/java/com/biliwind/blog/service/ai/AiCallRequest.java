@@ -46,6 +46,16 @@ public record AiCallRequest(AiOperation operation, Long providerId, String opera
                 content == null ? "" : content, null, null, null, Map.of(), List.of(), false);
     }
 
+    public static AiCallRequest moderateProfile(String content) {
+        return new AiCallRequest(AiOperation.MODERATE, null, "profile_audit", null,
+                content == null ? "" : content, null, null, null, Map.of(), List.of(), false);
+    }
+
+    public static AiCallRequest moderateAvatar(String prompt, List<String> imageUrls) {
+        return new AiCallRequest(AiOperation.MODERATE, null, "avatar_audit", null,
+                prompt == null ? "" : prompt, null, null, null, Map.of(), imageUrls, false);
+    }
+
     public static AiCallRequest complete(Long providerId, String operationTag,
                                          String systemPrompt, String prompt) {
         return new AiCallRequest(AiOperation.COMPLETE, providerId,

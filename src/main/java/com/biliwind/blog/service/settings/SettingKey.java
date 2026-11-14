@@ -15,6 +15,7 @@ public enum SettingKey {
     AMP("amp"),
     ANALYTICS_TRACKING("analytics_tracking"),
     AI_COMMENT_AUDIT("ai_comment_audit"),
+    AI_USER_PROFILE_AUDIT("ai_user_profile_audit"),
     AI_TRANSLATION("ai_translation"),
     AI_OPERATION_CONFIGS("ai_operation_configs"),
     ELASTICSEARCH("elasticsearch"),

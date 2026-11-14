@@ -5,6 +5,7 @@ import com.biliwind.blog.model.SettingLevel;
 import com.biliwind.blog.service.SidebarTemplateData;
 import com.biliwind.blog.service.ai.CommentModerationPrompt;
 import com.biliwind.blog.service.ai.TranslationPrompt;
+import com.biliwind.blog.service.ai.UserProfileModerationPrompt;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -105,6 +106,7 @@ public final class SettingCatalogue {
         add(definitions, amp());
         add(definitions, analyticsTracking());
         add(definitions, aiCommentAudit());
+        add(definitions, aiUserProfileAudit());
         add(definitions, aiTranslation());
         add(definitions, aiOperationConfigs());
         add(definitions, elasticsearch());
@@ -372,6 +374,21 @@ public final class SettingCatalogue {
         return definition(SettingKey.AI_COMMENT_AUDIT, value, "功能设置", schema, "AI 评论审核设置");
     }
 
+    private static SettingDefinition aiUserProfileAudit() {
+        ObjectNode schema = objectSchema();
+        ArrayNode fields = schema.putArray("fields");
+        fields.addObject().put("key", "prompt").put("label", "资料文本审核提示词").put("widget", "textarea").put("required", true);
+        fields.addObject().put("key", "avatarPrompt").put("label", "头像多模态审核提示词").put("widget", "textarea").put("required", true);
+        fields.addObject().put("key", "autoAudit").put("label", "自动 AI 审核").put("widget", "switch");
+        fields.addObject().put("key", "allowAutoDecision").put("label", "允许 AI 自动通过或拒绝").put("widget", "switch");
+        ObjectNode value = MAPPER.createObjectNode();
+        value.put("prompt", UserProfileModerationPrompt.DEFAULT_TEXT_PROMPT);
+        value.put("avatarPrompt", UserProfileModerationPrompt.DEFAULT_AVATAR_PROMPT);
+        value.put("autoAudit", true);
+        value.put("allowAutoDecision", false);
+        return definition(SettingKey.AI_USER_PROFILE_AUDIT, value, "功能设置", schema, "AI 用户资料（昵称、简介、头像）审核设置");
+    }
+
     private static SettingDefinition aiTranslation() {
         ObjectNode schema = objectSchema();
         ArrayNode fields = schema.putArray("fields");
@@ -391,6 +408,8 @@ public final class SettingCatalogue {
         ArrayNode fields = schema.putArray("fields");
         for (String[] operation : new String[][]{
                 {"moderate", "评论审核 AI 配置"},
+                {"profile_audit", "用户资料文本审核 AI 配置"},
+                {"avatar_audit", "用户头像多模态审核 AI 配置"},
                 {"summarize", "AI 摘要配置"},
                 {"translate", "AI 翻译配置"},
                 {"assistant", "写作助手 AI 配置"},
@@ -410,6 +429,8 @@ public final class SettingCatalogue {
         }
         ObjectNode value = MAPPER.createObjectNode();
         value.put("moderate", "");
+        value.put("profile_audit", "");
+        value.put("avatar_audit", "");
         value.put("summarize", "");
         value.put("translate", "");
         value.put("assistant", "");

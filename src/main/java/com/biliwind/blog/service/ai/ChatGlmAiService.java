@@ -217,9 +217,17 @@ public class ChatGlmAiService implements AiService {
         }
         String prompt = request.prompt() == null ? "" : request.prompt();
         if (!request.imageUrls().isEmpty()) {
-            prompt = prompt + "\n[Images: " + String.join(", ", request.imageUrls()) + "]";
+            List<Map<String, Object>> contentParts = new ArrayList<>();
+            contentParts.add(Map.of("type", "text", "text", prompt));
+            for (String imageUrl : request.imageUrls()) {
+                if (imageUrl != null && !imageUrl.isBlank()) {
+                    contentParts.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
+                }
+            }
+            messages.add(ChatMessage.builder().role(ChatMessageRole.USER.value()).content(contentParts).build());
+        } else {
+            messages.add(userMessage(prompt));
         }
-        messages.add(userMessage(prompt));
         return messages;
     }
 

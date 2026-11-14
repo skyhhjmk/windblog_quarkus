@@ -5,6 +5,8 @@ import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.common.security.PasswordHasher;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.model.User;
+import com.biliwind.blog.model.UserProfileReview;
+import com.biliwind.blog.service.UserProfileReviewService;
 import com.biliwind.blog.service.settings.SettingKey;
 import com.biliwind.blog.service.settings.SettingsReader;
 import com.biliwind.blog.service.PageRenderModel;
@@ -89,6 +91,9 @@ public class UserController {
 
     @Inject
     SecurityRateLimitService securityRateLimitService;
+
+    @Inject
+    UserProfileReviewService profileReviewService;
 
     @Inject
     RoutingContext routingContext;
@@ -184,10 +189,15 @@ public class UserController {
         int expPercent = Math.min(100, Math.max(0, (int) ((float) currentLevelExp / currentLevelMaxExp * 100)));
 
         boolean isPjax = PjaxHelper.isPjaxRequest(headers);
+        UserProfileReview latestReview = UserProfileReview
+                .find("userId = ?1 order by id desc", profile.id())
+                .firstResult();
         return Response.ok(pageRenderer.render(PageView.USER_CENTER, headers, new PageRenderModel()
                         .put("pjaxRequest", isPjax)
                         .put("language", languageContext.getLang())
                         .put("user", profile)
+                        .put("emailVerified", profile.emailVerified())
+                        .put("pendingReview", latestReview)
                         .put("pointsBalance", pointsBalance)
                         .put("hasCheckedIn", hasCheckedIn)
                         .put("level", level)
@@ -280,7 +290,7 @@ public class UserController {
                         "success", true,
                         "message", "注册成功，请查收验证邮件",
                         "redirect", targetUrl,
-                        "user", new UserProfile(user.id, user.username, user.email, user.roleName)
+                        "user", UserProfile.from(user)
                 ))
                 .cookie(cookie)
                 .build();
@@ -344,7 +354,7 @@ public class UserController {
                         "success", true,
                         "message", "登录成功",
                         "redirect", targetUrl,
-                        "user", new UserProfile(user.id, user.username, user.email, user.roleName)
+                        "user", UserProfile.from(user)
                 ))
                 .cookie(cookie)
                 .build();
@@ -364,6 +374,121 @@ public class UserController {
                     .build();
         }
         return Response.ok(Map.of("success", true, "data", profile)).build();
+    }
+
+    @GET
+    @Path("/api/profile/review")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getProfileReviewStatus(@Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(Map.of("success", false, "message", "登录已过期，请重新登录"))
+                    .build();
+        }
+        UserProfileReview latest = UserProfileReview
+                .find("userId = ?1 order by id desc", profile.id())
+                .firstResult();
+        if (latest == null) {
+            return Response.ok(Map.of("success", true, "data", Map.of())).build();
+        }
+        Map<String, Object> item = new java.util.LinkedHashMap<>();
+        item.put("id", latest.id);
+        item.put("status", latest.status);
+        item.put("newNickname", latest.newNickname);
+        item.put("newBio", latest.newBio);
+        item.put("hasPendingAvatar", latest.pendingAvatarPath != null && !latest.pendingAvatarPath.isBlank());
+        item.put("aiStatus", latest.aiStatus);
+        item.put("aiReason", latest.aiReason);
+        item.put("reviewNote", latest.reviewNote);
+        item.put("updatedAt", latest.updatedAt);
+        return Response.ok(Map.of("success", true, "data", item)).build();
+    }
+
+    @POST
+    @Path("/api/profile/review")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response submitProfileReview(
+            @org.jboss.resteasy.reactive.RestForm("nickname") String nickname,
+            @org.jboss.resteasy.reactive.RestForm("bio") String bio,
+            @org.jboss.resteasy.reactive.RestForm("avatar") org.jboss.resteasy.reactive.multipart.FileUpload avatar,
+            @Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(Map.of("success", false, "message", "登录已过期，请重新登录"))
+                    .build();
+        }
+        byte[] avatarBytes = null;
+        if (avatar != null && avatar.filePath() != null) {
+            if (avatar.size() > UserProfileReviewService.MAX_AVATAR_BYTES) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("success", false, "message", "头像文件过大，不能超过 2 MiB"))
+                        .build();
+            }
+            try {
+                avatarBytes = java.nio.file.Files.readAllBytes(avatar.filePath());
+            } catch (java.io.IOException e) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("success", false, "message", "读取头像文件失败"))
+                        .build();
+            }
+            if (avatarBytes.length > UserProfileReviewService.MAX_AVATAR_BYTES) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("success", false, "message", "头像文件过大，不能超过 2 MiB"))
+                        .build();
+            }
+        }
+        try {
+            UserProfileReview review = profileReviewService.submitChange(profile.id(), nickname, bio, avatarBytes);
+            String message = "APPROVED".equals(review.status)
+                    ? "资料修改已通过审核并生效"
+                    : "REJECTED".equals(review.status)
+                    ? ("资料修改未通过审核：" + (review.reviewNote == null ? "" : review.reviewNote))
+                    : "资料修改已提交，正在等待审核";
+            return Response.ok(Map.of(
+                    "success", true,
+                    "message", message,
+                    "status", review.status,
+                    "aiStatus", review.aiStatus,
+                    "reviewId", review.id
+            )).build();
+        } catch (BadRequestException ex) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false, "message", ex.getMessage()))
+                    .build();
+        }
+    }
+
+    @GET
+    @Path("/api/profile/pending-avatar")
+    @Produces(MediaType.WILDCARD)
+    public Response getPendingAvatar(@Context HttpHeaders headers) {
+        UserProfile profile = resolveUserFromCookie(headers);
+        if (profile == null) {
+            throw new NotAuthorizedException("请先登录");
+        }
+        UserProfileReviewService.AvatarPayload payload = profileReviewService.loadPendingAvatarForUser(profile.id());
+        if (payload == null) {
+            throw new NotFoundException();
+        }
+        return Response.ok(payload.bytes(), payload.mimeType())
+                .header("Cache-Control", "no-store")
+                .build();
+    }
+
+    @GET
+    @Path("/avatars/{fileName}")
+    @Produces(MediaType.WILDCARD)
+    public Response getPublicAvatar(@PathParam("fileName") String fileName) {
+        UserProfileReviewService.AvatarPayload payload = profileReviewService.loadPublicAvatar(fileName);
+        if (payload == null) {
+            throw new NotFoundException();
+        }
+        return Response.ok(payload.bytes(), payload.mimeType())
+                .header("Cache-Control", "public, max-age=86400")
+                .build();
     }
 
     @POST
@@ -689,11 +814,36 @@ public class UserController {
             return null;
         }
 
-        return new UserProfile(user.id, user.username, user.email, user.roleName);
+        return UserProfile.from(user);
     }
 
     @RegisterForReflection
-    public record UserProfile(Long id, String username, String email, String roleName) {
+    public record UserProfile(
+            Long id,
+            String username,
+            String email,
+            String roleName,
+            String nickname,
+            String avatar,
+            String bio,
+            boolean emailVerified
+    ) {
+        public static UserProfile from(User user) {
+            return new UserProfile(
+                    user.id,
+                    user.username,
+                    user.email,
+                    user.roleName,
+                    user.nickname,
+                    user.avatar,
+                    user.bio,
+                    user.emailVerifiedAt != null
+            );
+        }
+
+        public String displayName() {
+            return (nickname != null && !nickname.isBlank()) ? nickname : username;
+        }
     }
 
     public record SubscriptionRequest(boolean subscribeArticleUpdates, boolean subscribePromotions) {

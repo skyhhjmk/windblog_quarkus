@@ -291,7 +291,9 @@ public class AiCallExecutor {
 
     private CompletionStage<AiResult> moderate(AiService service, AiProviderConfig config,
                                                AiCallRequest request) {
-        return service.complete(config, AiProviderRequest.json("moderate", moderationPrompt(request)))
+        AiProviderRequest providerRequest = new AiProviderRequest(
+                feature(request), null, moderationPrompt(request), true, request.imageUrls(), false);
+        return service.complete(config, providerRequest)
                 .thenApply(this::parseModeration);
     }
 
@@ -422,7 +424,7 @@ public class AiCallExecutor {
         return switch (request.operation()) {
             case TRANSLATE -> request.promptTemplate() == null || request.promptTemplate().isBlank()
                     ? request.withPromptTemplate(configuredTranslationPrompt()) : request;
-            case MODERATE -> request.withPromptTemplate(configuredModerationPrompt());
+            case MODERATE -> request.withPromptTemplate(configuredModerationPrompt(request.operationTag()));
             default -> request;
         };
     }
@@ -431,7 +433,15 @@ public class AiCallExecutor {
         return settings.textNonBlank(SettingKey.AI_TRANSLATION, "prompt");
     }
 
-    private String configuredModerationPrompt() {
+    private String configuredModerationPrompt(String operationTag) {
+        if ("profile_audit".equalsIgnoreCase(operationTag)) {
+            String custom = settings.textNonBlank(SettingKey.AI_USER_PROFILE_AUDIT, "prompt");
+            return custom != null ? custom : UserProfileModerationPrompt.DEFAULT_TEXT_PROMPT;
+        }
+        if ("avatar_audit".equalsIgnoreCase(operationTag)) {
+            String custom = settings.textNonBlank(SettingKey.AI_USER_PROFILE_AUDIT, "avatarPrompt");
+            return custom != null ? custom : UserProfileModerationPrompt.DEFAULT_AVATAR_PROMPT;
+        }
         return settings.textNonBlank(SettingKey.AI_COMMENT_AUDIT, "prompt");
     }
 

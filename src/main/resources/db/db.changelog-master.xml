@@ -167,4 +167,5 @@
     <include file="db/migration/166-normalize-visibility-regions.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/167-create-wesp-sequence-frontiers.sql" relativeToChangelogFile="false"/>
     <include file="db/migration/168-add-post-revision-public-preview-rendered.sql" relativeToChangelogFile="false"/>
+    <include file="db/migration/169-create-user-profile-reviews.sql" relativeToChangelogFile="false"/>
 </databaseChangeLog>

@@ -100,6 +100,39 @@ public class UserGamificationController {
         return Response.ok(Map.of("success", true, "data", data)).build();
     }
 
+    @GET
+    @Path("/purchased-posts")
+    public Response getPurchasedPosts(@Context HttpHeaders headers) {
+        Long userId = resolveUserIdFromCookie(headers);
+        if (userId == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(Map.of("success", false, "message", "请先登录"))
+                    .build();
+        }
+        List<com.biliwind.blog.model.UserPurchaseRecord> records = com.biliwind.blog.model.UserPurchaseRecord
+                .find("userId = ?1 and targetType = 'POST' order by createdAt desc", userId)
+                .list();
+
+        List<Map<String, Object>> items = new java.util.ArrayList<>();
+        for (var record : records) {
+            com.biliwind.blog.model.Post post = com.biliwind.blog.model.Post.findById(record.targetId);
+            if (post == null || post.deletedAt != null) {
+                continue;
+            }
+            Map<String, Object> item = new HashMap<>();
+            item.put("recordId", record.id);
+            item.put("postId", post.id);
+            item.put("slug", post.slug);
+            item.put("title", post.title != null ? post.title.getOrDefault("zh-CN",
+                    post.title.values().stream().findFirst().orElse(post.slug)) : post.slug);
+            item.put("blockId", record.targetBlockId);
+            item.put("pointsPaid", record.pointsPaid);
+            item.put("purchasedAt", record.createdAt);
+            items.add(item);
+        }
+        return Response.ok(Map.of("success", true, "data", items)).build();
+    }
+
     private Long resolveUserIdFromCookie(HttpHeaders headers) {
         jakarta.ws.rs.core.Cookie cookie = headers.getCookies().get("user_token");
         if (cookie == null || cookie.getValue() == null || cookie.getValue().isBlank()) {

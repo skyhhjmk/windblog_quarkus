@@ -79,6 +79,12 @@ public class User extends PanacheEntityBase {
     public String avatar;
 
     /**
+     * 个人简介
+     */
+    @Column(columnDefinition = "TEXT")
+    public String bio;
+
+    /**
      * 手机号
      */
     @Column(length = 20)
