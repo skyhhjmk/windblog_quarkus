@@ -1195,6 +1195,9 @@
                 els.sendTextBtn.disabled = false;
                 els.sendReadyHint.textContent = 'P2P 直连已就绪，可双向互传';
                 setConnStatus(state.sessionEncrypted ? '已加密直连' : '已直连', 'ok');
+                if (state.sendingQueue.length > 0) {
+                    processSendQueue();
+                }
                 return;
             }
             if (msg.type === 'enc-toggle') {
@@ -1520,10 +1523,7 @@
         }
 
         function enqueueFiles(fileList) {
-            if (!state.dc || state.dc.readyState !== 'open') {
-                alert('请先完成 P2P 配对连接');
-                return;
-            }
+            const connected = Boolean(state.dc && state.dc.readyState === 'open');
             for (const file of fileList) {
                 const fileId = state.nextFileId++;
                 const item = {
@@ -1536,14 +1536,16 @@
                     size: file.size,
                     doneBytes: 0,
                     status: 'queued',
-                    statusText: '排队中…',
+                    statusText: connected ? '排队中…' : '已加入队列，等待配对连接后自动发送…',
                     hashStatus: ''
                 };
                 state.transfers.set(item.key, item);
                 renderTransferCard(item);
                 state.sendingQueue.push(item);
             }
-            processSendQueue();
+            if (connected) {
+                processSendQueue();
+            }
         }
 
         els.fileInput.addEventListener('change', (e) => {
