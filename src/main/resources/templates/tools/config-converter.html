@@ -1,0 +1,5 @@
+{#include "base.html"}
+    {#title}{pageTitle ?: 'YAML / JSON / Properties / .env 互转'}{/title}
+    {#navPath}{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / config-converter{/navPath}
+    {#content}{#include "tools/config-converter.content.html"}{/include}{/content}
+{/include}

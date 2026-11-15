@@ -74,7 +74,7 @@ class AgentCardResourceTest {
         assertEquals("HTTP+JSON", service.path("protocolBinding").asText());
         assertEquals("1.0", service.path("protocolVersion").asText());
         assertFalse(card.path("capabilities").path("streaming").asBoolean());
-        assertEquals(2, card.path("skills").size());
+        assertEquals(3, card.path("skills").size());
         for (JsonNode skill : card.path("skills")) {
             for (String field : new String[]{"id", "name", "description"}) {
                 assertFalse(skill.path(field).asText().isBlank());

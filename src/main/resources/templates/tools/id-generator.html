@@ -1,0 +1,5 @@
+{#include "base.html"}
+    {#title}{pageTitle ?: 'UUID / ULID / 雪花 ID 生成与反解析'}{/title}
+    {#navPath}{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / id-generator{/navPath}
+    {#content}{#include "tools/id-generator.content.html"}{/include}{/content}
+{/include}

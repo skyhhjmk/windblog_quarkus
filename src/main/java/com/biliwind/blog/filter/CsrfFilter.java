@@ -71,7 +71,9 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
             return false;
         }
         String normalizedPath = normalizePath(path);
-        if (normalizedPath.startsWith("/api/reactions/")) {
+        if (normalizedPath.startsWith("/api/reactions/")
+                || normalizedPath.equals("/api/public/mcp")
+                || normalizedPath.startsWith("/api/public/tools/")) {
             return false;
         }
         return (normalizedPath.startsWith("/api/") && !normalizedPath.startsWith("/api/admin/"))

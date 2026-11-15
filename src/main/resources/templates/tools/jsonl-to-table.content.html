@@ -1,0 +1,77 @@
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / jsonl-to-table</div>
+
+    <section class="space-y-8" id="jsonlTableToolApp">
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">JSONL / NDJSON</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">JSONL (NDJSON) 转表格与导出</h1>
+                <p class="text-body text-xs md:text-sm">纯本地将多行 JSONL / NDJSON 日志或数据集展开为可筛选、可排序的交互式表格，支持嵌套字段扁平化与 CSV / Markdown / JSON 导出。</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                <button type="button" id="btnJsonlSample" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent">加载示例 JSONL</button>
+                <label class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent cursor-pointer">
+                    <span>导入文件</span>
+                    <input type="file" id="jsonlFileInput" accept=".jsonl,.ndjson,.json,.log,.txt" class="hidden" />
+                </label>
+                <button type="button" id="btnJsonlClear" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-rose-400">清空</button>
+            </div>
+        </header>
+
+        <!-- 输入区 -->
+        <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                <div class="flex items-center gap-4">
+                    <label for="jsonlInput" class="font-bold text-main">JSONL / NDJSON 输入 (每行一个 JSON 对象)</label>
+                    <label class="flex items-center gap-1.5 text-meta cursor-pointer">
+                        <input type="checkbox" id="chkJsonlFlatten" checked class="rounded" />
+                        <span>自动扁平化嵌套字段 (a.b.c)</span>
+                    </label>
+                </div>
+                <span id="jsonlParseStats" class="text-meta">0 行 • 0 列</span>
+            </div>
+            <textarea id="jsonlInput" rows="7" placeholder='{"id":1,"user":{"name":"Alice","role":"admin"},"latency_ms":18}&#10;{"id":2,"user":{"name":"Bob","role":"dev"},"latency_ms":42}'
+                      class="w-full bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none resize-y"></textarea>
+            <div id="jsonlErrorInfo" class="hidden text-xs font-mono text-amber-400"></div>
+        </div>
+
+        <!-- 表格工具栏与表格 -->
+        <div class="bg-card border border-border rounded-2xl p-5 space-y-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border/40 pb-3">
+                <div class="flex items-center gap-2 flex-1">
+                    <input id="jsonlFilterInput" type="search" placeholder="输入关键词过滤表格行..."
+                           class="w-full md:max-w-sm bg-input-bg border border-border rounded-xl px-3 py-1.5 text-xs font-mono text-main focus:border-accent outline-none" />
+                    <span id="jsonlVisibleStats" class="text-xs font-mono text-meta shrink-0"></span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                    <button type="button" id="btnExportCsv" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent">导出 CSV</button>
+                    <button type="button" id="btnExportMarkdown" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent">复制 Markdown 表</button>
+                    <button type="button" id="btnExportJsonArray" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent">复制 JSON 数组</button>
+                </div>
+            </div>
+
+            <!-- 列显隐控制 -->
+            <div id="jsonlColumnsBar" class="flex flex-wrap items-center gap-2 text-[11px] font-mono"></div>
+
+            <div class="overflow-x-auto rounded-xl border border-border/70">
+                <table class="w-full text-xs font-mono border-collapse">
+                    <thead id="jsonlTableHead" class="bg-input-bg text-meta"></thead>
+                    <tbody id="jsonlTableBody" class="divide-y divide-border/40 text-main"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>

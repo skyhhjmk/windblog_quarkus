@@ -1,0 +1,98 @@
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / id-generator</div>
+
+    <section class="space-y-8" id="idGeneratorToolApp">
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">DISTRIBUTED ID</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">UUID / ULID / 雪花 ID 生成与反解析</h1>
+                <p class="text-body text-xs md:text-sm">批量生成 UUID v4、UUID v7、ULID 与 Snowflake 雪花 ID，并反向提取内嵌的精确毫秒时间戳与节点信息。</p>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 批量生成 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
+                    <h2 class="text-sm font-bold text-main font-mono">批量生成 (Generator)</h2>
+                    <button type="button" id="btnGenerateIds" class="px-3 py-1.5 rounded-lg bg-accent text-[var(--accent-foreground)] text-xs font-mono font-bold">立即生成</button>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                    <div>
+                        <label for="idGenType" class="block text-meta mb-1">ID 类型</label>
+                        <select id="idGenType" class="w-full bg-input-bg border border-border rounded-lg px-2 py-1.5 text-main outline-none">
+                            <option value="uuidv7">UUID v7 (时序)</option>
+                            <option value="uuidv4">UUID v4 (随机)</option>
+                            <option value="ulid">ULID</option>
+                            <option value="snowflake">Snowflake (64-bit)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="idGenCount" class="block text-meta mb-1">数量</label>
+                        <input id="idGenCount" type="number" min="1" max="100" value="10"
+                               class="w-full bg-input-bg border border-border rounded-lg px-2 py-1.5 text-main outline-none" />
+                    </div>
+                    <div>
+                        <label for="idGenWorker" class="block text-meta mb-1">Worker ID (0-31)</label>
+                        <input id="idGenWorker" type="number" min="0" max="31" value="1"
+                               class="w-full bg-input-bg border border-border rounded-lg px-2 py-1.5 text-main outline-none" />
+                    </div>
+                    <div>
+                        <label for="idGenDatacenter" class="block text-meta mb-1">Datacenter (0-31)</label>
+                        <input id="idGenDatacenter" type="number" min="0" max="31" value="1"
+                               class="w-full bg-input-bg border border-border rounded-lg px-2 py-1.5 text-main outline-none" />
+                    </div>
+                </div>
+                <div class="flex items-center justify-between text-xs font-mono text-meta">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" id="idGenUppercase" class="rounded" />
+                        <span>大写输出</span>
+                    </label>
+                    <button type="button" id="btnCopyGeneratedIds" class="px-2.5 py-1 rounded bg-input-bg border border-border hover:text-accent">
+                        <i class="fa-regular fa-copy mr-1"></i>复制全部
+                    </button>
+                </div>
+                <textarea id="idGenOutput" rows="11" readonly
+                          class="w-full bg-input-bg border border-border rounded-xl p-3 text-accent font-mono text-xs md:text-sm outline-none resize-y"></textarea>
+            </div>
+
+            <!-- 反解析 -->
+            <div class="bg-card border border-border rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between border-b border-border/40 pb-3">
+                    <h2 class="text-sm font-bold text-main font-mono">ID 时间戳反解析 (Inspector)</h2>
+                    <span class="text-[11px] font-mono text-meta">自动识别 Snowflake / ULID / UUID v7</span>
+                </div>
+                <input id="idInspectInput" type="text" placeholder="输入 Snowflake ID（如 1857410023948124160）、ULID 或 UUID v7"
+                       class="w-full bg-input-bg border border-border rounded-xl px-3 py-2 text-main font-mono text-xs md:text-sm focus:border-accent outline-none" />
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                    <div>
+                        <label for="idInspectEpoch" class="block text-meta mb-1">Snowflake Epoch (ms, 默认 Twitter 2010)</label>
+                        <input id="idInspectEpoch" type="number" value="1288834974657"
+                               class="w-full bg-input-bg border border-border rounded-lg px-2.5 py-1.5 text-main outline-none" />
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button type="button" data-epoch-preset="1288834974657" class="px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent">Twitter</button>
+                        <button type="button" data-epoch-preset="1420070400000" class="px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent">Discord</button>
+                        <button type="button" data-epoch-preset="1577836800000" class="px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent">2020-01-01</button>
+                    </div>
+                </div>
+                <div id="idInspectResult" class="bg-input-bg border border-border rounded-xl p-4 text-xs font-mono space-y-2 text-body">
+                    在上方输入任意 Snowflake ID、ULID 或 UUID v7 即可查看解析详情。
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

@@ -1,0 +1,111 @@
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / ai-token</div>
+
+    <section class="space-y-8" id="aiTokenToolApp">
+        <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">AI WORKFLOW</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">AI Token 计算与 Prompt 变量调试台</h1>
+                <p class="text-body text-xs md:text-sm">纯本地实时估算 GPT / Claude / Gemini / DeepSeek 的 Token 数量与 API 成本，支持 <code class="text-accent">&#123;&#123;variable&#125;&#125;</code> 模板变量自动提取与渲染预览。</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                <button type="button" data-ai-preset="rag" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent transition-colors">RAG 问答模板</button>
+                <button type="button" data-ai-preset="code" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-accent transition-colors">代码审查模板</button>
+                <button type="button" id="btnAiTokenClear" class="px-3 py-1.5 rounded-lg bg-input-bg border border-border text-meta hover:text-rose-400 transition-colors">清空</button>
+            </div>
+        </header>
+
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-card border border-border rounded-2xl p-4">
+                <div class="text-[11px] font-mono text-meta">估算总 Token</div>
+                <div id="aiStatTokens" class="text-2xl font-extrabold text-accent font-mono mt-1">0</div>
+            </div>
+            <div class="bg-card border border-border rounded-2xl p-4">
+                <div class="text-[11px] font-mono text-meta">字符数 (含空格)</div>
+                <div id="aiStatChars" class="text-2xl font-extrabold text-main font-mono mt-1">0</div>
+            </div>
+            <div class="bg-card border border-border rounded-2xl p-4">
+                <div class="text-[11px] font-mono text-meta">中文字符 / 英文词</div>
+                <div id="aiStatLang" class="text-lg font-bold text-main font-mono mt-1.5">0 / 0</div>
+            </div>
+            <div class="bg-card border border-border rounded-2xl p-4">
+                <div class="text-[11px] font-mono text-meta">预计输出 Token</div>
+                <input id="aiExpectedOutputTokens" type="number" min="0" max="128000" value="500"
+                       class="mt-1 w-full bg-input-bg border border-border rounded-lg px-2.5 py-1 text-sm font-mono text-main focus:border-accent outline-none" />
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Prompt 输入与变量 -->
+            <div class="space-y-4">
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                    <label for="aiSystemPrompt" class="block text-xs font-mono font-bold text-main">System Prompt</label>
+                    <textarea id="aiSystemPrompt" rows="4" placeholder="例如：你是一个资深的 &#123;&#123;role&#125;&#125;，请用 &#123;&#123;language&#125;&#125; 回答..."
+                              class="w-full bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none resize-y"></textarea>
+                </div>
+
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                    <label for="aiUserPrompt" class="block text-xs font-mono font-bold text-main">User Prompt (支持 &#123;&#123;var&#125;&#125; 变量)</label>
+                    <textarea id="aiUserPrompt" rows="7" placeholder="在此输入 User Prompt 或任意待估算文本..."
+                              class="w-full bg-input-bg border border-border rounded-xl p-3 text-main font-mono text-xs md:text-sm focus:border-accent outline-none resize-y"></textarea>
+                </div>
+
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xs font-mono font-bold text-main">模板变量注入 (&#123;&#123;variables&#125;&#125;)</h3>
+                        <span id="aiVarCount" class="text-[11px] font-mono text-meta">0 个变量</span>
+                    </div>
+                    <div id="aiVariablesContainer" class="space-y-2 text-xs font-mono text-meta">
+                        在上方 Prompt 中输入 <code class="text-accent">&#123;&#123;变量名&#125;&#125;</code> 即可在此实时填值测试。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 渲染预览与价格估算 -->
+            <div class="space-y-4">
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                    <div class="flex items-center justify-between border-b border-border/40 pb-2">
+                        <h3 class="text-xs font-mono font-bold text-main">变量渲染后最终 Prompt</h3>
+                        <button type="button" id="btnCopyRenderedPrompt" class="px-2.5 py-1 rounded bg-input-bg border border-border text-xs font-mono text-meta hover:text-accent">
+                            <i class="fa-regular fa-copy mr-1"></i>复制
+                        </button>
+                    </div>
+                    <pre id="aiRenderedPreview" class="bg-input-bg border border-border rounded-xl p-3 text-xs font-mono text-body whitespace-pre-wrap break-words max-h-56 overflow-y-auto"></pre>
+                </div>
+
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-3">
+                    <div class="flex items-center justify-between border-b border-border/40 pb-2">
+                        <h3 class="text-xs font-mono font-bold text-main">主流模型单次调用参考费用 (USD)</h3>
+                        <span class="text-[10px] font-mono text-meta">按每百万 Token 估算</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs font-mono">
+                            <thead>
+                            <tr class="text-left text-meta border-b border-border/60">
+                                <th class="py-2 pr-2">模型</th>
+                                <th class="py-2 pr-2">输入/输出 ($/1M)</th>
+                                <th class="py-2 text-right">本次预估</th>
+                            </tr>
+                            </thead>
+                            <tbody id="aiPricingTableBody" class="divide-y divide-border/40"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

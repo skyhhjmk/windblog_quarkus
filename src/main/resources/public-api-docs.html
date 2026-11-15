@@ -27,6 +27,17 @@
       <li><code>POST /api/link-applications</code>：以 JSON 提交友链申请。必填字段为 <code>name</code>、<code>url</code>、<code>email</code>、<code>placementType</code> 和 <code>placementUrl</code>；申请会经过频率限制和站点可达性检查。</li>
     </ul>
 
+    <h2>公开工具箱 API 与 MCP 端点</h2>
+    <ul>
+      <li><code>GET /api/public/tools</code>：获取全部公开网页工具目录及无状态 API 端点。</li>
+      <li><code>GET /api/public/tools/subnet?cidr=192.168.1.10/24</code>：IPv4/IPv6 子网掩码计算。</li>
+      <li><code>GET /api/public/tools/timestamp?value=now</code>：Unix 时间戳与 ISO-8601 互转。</li>
+      <li><code>GET /api/public/tools/cron?expr=*/5%20*%20*%20*%20*&amp;count=5</code>：Cron 表达式未来触发时间推算。</li>
+      <li><code>POST /api/public/tools/hash</code>：计算 UTF-8 文本的 MD5 / SHA-1 / SHA-256 / SHA-512 哈希值。</li>
+      <li><code>POST /api/public/tools/token-estimate</code>：估算文本的 LLM Token 数量与字符统计。</li>
+      <li><code>GET / POST /api/public/mcp</code>：无状态 Model Context Protocol (MCP) JSON-RPC 2.0 端点，供外部 AI Agent 发现并调用上述工具。</li>
+    </ul>
+
     <p>API 健康状态：<a href="/q/health/ready">/q/health/ready</a></p>
   </main>
 </body>

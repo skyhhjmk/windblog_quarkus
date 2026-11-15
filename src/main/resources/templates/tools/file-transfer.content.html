@@ -72,23 +72,28 @@
                         <i class="fa-solid fa-chevron-left text-[10px]"></i>
                         <span>返回工具箱</span>
                     </a>
-                    <span class="text-xs text-meta/40">•</span>
-                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">WEBRTC P2P</span>
-                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        <i class="fa-solid fa-server text-[9px] mr-1"></i>零服务器直传
-                    </span>
-                    <span id="ftWasmBadge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-card border border-border text-meta">
-                        <i class="fa-solid fa-microchip text-[9px] mr-1"></i>WASM 加载中…
-                    </span>
+                    <div id="ftTechBadges" class="hidden flex flex-wrap items-center gap-2">
+                        <span class="text-xs text-meta/40">•</span>
+                        <span class="text-xs font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">WEBRTC P2P</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <i class="fa-solid fa-server text-[9px] mr-1"></i>零服务器直传
+                        </span>
+                        <span id="ftWasmBadge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-card border border-border text-meta">
+                            <i class="fa-solid fa-microchip text-[9px] mr-1"></i>WASM 加载中…
+                        </span>
+                    </div>
                 </div>
                 <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">免服务器 P2P 文件快传</h1>
-                <p class="text-body text-xs md:text-sm max-w-3xl leading-relaxed">
+                <p id="ftEasySubtitle" class="text-body text-xs md:text-sm max-w-3xl leading-relaxed">
+                    选好文件后复制链接发给对方，对方打开链接即可自动开始传输。全程加密点对点直传，文件不经过服务器存储。
+                </p>
+                <p id="ftTechSubtitle" class="hidden text-body text-xs md:text-sm max-w-3xl leading-relaxed">
                     按照「看指引 → 配对拿链接 → 选文件传输」三步即可完成浏览器点对点直连传输。文件与消息不经过任何后端服务器，
                     内置 ECDH P-256 + AES-256-GCM 防监听加密、Rust WASM Reed-Solomon 纠错、大文件流式落盘与 SHA-256 校验。
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-2 text-xs font-mono shrink-0">
-                <button type="button" id="ftNatProbeBtn" class="px-3 py-2 rounded-xl bg-card border border-border text-main hover:border-accent transition-colors cursor-pointer" title="通过 STUN 探测当前网络 NAT 类型">
+                <button type="button" id="ftNatProbeBtn" class="hidden px-3 py-2 rounded-xl bg-card border border-border text-main hover:border-accent transition-colors cursor-pointer" title="通过 STUN 探测当前网络 NAT 类型">
                     <i class="fa-solid fa-network-wired mr-1.5 text-accent"></i><span id="ftNatProbeLabel">检测 NAT 类型</span>
                 </button>
                 <span id="ftConnBadge" class="px-3 py-2 rounded-xl bg-card border border-border text-meta">
@@ -99,6 +104,46 @@
                 </button>
             </div>
         </header>
+
+        <!-- Mode Switcher: 省心传 vs 高级模式 -->
+        <div class="bg-card border border-border rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+            <div class="inline-flex p-1 rounded-xl bg-input-bg border border-border text-xs font-mono self-start">
+                <button type="button" id="ftModeEasyBtn" class="px-4 py-2 rounded-lg bg-accent text-white font-bold transition-all cursor-pointer flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i><span>省心传（推荐）</span>
+                </button>
+                <button type="button" id="ftModeAdvBtn" class="px-4 py-2 rounded-lg text-meta hover:text-main font-semibold transition-all cursor-pointer flex items-center gap-1.5">
+                    <i class="fa-solid fa-sliders"></i><span>高级模式</span>
+                </button>
+            </div>
+            <div id="ftEasyGuaranteeBadge" class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-emerald-400">
+                <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25">
+                    <i class="fa-solid fa-lock mr-1"></i>已开启默认加密与防丢包保护
+                </span>
+            </div>
+        </div>
+
+        <!-- Easy Mode Wizard Card -->
+        <div id="ftEasyCard" class="bg-gradient-to-br from-emerald-500/10 via-card to-cyan-500/5 border border-emerald-500/30 rounded-2xl p-5 space-y-4 shadow-sm">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1">
+                    <h2 class="text-sm md:text-base font-bold text-main flex items-center gap-2">
+                        <i class="fa-solid fa-paper-plane text-emerald-400"></i>
+                        <span id="ftEasyHeadline">选好文件并复制链接发给对方，对方打开即可自动接收</span>
+                    </h2>
+                    <p id="ftEasyStatusText" class="text-xs text-body">
+                        第 1 步：点击「选择文件」（或直接把文件拖到下方发送区），系统会自动生成专属分享链接。
+                    </p>
+                </div>
+                <div id="ftEasyActionBtns" class="flex flex-wrap items-center gap-2 shrink-0">
+                    <button type="button" id="ftEasyPickFileBtn" class="px-4 py-2 rounded-xl bg-accent hover:opacity-90 text-white text-xs font-mono font-bold transition-all cursor-pointer">
+                        <i class="fa-solid fa-file-arrow-up mr-1.5"></i>选择文件
+                    </button>
+                    <button type="button" id="ftEasyCopyLinkBtn" disabled class="px-4 py-2 rounded-xl bg-emerald-500 hover:opacity-90 disabled:opacity-40 text-white text-xs font-mono font-bold transition-all cursor-pointer">
+                        <i class="fa-solid fa-share-nodes mr-1.5"></i>复制分享链接
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- NAT Probe Result Banner (hidden until probed) -->
         <div id="ftNatResultBox" class="hidden rounded-2xl border p-3.5 text-xs font-mono flex flex-wrap items-center justify-between gap-2">
@@ -111,7 +156,7 @@
         </div>
 
         <!-- 1. 看指引 -->
-        <details class="bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-sm group" open>
+        <details id="ftGuideSection" class="hidden bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-sm group" open>
             <summary class="flex items-center justify-between cursor-pointer list-none text-xs font-bold text-main font-mono">
                 <span class="flex items-center gap-2">
                     <span class="px-2 py-0.5 rounded bg-accent/10 text-accent">1</span>
@@ -140,15 +185,15 @@
         </details>
 
         <!-- 2. 配对拿链接 (Security Settings + Zero-Server Pairing + Connected Session Bar) -->
-        <div class="space-y-4">
-            <div class="flex items-center gap-2 text-xs font-bold text-main font-mono">
+        <div id="ftAdvancedSection" class="space-y-4">
+            <div id="ftPairingHeading" class="hidden flex items-center gap-2 text-xs font-bold text-main font-mono">
                 <span class="px-2 py-0.5 rounded bg-accent/10 text-accent">2</span>
                 <i class="fa-solid fa-link text-accent"></i>
                 <span>配对拿链接：配置安全参数并生成连接码 / 扫码配对</span>
             </div>
 
             <!-- Security & Network Settings Bar -->
-            <div class="bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
+            <div id="ftSecuritySettingsBox" class="hidden bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <h2 class="text-xs font-bold text-main font-mono flex items-center gap-2 uppercase tracking-wider">
                         <i class="fa-solid fa-shield-halved text-accent"></i>传输安全与网络参数
@@ -235,7 +280,7 @@
             </div>
 
             <!-- Zero-Server Signaling / Pairing -->
-            <div id="ftPairingSection" class="bg-card border border-border rounded-2xl p-5 space-y-5 shadow-sm">
+            <div id="ftPairingSection" class="hidden bg-card border border-border rounded-2xl p-5 space-y-5 shadow-sm">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
                     <div class="flex items-center gap-2">
                         <button type="button" id="ftRoleHostBtn" class="px-3.5 py-1.5 rounded-xl text-xs font-mono font-semibold bg-accent text-white transition-colors cursor-pointer">

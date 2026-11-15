@@ -292,9 +292,11 @@ public class FeedService {
     }
 
     private List<String> pagePaths() {
-        return List.of("/", "/tools", "/tools/subnet", "/tools/timestamp", "/tools/log-formatter",
-                "/tools/base-encoder", "/tools/cron", "/tools/regex", "/tools/hash", "/tools/json-diff",
-                "/category", "/tag", "/link", "/terms", "/privacy");
+        List<String> paths = new ArrayList<>(List.of("/", "/tools"));
+        com.biliwind.blog.controller.ToolsController.allTools()
+                .forEach(tool -> paths.add(tool.url()));
+        paths.addAll(List.of("/category", "/tag", "/link", "/terms", "/privacy"));
+        return paths;
     }
 
     private String formatLastModified(OffsetDateTime updatedAt, OffsetDateTime createdAt) {

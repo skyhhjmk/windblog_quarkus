@@ -67,6 +67,32 @@ public class StructuredDataService {
         return graph(List.of(page, breadcrumb(url, completeTrail)));
     }
 
+    public String toolApplication(String name, String description, String path,
+                                  String language, String toolsIndexLabel) {
+        String url = canonicalUrlService.buildPath(localizePath(path));
+        ObjectNode app = node("WebApplication", url + "#webapp");
+        app.put("url", url);
+        app.put("name", name);
+        app.put("description", description == null ? "" : description);
+        app.put("inLanguage", language);
+        app.put("applicationCategory", "DeveloperApplication");
+        app.put("operatingSystem", "All");
+        app.put("browserRequirements", "Requires JavaScript. Modern HTML5 browser.");
+        app.put("isAccessibleForFree", true);
+        ObjectNode offers = app.putObject("offers");
+        offers.put("@type", "Offer");
+        offers.put("price", "0");
+        offers.put("priceCurrency", "USD");
+        ObjectNode pub = publisher();
+        app.putObject("publisher").put("@id", pub.path("@id").asText());
+
+        List<Breadcrumb> trail = List.of(
+                new Breadcrumb(toolsIndexLabel, "/tools"),
+                new Breadcrumb(name, path)
+        );
+        return graph(List.of(app, pub, breadcrumb(url, trail)));
+    }
+
     public String article(PublicCacheRefreshService.PublicPostSnapshot snapshot, String title,
                           String description, String canonicalUrl, String language, String publicHtml) {
         ObjectNode article = node("BlogPosting", canonicalUrl + "#article");

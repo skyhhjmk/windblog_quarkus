@@ -2570,6 +2570,16 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         const btnClearFormat = document.getElementById('btnClearJsonFormat');
         const btnCopyFormat = document.getElementById('btnCopyJsonFormat');
         const formatTextarea = document.getElementById('jsonFormatTextarea');
+        try {
+            const rawPipe = sessionStorage.getItem('windblog_tool_pipe_payload');
+            if (rawPipe) {
+                const parsedPipe = JSON.parse(rawPipe);
+                if (parsedPipe && parsedPipe.target === '/tools/json-diff' && Date.now() - parsedPipe.ts <= 60000 && formatTextarea) {
+                    sessionStorage.removeItem('windblog_tool_pipe_payload');
+                    formatTextarea.value = parsedPipe.data || '';
+                }
+            }
+        } catch (e) {}
         const formatStats = document.getElementById('jsonFormatStats');
         const validBadge = document.getElementById('jsonValidBadge');
         const errorAlert = document.getElementById('jsonFormatErrorAlert');
@@ -3676,7 +3686,7 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
     WindBlogLifecycle.register('tool-file-transfer', {
         mount: function () {
             if (!document.getElementById('fileTransferToolApp')) return;
-            loadScriptOnce('/assets/js/file-transfer.js?v=20261115b')
+            loadScriptOnce('/assets/js/file-transfer.js?v=20261115e')
                 .then(() => {
                     if (document.getElementById('fileTransferToolApp') && window.WindBlogFileTransfer) {
                         window.WindBlogFileTransfer.mount();
@@ -3689,6 +3699,34 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         unmount: function () {
             if (window.WindBlogFileTransfer) {
                 window.WindBlogFileTransfer.unmount();
+            }
+        }
+    });
+
+    WindBlogLifecycle.register('tool-suite', {
+        mount: function () {
+            const isToolsPage = document.getElementById('toolsIndexApp')
+                || document.getElementById('aiTokenToolApp')
+                || document.getElementById('jwtToolApp')
+                || document.getElementById('configConverterToolApp')
+                || document.getElementById('curlConverterToolApp')
+                || document.getElementById('idGeneratorToolApp')
+                || document.getElementById('jsonlTableToolApp')
+                || /^(\/(zh-cn|en-us))?\/tools(\/|$)/i.test(window.location.pathname || '');
+            if (!isToolsPage) return;
+            loadScriptOnce('/assets/js/tools-suite.js?v=20261115c')
+                .then(() => {
+                    if (window.WindBlogToolsSuite) {
+                        window.WindBlogToolsSuite.mount();
+                    }
+                })
+                .catch((err) => {
+                    console.error('[ToolsSuite] Failed to load module:', err);
+                });
+        },
+        unmount: function () {
+            if (window.WindBlogToolsSuite) {
+                window.WindBlogToolsSuite.unmount();
             }
         }
     });

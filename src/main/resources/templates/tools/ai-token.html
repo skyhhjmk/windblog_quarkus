@@ -1,0 +1,5 @@
+{#include "base.html"}
+    {#title}{pageTitle ?: 'AI Token 计算与 Prompt 调试台'}{/title}
+    {#navPath}{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / ai-token{/navPath}
+    {#content}{#include "tools/ai-token.content.html"}{/include}{/content}
+{/include}

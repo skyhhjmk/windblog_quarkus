@@ -174,4 +174,28 @@ class ToolsControllerTest {
                 .body(containsString("id=\"pjax-content-root\""))
                 .body(containsString("新一代智能子网掩码推演计算器"));
     }
+
+    @Test
+    void shouldReturnNewToolboxPagesAndBilingualSeo() {
+        given().when().get("/tools/ai-token").then().statusCode(200)
+                .body(containsString("aiTokenToolApp"))
+                .body(containsString("application/ld+json"))
+                .body(containsString("WebApplication"));
+        given().when().get("/tools/jwt").then().statusCode(200)
+                .body(containsString("jwtToolApp"));
+        given().when().get("/tools/config-converter").then().statusCode(200)
+                .body(containsString("configConverterToolApp"));
+        given().when().get("/tools/curl-converter").then().statusCode(200)
+                .body(containsString("curlConverterToolApp"));
+        given().when().get("/tools/id-generator").then().statusCode(200)
+                .body(containsString("idGeneratorToolApp"));
+        given().when().get("/tools/jsonl-to-table").then().statusCode(200)
+                .body(containsString("jsonlTableToolApp"));
+
+        // Bilingual SEO title check
+        given().when().get("/en-us/tools/jsonl-to-table").then().statusCode(200)
+                .body(containsString("JSONL (NDJSON) to Table Viewer"));
+        given().when().get("/assets/js/tools-suite.js").then().statusCode(200)
+                .body(containsString("WindBlogToolsSuite"));
+    }
 }

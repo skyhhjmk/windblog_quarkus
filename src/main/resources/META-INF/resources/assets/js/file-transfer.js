@@ -481,6 +481,19 @@
             natResultDetail: $('ftNatResultDetail'),
             connBadge: $('ftConnBadge'),
             disconnectBtn: $('ftDisconnectBtn'),
+            techBadges: $('ftTechBadges'),
+            easySubtitle: $('ftEasySubtitle'),
+            techSubtitle: $('ftTechSubtitle'),
+            modeEasyBtn: $('ftModeEasyBtn'),
+            modeAdvBtn: $('ftModeAdvBtn'),
+            easyGuaranteeBadge: $('ftEasyGuaranteeBadge'),
+            easyCard: $('ftEasyCard'),
+            easyStatusText: $('ftEasyStatusText'),
+            easyActionBtns: $('ftEasyActionBtns'),
+            easyPickFileBtn: $('ftEasyPickFileBtn'),
+            easyCopyLinkBtn: $('ftEasyCopyLinkBtn'),
+            guideSection: $('ftGuideSection'),
+            securitySettingsBox: $('ftSecuritySettingsBox'),
             toggleAdvBtn: $('ftToggleAdvancedBtn'),
             advPanel: $('ftAdvancedPanel'),
             e2eeToggle: $('ftE2eeToggle'),
@@ -540,6 +553,9 @@
 
         const state = {
             disposed: false,
+            transferMode: 'easy',
+            easyPollTimer: null,
+            easyShareUrl: '',
             ecc: null,
             pc: null,
             dc: null,
@@ -833,6 +849,12 @@
         }
 
         function resetPeerConnection() {
+            if (state.easyPollTimer) {
+                clearInterval(state.easyPollTimer);
+                state.easyPollTimer = null;
+            }
+            state.easyShareUrl = '';
+            if (els.easyCopyLinkBtn) els.easyCopyLinkBtn.disabled = true;
             stopCameraScanner();
             if (state.dc) {
                 try { state.dc.close(); } catch (_) {}
@@ -1053,6 +1075,15 @@
             els.offerQrWrap.classList.remove('hidden');
             await renderQrToCanvas(els.offerQrCanvas, token);
             setConnStatus('等待对方应答', 'wait');
+            if (els.easyCopyLinkBtn) {
+                els.easyCopyLinkBtn.disabled = false;
+            }
+            if (els.easyAnswerWrap) {
+                els.easyAnswerWrap.classList.remove('hidden');
+            }
+            if (els.easyStatusText) {
+                els.easyStatusText.textContent = '第 2 步：点击「复制分享链接」发给对方；对方发回应答码后粘贴到下方，将自动连接并开始传输。';
+            }
         });
 
         els.copyOfferBtn.addEventListener('click', () => {
@@ -1102,6 +1133,13 @@
                 els.answerQrWrap.classList.remove('hidden');
                 await renderQrToCanvas(els.answerQrCanvas, token);
                 setConnStatus('等待发起方确认…', 'wait');
+                if (els.easyAnswerOut && els.easyJoinWrap) {
+                    els.easyAnswerOut.value = token;
+                    els.easyJoinWrap.classList.remove('hidden');
+                }
+                if (els.easyStatusText) {
+                    els.easyStatusText.textContent = '已自动生成应答码！点击下方「复制应答码发回给对方」，对方粘贴后即自动开始传输。';
+                }
             } catch (err) {
                 alert(err.message || err);
                 setConnStatus('配对失败', 'err');
@@ -1197,7 +1235,11 @@
                 state.sessionEncrypted = state.myEncPref && state.peerEncPref;
                 updateEncUi();
                 els.pairingSection.classList.add('hidden');
-                els.sessionBar.classList.remove('hidden');
+                if (state.transferMode === 'advanced') {
+                    els.sessionBar.classList.remove('hidden');
+                } else if (els.easyStatusText) {
+                    els.easyStatusText.textContent = '已建立安全连接，正在自动传输文件…';
+                }
                 els.disconnectBtn.classList.remove('hidden');
                 els.sendTextBtn.disabled = false;
                 els.sendReadyHint.textContent = 'P2P 直连已就绪，可双向互传';
@@ -1558,6 +1600,8 @@
             }
             if (connected) {
                 processSendQueue();
+            } else if (state.transferMode === 'easy' && !state.pc && !state.easyShareUrl) {
+                startEasySendSession();
             }
         }
 
@@ -1601,8 +1645,166 @@
             if (state.transfers.size === 0) els.emptyState.classList.remove('hidden');
         });
 
-        // Auto-fill #offer= from URL hash
-        if (window.location.hash && window.location.hash.startsWith('#offer=')) {
+        async function startEasySendSession() {
+            resetPeerConnection();
+            if (els.easyStatusText) els.easyStatusText.textContent = '正在准备分享链接…';
+            setConnStatus('准备中…', 'wait');
+            try {
+                const pc = new RTCPeerConnection({ iceServers: buildIceServers() });
+                state.pc = pc;
+                const dc = pc.createDataChannel('windblog-ft', { ordered: true });
+                attachDataChannel(dc);
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await gatherIceComplete(pc);
+
+                const token = await encodeSignalToken({ t: 'O', s: pc.localDescription.sdp }, '');
+                const csrfToken = typeof window.getCsrfToken === 'function' ? window.getCsrfToken() : '';
+                const resp = await fetch('/api/public/ft-signal/rooms', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {})
+                    },
+                    body: JSON.stringify({ offer: token })
+                });
+                if (!resp.ok) throw new Error('创建分享链接失败');
+                const data = await resp.json();
+                state.easyShareUrl = window.location.href.split('#')[0] + '#easy=' + encodeURIComponent(data.roomId);
+                if (els.easyCopyLinkBtn) els.easyCopyLinkBtn.disabled = false;
+                if (els.easyStatusText) {
+                    els.easyStatusText.textContent = '分享链接已就绪！点击「复制分享链接」发给对方，对方打开后将自动开始传输。';
+                }
+                setConnStatus('等待对方打开链接', 'wait');
+
+                state.easyPollTimer = setInterval(async () => {
+                    if (state.disposed || !state.pc) {
+                        clearInterval(state.easyPollTimer);
+                        state.easyPollTimer = null;
+                        return;
+                    }
+                    try {
+                        const poll = await fetch('/api/public/ft-signal/rooms/' + encodeURIComponent(data.roomId) + '/answer?hostToken=' + encodeURIComponent(data.hostToken));
+                        if (!poll.ok) return;
+                        const res = await poll.json();
+                        if (res.ready && res.answer) {
+                            clearInterval(state.easyPollTimer);
+                            state.easyPollTimer = null;
+                            const payload = await decodeSignalToken(res.answer, '');
+                            if (payload.t === 'A' && payload.s && state.pc) {
+                                await state.pc.setRemoteDescription({ type: 'answer', sdp: payload.s });
+                                if (els.easyStatusText) els.easyStatusText.textContent = '对方已打开链接，正在建立连接并自动传输…';
+                                setConnStatus('正在连接…', 'wait');
+                            }
+                        }
+                    } catch (_) {}
+                }, 1200);
+            } catch (err) {
+                if (els.easyStatusText) els.easyStatusText.textContent = '生成分享链接失败，请重试或切换高级模式。';
+                setConnStatus('准备失败', 'err');
+            }
+        }
+
+        async function joinEasySession(roomId) {
+            resetPeerConnection();
+            if (els.easyActionBtns) els.easyActionBtns.classList.add('hidden');
+            if (els.easyStatusText) els.easyStatusText.textContent = '正在连接发送方，连接后将自动开始接收文件…';
+            setConnStatus('正在连接…', 'wait');
+            try {
+                const resp = await fetch('/api/public/ft-signal/rooms/' + encodeURIComponent(roomId));
+                if (!resp.ok) throw new Error('分享链接已失效或不存在');
+                const data = await resp.json();
+                const payload = await decodeSignalToken(data.offer, '');
+                if (payload.t !== 'O' || !payload.s) throw new Error('分享链接无效');
+
+                const pc = new RTCPeerConnection({ iceServers: buildIceServers() });
+                state.pc = pc;
+                pc.ondatachannel = (ev) => attachDataChannel(ev.channel);
+                await pc.setRemoteDescription({ type: 'offer', sdp: payload.s });
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await gatherIceComplete(pc);
+
+                const token = await encodeSignalToken({ t: 'A', s: pc.localDescription.sdp }, '');
+                const csrfToken = typeof window.getCsrfToken === 'function' ? window.getCsrfToken() : '';
+                const postResp = await fetch('/api/public/ft-signal/rooms/' + encodeURIComponent(roomId) + '/answer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {})
+                    },
+                    body: JSON.stringify({ answer: token })
+                });
+                if (!postResp.ok) throw new Error('连接响应失败');
+                if (els.easyStatusText) els.easyStatusText.textContent = '已通知发送方，正在等待文件传输开始…';
+            } catch (err) {
+                if (els.easyStatusText) els.easyStatusText.textContent = err.message || '连接失败，请让发送方重新生成链接。';
+                setConnStatus('连接失败', 'err');
+            }
+        }
+
+        function setTransferMode(mode) {
+            state.transferMode = mode === 'advanced' ? 'advanced' : 'easy';
+            const isEasy = state.transferMode === 'easy';
+            if (els.modeEasyBtn && els.modeAdvBtn) {
+                els.modeEasyBtn.className = isEasy
+                    ? 'px-4 py-2 rounded-lg bg-accent text-white font-bold transition-all cursor-pointer flex items-center gap-1.5'
+                    : 'px-4 py-2 rounded-lg text-meta hover:text-main font-semibold transition-all cursor-pointer flex items-center gap-1.5';
+                els.modeAdvBtn.className = !isEasy
+                    ? 'px-4 py-2 rounded-lg bg-accent text-white font-bold transition-all cursor-pointer flex items-center gap-1.5'
+                    : 'px-4 py-2 rounded-lg text-meta hover:text-main font-semibold transition-all cursor-pointer flex items-center gap-1.5';
+            }
+            if (els.easyCard) els.easyCard.classList.toggle('hidden', !isEasy);
+            if (els.easyGuaranteeBadge) els.easyGuaranteeBadge.classList.toggle('hidden', !isEasy);
+            if (els.easySubtitle) els.easySubtitle.classList.toggle('hidden', !isEasy);
+            if (els.techSubtitle) els.techSubtitle.classList.toggle('hidden', isEasy);
+            if (els.techBadges) els.techBadges.classList.toggle('hidden', isEasy);
+            if (els.natProbeBtn) els.natProbeBtn.classList.toggle('hidden', isEasy);
+            if (els.guideSection) els.guideSection.classList.toggle('hidden', isEasy);
+            if (els.securitySettingsBox) els.securitySettingsBox.classList.toggle('hidden', isEasy);
+            if (els.pairingSection) els.pairingSection.classList.toggle('hidden', isEasy);
+            const pairingHeading = document.getElementById('ftPairingHeading');
+            if (pairingHeading) pairingHeading.classList.toggle('hidden', isEasy);
+            if (isEasy && els.sessionBar) els.sessionBar.classList.add('hidden');
+
+            if (isEasy) {
+                els.e2eeToggle.checked = true;
+                els.eccSelect.value = 'std';
+                els.autoAccept.checked = true;
+                els.channelMode.value = 'reliable';
+                els.iceMode.value = 'public';
+                els.signalPass.value = '';
+                state.e2eeEnabled = true;
+            }
+        }
+
+        if (els.modeEasyBtn) els.modeEasyBtn.addEventListener('click', () => setTransferMode('easy'));
+        if (els.modeAdvBtn) els.modeAdvBtn.addEventListener('click', () => setTransferMode('advanced'));
+        if (els.easyPickFileBtn) els.easyPickFileBtn.addEventListener('click', () => els.fileInput.click());
+        if (els.easyCopyLinkBtn) {
+            els.easyCopyLinkBtn.addEventListener('click', () => {
+                if (!state.easyShareUrl) return;
+                navigator.clipboard.writeText(state.easyShareUrl).then(() => {
+                    const orig = els.easyCopyLinkBtn.innerHTML;
+                    els.easyCopyLinkBtn.textContent = '已复制分享链接！';
+                    setTimeout(() => { els.easyCopyLinkBtn.innerHTML = orig; }, 1500);
+                }).catch(() => {});
+            });
+        }
+
+        // Default to Easy Mode ("省心传")
+        setTransferMode('easy');
+
+        // Auto-join #easy= or auto-fill #offer= from URL hash
+        if (window.location.hash && window.location.hash.startsWith('#easy=')) {
+            const roomId = decodeURIComponent(window.location.hash.slice('#easy='.length));
+            if (roomId) {
+                setTransferMode('easy');
+                joinEasySession(roomId);
+            }
+        } else if (window.location.hash && window.location.hash.startsWith('#offer=')) {
+            setTransferMode('advanced');
             switchRole('join');
             els.offerIn.value = decodeURIComponent(window.location.hash.slice('#offer='.length));
         }

@@ -57,6 +57,13 @@ public class AgentCardResource {
                                 "description", "Provides links to the OpenAPI reference and documentation for GeekCoreLab's unauthenticated public APIs.",
                                 "tags", List.of("api", "openapi", "documentation"),
                                 "examples", List.of("List the public GeekCoreLab API operations.")
+                        ),
+                        Map.of(
+                                "id", "public-developer-toolbox",
+                                "name", "Public developer toolbox & MCP",
+                                "description", "Stateless HTTP & MCP JSON-RPC 2.0 tools at /api/public/tools and /api/public/mcp for subnet calculation, timestamp conversion, cron simulation, hashing, and LLM token estimation.",
+                                "tags", List.of("tools", "mcp", "subnet", "cron", "timestamp"),
+                                "examples", List.of("Calculate IPv4 subnet 192.168.1.10/24 or list upcoming runs for a cron expression.")
                         )
                 )
         );

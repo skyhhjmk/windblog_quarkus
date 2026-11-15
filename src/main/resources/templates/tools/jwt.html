@@ -1,0 +1,5 @@
+{#include "base.html"}
+    {#title}{pageTitle ?: 'JWT 解析与本地签名验证器'}{/title}
+    {#navPath}{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / jwt{/navPath}
+    {#content}{#include "tools/jwt.content.html"}{/include}{/content}
+{/include}

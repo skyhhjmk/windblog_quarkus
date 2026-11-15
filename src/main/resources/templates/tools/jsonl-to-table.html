@@ -1,0 +1,5 @@
+{#include "base.html"}
+    {#title}{pageTitle ?: 'JSONL (NDJSON) 转表格与导出'}{/title}
+    {#navPath}{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / jsonl-to-table{/navPath}
+    {#content}{#include "tools/jsonl-to-table.content.html"}{/include}{/content}
+{/include}

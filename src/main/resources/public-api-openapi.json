@@ -124,6 +124,133 @@
           "422": {"description": "Submitted site is not publicly reachable"}
         }
       }
+    },
+    "/api/public/tools": {
+      "get": {
+        "tags": ["Toolbox"],
+        "summary": "List public developer tools and stateless calculation endpoints",
+        "operationId": "listPublicTools",
+        "responses": {
+          "200": {
+            "description": "Catalog of browser tools, REST endpoints, and MCP endpoint",
+            "content": {"application/json": {"schema": {"type": "object"}}}
+          }
+        }
+      }
+    },
+    "/api/public/tools/subnet": {
+      "get": {
+        "tags": ["Toolbox"],
+        "summary": "Calculate IPv4/IPv6 CIDR subnet details",
+        "operationId": "calculateSubnet",
+        "parameters": [
+          {"name": "cidr", "in": "query", "required": true, "schema": {"type": "string", "example": "192.168.1.10/24"}}
+        ],
+        "responses": {
+          "200": {"description": "Subnet calculation result", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "400": {"description": "Invalid CIDR argument"}
+        }
+      }
+    },
+    "/api/public/tools/timestamp": {
+      "get": {
+        "tags": ["Toolbox"],
+        "summary": "Convert Unix epoch seconds/millis or ISO-8601 timestamp",
+        "operationId": "convertTimestamp",
+        "parameters": [
+          {"name": "value", "in": "query", "required": false, "schema": {"type": "string", "default": "now"}}
+        ],
+        "responses": {
+          "200": {"description": "Converted timestamp formats", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "400": {"description": "Invalid timestamp format"}
+        }
+      }
+    },
+    "/api/public/tools/cron": {
+      "get": {
+        "tags": ["Toolbox"],
+        "summary": "Parse Cron expression and compute upcoming trigger timestamps",
+        "operationId": "simulateCron",
+        "parameters": [
+          {"name": "expr", "in": "query", "required": true, "schema": {"type": "string", "example": "*/5 * * * *"}},
+          {"name": "count", "in": "query", "required": false, "schema": {"type": "integer", "default": 5}}
+        ],
+        "responses": {
+          "200": {"description": "Upcoming trigger timestamps", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "400": {"description": "Invalid Cron expression"}
+        }
+      }
+    },
+    "/api/public/tools/hash": {
+      "post": {
+        "tags": ["Toolbox"],
+        "summary": "Compute MD5/SHA-1/SHA-256/SHA-512 digest for UTF-8 text",
+        "operationId": "computeHash",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {
+                  "text": {"type": "string"},
+                  "algorithm": {"type": "string", "enum": ["MD5", "SHA-1", "SHA-256", "SHA-512"], "default": "SHA-256"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Hex digest", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "400": {"description": "Invalid input or unsupported algorithm"}
+        }
+      }
+    },
+    "/api/public/tools/token-estimate": {
+      "post": {
+        "tags": ["Toolbox"],
+        "summary": "Estimate LLM token count and character metrics for text",
+        "operationId": "estimateTokens",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {"text": {"type": "string"}}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Token estimation result", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "400": {"description": "Input exceeds size limit"}
+        }
+      }
+    },
+    "/api/public/mcp": {
+      "get": {
+        "tags": ["MCP"],
+        "summary": "Describe the stateless public MCP JSON-RPC 2.0 endpoint",
+        "operationId": "getPublicMcpInfo",
+        "responses": {
+          "200": {"description": "MCP endpoint metadata and tool schemas", "content": {"application/json": {"schema": {"type": "object"}}}}
+        }
+      },
+      "post": {
+        "tags": ["MCP"],
+        "summary": "Invoke stateless public MCP JSON-RPC 2.0 methods (initialize, tools/list, tools/call)",
+        "operationId": "invokePublicMcp",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object"}}}
+        },
+        "responses": {
+          "200": {"description": "JSON-RPC 2.0 response", "content": {"application/json": {"schema": {"type": "object"}}}}
+        }
+      }
     }
   }
 }

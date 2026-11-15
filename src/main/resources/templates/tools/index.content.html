@@ -10,7 +10,7 @@
         {#include sidebar/area.html area='default' /}
     </div>
 
-    <section class="space-y-8 md:space-y-10">
+    <section class="space-y-8 md:space-y-10" id="toolsIndexApp">
         <!-- Header Section -->
         <header class="space-y-3 border-b border-border/60 pb-6">
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent text-xs font-mono">
@@ -24,10 +24,43 @@
             </p>
         </header>
 
+        <!-- Search & Filter Bar -->
+        <div class="space-y-4">
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-meta text-xs pointer-events-none"></i>
+                <input id="toolsIndexSearchInput" type="search" placeholder="{i18n.t('tools.search_placeholder')}"
+                       class="w-full pl-10 pr-12 py-2.5 rounded-xl bg-card border border-border text-main text-xs md:text-sm placeholder:text-meta/70 focus:border-accent outline-none transition-colors" />
+                <kbd class="hidden sm:inline-flex items-center px-2 py-0.5 rounded border border-border bg-input-bg text-[10px] font-mono text-meta absolute right-3 top-1/2 -translate-y-1/2">/</kbd>
+            </div>
+            <div id="toolsIndexTagFilters" class="flex flex-wrap items-center gap-2">
+                <button type="button" data-filter-tag="ALL"
+                        class="px-3 py-1.5 rounded-full text-xs font-mono bg-accent text-[var(--accent-foreground)] font-bold transition-all">
+                    {i18n.t('tools.all_tags')}
+                </button>
+            </div>
+        </div>
+
+        <!-- Recently Used -->
+        <div id="toolsRecentSection" class="hidden space-y-3">
+            <div class="flex items-center gap-2 text-xs font-mono text-meta">
+                <i class="fa-solid fa-clock-rotate-left text-accent"></i>
+                <span class="font-bold text-main">{i18n.t('tools.recent')}</span>
+            </div>
+            <div id="toolsRecentGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+        </div>
+
         <!-- Tools Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-5 md:gap-6">
+        <div id="toolsIndexGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-5 md:gap-6">
             {#for tool in tools}
-            <a href="{languagePrefix}{tool.url}" class="group relative block p-5 sm:p-6 rounded-2xl bg-card border border-border hover:border-accent/40 hover:shadow-xl transition-all duration-300">
+            <a href="{languagePrefix}{tool.url}"
+               data-tool-card="true"
+               data-tool-id="{tool.id}"
+               data-tool-url="{languagePrefix}{tool.url}"
+               data-tool-icon="{tool.icon}"
+               data-tool-name="{i18n.t(tool.nameKey)}"
+               data-tool-tag="{i18n.t(tool.tagKey)}"
+               data-tool-search="{i18n.t(tool.nameKey)} {i18n.t(tool.descriptionKey)} {i18n.t(tool.tagKey)} {tool.id}"
+               class="group relative block p-5 sm:p-6 rounded-2xl bg-card border hover:border-accent/40 hover:shadow-xl transition-all duration-300 {#if tool.id == 'file-transfer'}md:col-span-2 lg:col-span-2 border-emerald-500/35 bg-gradient-to-r from-emerald-500/10 via-card to-cyan-500/10{#else}border-border{/if}">
                 <div class="flex items-start gap-4">
                     <div class="w-11 h-11 rounded-xl bg-input-bg border border-border/80 flex items-center justify-center text-accent text-lg shrink-0 group-hover:scale-105 group-hover:border-accent/40 group-hover:bg-accent/10 transition-all duration-300 shadow-sm">
                         <i class="{tool.icon}"></i>
@@ -53,5 +86,24 @@
             </a>
             {/for}
         </div>
+
+        <div id="toolsEmptyState" class="hidden rounded-2xl bg-card border border-border p-8 text-center text-xs md:text-sm text-meta">
+            {i18n.t('tools.empty_search')}
+        </div>
+
+        <!-- Public API & MCP Discovery Bar -->
+        <footer class="rounded-2xl bg-card/60 border border-border/70 p-4 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-meta">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-plug text-accent"></i>
+                <span>Public Tools REST API &amp; Stateless MCP (JSON-RPC 2.0)</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/api/public/tools" class="hover:text-accent transition-colors" data-pjax="false">/api/public/tools</a>
+                <span class="text-border">|</span>
+                <a href="/api/public/mcp" class="hover:text-accent transition-colors" data-pjax="false">/api/public/mcp</a>
+                <span class="text-border">|</span>
+                <a href="/api/public/docs" class="hover:text-accent transition-colors" data-pjax="false">API Docs</a>
+            </div>
+        </footer>
     </section>
 </div>
