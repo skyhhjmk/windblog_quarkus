@@ -77,6 +77,54 @@ class AiCallExecutorTest {
         assertEquals(List.of("translate"), recorded);
     }
 
+    @Test
+    void executesMultiTurnToolLoopAndAccumulatesUsage() {
+        AiProviderConfig config = provider(1L, "tools", "TOOLS", AiConfigType.PROVIDER);
+        List<String> recorded = new CopyOnWriteArrayList<>();
+        AiService toolAwareService = new AiService() {
+            int round = 0;
+
+            @Override
+            public boolean supports(AiProviderConfig cfg) {
+                return true;
+            }
+
+            @Override
+            public CompletionStage<AiResult> complete(AiProviderConfig cfg, AiProviderRequest request) {
+                round++;
+                AiResult result = new AiResult();
+                if (round == 1) {
+                    assertEquals(1, request.tools().size());
+                    result.toolCalls.add(new AiToolCall("call-1", "web_search", "{\"query\":\"quarkus\"}"));
+                    result.addUsage(10, 5, 15);
+                } else {
+                    assertTrue(request.messages().stream().anyMatch(m -> "tool".equals(m.role())));
+                    result.contents.put("text", "{\"title\":\"Done\",\"summary\":\"S\",\"contentMarkdown\":\"## Body\"}");
+                    result.addUsage(20, 10, 30);
+                }
+                return CompletableFuture.completedFuture(result);
+            }
+        };
+
+        AiCallExecutor executor = executor(List.of(config), Map.of("TOOLS", toolAwareService),
+                recorded, Map.of(1L, config));
+        AiToolDefinition def = new AiToolDefinition("web_search", "Search web",
+                Map.of("type", "object", "properties", Map.of()));
+        AiResult result = executor.completeWithTools(
+                AiCallRequest.completeWithTools(1L, "topic", "sys", "write",
+                        List.of(def), AiToolContext.forDraft(1L, 2L)),
+                (call, ctx) -> "{\"results\":[{\"title\":\"Quarkus\",\"url\":\"https://quarkus.io\"}]}",
+                5).toCompletableFuture().join();
+
+        assertEquals("{\"title\":\"Done\",\"summary\":\"S\",\"contentMarkdown\":\"## Body\"}",
+                result.contents.get("text"));
+        assertEquals(30, result.inputTokens);
+        assertEquals(15, result.outputTokens);
+        assertEquals(45, result.totalTokens);
+        assertEquals(List.of("web_search"), result.provenance.get("toolsUsed"));
+        assertEquals(List.of("topic", "topic"), recorded);
+    }
+
     private static AiCallExecutor executor(List<AiProviderConfig> configs,
                                            Map<String, AiService> services,
                                            List<String> recorded,

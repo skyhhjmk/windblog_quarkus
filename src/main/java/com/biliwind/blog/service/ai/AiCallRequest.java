@@ -14,7 +14,18 @@ public record AiCallRequest(AiOperation operation, Long providerId, String opera
                             String systemPrompt, String prompt, String sourceLanguage,
                             String targetLanguage, String promptTemplate,
                             Map<String, String> structuredValues, List<String> imageUrls,
-                            boolean stream) {
+                            boolean stream, List<AiChatMessage> messages,
+                            List<AiToolDefinition> tools, AiToolContext toolContext) {
+
+    public AiCallRequest(AiOperation operation, Long providerId, String operationTag,
+                         String systemPrompt, String prompt, String sourceLanguage,
+                         String targetLanguage, String promptTemplate,
+                         Map<String, String> structuredValues, List<String> imageUrls,
+                         boolean stream) {
+        this(operation, providerId, operationTag, systemPrompt, prompt, sourceLanguage,
+                targetLanguage, promptTemplate, structuredValues, imageUrls, stream,
+                List.of(), List.of(), null);
+    }
 
     public AiCallRequest {
         structuredValues = structuredValues == null
@@ -23,6 +34,12 @@ public record AiCallRequest(AiOperation operation, Long providerId, String opera
         imageUrls = imageUrls == null
                 ? List.of()
                 : Collections.unmodifiableList(new ArrayList<>(imageUrls));
+        messages = messages == null
+                ? List.of()
+                : Collections.unmodifiableList(new ArrayList<>(messages));
+        tools = tools == null
+                ? List.of()
+                : Collections.unmodifiableList(new ArrayList<>(tools));
     }
 
     public static AiCallRequest summarize(Map<String, String> contentByLanguage) {
@@ -61,6 +78,23 @@ public record AiCallRequest(AiOperation operation, Long providerId, String opera
         return new AiCallRequest(AiOperation.COMPLETE, providerId,
                 operationTag == null || operationTag.isBlank() ? "assistant" : operationTag.trim(),
                 systemPrompt, prompt, null, null, null, Map.of(), List.of(), false);
+    }
+
+    public static AiCallRequest completeWithTools(Long providerId, String operationTag,
+                                                  String systemPrompt, String prompt,
+                                                  List<AiToolDefinition> tools,
+                                                  AiToolContext toolContext) {
+        return new AiCallRequest(AiOperation.COMPLETE, providerId,
+                operationTag == null || operationTag.isBlank() ? "assistant" : operationTag.trim(),
+                systemPrompt, prompt, null, null, null, Map.of(), List.of(), false,
+                List.of(), tools, toolContext);
+    }
+
+    public AiCallRequest withMessagesAndTools(List<AiChatMessage> nextMessages,
+                                              List<AiToolDefinition> nextTools) {
+        return new AiCallRequest(operation, providerId, operationTag, systemPrompt, prompt,
+                sourceLanguage, targetLanguage, promptTemplate, structuredValues, imageUrls, stream,
+                nextMessages, nextTools, toolContext);
     }
 
     public static AiCallRequest completeStream(Long providerId, String systemPrompt, String prompt) {

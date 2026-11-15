@@ -164,7 +164,27 @@ public class AdminAiTopicController {
                 text(body.get("language")),
                 text(body.get("instructions")),
                 text(body.get("repostPolicyCode")),
-                false);
+                false,
+                booleanValue(body.get("enableTools"), true));
+        return Response.accepted(Map.of("success", true, "data", job)).build();
+    }
+
+    @POST
+    @Path("/one-shot/draft")
+    @Operation(summary = "一句话发起一次性话题并异步生成文章草稿")
+    public Response startOneShotDraft(Map<String, Object> payload) {
+        Map<String, Object> body = payload == null ? Map.of() : payload;
+        String prompt = text(body.get("prompt"));
+        if (prompt == null || prompt.isBlank()) {
+            prompt = text(body.get("sentence"));
+        }
+        Map<String, Object> job = draftService.startOneShot(
+                prompt,
+                longValue(body.get("providerId")),
+                text(body.get("language")),
+                text(body.get("instructions")),
+                text(body.get("repostPolicyCode")),
+                booleanValue(body.get("enableTools"), true));
         return Response.accepted(Map.of("success", true, "data", job)).build();
     }
 
@@ -178,7 +198,8 @@ public class AdminAiTopicController {
                 text(body.get("language")),
                 text(body.get("instructions")),
                 text(body.get("repostPolicyCode")),
-                true);
+                true,
+                booleanValue(body.get("enableTools"), true));
         return Response.accepted(Map.of("success", true, "data", job)).build();
     }
 
@@ -211,6 +232,15 @@ public class AdminAiTopicController {
 
     private static String text(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private static boolean booleanValue(Object value, boolean fallback) {
+        if (value == null) return fallback;
+        if (value instanceof Boolean bool) return bool;
+        String text = String.valueOf(value).trim().toLowerCase();
+        if ("true".equals(text)) return true;
+        if ("false".equals(text)) return false;
+        return fallback;
     }
 
     private static Long longValue(Object value) {

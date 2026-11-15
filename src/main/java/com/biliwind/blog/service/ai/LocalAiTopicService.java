@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * WindBlog-owned AI topic pool. Topic discovery, review and draft linking are
@@ -59,6 +60,7 @@ public class LocalAiTopicService {
                     integer(payload, "page", 1), integer(payload, "pageSize", 20));
             case "topics.read" -> topicView(requiredId(payload, "id"));
             case "topics.import" -> importTopics(payload, actorId, traceId);
+            case "topics.createOneShot" -> createOneShotTopic(payload, actorId, traceId);
             case "topics.review" -> reviewTopic(requiredId(payload, "id"),
                     text(payload, "decision", ""), text(payload, "note", ""));
             case "topics.bindDraft" -> bindDraft(requiredId(payload, "topicId"), payload);
@@ -305,6 +307,50 @@ public class LocalAiTopicService {
             topic.persist();
         }
         return Map.of("created", created, "updated", updated, "total", values.size());
+    }
+
+    private Map<String, Object> createOneShotTopic(JsonNode payload, String actorId, String traceId) {
+        String rawPrompt = text(payload, "prompt", "");
+        if (rawPrompt.isBlank()) {
+            throw new IllegalArgumentException("一句话主题内容不能为空");
+        }
+        String prompt = rawPrompt.trim();
+        if (prompt.length() > 2_000) {
+            throw new IllegalArgumentException("一句话主题内容不能超过 2000 字符");
+        }
+        String language = text(payload, "language", "zh-CN").trim();
+        if (language.isBlank()) {
+            language = "zh-CN";
+        }
+        String title = prompt.replaceAll("[\\r\\n]+", " ").trim();
+        if (title.length() > 160) {
+            title = title.substring(0, 160);
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        AiTopicPoolEntry topic = new AiTopicPoolEntry();
+        topic.title = title;
+        topic.rationale = prompt;
+        topic.recommendation = "MANUAL";
+        topic.status = "WRITING";
+        topic.dedupeKey = "oneshot-" + UUID.randomUUID().toString().replace("-", "");
+        topic.occurrenceCount = 1;
+        topic.createdAt = now;
+        topic.lastSeenAt = now;
+        topic.reviewedAt = now;
+        topic.updatedAt = now;
+
+        ObjectNode source = objectMapper.createObjectNode();
+        source.put("mode", "ONE_SHOT");
+        source.put("oneShot", true);
+        source.put("prompt", prompt);
+        source.put("language", language);
+        source.put("discoveredAt", now.toString());
+        source.put("importedBy", actorId == null ? "" : actorId);
+        source.put("traceId", traceId == null ? "" : traceId);
+        topic.source = source.toString();
+        topic.persist();
+        topic.flush();
+        return topicMap(topic);
     }
 
     private String mergeSource(String existing, JsonNode value, String actorId,

@@ -24,11 +24,16 @@ public class AiArticleDraftRunner {
 
     public void start(Long runId, Long topicId, Long providerId, String language, String instructions,
                       String repostPolicyCode, boolean regenerate, Long operatorId) {
+        start(runId, topicId, providerId, language, instructions, repostPolicyCode, regenerate, operatorId, true);
+    }
+
+    public void start(Long runId, Long topicId, Long providerId, String language, String instructions,
+                      String repostPolicyCode, boolean regenerate, Long operatorId, boolean enableTools) {
         executor.submit("AI 草稿任务 runId=" + runId, () -> {
             runService.markStarted(runId);
             JsonNode topic = draftService.readTopic(topicId, operatorId);
             AiArticleDraftService.DraftPayload payload =
-                    draftService.generateContent(topic, providerId, language, instructions);
+                    draftService.generateContent(topic, providerId, language, instructions, operatorId, enableTools);
             AiArticleDraftService.DraftSaved saved = draftService.persist(topicId, topic, payload,
                     repostPolicyCode, regenerate, operatorId);
             runService.complete(runId, saved.postId(), saved.title(), saved.summary());

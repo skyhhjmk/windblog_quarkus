@@ -47,14 +47,13 @@ public class OpenAiAiService implements AiService {
         }
         try {
             Map<String, Object> payload = basePayload(config, false);
-            List<Map<String, Object>> messages = new ArrayList<>();
-            if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
-                messages.add(Map.of("role", "system", "content", request.systemPrompt()));
-            }
-            messages.add(Map.of("role", "user", "content",
-                    request.prompt() == null ? "" : request.prompt()));
+            List<Map<String, Object>> messages = buildMessages(request);
             payload.put("messages", messages);
-            if (request.jsonResponse()) {
+            if (!request.tools().isEmpty()) {
+                payload.put("tools", buildToolsPayload(request.tools()));
+                payload.put("tool_choice", "auto");
+            }
+            if (request.jsonResponse() && request.tools().isEmpty()) {
                 payload.put("response_format", Map.of("type", "json_object"));
             }
 
@@ -77,6 +76,7 @@ public class OpenAiAiService implements AiService {
                             JsonNode root = objectMapper.readTree(response.body());
                             AiResult result = new AiResult();
                             result.contents.put("text", extractTextFromResponse(root));
+                            result.toolCalls.addAll(extractToolCallsFromResponse(root));
                             result.rawResponse = response.body();
                             applyUsage(root, result);
                             return result;
@@ -264,11 +264,98 @@ public class OpenAiAiService implements AiService {
         if (root != null && root.has("choices") && root.get("choices").isArray()
                 && !root.get("choices").isEmpty()) {
             JsonNode message = root.get("choices").get(0).get("message");
-            if (message != null && message.has("content")) {
+            if (message != null && message.has("content") && !message.get("content").isNull()) {
                 return message.get("content").asText("");
             }
         }
         return "";
+    }
+
+    private List<AiToolCall> extractToolCallsFromResponse(JsonNode root) {
+        List<AiToolCall> calls = new ArrayList<>();
+        if (root == null || !root.has("choices") || !root.get("choices").isArray()
+                || root.get("choices").isEmpty()) {
+            return calls;
+        }
+        JsonNode message = root.get("choices").get(0).get("message");
+        if (message == null || !message.has("tool_calls") || !message.get("tool_calls").isArray()) {
+            return calls;
+        }
+        for (JsonNode node : message.get("tool_calls")) {
+            String id = node.path("id").asText("");
+            JsonNode fn = node.get("function");
+            if (fn == null || fn.isNull()) continue;
+            String name = fn.path("name").asText("");
+            if (name.isBlank()) continue;
+            JsonNode argsNode = fn.get("arguments");
+            String argsJson;
+            if (argsNode == null || argsNode.isNull()) {
+                argsJson = "{}";
+            } else if (argsNode.isTextual()) {
+                argsJson = argsNode.asText("{}");
+            } else {
+                argsJson = argsNode.toString();
+            }
+            calls.add(new AiToolCall(id, name, argsJson));
+        }
+        return calls;
+    }
+
+    private List<Map<String, Object>> buildMessages(AiProviderRequest request) {
+        if (!request.messages().isEmpty()) {
+            List<Map<String, Object>> messages = new ArrayList<>();
+            for (AiChatMessage msg : request.messages()) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("role", msg.role());
+                if ("assistant".equals(msg.role()) && !msg.toolCalls().isEmpty()) {
+                    item.put("content", msg.content() == null || msg.content().isBlank() ? null : msg.content());
+                    List<Map<String, Object>> toolCalls = new ArrayList<>();
+                    for (AiToolCall call : msg.toolCalls()) {
+                        Map<String, Object> fn = new HashMap<>();
+                        fn.put("name", call.name());
+                        fn.put("arguments", call.argumentsJson());
+                        Map<String, Object> tc = new HashMap<>();
+                        tc.put("id", call.id());
+                        tc.put("type", "function");
+                        tc.put("function", fn);
+                        toolCalls.add(tc);
+                    }
+                    item.put("tool_calls", toolCalls);
+                } else if ("tool".equals(msg.role())) {
+                    item.put("tool_call_id", msg.toolCallId() == null ? "" : msg.toolCallId());
+                    if (msg.name() != null && !msg.name().isBlank()) {
+                        item.put("name", msg.name());
+                    }
+                    item.put("content", msg.content() == null ? "" : msg.content());
+                } else {
+                    item.put("content", msg.content() == null ? "" : msg.content());
+                }
+                messages.add(item);
+            }
+            return messages;
+        }
+        List<Map<String, Object>> messages = new ArrayList<>();
+        if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+            messages.add(Map.of("role", "system", "content", request.systemPrompt()));
+        }
+        messages.add(Map.of("role", "user", "content",
+                request.prompt() == null ? "" : request.prompt()));
+        return messages;
+    }
+
+    private List<Map<String, Object>> buildToolsPayload(List<AiToolDefinition> tools) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (AiToolDefinition tool : tools) {
+            Map<String, Object> fn = new HashMap<>();
+            fn.put("name", tool.name());
+            fn.put("description", tool.description());
+            fn.put("parameters", tool.parameters());
+            Map<String, Object> wrapper = new HashMap<>();
+            wrapper.put("type", "function");
+            wrapper.put("function", fn);
+            list.add(wrapper);
+        }
+        return list;
     }
 
     private boolean isConfigReady(AiProviderConfig config) {

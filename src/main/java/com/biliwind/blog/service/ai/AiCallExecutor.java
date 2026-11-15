@@ -14,6 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,6 +84,69 @@ public class AiCallExecutor {
         } catch (RuntimeException exception) {
             return CompletableFuture.failedFuture(exception);
         }
+    }
+
+    public CompletionStage<AiResult> completeWithTools(AiCallRequest request, AiToolExecutor toolExecutor,
+                                                       int maxRounds) {
+        if (request == null) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("AI 请求不能为空"));
+        }
+        if (toolExecutor == null || request.tools().isEmpty() || maxRounds <= 1) {
+            return call(request);
+        }
+        List<AiChatMessage> history = new ArrayList<>();
+        if (!request.messages().isEmpty()) {
+            history.addAll(request.messages());
+        } else {
+            if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+                history.add(AiChatMessage.system(request.systemPrompt()));
+            }
+            history.add(AiChatMessage.user(request.prompt() == null ? "" : request.prompt()));
+        }
+        int boundedRounds = Math.max(1, Math.min(12, maxRounds));
+        Set<String> toolsUsed = new LinkedHashSet<>();
+        int[] usageTotals = new int[3];
+        return runToolLoop(request, history, toolExecutor, 0, boundedRounds, toolsUsed, usageTotals);
+    }
+
+    private CompletionStage<AiResult> runToolLoop(AiCallRequest baseRequest,
+                                                  List<AiChatMessage> history,
+                                                  AiToolExecutor toolExecutor,
+                                                  int round,
+                                                  int maxRounds,
+                                                  Set<String> toolsUsed,
+                                                  int[] usageTotals) {
+        boolean lastRound = round >= maxRounds - 1;
+        List<AiToolDefinition> roundTools = lastRound ? List.of() : baseRequest.tools();
+        AiCallRequest roundRequest = baseRequest.withMessagesAndTools(List.copyOf(history), roundTools);
+        return call(roundRequest).thenCompose(result -> {
+            usageTotals[0] += result.inputTokens;
+            usageTotals[1] += result.outputTokens;
+            usageTotals[2] += result.totalTokens;
+            if (result.toolCalls == null || result.toolCalls.isEmpty() || lastRound) {
+                result.inputTokens = usageTotals[0];
+                result.outputTokens = usageTotals[1];
+                result.totalTokens = usageTotals[2];
+                if (!toolsUsed.isEmpty()) {
+                    Map<String, Object> provenance = new LinkedHashMap<>(result.provenance);
+                    provenance.put("toolsUsed", List.copyOf(toolsUsed));
+                    provenance.put("toolRounds", round + 1);
+                    result.provenance = provenance;
+                }
+                return CompletableFuture.completedFuture(result);
+            }
+            String assistantText = result.contents == null ? "" : result.contents.getOrDefault("text", "");
+            history.add(AiChatMessage.assistant(assistantText, result.toolCalls));
+            return CompletableFuture.supplyAsync(() -> {
+                for (AiToolCall toolCall : result.toolCalls) {
+                    toolsUsed.add(toolCall.name());
+                    String output = toolExecutor.execute(toolCall, baseRequest.toolContext());
+                    history.add(AiChatMessage.tool(toolCall.id(), toolCall.name(), output));
+                }
+                return null;
+            }).thenCompose(ignored -> runToolLoop(baseRequest, history, toolExecutor, round + 1,
+                    maxRounds, toolsUsed, usageTotals));
+        });
     }
 
     public Multi<String> stream(AiCallRequest request) {
@@ -299,10 +364,14 @@ public class AiCallExecutor {
 
     private CompletionStage<AiResult> complete(AiService service, AiProviderConfig config,
                                                AiCallRequest request) {
-        return service.complete(config, AiProviderRequest.text(feature(request),
-                        request.systemPrompt(), request.prompt()))
+        AiProviderRequest providerRequest = (!request.messages().isEmpty() || !request.tools().isEmpty())
+                ? new AiProviderRequest(feature(request), request.systemPrompt(), request.prompt(),
+                        false, request.imageUrls(), false, request.messages(), request.tools())
+                : AiProviderRequest.text(feature(request), request.systemPrompt(), request.prompt());
+        return service.complete(config, providerRequest)
                 .thenApply(result -> {
-                    if (textOf(result).isBlank()) {
+                    boolean hasToolCalls = result != null && result.toolCalls != null && !result.toolCalls.isEmpty();
+                    if (!hasToolCalls && textOf(result).isBlank()) {
                         throw new IllegalStateException("AI 提供商未返回写作结果");
                     }
                     return result;

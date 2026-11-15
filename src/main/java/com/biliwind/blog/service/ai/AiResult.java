@@ -1,6 +1,8 @@
 package com.biliwind.blog.service.ai;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -60,6 +62,7 @@ public class AiResult {
     public String taskId;
     public String generationMode;
     public Map<String, Object> provenance = new HashMap<>();
+    public List<AiToolCall> toolCalls = new ArrayList<>();
 
     public AiResult() {
     }

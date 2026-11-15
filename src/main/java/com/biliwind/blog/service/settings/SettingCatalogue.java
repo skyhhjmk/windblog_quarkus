@@ -109,6 +109,7 @@ public final class SettingCatalogue {
         add(definitions, aiUserProfileAudit());
         add(definitions, aiTranslation());
         add(definitions, aiOperationConfigs());
+        add(definitions, aiTopicMcp());
         add(definitions, elasticsearch());
         add(definitions, securityNetwork());
         add(definitions, commentSecurity());
@@ -438,6 +439,67 @@ public final class SettingCatalogue {
         value.put("slug", "");
         return definition(SettingKey.AI_OPERATION_CONFIGS, value, "功能设置", schema,
                 "分别指定 AI 评论审核、摘要、翻译、话题和 Slug 生成功能使用的提供商或轮询组。");
+    }
+
+    private static SettingDefinition aiTopicMcp() {
+        ObjectNode schema = objectSchema();
+        ArrayNode fields = schema.putArray("fields");
+        fields.addObject()
+                .put("key", "toolsEnabled")
+                .put("label", "启用 AI 工具与 MCP")
+                .put("widget", "switch")
+                .put("section", "内置工具");
+        fields.addObject()
+                .put("key", "maxToolRounds")
+                .put("label", "单次写作最大工具调用轮次")
+                .put("widget", "number")
+                .put("hint", "默认 8，范围 1-12")
+                .put("section", "内置工具");
+        ArrayNode searchOptions = fields.addObject()
+                .put("key", "webSearchProvider")
+                .put("label", "Web 搜索引擎")
+                .put("widget", "select")
+                .put("section", "Web 搜索")
+                .putArray("options");
+        searchOptions.addObject().put("value", "AUTO").put("label", "自动（优先 SearXNG / Tavily / Serper，回退 DuckDuckGo）");
+        searchOptions.addObject().put("value", "DUCKDUCKGO").put("label", "DuckDuckGo（免密钥）");
+        searchOptions.addObject().put("value", "SEARXNG").put("label", "SearXNG（自建实例）");
+        searchOptions.addObject().put("value", "TAVILY").put("label", "Tavily Search API");
+        searchOptions.addObject().put("value", "SERPER").put("label", "Serper (Google Search API)");
+        fields.addObject()
+                .put("key", "searxngUrl")
+                .put("label", "SearXNG 地址")
+                .put("widget", "input")
+                .put("hint", "例如：https://search.example.com")
+                .put("section", "Web 搜索");
+        fields.addObject()
+                .put("key", "tavilyApiKey")
+                .put("label", "Tavily API Key")
+                .put("widget", "secret")
+                .put("section", "Web 搜索");
+        fields.addObject()
+                .put("key", "serperApiKey")
+                .put("label", "Serper API Key")
+                .put("widget", "secret")
+                .put("section", "Web 搜索");
+        fields.addObject()
+                .put("key", "mcpServersJson")
+                .put("label", "外部 MCP 服务列表 (JSON)")
+                .put("widget", "textarea")
+                .put("hint", "[{\"name\":\"my-mcp\",\"url\":\"https://mcp.example.com/mcp\",\"apiKey\":\"\",\"enabled\":true}]")
+                .put("section", "外部 MCP");
+
+        ObjectNode value = MAPPER.createObjectNode();
+        value.put("toolsEnabled", true);
+        value.put("maxToolRounds", 8);
+        value.put("webSearchProvider", "AUTO");
+        value.put("searxngUrl", "");
+        value.put("tavilyApiKey", "");
+        value.put("serperApiKey", "");
+        value.put("mcpServersJson", "[]");
+        return definition(SettingKey.AI_TOPIC_MCP, value, "话题 AI 工具与 MCP", schema,
+                "配置话题写作与一句话生成时可供 AI 调用的 Web 搜索、图片转存媒体库与外部 MCP 服务。",
+                SettingLevel.CRITICAL, false, Set.of("tavilyApiKey", "serperApiKey"), RegionalKind.NONE);
     }
 
     private static SettingDefinition elasticsearch() {

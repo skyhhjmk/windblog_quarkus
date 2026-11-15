@@ -68,6 +68,14 @@ public class AiManager {
         return call(AiCallRequest.complete(providerId, operation, systemPrompt, prompt));
     }
 
+    public CompletionStage<AiResult> completeWithTools(Long providerId, String operation,
+            String systemPrompt, String prompt, List<AiToolDefinition> tools,
+            AiToolContext toolContext, AiToolExecutor toolExecutor, int maxRounds) {
+        return executor.completeWithTools(
+                AiCallRequest.completeWithTools(providerId, operation, systemPrompt, prompt, tools, toolContext),
+                toolExecutor, maxRounds);
+    }
+
     public Multi<String> completeStream(Long providerId, String systemPrompt, String prompt) {
         return stream(AiCallRequest.completeStream(providerId, systemPrompt, prompt));
     }

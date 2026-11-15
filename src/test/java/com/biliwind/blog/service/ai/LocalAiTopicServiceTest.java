@@ -121,6 +121,26 @@ class LocalAiTopicServiceTest {
         assertTrue(list.path("items").toString().contains("trace-run"));
     }
 
+    @Test
+    @Transactional
+    void createsOneShotTopicWithUniqueKey() {
+        String prompt = "写一篇 Quarkus 虚拟线程实践指南 " + UUID.randomUUID();
+        JsonNode first = objectMapper.valueToTree(service.dispatch("topics.createOneShot",
+                objectMapper.valueToTree(Map.of("prompt", prompt, "language", "zh-CN")),
+                "tester", "trace-1"));
+        JsonNode second = objectMapper.valueToTree(service.dispatch("topics.createOneShot",
+                objectMapper.valueToTree(Map.of("prompt", prompt, "language", "zh-CN")),
+                "tester", "trace-2"));
+
+        assertTrue(first.path("id").asLong() > 0);
+        assertTrue(second.path("id").asLong() > first.path("id").asLong());
+        assertEquals("WRITING", first.path("status").asText());
+        assertEquals("MANUAL", first.path("recommendation").asText());
+        assertEquals("ONE_SHOT", first.path("source").path("mode").asText());
+        assertTrue(first.path("source").path("oneShot").asBoolean());
+        assertEquals(prompt, first.path("source").path("prompt").asText());
+    }
+
     private Long findTopicId(String title) {
         JsonNode list = objectMapper.valueToTree(service.dispatch("topics.list",
                 objectMapper.valueToTree(Map.of("page", 1, "pageSize", 100)),

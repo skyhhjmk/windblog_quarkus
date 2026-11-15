@@ -12,7 +12,9 @@ import com.biliwind.blog.model.PostStatus;
 import com.biliwind.blog.model.User;
 import com.biliwind.blog.service.ai.AiManager;
 import com.biliwind.blog.service.ai.AiResult;
+import com.biliwind.blog.service.ai.AiToolContext;
 import com.biliwind.blog.service.ai.LocalAiTopicService;
+import com.biliwind.blog.service.ai.tool.AiToolRegistry;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
 import com.biliwind.blog.service.link.ArticleExternalLinkService;
 import com.biliwind.blog.service.repost.RepostPolicyCatalog;
@@ -44,6 +46,9 @@ public class AiArticleDraftService {
 
     @Inject
     AiManager aiManager;
+
+    @Inject
+    AiToolRegistry toolRegistry;
 
     @Inject
     LocalAiTopicService topicService;
@@ -78,6 +83,12 @@ public class AiArticleDraftService {
     /** Creates an asynchronous draft run and returns it immediately. */
     public Map<String, Object> start(Long topicId, Long providerId, String language, String instructions,
                                      String repostPolicyCode, boolean regenerate) {
+        return start(topicId, providerId, language, instructions, repostPolicyCode, regenerate, true);
+    }
+
+    /** Creates an asynchronous draft run with configurable tool/MCP access. */
+    public Map<String, Object> start(Long topicId, Long providerId, String language, String instructions,
+                                     String repostPolicyCode, boolean regenerate, boolean enableTools) {
         if (topicId == null) {
             throw new BadRequestException("话题 ID 不能为空");
         }
@@ -99,8 +110,38 @@ public class AiArticleDraftService {
         Long runId = run.get("id") instanceof Number number ? number.longValue() : null;
         if (runId == null) throw new IllegalStateException("draft run id missing");
         runner.start(runId, topicId, providerId, effectiveLanguage,
-                truncate(instructions, 4000), policy, regenerate, operatorId);
+                truncate(instructions, 4000), policy, regenerate, operatorId, enableTools);
         return run;
+    }
+
+    /**
+     * Creates a one-off topic from a single sentence/prompt and immediately starts
+     * an asynchronous AI article draft run.
+     */
+    public Map<String, Object> startOneShot(String prompt, Long providerId, String language,
+                                            String instructions, String repostPolicyCode,
+                                            boolean enableTools) {
+        if (prompt == null || prompt.isBlank()) {
+            throw new BadRequestException("一句话主题内容不能为空");
+        }
+        Long operatorId = adminRequestContext.getUserId();
+        String effectiveLanguage = canonicalLanguage(language);
+        String policy = repostPolicyCatalog.require(repostPolicyCode).code();
+        Map<String, Object> topic = dispatchTopic("topics.createOneShot",
+                Map.of("prompt", prompt.trim(), "language", effectiveLanguage), operatorId);
+        Long topicId = topic.get("id") instanceof Number number ? number.longValue() : null;
+        if (topicId == null) {
+            throw new IllegalStateException("创建一次性话题失败");
+        }
+        Map<String, Object> run = runService.create(topicId, providerId, effectiveLanguage,
+                truncate(instructions, 4000), policy, false, operatorId);
+        Long runId = run.get("id") instanceof Number number ? number.longValue() : null;
+        if (runId == null) throw new IllegalStateException("draft run id missing");
+        runner.start(runId, topicId, providerId, effectiveLanguage,
+                truncate(instructions, 4000), policy, false, operatorId, enableTools);
+        Map<String, Object> response = new LinkedHashMap<>(run);
+        response.put("topic", topic);
+        return response;
     }
 
     public Map<String, Object> job(Long runId) {
@@ -125,12 +166,38 @@ public class AiArticleDraftService {
 
     /** Calls the configured AI provider. Runs outside any database transaction. */
     public DraftPayload generateContent(JsonNode topic, Long providerId, String language, String instructions) {
-        String prompt = buildPrompt(topic, language, instructions);
+        return generateContent(topic, providerId, language, instructions, null, true);
+    }
+
+    /** Calls the configured AI provider with optional MCP/built-in tools. */
+    public DraftPayload generateContent(JsonNode topic, Long providerId, String language,
+                                        String instructions, Long operatorId, boolean enableTools) {
+        AiToolRegistry.ToolBundle bundle = enableTools
+                ? toolRegistry.resolveBundle()
+                : new AiToolRegistry.ToolBundle(java.util.List.of(), null, 1);
+        boolean toolsActive = enableTools && !bundle.definitions().isEmpty() && bundle.executor() != null;
+        String prompt = buildPrompt(topic, language, instructions, toolsActive);
         AiResult result;
         try {
-            result = aiManager.complete(providerId, "topic", SYSTEM_PROMPT, prompt)
-                    .toCompletableFuture()
-                    .join();
+            if (toolsActive) {
+                Long topicId = topic != null && topic.path("id").canConvertToLong()
+                        ? topic.path("id").asLong() : null;
+                result = aiManager.completeWithTools(
+                                providerId,
+                                "topic",
+                                SYSTEM_PROMPT,
+                                prompt,
+                                bundle.definitions(),
+                                AiToolContext.forDraft(operatorId, topicId),
+                                bundle.executor(),
+                                bundle.maxRounds())
+                        .toCompletableFuture()
+                        .join();
+            } else {
+                result = aiManager.complete(providerId, "topic", SYSTEM_PROMPT, prompt)
+                        .toCompletableFuture()
+                        .join();
+            }
         } catch (CompletionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw new BadRequestException("AI 文章生成失败: " + safeMessage(cause));
@@ -271,15 +338,23 @@ public class AiArticleDraftService {
         return Map.of();
     }
 
-    private String buildPrompt(JsonNode topic, String language, String instructions) {
+    private String buildPrompt(JsonNode topic, String language, String instructions, boolean toolsActive) {
         String title = topic.path("title").asText("");
         String rationale = topic.path("rationale").asText("");
         JsonNode source = topic.path("source");
+        boolean oneShot = source.path("oneShot").asBoolean(false);
+        String oneShotPrompt = source.path("prompt").asText("").trim();
         StringBuilder prompt = new StringBuilder();
-        prompt.append("请根据以下选题写一篇可直接进入编辑器的技术文章。\n")
-                .append("选题：").append(title).append("\n")
-                .append("推荐理由：").append(rationale).append("\n")
-                .append("文章语言：").append(language).append("\n");
+        if (oneShot && !oneShotPrompt.isBlank()) {
+            prompt.append("请根据管理员提供的一句话指令，自主调研并写一篇可直接进入编辑器的高质量文章。\n")
+                    .append("一句话指令：").append(oneShotPrompt).append("\n")
+                    .append("文章语言：").append(language).append("\n");
+        } else {
+            prompt.append("请根据以下选题写一篇可直接进入编辑器的技术文章。\n")
+                    .append("选题：").append(title).append("\n")
+                    .append("推荐理由：").append(rationale).append("\n")
+                    .append("文章语言：").append(language).append("\n");
+        }
         JsonNode keywords = source.path("keywords");
         if (keywords.isArray() && !keywords.isEmpty()) {
             prompt.append("关键词：");
@@ -298,6 +373,15 @@ public class AiArticleDraftService {
         }
         if (instructions != null && !instructions.isBlank()) {
             prompt.append("额外要求：").append(truncate(instructions, 4000)).append("\n");
+        }
+        if (toolsActive) {
+            prompt.append("""
+                    可用工具（MCP / 内置工具）说明：
+                    - 可按需调用 `web_search` 搜索最新事实、官方文档或参考资料，并用 `fetch_web_page` 读取关键页面内容。
+                    - 若需在文章中插入外部图片（或指令/网页中包含配图），必须先调用 `import_image_to_media` 将图片转存到 WindBlog 媒体库，并使用其返回的 `url` 写入 Markdown（`![alt](url)`）；严禁直接引用未转存的第三方外链图片。
+                    - 可按需调用 `search_site_posts` 检索本站已发布文章以补充准确的站内链接。
+                    - 工具调用完成后，最终只输出符合下方要求的 JSON 对象。
+                    """);
         }
         prompt.append("""
                 硬性要求：

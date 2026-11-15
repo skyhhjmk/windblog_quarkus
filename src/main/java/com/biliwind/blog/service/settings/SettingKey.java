@@ -18,6 +18,7 @@ public enum SettingKey {
     AI_USER_PROFILE_AUDIT("ai_user_profile_audit"),
     AI_TRANSLATION("ai_translation"),
     AI_OPERATION_CONFIGS("ai_operation_configs"),
+    AI_TOPIC_MCP("ai_topic_mcp"),
     ELASTICSEARCH("elasticsearch"),
     SECURITY_NETWORK("security_network"),
     COMMENT_SECURITY("comment_security"),
