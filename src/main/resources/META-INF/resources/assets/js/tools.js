@@ -3676,7 +3676,7 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
     WindBlogLifecycle.register('tool-file-transfer', {
         mount: function () {
             if (!document.getElementById('fileTransferToolApp')) return;
-            loadScriptOnce('/assets/js/file-transfer.js?v=20261115')
+            loadScriptOnce('/assets/js/file-transfer.js?v=20261115b')
                 .then(() => {
                     if (document.getElementById('fileTransferToolApp') && window.WindBlogFileTransfer) {
                         window.WindBlogFileTransfer.mount();

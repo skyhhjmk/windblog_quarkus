@@ -964,6 +964,7 @@
             state.dc = dc;
             dc.binaryType = 'arraybuffer';
             dc.bufferedAmountLowThreshold = 256 * 1024;
+            let rxQueue = Promise.resolve();
 
             dc.onopen = async () => {
                 await prepareEcdh();
@@ -977,7 +978,7 @@
                 setConnStatus('密钥协商中…', 'wait');
             };
 
-            dc.onmessage = async (event) => {
+            async function processIncomingMessage(event) {
                 if (typeof event.data === 'string') {
                     let msg;
                     try { msg = JSON.parse(event.data); } catch (_) { return; }
@@ -1010,6 +1011,12 @@
                     }
                     await handleBinaryFrame(frame);
                 }
+            }
+
+            dc.onmessage = (event) => {
+                rxQueue = rxQueue.then(() => processIncomingMessage(event)).catch((err) => {
+                    console.error('[FileTransfer] rx error:', err);
+                });
             };
 
             dc.onclose = () => {
@@ -1324,6 +1331,11 @@
                     dataCount: 0,
                     flushed: false
                 };
+                const chunksInThisStripe = Math.min(k, item.totalChunks - stripeIdx * k);
+                for (let z = chunksInThisStripe; z < k; z++) {
+                    st.present[z] = 1;
+                    st.validCount++;
+                }
                 item.stripes.set(stripeIdx, st);
             }
             if (st.flushed || st.present[shardIdx]) return;
@@ -1367,6 +1379,10 @@
                     }
                 }
 
+                st.flushed = true;
+                item.stripes.delete(item.nextFlushStripe);
+                item.nextFlushStripe++;
+
                 for (let i = 0; i < chunksInThisStripe; i++) {
                     const len = st.lens[i];
                     const data = st.shards.subarray(i * CHUNK_SIZE, i * CHUNK_SIZE + len);
@@ -1378,9 +1394,6 @@
                     }
                     item.doneBytes += len;
                 }
-                st.flushed = true;
-                item.stripes.delete(item.nextFlushStripe);
-                item.nextFlushStripe++;
                 state.stats.stripes++;
                 updateStatsUi();
                 renderTransferCard(item);
