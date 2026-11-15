@@ -83,7 +83,7 @@
                 </div>
                 <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">免服务器 P2P 文件快传</h1>
                 <p class="text-body text-xs md:text-sm max-w-3xl leading-relaxed">
-                    按照「看指引 → 选文件 → 拿链接」三步即可完成浏览器点对点直连传输。文件与消息不经过任何后端服务器，
+                    按照「看指引 → 配对拿链接 → 选文件传输」三步即可完成浏览器点对点直连传输。文件与消息不经过任何后端服务器，
                     内置 ECDH P-256 + AES-256-GCM 防监听加密、Rust WASM Reed-Solomon 纠错、大文件流式落盘与 SHA-256 校验。
                 </p>
             </div>
@@ -121,9 +121,9 @@
             </summary>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-body leading-relaxed">
                 <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
-                    <div class="font-bold text-main font-mono">① 选文件 → ② 拿链接配对</div>
-                    <p>可先在下方「选文件」拖拽或加入待传文件（连接建立后自动发送）。</p>
-                    <p>然后在「拿链接」由发起方生成连接码/二维码发给对方；加入方扫码或粘贴后生成应答码传回，发起方确认即可建立 P2P 直连。</p>
+                    <div class="font-bold text-main font-mono">① 配对拿链接 → ② 选文件互传</div>
+                    <p>先在下方「配对拿链接」由发起方生成连接码/二维码发给对方；加入方扫码或粘贴后生成应答码传回，发起方确认即可建立 P2P 直连。</p>
+                    <p>连接成功后即可在「选文件传输」拖拽多文件或发送文本（也支持预先入队，连接后自动发送）。</p>
                 </div>
                 <div class="p-3.5 rounded-xl bg-input-bg border border-border/70 space-y-1.5">
                     <div class="font-bold text-main font-mono">防监听加密与 WASM ECC</div>
@@ -139,74 +139,12 @@
             </div>
         </details>
 
-        <!-- 2. 选文件 (Bidirectional Transfer Workspace) -->
-        <div id="ftWorkspace" class="space-y-4">
-            <div class="flex items-center gap-2 text-xs font-bold text-main font-mono">
-                <span class="px-2 py-0.5 rounded bg-accent/10 text-accent">2</span>
-                <i class="fa-solid fa-folder-open text-accent"></i>
-                <span>选文件：添加待传文件或文本（可先选文件再配对，连接后自动发送）</span>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <!-- Left: Send Files & Text -->
-                <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
-                            <i class="fa-solid fa-paper-plane text-accent"></i>发送文件与文本
-                        </h2>
-                        <span id="ftSendReadyHint" class="text-[11px] font-mono text-meta">可先选文件，配对后自动发送</span>
-                    </div>
-
-                    <label id="ftDropzone" class="ft-dropzone block border-2 border-dashed border-border hover:border-accent/60 rounded-2xl p-6 text-center cursor-pointer transition-colors">
-                        <input type="file" id="ftFileInput" multiple class="hidden">
-                        <div class="space-y-2">
-                            <div class="w-11 h-11 rounded-xl bg-accent/10 text-accent mx-auto flex items-center justify-center text-lg">
-                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                            </div>
-                            <div class="text-sm font-semibold text-main">拖拽文件到此处，或点击选择多文件</div>
-                            <div class="text-xs text-meta">支持任意大小文件 · 分片流式发送 · 背压自动流控</div>
-                        </div>
-                    </label>
-
-                    <div class="space-y-2 pt-2 border-t border-border/60">
-                        <label for="ftTextMsgInput" class="text-xs font-mono text-meta">文本 / 剪贴板快传</label>
-                        <div class="flex gap-2">
-                            <textarea id="ftTextMsgInput" rows="2" placeholder="输入文本、命令或代码片段，连接后直接发给对方…"
-                                      class="flex-1 bg-input-bg border border-border rounded-xl p-2.5 text-xs font-mono text-main focus:border-accent outline-none resize-none"></textarea>
-                            <button type="button" id="ftSendTextBtn" disabled class="px-4 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer shrink-0">
-                                发送
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: Transfer Queue & Received Items -->
-                <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm flex flex-col">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
-                            <i class="fa-solid fa-right-left text-accent"></i>传输队列与接收记录
-                        </h2>
-                        <button type="button" id="ftClearDoneBtn" class="text-[11px] font-mono text-meta hover:text-main cursor-pointer">
-                            清理已完成
-                        </button>
-                    </div>
-
-                    <div id="ftTransferList" class="space-y-3 flex-1 min-h-[220px] max-h-[520px] overflow-y-auto pr-1">
-                        <div id="ftEmptyState" class="h-full min-h-[200px] flex flex-col items-center justify-center text-center text-meta text-xs space-y-2">
-                            <i class="fa-solid fa-inbox text-2xl opacity-40"></i>
-                            <p>暂无传输任务。选择文件后完成下方配对即可开始互传。</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. 拿链接 (Security Settings + Zero-Server Pairing + Connected Session Bar) -->
+        <!-- 2. 配对拿链接 (Security Settings + Zero-Server Pairing + Connected Session Bar) -->
         <div class="space-y-4">
             <div class="flex items-center gap-2 text-xs font-bold text-main font-mono">
-                <span class="px-2 py-0.5 rounded bg-accent/10 text-accent">3</span>
+                <span class="px-2 py-0.5 rounded bg-accent/10 text-accent">2</span>
                 <i class="fa-solid fa-link text-accent"></i>
-                <span>拿链接：配置安全参数并生成连接码 / 扫码配对</span>
+                <span>配对拿链接：配置安全参数并生成连接码 / 扫码配对</span>
             </div>
 
             <!-- Security & Network Settings Bar -->
@@ -446,6 +384,68 @@
                     <div class="p-2.5 rounded-xl bg-input-bg border border-border/60">
                         <div class="text-meta">CRC32 损坏拦截</div>
                         <div id="ftStatCrcBad" class="text-amber-400 font-semibold mt-0.5">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 选文件传输 (Bidirectional Transfer Workspace) -->
+        <div id="ftWorkspace" class="space-y-4">
+            <div class="flex items-center gap-2 text-xs font-bold text-main font-mono">
+                <span class="px-2 py-0.5 rounded bg-accent/10 text-accent">3</span>
+                <i class="fa-solid fa-folder-open text-accent"></i>
+                <span>选文件传输：完成上方配对后即可双向互传文件或文本</span>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <!-- Left: Send Files & Text -->
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                            <i class="fa-solid fa-paper-plane text-accent"></i>发送文件与文本
+                        </h2>
+                        <span id="ftSendReadyHint" class="text-[11px] font-mono text-meta">等待建立 P2P 连接</span>
+                    </div>
+
+                    <label id="ftDropzone" class="ft-dropzone block border-2 border-dashed border-border hover:border-accent/60 rounded-2xl p-6 text-center cursor-pointer transition-colors">
+                        <input type="file" id="ftFileInput" multiple class="hidden">
+                        <div class="space-y-2">
+                            <div class="w-11 h-11 rounded-xl bg-accent/10 text-accent mx-auto flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                            </div>
+                            <div class="text-sm font-semibold text-main">拖拽文件到此处，或点击选择多文件</div>
+                            <div class="text-xs text-meta">支持任意大小文件 · 分片流式发送 · 背压自动流控</div>
+                        </div>
+                    </label>
+
+                    <div class="space-y-2 pt-2 border-t border-border/60">
+                        <label for="ftTextMsgInput" class="text-xs font-mono text-meta">文本 / 剪贴板快传</label>
+                        <div class="flex gap-2">
+                            <textarea id="ftTextMsgInput" rows="2" placeholder="输入文本、命令或代码片段，连接后直接发给对方…"
+                                      class="flex-1 bg-input-bg border border-border rounded-xl p-2.5 text-xs font-mono text-main focus:border-accent outline-none resize-none"></textarea>
+                            <button type="button" id="ftSendTextBtn" disabled class="px-4 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer shrink-0">
+                                发送
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Transfer Queue & Received Items -->
+                <div class="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm flex flex-col">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-main font-mono flex items-center gap-2">
+                            <i class="fa-solid fa-right-left text-accent"></i>传输队列与接收记录
+                        </h2>
+                        <button type="button" id="ftClearDoneBtn" class="text-[11px] font-mono text-meta hover:text-main cursor-pointer">
+                            清理已完成
+                        </button>
+                    </div>
+
+                    <div id="ftTransferList" class="space-y-3 flex-1 min-h-[220px] max-h-[520px] overflow-y-auto pr-1">
+                        <div id="ftEmptyState" class="h-full min-h-[200px] flex flex-col items-center justify-center text-center text-meta text-xs space-y-2">
+                            <i class="fa-solid fa-inbox text-2xl opacity-40"></i>
+                            <p>暂无传输任务。完成上方配对后即可开始互传文件或文本。</p>
+                        </div>
                     </div>
                 </div>
             </div>
