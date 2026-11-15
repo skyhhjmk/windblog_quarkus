@@ -16,6 +16,7 @@ import java.security.SecureRandom;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Ephemeral, zero-persistence in-memory signaling relay for Easy Mode P2P file transfer.
@@ -30,8 +31,8 @@ public class FileTransferSignalResource {
     private static final int MAX_ROOMS = 512;
     private static final int MAX_TOKEN_LENGTH = 32768;
     private static final String CODE_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    private static final SecureRandom RANDOM = new SecureRandom();
 
+    private final AtomicReference<SecureRandom> randomRef = new AtomicReference<>();
     private final ConcurrentHashMap<String, SignalRoom> rooms = new ConcurrentHashMap<>();
 
     @POST
@@ -134,10 +135,16 @@ public class FileTransferSignalResource {
         }
     }
 
-    private static String randomCode(int length) {
+    private String randomCode(int length) {
+        SecureRandom rng = randomRef.get();
+        if (rng == null) {
+            rng = new SecureRandom();
+            randomRef.compareAndSet(null, rng);
+            rng = randomRef.get();
+        }
         StringBuilder sb = new StringBuilder(length);
         for (int i = 0; i < length; i++) {
-            sb.append(CODE_CHARS.charAt(RANDOM.nextInt(CODE_CHARS.length())));
+            sb.append(CODE_CHARS.charAt(rng.nextInt(CODE_CHARS.length())));
         }
         return sb.toString();
     }
