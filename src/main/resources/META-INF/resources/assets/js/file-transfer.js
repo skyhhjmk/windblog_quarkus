@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const WASM_URL = '/assets/vendor/file-transfer-wasm/file_transfer_ecc.wasm?v=20261114';
+    const WASM_URL = '/assets/vendor/file-transfer-wasm/file_transfer_ecc.wasm?v=20261115';
     const QR_GEN_URL = '/assets/vendor/qrcode/qrcode.js?v=2.0.4';
     const QR_SCAN_URL = '/assets/vendor/qrcode/jsQR.js?v=1.4.0';
 

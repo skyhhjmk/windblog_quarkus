@@ -4,11 +4,7 @@
  */
 
 (function () {
-    WindBlogLifecycle.register('post-premium', {
-        mount: initPostPremium
-    });
-
-    // Global variables (will be initialized from data attributes)
+    // Global variables (must be initialized before WindBlogLifecycle.register invokes mount)
     let config = {
         postRef: '',
         postPrice: 0,
@@ -19,6 +15,10 @@
     let repostButtonListenerBound = false;
     let repostCopyButtonListenerBound = false;
     let passwordFormListenerBound = false;
+
+    WindBlogLifecycle.register('post-premium', {
+        mount: initPostPremium
+    });
 
     function initPostPremium() {
         initPasswordForms();
