@@ -157,15 +157,18 @@
             searchInput.addEventListener('input', applyFilters);
         }
 
-        const onKeyDown = function (e) {
-            if (!document.getElementById('toolsIndexApp')) return;
-            if (e.key === '/' && document.activeElement !== searchInput &&
-                !/INPUT|TEXTAREA|SELECT/.test((document.activeElement && document.activeElement.tagName) || '')) {
-                e.preventDefault();
-                if (searchInput) searchInput.focus();
-            }
-        };
-        document.addEventListener('keydown', onKeyDown);
+        if (!window.__windblogToolsIndexKeydownBound) {
+            window.__windblogToolsIndexKeydownBound = true;
+            document.addEventListener('keydown', function (e) {
+                const input = document.getElementById('toolsIndexSearchInput');
+                if (!input || !document.getElementById('toolsIndexApp')) return;
+                if (e.key === '/' && document.activeElement !== input &&
+                    !/INPUT|TEXTAREA|SELECT/.test((document.activeElement && document.activeElement.tagName) || '')) {
+                    e.preventDefault();
+                    input.focus();
+                }
+            });
+        }
 
         // Record clicks on cards
         cards.forEach(card => {
