@@ -6,6 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.redis.datasource.RedisDataSource;
 import io.quarkus.redis.datasource.pubsub.PubSubCommands;
+import io.quarkus.runtime.Startup;
+import io.vertx.mutiny.redis.client.Command;
+import io.vertx.mutiny.redis.client.Redis;
+import io.vertx.mutiny.redis.client.RedisConnection;
+import io.vertx.mutiny.redis.client.Request;
+import io.vertx.mutiny.redis.client.Response;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -22,36 +28,64 @@ import java.util.UUID;
  * truth; Pub/Sub only removes the per-process stale-read window.
  */
 @ApplicationScoped
+@Startup
 public class ConfigChangeBroadcastService {
 
     private static final Logger LOG = Logger.getLogger(ConfigChangeBroadcastService.class);
     private static final String CHANNEL = "windblog:config:changed";
 
     @Inject RedisDataSource redisDataSource;
+    @Inject Redis redisClient;
     @Inject ObjectMapper objectMapper;
     @Inject ConfigManager configManager;
 
     private final String nodeId = UUID.randomUUID().toString();
     private PubSubCommands<String> pubSub;
-    private PubSubCommands.RedisSubscriber subscriber;
+    private volatile RedisConnection subscriptionConnection;
 
     @PostConstruct
     void subscribe() {
-        try {
-            pubSub = redisDataSource.pubsub(String.class);
-            subscriber = pubSub.subscribe(CHANNEL, this::applyRemoteChange,
-                    () -> LOG.infof("已订阅跨节点配置通知频道: %s", CHANNEL),
-                    failure -> LOG.errorf(failure, "跨节点配置通知订阅异常"));
-        } catch (Exception failure) {
-            // Redis is already handled as a best-effort cache elsewhere. Do not
-            // prevent a node from starting solely because propagation is down.
-            LOG.warnf(failure, "无法订阅跨节点配置通知；本节点将继续使用 Redis/数据库回退");
-        }
+        pubSub = redisDataSource.pubsub(String.class);
+        // Register the push handler on the connection before sending SUBSCRIBE so
+        // the initial [subscribe, channel, 1] frame is never dropped by Vert.x.
+        redisClient.connect()
+                .chain(connection -> {
+                    subscriptionConnection = connection;
+                    connection.handler(this::handleRedisPush);
+                    connection.endHandler(() -> LOG.debugf("跨节点配置通知订阅连接已关闭: %s", CHANNEL));
+                    connection.exceptionHandler(failure -> LOG.errorf(failure, "跨节点配置通知订阅异常"));
+                    return connection.send(Request.cmd(Command.SUBSCRIBE).arg(CHANNEL))
+                            .onFailure().invoke(failure -> closeSubscriptionConnection(connection));
+                })
+                .subscribe().with(
+                        ignored -> LOG.infof("已订阅跨节点配置通知频道: %s", CHANNEL),
+                        failure -> LOG.warnf(failure, "无法订阅跨节点配置通知；本节点将继续使用 Redis/数据库回退"));
     }
 
     @PreDestroy
     void unsubscribe() {
-        if (subscriber != null) subscriber.unsubscribe();
+        RedisConnection connection = subscriptionConnection;
+        subscriptionConnection = null;
+        if (connection != null) {
+            connection.closeAndForget();
+        }
+    }
+
+    private void closeSubscriptionConnection(RedisConnection connection) {
+        if (subscriptionConnection == connection) {
+            subscriptionConnection = null;
+        }
+        connection.closeAndForget();
+    }
+
+    private void handleRedisPush(Response response) {
+        if (response == null || response.size() < 3) {
+            return;
+        }
+        String type = response.get(0).toString();
+        if ("message".equalsIgnoreCase(type)) {
+            applyRemoteChange(response.get(2).toString());
+        }
     }
 
     /** Publishes only after the database transaction that changed the setting commits. */
