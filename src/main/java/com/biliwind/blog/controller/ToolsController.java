@@ -79,6 +79,15 @@ public class ToolsController {
                     "purple"
             ),
             new ToolItem(
+                    "image-converter",
+                    "免费极速本地图像格式转换器 (全格式互转)",
+                    "100% 免费、毫秒级极速、零上传纯本地图片格式互转工具。支持 WebP 转 PNG/JPG、PNG/JPG 转 WebP、AVIF 转 PNG/JPG、PNG/SVG 转多尺寸 Favicon ICO、BMP、GIF 静帧提取与 Base64 批量互转，自动剥离 EXIF 隐私。",
+                    "fa-solid fa-images",
+                    "/tools/image-converter",
+                    "图像视觉",
+                    "emerald"
+            ),
+            new ToolItem(
                     "subnet-calculator",
                     "新一代智能子网掩码计算器",
                     "可视化 IP/CIDR 掩码计算与网络划分工具。支持 IPv4/IPv6、二/十/十六进制位图对比、通配符计算、可变长子网 (VLSM) 划分与层级可视化。",
@@ -381,6 +390,19 @@ public class ToolsController {
                 "Procedural Image Generator, Pixel Processor & Local Transcoder Studio",
                 "Client-side procedural art generator (Perlin fBm, Domain Warping, Delaunay Low-Poly, Mandelbrot/Julia fractals, Strange Attractors, Reaction-Diffusion), non-destructive image processor (color grading, custom 3x3 convolution, retro dithering, chroma key, watermarks) and batch local format transcoder (PNG/WebP/JPEG/BMP/ICO/Base64).",
                 "procedural image generator,online image processor,local image converter,perlin noise generator,low poly generator,dithering tool,favicon ico generator");
+    }
+
+    @GET
+    @Path("/image-converter")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance imageConverter(@Context HttpHeaders headers) {
+        return renderTool(headers, PageView.TOOLS_IMAGE_CONVERTER, "/tools/image-converter",
+                "免费在线图片格式转换器 - WebP/PNG/JPG/AVIF/ICO/SVG/BMP/Base64 极速纯本地批量互转",
+                "100% 免费、毫秒级极速、零服务器上传的纯浏览器本地图片格式转换器。全面支持 WebP 转 PNG、WebP 转 JPG、PNG 转 WebP、JPG 转 WebP、AVIF 转 JPG/PNG、PNG/JPG/SVG 转多尺寸 Favicon.ico 图标、SVG 矢量转 PNG、BMP 无损位图互转、GIF 静帧转 PNG 以及图片与 Base64 DataURL 双向批量转换，自动清除 EXIF/GPS 隐私信息。",
+                "图片格式转换器,免费图片格式转换,本地图片转码,在线图片转换,WebP转PNG,WebP转JPG,PNG转WebP,JPG转WebP,AVIF转JPG,AVIF转PNG,PNG转AVIF,PNG转ICO,JPG转ICO,SVG转ICO,Favicon在线生成,SVG转PNG,SVG转JPG,BMP转PNG,PNG转BMP,GIF转PNG,图片转Base64,Base64转图片,批量图片压缩转换,清除EXIF信息",
+                "Free Fast Local Image Format Converter - WebP, PNG, JPG, AVIF, ICO, SVG, BMP & Base64 Batch Transcoder",
+                "100% free, blazing-fast, zero-upload local browser image converter and compressor. Batch convert WebP to PNG, WebP to JPG, PNG/JPG to WebP, AVIF to PNG/JPG, PNG/SVG to multi-size Favicon ICO, SVG to PNG, BMP to PNG/JPG, and Image to Base64 DataURL with automatic EXIF privacy stripping.",
+                "free image converter,local image transcoder,webp to png,webp to jpg,png to webp,jpg to webp,avif to png,avif to jpg,png to ico,svg to ico,favicon generator,svg to png,bmp to png,png to bmp,image to base64,base64 to image,batch image converter,remove exif metadata");
     }
 
     @GET

@@ -201,6 +201,29 @@ class ToolsControllerTest {
     }
 
     @Test
+    void shouldReturnImageConverterPageWithRichSeo() {
+        given()
+                .when().get("/tools/image-converter")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("免费极速本地图像格式转换器"))
+                .body(containsString("imageConverterToolApp"))
+                .body(containsString("WebP 转 PNG"))
+                .body(containsString("AVIF 转 PNG"))
+                .body(containsString("Favicon"))
+                .body(containsString("tools.js"));
+
+        given()
+                .when().get("/assets/js/image-converter.js")
+                .then()
+                .statusCode(200)
+                .body(containsString("WindBlogImageConverter"))
+                .body(containsString("encodeCanvasToIcoBlob"))
+                .body(containsString("encodeCanvasToBmpBlob"));
+    }
+
+    @Test
     void shouldSupportPjaxHeader() {
         given()
                 .header("X-PJAX", "true")

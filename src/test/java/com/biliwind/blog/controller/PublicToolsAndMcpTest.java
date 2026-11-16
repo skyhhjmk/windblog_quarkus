@@ -108,6 +108,7 @@ class PublicToolsAndMcpTest {
                 .body(containsString("/tools/jwt"))
                 .body(containsString("/tools/jsonl-to-table"))
                 .body(containsString("/tools/file-transfer"))
-                .body(containsString("/tools/image-generator"));
+                .body(containsString("/tools/image-generator"))
+                .body(containsString("/tools/image-converter"));
     }
 }

@@ -3723,6 +3723,26 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         }
     });
 
+    WindBlogLifecycle.register('tool-image-converter', {
+        mount: function () {
+            if (!document.getElementById('imageConverterToolApp')) return;
+            loadScriptOnce('/assets/js/image-converter.js?v=20261116a')
+                .then(() => {
+                    if (document.getElementById('imageConverterToolApp') && window.WindBlogImageConverter) {
+                        window.WindBlogImageConverter.mount();
+                    }
+                })
+                .catch((err) => {
+                    console.error('[ImageConverter] Failed to load module:', err);
+                });
+        },
+        unmount: function () {
+            if (window.WindBlogImageConverter) {
+                window.WindBlogImageConverter.unmount();
+            }
+        }
+    });
+
     WindBlogLifecycle.register('tool-suite', {
         mount: function () {
             const isToolsPage = document.getElementById('toolsIndexApp')

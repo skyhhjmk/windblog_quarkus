@@ -1,0 +1,544 @@
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / image-converter</div>
+
+    <style nonce="{cspNonce}">
+        .ic-dropzone.ic-dragover {
+            border-color: var(--accent, #10b981);
+            background-color: rgba(16, 185, 129, 0.08);
+        }
+        .ic-pair-pill[data-active="true"] {
+            border-color: var(--accent, #10b981);
+            background-color: rgba(16, 185, 129, 0.15);
+            color: var(--text-main);
+            font-weight: 700;
+        }
+        .ic-range {
+            accent-color: var(--accent, #10b981);
+        }
+        .ic-checker {
+            background-color: #18181b;
+            background-image:
+                linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+                linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%);
+            background-size: 14px 14px;
+            background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+        }
+    </style>
+
+    <section class="space-y-8" id="imageConverterToolApp">
+        <!-- 1. Hero Header with Free / Fast / Local Highlights -->
+        <header class="space-y-4 border-b border-border/60 pb-6">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
+                        <i class="fa-solid fa-circle-check mr-1"></i>100% 永久免费 · 无限制无水印
+                    </span>
+                    <span class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold">
+                        <i class="fa-solid fa-bolt mr-1"></i>毫秒级本地硬件加速转码
+                    </span>
+                    <span class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-bold">
+                        <i class="fa-solid fa-shield-halved mr-1"></i>零服务器上传 · 自动清除 EXIF 隐私
+                    </span>
+                </div>
+                <a href="{languagePrefix}/tools/image-generator" class="text-xs font-mono text-accent hover:underline flex items-center gap-1">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>前往程序化图像生成与精修工作台 →</span>
+                </a>
+            </div>
+
+            <div class="space-y-2">
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">
+                    免费极速本地图像格式转换器 · WebP / PNG / JPG / AVIF / ICO / SVG / BMP / Base64 全格式批量互转
+                </h1>
+                <p class="text-body text-xs md:text-sm max-w-4xl leading-relaxed">
+                    无需注册登录、无需上传任何文件到云端服务器，完全依托浏览器本地 Canvas 硬件加速与纯前端二进制编码引擎，实现毫秒级批量图像格式互转与无损/有损体积压缩。
+                    全面支持 <strong>WebP 转 PNG、WebP 转 JPG、PNG 转 WebP、JPG 转 WebP、AVIF 转 PNG/JPG、PNG/JPG/SVG 转多尺寸网站 Favicon.ico 图标、SVG 矢量转高清 PNG、24位 BMP 位图互转、GIF 静帧提取以及图片与 Base64 DataURL 双向编码转换</strong>，转换过程默认自动剥离照片中的 GPS 经纬度与相机 EXIF 敏感隐私信息。
+                </p>
+            </div>
+
+            <!-- 3 Core Value Pillars -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div class="p-3.5 rounded-xl bg-card border border-border flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 text-sm">
+                        <i class="fa-solid fa-gift"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-main">真正 100% 免费无套路</div>
+                        <div class="text-[11px] text-meta mt-0.5 leading-relaxed">不限单次批量张数、不限文件大小、不加任何水印、无需扫码关注或开通会员，打开网页即刻无限次使用。</div>
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-card border border-border flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 text-sm">
+                        <i class="fa-solid fa-gauge-high"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-main">毫秒级极速并行转码</div>
+                        <div class="text-[11px] text-meta mt-0.5 leading-relaxed">省去传统在线转换网站漫长的上传排队与下载等待，直接调用本机多核 CPU/GPU 内存直转，几十张高清大图瞬间完成。</div>
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-card border border-border flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 text-sm">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-main">纯本地离线级隐私保护</div>
+                        <div class="text-[11px] text-meta mt-0.5 leading-relaxed">身份证件、商业设计稿、私人照片 0 字节离开您的电脑或手机，断网环境下依然可用，并自动抹除 EXIF 拍摄定位。</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 2. Quick Conversion Pair Matrix (18 High-Frequency SEO Presets) -->
+        <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-fire text-amber-400 text-xs"></i>
+                    <h2 class="text-xs sm:text-sm font-bold text-main">热门图像格式互转一键预设 (点击即刻锁定最佳目标格式与编码参数)</h2>
+                </div>
+                <span id="icActivePairBanner" class="text-[11px] font-mono text-accent">
+                    当前模式：任意图片格式 → WebP 高压缩比转换
+                </span>
+            </div>
+            <div id="icQuickPairBar" class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                <button type="button" data-pair="any-to-webp" data-fmt="image/webp" data-qual="86" data-scale="original" data-active="true"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    PNG / JPG 转 WebP
+                </button>
+                <button type="button" data-pair="webp-to-png" data-fmt="image/png" data-qual="100" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    WebP 转 PNG (无损透明)
+                </button>
+                <button type="button" data-pair="webp-to-jpg" data-fmt="image/jpeg" data-qual="92" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    WebP 转 JPG / JPEG
+                </button>
+                <button type="button" data-pair="avif-to-png" data-fmt="image/png" data-qual="100" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    AVIF 转 PNG
+                </button>
+                <button type="button" data-pair="avif-to-jpg" data-fmt="image/jpeg" data-qual="92" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    AVIF 转 JPG
+                </button>
+                <button type="button" data-pair="any-to-avif" data-fmt="image/avif" data-qual="82" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    PNG / JPG 转 AVIF
+                </button>
+                <button type="button" data-pair="png-to-ico" data-fmt="image/x-icon" data-qual="100" data-scale="ico-multi" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    PNG / SVG 转 ICO (多尺寸 Favicon)
+                </button>
+                <button type="button" data-pair="ico-32" data-fmt="image/x-icon" data-qual="100" data-scale="32x32" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    生成 32×32 标准 Favicon.ico
+                </button>
+                <button type="button" data-pair="svg-to-png" data-fmt="image/png" data-qual="100" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    SVG 矢量转高清 PNG
+                </button>
+                <button type="button" data-pair="png-to-jpg" data-fmt="image/jpeg" data-qual="90" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    PNG 转 JPG (白底填充)
+                </button>
+                <button type="button" data-pair="jpg-to-png" data-fmt="image/png" data-qual="100" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    JPG 转 PNG
+                </button>
+                <button type="button" data-pair="any-to-bmp" data-fmt="image/bmp" data-qual="100" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    PNG / JPG 转 24位 BMP 位图
+                </button>
+                <button type="button" data-pair="bmp-to-png" data-fmt="image/png" data-qual="100" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    BMP 转 PNG / WebP 压缩
+                </button>
+                <button type="button" data-pair="any-to-svg" data-fmt="image/svg+xml" data-qual="100" data-scale="original" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    PNG / JPG 转 SVG 封装
+                </button>
+                <button type="button" data-pair="web-compress" data-fmt="image/webp" data-qual="75" data-scale="max-1920" data-active="false"
+                        class="ic-pair-pill px-2.5 py-1.5 rounded-lg border border-border bg-input-bg text-meta hover:text-main transition-all cursor-pointer">
+                    大图瘦身压缩 (WebP 75% · 限宽1920)
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Main Batch Converter Workspace -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- Left Control & Settings Panel (5 cols) -->
+            <div class="lg:col-span-5 space-y-5">
+                <div class="rounded-2xl bg-card border border-border p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-main flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-accent"></i>
+                            <span>输出编码与尺寸压缩配置</span>
+                        </h2>
+                        <span id="icEncoderSupportBadge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            WebP / PNG / JPG / BMP / ICO 就绪
+                        </span>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-mono text-meta mb-1">1. 目标输出格式 (Target Format)</label>
+                            <select id="icTargetFormat" class="w-full px-3 py-2.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                <option value="image/webp" selected>WebP (.webp 高压缩比现代标准 · 支持透明)</option>
+                                <option value="image/png">PNG (.png 24/32位无损压缩 · 完整保留透明通道)</option>
+                                <option value="image/jpeg">JPEG / JPG (.jpg 通用照片有损压缩 · 兼容性最佳)</option>
+                                <option value="image/avif">AVIF (.avif 下一代 AV1 图像编码 · 极致超小体积)</option>
+                                <option value="image/x-icon">ICO (.ico 网站 Favicon 图标容器 · 支持多尺寸合一)</option>
+                                <option value="image/bmp">BMP (.bmp 24-Bit Windows 标准无压缩位图)</option>
+                                <option value="image/svg+xml">SVG (.svg 矢量内嵌封装容器)</option>
+                            </select>
+                        </div>
+
+                        <div id="icQualityWrap">
+                            <div class="flex justify-between text-xs font-mono mb-1">
+                                <span class="text-meta">2. 压缩编码质量 (Quality)</span>
+                                <span id="icQualityLabel" class="text-accent font-bold">86% (推荐平衡点)</span>
+                            </div>
+                            <input id="icQualitySlider" type="range" min="5" max="100" value="86" class="w-full ic-range cursor-pointer" />
+                            <div class="flex justify-between text-[10px] font-mono text-meta mt-0.5">
+                                <span>最小体积 (5%)</span>
+                                <span>高画质平衡 (80%~90%)</span>
+                                <span>极限画质 (100%)</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-mono text-meta mb-1">3. 尺寸缩放 / ICO 规格</label>
+                                <select id="icScaleMode" class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                    <option value="original" selected>保持原图 100% 原始尺寸</option>
+                                    <option value="ico-multi">ICO 多尺寸打包 (16+32+48+64px)</option>
+                                    <option value="max-2560">限制长边 ≤ 2560px (2K 超清)</option>
+                                    <option value="max-1920">限制长边 ≤ 1920px (1080p 高清)</option>
+                                    <option value="max-1280">限制长边 ≤ 1280px (网页文章配图)</option>
+                                    <option value="max-800">限制长边 ≤ 800px (轻量缩略图)</option>
+                                    <option value="pct-75">按 75% 等比缩小</option>
+                                    <option value="pct-50">按 50% 等比缩小</option>
+                                    <option value="pct-200">按 200% 等比放大</option>
+                                    <option value="16x16">固定 16 × 16 (小图标)</option>
+                                    <option value="32x32">固定 32 × 32 (标准 Favicon)</option>
+                                    <option value="48x48">固定 48 × 48 (桌面小图标)</option>
+                                    <option value="64x64">固定 64 × 64 (高清图标)</option>
+                                    <option value="128x128">固定 128 × 128 (应用图标)</option>
+                                    <option value="256x256">固定 256 × 256 (大图标)</option>
+                                    <option value="512x512">固定 512 × 512 (PWA 图标)</option>
+                                    <option value="custom">自定义固定宽高像素...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-mono text-meta mb-1">4. 透明背景填充色 (JPG/BMP)</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" id="icBgFillColor" value="#ffffff" class="w-9 h-9 rounded-lg border border-border bg-transparent cursor-pointer shrink-0" />
+                                    <select id="icBgFillPreset" class="w-full px-2.5 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main">
+                                        <option value="#ffffff" selected>纯白背景 (#FFFFFF)</option>
+                                        <option value="#000000">纯黑背景 (#000000)</option>
+                                        <option value="#090d16">深邃暗夜 (#090D16)</option>
+                                        <option value="custom">使用左侧自定义取色</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Custom Width / Height inputs when icScaleMode === 'custom' -->
+                        <div id="icCustomDimWrap" class="hidden grid grid-cols-2 gap-3 pt-1">
+                            <div>
+                                <label class="block text-[11px] font-mono text-meta mb-1">目标宽度 (px)</label>
+                                <input id="icCustomWidth" type="number" min="8" max="8192" value="800" class="w-full px-3 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main" />
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-mono text-meta mb-1">目标高度 (px)</label>
+                                <input id="icCustomHeight" type="number" min="8" max="8192" value="600" class="w-full px-3 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main" />
+                            </div>
+                        </div>
+
+                        <div class="pt-2 border-t border-border/50 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                            <label class="inline-flex items-center gap-2 text-main cursor-pointer">
+                                <input type="checkbox" id="icStripExif" checked disabled class="rounded border-border" />
+                                <span>自动剥离 EXIF / GPS 拍摄隐私元数据</span>
+                            </label>
+                            <button type="button" id="icReconvertAllBtn" class="px-3 py-1.5 rounded-xl bg-accent/15 border border-accent/30 text-accent font-bold hover:bg-accent/25 transition-colors cursor-pointer">
+                                <i class="fa-solid fa-rotate mr-1"></i>按新配置重新转码全部
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Base64 / DataURL to Image Reverse Decoder Card -->
+                <div class="rounded-2xl bg-card border border-border p-5 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-main flex items-center gap-2">
+                            <i class="fa-solid fa-code text-accent"></i>
+                            <span>Base64 编码还原转图片 (Base64 to PNG/JPG/WebP/ICO)</span>
+                        </h2>
+                    </div>
+                    <p class="text-[11px] text-meta leading-relaxed">
+                        粘贴任意 <code>data:image/...;base64,...</code> 或纯 Base64 字符串，自动解码并按上方所选目标格式加入转码队列。
+                    </p>
+                    <textarea id="icBase64Input" rows="3" placeholder="在此粘贴 data:image/png;base64,iVBORw0KGgo... 或纯 Base64 编码字符串"
+                              class="w-full p-2.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main placeholder:text-meta/60 focus:border-accent outline-none resize-none"></textarea>
+                    <div class="flex items-center justify-between gap-2">
+                        <span id="icBase64Status" class="text-[11px] font-mono text-meta">支持自动补全 DataURL 头部</span>
+                        <button type="button" id="icBase64DecodeBtn" class="px-3.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono font-bold text-main hover:border-accent transition-colors cursor-pointer">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-1 text-accent"></i>解码 Base64 并加入转码列表
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Dropzone, Savings Dashboard & Batch Queue (7 cols) -->
+            <div class="lg:col-span-7 space-y-5">
+
+                <!-- Multi-file Dropzone -->
+                <div class="rounded-2xl bg-card border border-border p-5 space-y-4">
+                    <label id="icDropzone" class="ic-dropzone flex flex-col items-center justify-center p-6 sm:p-8 rounded-2xl border-2 border-dashed border-border hover:border-accent/60 bg-input-bg/30 text-center transition-all cursor-pointer">
+                        <div class="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 text-accent flex items-center justify-center text-2xl mb-3 shadow-sm">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <div class="text-sm sm:text-base font-extrabold text-main">
+                            拖拽一张或多张图片到此处，或点击选择本地文件开始极速转换
+                        </div>
+                        <div class="text-xs font-mono text-meta mt-1.5 max-w-xl">
+                            支持输入：<strong>WebP · PNG · JPG / JPEG · AVIF · SVG · BMP · GIF · ICO</strong>（亦可在页面任意位置直接按 <kbd class="px-1.5 py-0.5 rounded bg-card border border-border text-[10px]">Ctrl+V</kbd> 粘贴截图）
+                        </div>
+                        <input id="icFileInput" type="file" accept="image/*,.webp,.avif,.svg,.ico,.bmp" multiple class="hidden" />
+                    </label>
+
+                    <!-- Summary Stats Bar & Batch Actions -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <div class="p-3 rounded-xl bg-input-bg/60 border border-border">
+                            <div class="text-[10px] font-mono text-meta">已转码队列文件</div>
+                            <div id="icStatCount" class="text-sm font-extrabold font-mono text-main mt-0.5">0 张</div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-input-bg/60 border border-border">
+                            <div class="text-[10px] font-mono text-meta">原始总体积</div>
+                            <div id="icStatOrigSize" class="text-sm font-extrabold font-mono text-main mt-0.5">0 B</div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-input-bg/60 border border-border">
+                            <div class="text-[10px] font-mono text-meta">转换后总体积</div>
+                            <div id="icStatNewSize" class="text-sm font-extrabold font-mono text-accent mt-0.5">0 B</div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-input-bg/60 border border-border">
+                            <div class="text-[10px] font-mono text-meta">累计体积变化 / 节省</div>
+                            <div id="icStatSaved" class="text-sm font-extrabold font-mono text-emerald-400 mt-0.5">0%</div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" id="icLoadSampleBtn" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent transition-colors cursor-pointer">
+                                <i class="fa-solid fa-flask mr-1 text-accent"></i>一键载入测试样张体验
+                            </button>
+                            <button type="button" id="icClearQueueBtn" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-meta hover:text-rose-400 transition-colors cursor-pointer">
+                                <i class="fa-solid fa-trash-can mr-1"></i>清空列表
+                            </button>
+                        </div>
+                        <button type="button" id="icDownloadAllBtn" class="px-4 py-2 rounded-xl bg-accent text-[var(--accent-foreground)] text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-arrow-down"></i>
+                            <span>一键批量下载全部转换文件</span>
+                        </button>
+                    </div>
+
+                    <!-- Queue Items Container -->
+                    <div id="icQueueList" class="space-y-2.5 max-h-[540px] overflow-y-auto pr-1">
+                        <div class="text-center py-8 text-xs font-mono text-meta">
+                            暂无待转码图片。拖入本地图片或点击「一键载入测试样张体验」立即查看毫秒级转码效果。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. SEO Rich Format Conversion Matrix, Technical Table & FAQ Guide -->
+        <div class="space-y-6 pt-4 border-t border-border/60">
+
+            <!-- 4A. Comprehensive Conversion Scenarios Grid (SEO Keyword Hub) -->
+            <div class="rounded-2xl bg-card border border-border p-5 sm:p-6 space-y-4">
+                <div class="space-y-1">
+                    <h2 class="text-base sm:text-lg font-extrabold text-main flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-accent"></i>
+                        <span>全格式图片互转支持矩阵与应用场景指南</span>
+                    </h2>
+                    <p class="text-xs text-meta">
+                        涵盖日常办公、前端开发、电商设计、自媒体排版与网站 Favicon 制作中最高频的图像格式无损/有损互转需求：
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                    <div class="p-4 rounded-xl bg-input-bg/50 border border-border space-y-1.5">
+                        <div class="font-bold text-main flex items-center justify-between">
+                            <span>WebP 转 PNG / WebP 转 JPG</span>
+                            <span class="text-[10px] font-mono text-emerald-400">兼容性修复</span>
+                        </div>
+                        <p class="text-meta leading-relaxed">
+                            从网页保存下来的 <code>.webp</code> 图片无法在旧版 Photoshop、Office Word/PPT 或部分社交平台直接插入？使用本地 <strong>WebP 转 PNG</strong>（完整保留透明背景）或 <strong>WebP 转 JPG</strong>，毫秒级还原为通用格式。
+                        </p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-input-bg/50 border border-border space-y-1.5">
+                        <div class="font-bold text-main flex items-center justify-between">
+                            <span>PNG / JPG 转 WebP &amp; AVIF</span>
+                            <span class="text-[10px] font-mono text-amber-400">网站加速 70%+</span>
+                        </div>
+                        <p class="text-meta leading-relaxed">
+                            针对独立站、博客与小程序性能优化，批量将体积庞大的 <strong>PNG 转 WebP</strong>、<strong>JPG 转 WebP</strong> 或下一代 <strong>AVIF 格式</strong>，在肉眼几乎无损的前提下平均减少 50%~80% 带宽体积，显著提升 Core Web Vitals (LCP) 评分。
+                        </p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-input-bg/50 border border-border space-y-1.5">
+                        <div class="font-bold text-main flex items-center justify-between">
+                            <span>PNG / SVG / JPG 转 ICO 图标</span>
+                            <span class="text-[10px] font-mono text-purple-400">Favicon 生成器</span>
+                        </div>
+                        <p class="text-meta leading-relaxed">
+                            内置纯前端二进制 ICO 打包引擎，支持将透明 <strong>PNG 转 ICO</strong>、<strong>SVG 转 ICO</strong> 或 <strong>JPG 转 ICO</strong>。可一键生成包含 <code>16×16, 32×32, 48×48, 64×64</code> 的多尺寸复合 <code>favicon.ico</code> 文件，适配所有桌面与移动端浏览器标签页。
+                        </p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-input-bg/50 border border-border space-y-1.5">
+                        <div class="font-bold text-main flex items-center justify-between">
+                            <span>SVG 矢量图转高清 PNG / JPG / WebP</span>
+                            <span class="text-[10px] font-mono text-cyan-400">矢量栅格化</span>
+                        </div>
+                        <p class="text-meta leading-relaxed">
+                            将 <code>.svg</code> 矢量图标、流程图或 Logo 在浏览器本地高倍率光栅化渲染为透明背景的 <strong>SVG 转 PNG</strong>、<strong>SVG 转 WebP</strong> 或白底 <strong>SVG 转 JPG</strong>，支持自定义导出像素宽高，边缘平滑锐利无锯齿。
+                        </p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-input-bg/50 border border-border space-y-1.5">
+                        <div class="font-bold text-main flex items-center justify-between">
+                            <span>AVIF 转 PNG / AVIF 转 JPG</span>
+                            <span class="text-[10px] font-mono text-pink-400">新格式解码</span>
+                        </div>
+                        <p class="text-meta leading-relaxed">
+                            越来越多网站与流媒体采用 AV1 帧内编码的 <code>.avif</code> 格式。通过本工具可直接在本地完成 <strong>AVIF 转 JPG</strong>、<strong>AVIF 转 PNG</strong> 或 <strong>AVIF 转 WebP</strong>，解决本地看图软件与剪辑软件无法打开 AVIF 的难题。
+                        </p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-input-bg/50 border border-border space-y-1.5">
+                        <div class="font-bold text-main flex items-center justify-between">
+                            <span>BMP 位图互转 &amp; Base64 内联编码</span>
+                            <span class="text-[10px] font-mono text-indigo-400">开发与工业制图</span>
+                        </div>
+                        <p class="text-meta leading-relaxed">
+                            支持工业相机与嵌入式开发常用的 <strong>PNG/JPG 转 24位无压缩 BMP</strong>、<strong>BMP 转 PNG/JPG 大幅瘦身</strong>，以及前端开发必备的 <strong>图片转 Base64 DataURL</strong> 与 <strong>Base64 转图片文件下载</strong>。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4B. Image Format Technical Comparison Table -->
+            <div class="rounded-2xl bg-card border border-border p-5 sm:p-6 space-y-4 overflow-x-auto">
+                <h2 class="text-base font-extrabold text-main flex items-center gap-2">
+                    <i class="fa-solid fa-table-list text-accent"></i>
+                    <span>主流图像格式技术参数与选型对比表</span>
+                </h2>
+                <table class="w-full text-left border-collapse text-xs font-mono">
+                    <thead>
+                        <tr class="border-b border-border text-meta">
+                            <th class="py-2.5 pr-4">图像格式</th>
+                            <th class="py-2.5 px-3">压缩方式</th>
+                            <th class="py-2.5 px-3">透明通道 (Alpha)</th>
+                            <th class="py-2.5 px-3">平均体积表现</th>
+                            <th class="py-2.5 pl-3">最佳适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border/50 text-body">
+                        <tr>
+                            <td class="py-2.5 pr-4 font-bold text-main">WebP (.webp)</td>
+                            <td class="py-2.5 px-3">有损 / 无损双模</td>
+                            <td class="py-2.5 px-3 text-emerald-400">支持 (8-bit Alpha)</td>
+                            <td class="py-2.5 px-3 text-emerald-400">极小 (比 PNG 小 50%~75%)</td>
+                            <td class="py-2.5 pl-3">现代网站配图、博客封面、电商商品图、移动端 App 资源</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 pr-4 font-bold text-main">PNG (.png)</td>
+                            <td class="py-2.5 px-3">DEFLATE 无损压缩</td>
+                            <td class="py-2.5 px-3 text-emerald-400">完美支持</td>
+                            <td class="py-2.5 px-3 text-amber-400">中等偏大</td>
+                            <td class="py-2.5 pl-3">UI 图标、透明抠图素材、文字截图、需要像素级无损的设计稿</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 pr-4 font-bold text-main">JPG / JPEG (.jpg)</td>
+                            <td class="py-2.5 px-3">DCT 离散余弦有损</td>
+                            <td class="py-2.5 px-3 text-rose-400">不支持 (自动填充底色)</td>
+                            <td class="py-2.5 px-3 text-emerald-400">小</td>
+                            <td class="py-2.5 pl-3">数码摄影照片、跨平台文档附件、旧版系统与办公软件高兼容场景</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 pr-4 font-bold text-main">AVIF (.avif)</td>
+                            <td class="py-2.5 px-3">AV1 帧内有损/无损</td>
+                            <td class="py-2.5 px-3 text-emerald-400">支持</td>
+                            <td class="py-2.5 px-3 text-emerald-400">超极小 (比 JPG 小 50%+)</td>
+                            <td class="py-2.5 pl-3">追求极致加载速度的新一代 Web 前端与高动态范围图像</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 pr-4 font-bold text-main">ICO (.ico)</td>
+                            <td class="py-2.5 px-3">多分辨率 PNG/BMP 容器</td>
+                            <td class="py-2.5 px-3 text-emerald-400">支持 (32-bit ARGB)</td>
+                            <td class="py-2.5 px-3 text-meta">极小 (图标级)</td>
+                            <td class="py-2.5 pl-3">网站根目录 <code>favicon.ico</code>、Windows 桌面程序与快捷方式图标</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 pr-4 font-bold text-main">BMP (.bmp)</td>
+                            <td class="py-2.5 px-3">无压缩原始像素阵列</td>
+                            <td class="py-2.5 px-3 text-meta">24-Bit 不含透明</td>
+                            <td class="py-2.5 px-3 text-rose-400">极大 (原始未压缩)</td>
+                            <td class="py-2.5 pl-3">嵌入式屏幕字模、工业视觉检测、无损原始位图分析</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 4C. Frequently Asked Questions (SEO Long-tail Q&A) -->
+            <div class="rounded-2xl bg-card border border-border p-5 sm:p-6 space-y-4">
+                <h2 class="text-base font-extrabold text-main flex items-center gap-2">
+                    <i class="fa-solid fa-circle-question text-accent"></i>
+                    <span>常见问题解答 (FAQ)</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs leading-relaxed">
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">Q1: 为什么这款图片格式转换器不需要上传文件就能转换？</h3>
+                        <p class="text-meta">
+                            本工具基于现代浏览器的 HTML5 Canvas API、FileReader 与二进制 ArrayBuffer 构建。当您拖入图片时，您的浏览器直接在本地内存中完成解码与目标格式重编码（包含纯前端实现的 BMP 位图与多尺寸 ICO 容器打包器），全程零网络请求，因此速度极快且绝对保护隐私。
+                        </p>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">Q2: 透明背景的 PNG 或 WebP 转换成 JPG 时背景变黑怎么办？</h3>
+                        <p class="text-meta">
+                            由于 JPG/JPEG 格式本身不支持透明通道，许多简易工具直接丢弃 Alpha 通道会导致透明区域变成全黑。本转换器专门内置了「透明背景填充色」合成层，默认为您自动垫上一层纯白背景（<code>#FFFFFF</code>），您也可以自由修改为任意品牌背景色。
+                        </p>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">Q3: 转换后的图片会自动清除手机拍照的 GPS 定位等 EXIF 信息吗？</h3>
+                        <p class="text-meta">
+                            是的！当照片通过本地像素画布重编码为新的 PNG、WebP、JPG、AVIF 或 BMP 文件时，原始文件中附带的 EXIF 元数据（包括 GPS 经纬度坐标、拍摄时间、手机/相机型号、快门参数等）会被天然彻底剥离，非常适合在社交平台分享照片前进行隐私脱敏。
+                        </p>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">Q4: 如何制作高清且兼容所有浏览器的网站 favicon.ico 图标？</h3>
+                        <p class="text-meta">
+                            点击上方快捷栏的「<strong>PNG / SVG 转 ICO (多尺寸 Favicon)</strong>」，然后拖入一张正方形的透明 PNG 或 SVG 图标。工具会自动将图像缩放并封装为包含 <code>16×16</code>、<code>32×32</code>、<code>48×48</code> 和 <code>64×64</code> 四个分辨率图层的标准复合 <code>.ico</code> 文件。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
