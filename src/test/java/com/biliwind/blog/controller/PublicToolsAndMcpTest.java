@@ -107,6 +107,7 @@ class PublicToolsAndMcpTest {
                 .body(containsString("/tools/ai-token"))
                 .body(containsString("/tools/jwt"))
                 .body(containsString("/tools/jsonl-to-table"))
-                .body(containsString("/tools/file-transfer"));
+                .body(containsString("/tools/file-transfer"))
+                .body(containsString("/tools/image-generator"));
     }
 }

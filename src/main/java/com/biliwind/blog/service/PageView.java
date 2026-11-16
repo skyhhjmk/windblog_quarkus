@@ -23,6 +23,7 @@ public enum PageView {
     TOOLS_JSON_DIFF("tools/json-diff.html", "tools/json-diff.content.html"),
     TOOLS_SERIAL("tools/serial.html", "tools/serial.content.html"),
     TOOLS_FILE_TRANSFER("tools/file-transfer.html", "tools/file-transfer.content.html"),
+    TOOLS_IMAGE_GENERATOR("tools/image-generator.html", "tools/image-generator.content.html"),
     TOOLS_AI_TOKEN("tools/ai-token.html", "tools/ai-token.content.html"),
     TOOLS_JWT("tools/jwt.html", "tools/jwt.content.html"),
     TOOLS_CONFIG_CONVERTER("tools/config-converter.html", "tools/config-converter.content.html"),

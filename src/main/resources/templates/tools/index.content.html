@@ -60,7 +60,7 @@
                data-tool-name="{i18n.t(tool.nameKey)}"
                data-tool-tag="{i18n.t(tool.tagKey)}"
                data-tool-search="{i18n.t(tool.nameKey)} {i18n.t(tool.descriptionKey)} {i18n.t(tool.tagKey)} {tool.id}"
-               class="group relative block p-5 sm:p-6 rounded-2xl bg-card border hover:border-accent/40 hover:shadow-xl transition-all duration-300 {#if tool.id == 'file-transfer'}md:col-span-2 lg:col-span-2 border-emerald-500/35 bg-gradient-to-r from-emerald-500/10 via-card to-cyan-500/10{#else}border-border{/if}">
+               class="group relative block p-5 sm:p-6 rounded-2xl bg-card border hover:border-accent/40 hover:shadow-xl transition-all duration-300 {#if tool.id == 'file-transfer'}md:col-span-2 lg:col-span-2 border-emerald-500/35 bg-gradient-to-r from-emerald-500/10 via-card to-cyan-500/10{#else if tool.id == 'image-generator'}md:col-span-2 lg:col-span-2 border-purple-500/35 bg-gradient-to-r from-purple-500/10 via-card to-pink-500/10{#else}border-border{/if}">
                 <div class="flex items-start gap-4">
                     <div class="w-11 h-11 rounded-xl bg-input-bg border border-border/80 flex items-center justify-center text-accent text-lg shrink-0 group-hover:scale-105 group-hover:border-accent/40 group-hover:bg-accent/10 transition-all duration-300 shadow-sm">
                         <i class="{tool.icon}"></i>

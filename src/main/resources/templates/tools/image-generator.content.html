@@ -1,0 +1,1200 @@
+<div id="pjax-content-root" data-seeray-layout-version="windblog-pjax-v1"
+     data-page-title="{pageTitle}">
+{#if pjaxRequest}
+<template id="pjax-head-metadata">
+{#include fragments/head-metadata.html /}
+</template>
+{/if}
+    <div id="pjax-nav-path" class="hidden">{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / image-generator</div>
+
+    <style nonce="{cspNonce}">
+        .ig-checkerboard {
+            background-color: #18181b;
+            background-image:
+                linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+                linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+        }
+        .ig-dropzone.ig-dragover {
+            border-color: var(--accent, #a855f7);
+            background-color: rgba(168, 85, 247, 0.08);
+        }
+        .ig-range {
+            accent-color: var(--accent, #a855f7);
+        }
+        .ig-algo-btn[data-active="true"] {
+            border-color: var(--accent, #a855f7);
+            background-color: rgba(168, 85, 247, 0.14);
+            color: var(--text-main);
+        }
+        .ig-main-tab[data-active="true"] {
+            background-color: var(--accent);
+            color: var(--accent-foreground, #ffffff);
+            border-color: var(--accent);
+        }
+        .ig-sub-tab[data-active="true"] {
+            border-color: var(--accent);
+            background-color: rgba(168, 85, 247, 0.14);
+            color: var(--text-main);
+        }
+        .ig-palette-chip[data-active="true"] {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.28);
+        }
+        #igMainCanvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+        }
+        #igMainCanvas.ig-zoom-pixel {
+            max-width: none;
+            image-rendering: pixelated;
+        }
+    </style>
+
+    <section class="space-y-6" id="imageGeneratorToolApp">
+        <!-- Header -->
+        <header class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-border/60 pb-6">
+            <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        <span>返回工具箱</span>
+                    </a>
+                    <span class="text-xs text-meta/40">•</span>
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                        <i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1"></i>18+ 程序化算法引擎
+                    </span>
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/20">
+                        <i class="fa-solid fa-sliders text-[9px] mr-1"></i>非破坏性像素管线
+                    </span>
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <i class="fa-solid fa-shield-halved text-[9px] mr-1"></i>100% 本地零上传转码
+                    </span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">程序化图像生成与全能图像处理工作台</h1>
+                <p class="text-body text-xs md:text-sm max-w-3xl leading-relaxed">
+                    集数学程序化图像生成（柏林分形噪声、域扭曲流体、德劳内低多边形、曼德博/朱利亚分形、混沌吸引子、图灵反应扩散等）、全链路像素级图像精修（色彩分级、自定义卷积核、复古误差扩散抖动、智能去背与防盗水印）以及多格式本地批量转码（PNG / WebP / JPEG / BMP / 多尺寸 ICO / SVG / Base64）于一体的浏览器端图形工作站。
+                </p>
+            </div>
+            <!-- Top Mode Switcher -->
+            <div class="flex flex-wrap items-center gap-2 shrink-0" role="tablist" aria-label="图像工作台模式切换">
+                <button type="button" id="igModeTabGenerate" data-ig-mode="generate" data-active="true"
+                        class="ig-main-tab px-3.5 py-2 rounded-xl border border-border bg-card text-xs font-bold text-main hover:border-accent/50 transition-all cursor-pointer flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>1. 程序化图像生成</span>
+                </button>
+                <button type="button" id="igModeTabProcess" data-ig-mode="process" data-active="false"
+                        class="ig-main-tab px-3.5 py-2 rounded-xl border border-border bg-card text-xs font-bold text-main hover:border-accent/50 transition-all cursor-pointer flex items-center gap-1.5">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>2. 图像处理与滤镜</span>
+                </button>
+                <button type="button" id="igModeTabTranscode" data-ig-mode="transcode" data-active="false"
+                        class="ig-main-tab px-3.5 py-2 rounded-xl border border-border bg-card text-xs font-bold text-main hover:border-accent/50 transition-all cursor-pointer flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>3. 本地转码与导出</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace Grid -->
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+
+            <!-- LEFT COLUMN: Controls for Active Mode (7 cols on xl) -->
+            <div class="xl:col-span-7 space-y-5">
+
+                <!-- ========================================================= -->
+                <!-- MODE 1: PROCEDURAL IMAGE GENERATOR                        -->
+                <!-- ========================================================= -->
+                <div id="igPanelGenerate" class="space-y-5">
+
+                    <!-- 1A. Algorithm Selector (18 Procedural Engines) -->
+                    <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs font-bold">1</span>
+                                <h2 class="text-sm font-bold text-main">选择程序化生成算法 (18 种数学与几何渲染引擎)</h2>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" id="igRandomAlgoBtn" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-meta hover:text-accent hover:border-accent/40 transition-colors cursor-pointer">
+                                    <i class="fa-solid fa-shuffle mr-1"></i>随机算法
+                                </button>
+                                <button type="button" id="igSurpriseMeBtn" class="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-[11px] font-mono text-purple-300 hover:bg-purple-500/25 transition-colors cursor-pointer">
+                                    <i class="fa-solid fa-bolt mr-1"></i>灵感一键生成
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Category Filter Pills -->
+                        <div id="igAlgoCategoryBar" class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                            <button type="button" data-algo-cat="all" data-active="true" class="ig-sub-tab px-2.5 py-1 rounded-lg border border-border bg-input-bg text-meta cursor-pointer">全部 (18)</button>
+                            <button type="button" data-algo-cat="noise" data-active="false" class="ig-sub-tab px-2.5 py-1 rounded-lg border border-border bg-input-bg text-meta cursor-pointer">噪声与流体场 (4)</button>
+                            <button type="button" data-algo-cat="geo" data-active="false" class="ig-sub-tab px-2.5 py-1 rounded-lg border border-border bg-input-bg text-meta cursor-pointer">几何与晶格艺术 (5)</button>
+                            <button type="button" data-algo-cat="fractal" data-active="false" class="ig-sub-tab px-2.5 py-1 rounded-lg border border-border bg-input-bg text-meta cursor-pointer">分形与混沌吸引子 (4)</button>
+                            <button type="button" data-algo-cat="cyber" data-active="false" class="ig-sub-tab px-2.5 py-1 rounded-lg border border-border bg-input-bg text-meta cursor-pointer">波浪与赛博光影 (3)</button>
+                            <button type="button" data-algo-cat="dev" data-active="false" class="ig-sub-tab px-2.5 py-1 rounded-lg border border-border bg-input-bg text-meta cursor-pointer">工程纹理与头像 (2)</button>
+                        </div>
+
+                        <!-- Algorithm Cards Grid -->
+                        <div id="igAlgoGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <!-- Noise & Fluid -->
+                            <button type="button" data-algo="domain-warping" data-cat="noise" data-active="true"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>域扭曲流体大理石</span>
+                                    <i class="fa-solid fa-water text-purple-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Domain Warping fBm</div>
+                            </button>
+                            <button type="button" data-algo="perlin-fbm" data-cat="noise" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>多层分形柏林噪声</span>
+                                    <i class="fa-solid fa-cloud text-cyan-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Perlin fBm / Ridge</div>
+                            </button>
+                            <button type="button" data-algo="flow-field" data-cat="noise" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>旋度向量流场粒子</span>
+                                    <i class="fa-solid fa-wind text-emerald-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Curl Flow Field</div>
+                            </button>
+                            <button type="button" data-algo="worley-cellular" data-cat="noise" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>沃利晶胞与泰森晶格</span>
+                                    <i class="fa-solid fa-bacteria text-teal-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Worley Voronoi F2-F1</div>
+                            </button>
+
+                            <!-- Geometric & Mesh -->
+                            <button type="button" data-algo="low-poly" data-cat="geo" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>德劳内低多边形晶格</span>
+                                    <i class="fa-solid fa-shapes text-pink-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Delaunay Low-Poly</div>
+                            </button>
+                            <button type="button" data-algo="mesh-gradient" data-cat="geo" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>多锚点流体弥散渐变</span>
+                                    <i class="fa-solid fa-palette text-fuchsia-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Aurora Mesh Gradient</div>
+                            </button>
+                            <button type="button" data-algo="isometric-cubes" data-cat="geo" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>等距立体体素矩阵</span>
+                                    <i class="fa-solid fa-cubes text-amber-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">3D Isometric Voxels</div>
+                            </button>
+                            <button type="button" data-algo="bauhaus-memphis" data-cat="geo" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>包豪斯与孟菲斯几何</span>
+                                    <i class="fa-solid fa-compass-drafting text-orange-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Bauhaus Constructivism</div>
+                            </button>
+                            <button type="button" data-algo="truchet-tiles" data-cat="geo" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>图谢迷宫圆弧镶嵌</span>
+                                    <i class="fa-solid fa-puzzle-piece text-indigo-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Multi-Scale Truchet</div>
+                            </button>
+
+                            <!-- Fractals & Attractors -->
+                            <button type="button" data-algo="mandelbrot-julia" data-cat="fractal" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>曼德博与朱利亚分形</span>
+                                    <i class="fa-solid fa-infinity text-violet-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Mandelbrot &amp; Julia Set</div>
+                            </button>
+                            <button type="button" data-algo="clifford-attractor" data-cat="fractal" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>克利福德混沌吸引子</span>
+                                    <i class="fa-solid fa-atom text-rose-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Clifford Strange Attractor</div>
+                            </button>
+                            <button type="button" data-algo="reaction-diffusion" data-cat="fractal" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>图灵反应扩散斑图</span>
+                                    <i class="fa-solid fa-fingerprint text-emerald-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Gray-Scott Turing Pattern</div>
+                            </button>
+                            <button type="button" data-algo="phyllotaxis-spiro" data-cat="fractal" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>黄金叶序与旋轮万花尺</span>
+                                    <i class="fa-solid fa-sun text-yellow-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Phyllotaxis &amp; Spirograph</div>
+                            </button>
+
+                            <!-- Waves & Cyber -->
+                            <button type="button" data-algo="layered-waves" data-cat="cyber" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>多层视差山峦与波浪</span>
+                                    <i class="fa-solid fa-mountain-sun text-sky-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Parallax Mountains &amp; Waves</div>
+                            </button>
+                            <button type="button" data-algo="synthwave-grid" data-cat="cyber" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>赛博复古地平线网格</span>
+                                    <i class="fa-solid fa-vr-cardboard text-pink-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Synthwave Outrun Grid</div>
+                            </button>
+                            <button type="button" data-algo="halftone-op-art" data-cat="cyber" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>波普半调与欧普摩尔纹</span>
+                                    <i class="fa-solid fa-braille text-lime-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Halftone &amp; Moiré Op-Art</div>
+                            </button>
+
+                            <!-- Developer & Utility -->
+                            <button type="button" data-algo="identicon-avatar" data-cat="dev" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>哈希对称极客头像</span>
+                                    <i class="fa-solid fa-user-astronaut text-cyan-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Deterministic Identicon</div>
+                            </button>
+                            <button type="button" data-algo="blueprint-checker" data-cat="dev" data-active="false"
+                                    class="ig-algo-btn text-left p-2.5 rounded-xl border border-border bg-input-bg/60 hover:border-accent/40 transition-all cursor-pointer">
+                                <div class="flex items-center justify-between text-xs font-bold text-main mb-0.5">
+                                    <span>工程蓝图与 UV 校准卡</span>
+                                    <i class="fa-solid fa-ruler-combined text-blue-400 text-[11px]"></i>
+                                </div>
+                                <div class="text-[10px] font-mono text-meta truncate">Blueprint / UV / SMPTE</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 1B. Resolution, Seed & Algorithm Dynamic Parameters -->
+                    <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs font-bold">2</span>
+                                <h2 class="text-sm font-bold text-main">画布尺寸与算法微调参数</h2>
+                            </div>
+                            <span id="igCurrentAlgoDesc" class="text-[11px] font-mono text-meta">多重分形噪声对空间坐标进行递归扭曲，生成丝绸与大理石流体纹理</span>
+                        </div>
+
+                        <!-- Resolution & Seed Row -->
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
+                            <div class="sm:col-span-5">
+                                <label class="block text-[11px] font-mono text-meta mb-1">预设画布比例与分辨率</label>
+                                <select id="igResPreset" class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                    <option value="1200x630" selected>1200 × 630 (OpenGraph / 博客封面)</option>
+                                    <option value="1920x1080">1920 × 1080 (FHD 16:9 桌面壁纸)</option>
+                                    <option value="1080x1080">1080 × 1080 (1:1 社交方图 / 海报)</option>
+                                    <option value="512x512">512 × 512 (1:1 极客头像 / 图标)</option>
+                                    <option value="1080x1920">1080 × 1920 (9:16 手机锁屏壁纸)</option>
+                                    <option value="2560x1440">2560 × 1440 (2K QHD 高清壁纸)</option>
+                                    <option value="3840x2160">3840 × 2160 (4K UHD 超清壁纸)</option>
+                                    <option value="1600x900">1600 × 900 (16:9 文章横幅)</option>
+                                    <option value="custom">自定义宽高像素...</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-4 grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">宽度 (W)</label>
+                                    <input id="igCanvasWidth" type="number" min="16" max="4096" step="1" value="1200"
+                                           class="w-full px-2.5 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">高度 (H)</label>
+                                    <input id="igCanvasHeight" type="number" min="16" max="4096" step="1" value="630"
+                                           class="w-full px-2.5 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none" />
+                                </div>
+                            </div>
+                            <div class="sm:col-span-3">
+                                <label class="block text-[11px] font-mono text-meta mb-1">确定性随机种子 (Seed)</label>
+                                <div class="flex gap-1.5">
+                                    <input id="igSeedInput" type="text" value="windblog-2026"
+                                           class="w-full min-w-0 px-2.5 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none" />
+                                    <button type="button" id="igRerollSeedBtn" title="重新投掷随机种子"
+                                            class="px-2.5 py-2 rounded-xl bg-input-bg border border-border text-xs text-meta hover:text-accent hover:border-accent/40 transition-colors cursor-pointer shrink-0">
+                                        <i class="fa-solid fa-dice"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Universal 4-Parameter Sliders (Labels adapt to selected algorithm!) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/50">
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono mb-1">
+                                    <span id="igParam1Label" class="text-main">空间尺度 / 频率 (Scale)</span>
+                                    <span id="igParam1Val" class="text-accent font-bold">45</span>
+                                </div>
+                                <input id="igParam1" type="range" min="1" max="100" value="45" class="w-full ig-range cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono mb-1">
+                                    <span id="igParam2Label" class="text-main">细节复杂度 / 迭代阶数 (Detail)</span>
+                                    <span id="igParam2Val" class="text-accent font-bold">60</span>
+                                </div>
+                                <input id="igParam2" type="range" min="1" max="100" value="60" class="w-full ig-range cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono mb-1">
+                                    <span id="igParam3Label" class="text-main">扭曲强度 / 混沌幅度 (Warp)</span>
+                                    <span id="igParam3Val" class="text-accent font-bold">55</span>
+                                </div>
+                                <input id="igParam3" type="range" min="0" max="100" value="55" class="w-full ig-range cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono mb-1">
+                                    <span id="igParam4Label" class="text-main">光影对比与锐利度 (Contrast)</span>
+                                    <span id="igParam4Val" class="text-accent font-bold">50</span>
+                                </div>
+                                <input id="igParam4" type="range" min="0" max="100" value="50" class="w-full ig-range cursor-pointer" />
+                            </div>
+                        </div>
+
+                        <!-- Sub-variant & Post-Grain Row -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                            <div>
+                                <label class="block text-[11px] font-mono text-meta mb-1">算法渲染子模式 (Variant)</label>
+                                <select id="igAlgoVariant" class="w-full px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                    <option value="0">模式 A (默认标准形态)</option>
+                                    <option value="1">模式 B (山脊/发光/线框变体)</option>
+                                    <option value="2">模式 C (湍流/极坐标/反相变体)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono mb-1">
+                                    <span class="text-meta">有机胶片颗粒感 (Grain)</span>
+                                    <span id="igGenGrainVal" class="text-main">12%</span>
+                                </div>
+                                <input id="igGenGrain" type="range" min="0" max="60" value="12" class="w-full ig-range cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono mb-1">
+                                    <span class="text-meta">边缘暗角聚焦 (Vignette)</span>
+                                    <span id="igGenVignetteVal" class="text-main">20%</span>
+                                </div>
+                                <input id="igGenVignette" type="range" min="0" max="100" value="20" class="w-full ig-range cursor-pointer" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 1C. Color Palette Studio (12 Curated Themes + 5 Custom Color Stops) -->
+                    <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs font-bold">3</span>
+                                <h2 class="text-sm font-bold text-main">色彩映射与多锚点调色盘 (Color Palette &amp; Gradient Map)</h2>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" id="igReversePaletteBtn" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-meta hover:text-main cursor-pointer">
+                                    <i class="fa-solid fa-right-left mr-1"></i>反转色序
+                                </button>
+                                <button type="button" id="igRandomHarmonyBtn" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-meta hover:text-accent cursor-pointer">
+                                    <i class="fa-solid fa-wand-sparkles mr-1"></i>随机和谐配色
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Preset Palettes -->
+                        <div id="igPalettePresets" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <!-- Populated/bound by JS -->
+                        </div>
+
+                        <!-- 5 Custom Color Stops -->
+                        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border/50">
+                            <span class="text-[11px] font-mono text-meta">自定义 5 阶渐变映射色标：</span>
+                            <div class="flex items-center gap-2">
+                                <input type="color" id="igColorStop0" value="#090d16" class="w-8 h-8 rounded-lg border border-border bg-transparent cursor-pointer" title="色标 1 (暗部基底)" />
+                                <input type="color" id="igColorStop1" value="#1e1b4b" class="w-8 h-8 rounded-lg border border-border bg-transparent cursor-pointer" title="色标 2 (低调过渡)" />
+                                <input type="color" id="igColorStop2" value="#7c3aed" class="w-8 h-8 rounded-lg border border-border bg-transparent cursor-pointer" title="色标 3 (主视觉色)" />
+                                <input type="color" id="igColorStop3" value="#ec4899" class="w-8 h-8 rounded-lg border border-border bg-transparent cursor-pointer" title="色标 4 (高光强调)" />
+                                <input type="color" id="igColorStop4" value="#38bdf8" class="w-8 h-8 rounded-lg border border-border bg-transparent cursor-pointer" title="色标 5 (极亮/点缀)" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 1D. Cover Typography & Badge Overlay (Optional) -->
+                    <details class="rounded-2xl bg-card border border-border p-4 sm:p-5 group">
+                        <summary class="flex items-center justify-between cursor-pointer list-none">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center text-xs font-bold">4</span>
+                                <h2 class="text-sm font-bold text-main">封面文字排版与极客徽章叠加 (可选：一键制作文章封面 / 社交卡片)</h2>
+                            </div>
+                            <span class="text-xs font-mono text-meta group-open:rotate-180 transition-transform"><i class="fa-solid fa-chevron-down"></i></span>
+                        </summary>
+                        <div class="pt-4 mt-3 border-t border-border/50 space-y-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">主标题文字 (Title)</label>
+                                    <input id="igOverlayTitle" type="text" placeholder="例如：深入理解 Quarkus 响应式架构"
+                                           class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs text-main focus:border-accent outline-none" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">副标题 / 作者签名 (Subtitle)</label>
+                                    <input id="igOverlaySubtitle" type="text" placeholder="例如：WindBlog Architecture Series · 2026"
+                                           class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs text-main focus:border-accent outline-none" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">顶部胶囊徽章 (Badge)</label>
+                                    <input id="igOverlayBadge" type="text" placeholder="例如：TECH DEEP DIVE"
+                                           class="w-full px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">排版布局样式</label>
+                                    <select id="igOverlayLayout" class="w-full px-2.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                        <option value="center-glass">居中毛玻璃卡片</option>
+                                        <option value="center-clean">居中纯净大字</option>
+                                        <option value="bottom-left">左下角杂志社论风</option>
+                                        <option value="terminal-frame">极客终端窗口框</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">标题字号缩放</label>
+                                    <input id="igOverlayFontScale" type="range" min="50" max="160" value="100" class="w-full ig-range mt-2 cursor-pointer" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">暗色遮罩浓度</label>
+                                    <input id="igOverlayBackdropDim" type="range" min="0" max="90" value="40" class="w-full ig-range mt-2 cursor-pointer" />
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <!-- ========================================================= -->
+                <!-- MODE 2: RICH IMAGE PROCESSING PIPELINE                    -->
+                <!-- ========================================================= -->
+                <div id="igPanelProcess" class="hidden space-y-5">
+
+                    <!-- 2A. Image Source Loader & Pipeline Toolbar -->
+                    <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-lg bg-pink-500/15 text-pink-400 flex items-center justify-center text-xs font-bold">1</span>
+                                <h2 class="text-sm font-bold text-main">图像源导入与一键风格预设 (支持本地文件拖拽 / Ctrl+V 粘贴 / 程序化画布导入)</h2>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <button type="button" id="igUseGeneratedSourceBtn" class="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-[11px] font-mono text-purple-300 hover:bg-purple-500/25 cursor-pointer">
+                                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>导入当前生成图
+                                </button>
+                                <button type="button" id="igProcUndoBtn" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-meta hover:text-main cursor-pointer" title="撤销上一步参数修改">
+                                    <i class="fa-solid fa-rotate-left"></i> 撤销
+                                </button>
+                                <button type="button" id="igProcResetBtn" class="px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-[11px] font-mono text-rose-400 hover:bg-rose-500/20 cursor-pointer">
+                                    <i class="fa-solid fa-arrow-rotate-left mr-1"></i>重置全部滤镜
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Dropzone -->
+                        <label id="igProcDropzone" class="ig-dropzone flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-xl border-2 border-dashed border-border hover:border-accent/50 bg-input-bg/40 transition-colors cursor-pointer">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center text-base shrink-0">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-bold text-main">点击选择本地图片、拖拽图片到此，或直接按 Ctrl+V 粘贴剪贴板截图</div>
+                                    <div id="igProcSourceMeta" class="text-[11px] font-mono text-meta">当前源：程序化画布实时源 · 全程浏览器本地内存处理，绝不上传服务器</div>
+                                </div>
+                            </div>
+                            <input id="igProcFileInput" type="file" accept="image/*" class="hidden" />
+                            <span class="px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-mono text-main shrink-0">选择本地图像</span>
+                        </label>
+
+                        <!-- Quick One-Click Filter / Effect Presets -->
+                        <div class="space-y-1.5">
+                            <div class="text-[11px] font-mono text-meta">一键风格化预设 (点击即刻应用组合参数)：</div>
+                            <div id="igQuickFilterPresets" class="flex flex-wrap gap-1.5">
+                                <button type="button" data-proc-preset="none" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-main hover:border-accent cursor-pointer">原图无滤镜</button>
+                                <button type="button" data-proc-preset="kodak-film" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-amber-300 hover:border-accent cursor-pointer">🎞️ 柯达暖调胶片</button>
+                                <button type="button" data-proc-preset="cyber-neon" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-pink-300 hover:border-accent cursor-pointer">⚡ 赛博霓虹色差</button>
+                                <button type="button" data-proc-preset="noir-bw" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-slate-300 hover:border-accent cursor-pointer">🎬 森山大道高反差黑白</button>
+                                <button type="button" data-proc-preset="gameboy-8bit" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-emerald-300 hover:border-accent cursor-pointer">🕹️ GameBoy 像素抖动</button>
+                                <button type="button" data-proc-preset="mac-atkinson" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-cyan-300 hover:border-accent cursor-pointer">🖥️ Macintosh 1-Bit 抖动</button>
+                                <button type="button" data-proc-preset="sobel-neon" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-purple-300 hover:border-accent cursor-pointer">📐 Sobel 霓虹边缘提取</button>
+                                <button type="button" data-proc-preset="vhs-glitch" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-rose-300 hover:border-accent cursor-pointer">📼 VHS 磁带错位故障</button>
+                                <button type="button" data-proc-preset="duotone-spotify" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-indigo-300 hover:border-accent cursor-pointer">🎧 双色调时尚映射</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2B. Sub-navigation for 6 Processing Modules -->
+                    <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-4">
+                        <div id="igProcSubTabs" class="flex flex-wrap gap-1.5 border-b border-border/60 pb-3">
+                            <button type="button" data-proc-tab="color" data-active="true" class="ig-sub-tab px-3 py-1.5 rounded-xl border border-border bg-input-bg text-xs font-bold text-meta cursor-pointer">
+                                <i class="fa-solid fa-sun mr-1"></i>光影与色彩精修
+                            </button>
+                            <button type="button" data-proc-tab="geometry" data-active="false" class="ig-sub-tab px-3 py-1.5 rounded-xl border border-border bg-input-bg text-xs font-bold text-meta cursor-pointer">
+                                <i class="fa-solid fa-crop-simple mr-1"></i>裁剪旋转与圆角边框
+                            </button>
+                            <button type="button" data-proc-tab="kernel" data-active="false" class="ig-sub-tab px-3 py-1.5 rounded-xl border border-border bg-input-bg text-xs font-bold text-meta cursor-pointer">
+                                <i class="fa-solid fa-table-cells mr-1"></i>卷积核与边缘滤镜
+                            </button>
+                            <button type="button" data-proc-tab="dither" data-active="false" class="ig-sub-tab px-3 py-1.5 rounded-xl border border-border bg-input-bg text-xs font-bold text-meta cursor-pointer">
+                                <i class="fa-solid fa-chess-board mr-1"></i>像素化与复古抖动
+                            </button>
+                            <button type="button" data-proc-tab="fx" data-active="false" class="ig-sub-tab px-3 py-1.5 rounded-xl border border-border bg-input-bg text-xs font-bold text-meta cursor-pointer">
+                                <i class="fa-solid fa-bolt-lightning mr-1"></i>故障色差与双色调
+                            </button>
+                            <button type="button" data-proc-tab="watermark" data-active="false" class="ig-sub-tab px-3 py-1.5 rounded-xl border border-border bg-input-bg text-xs font-bold text-meta cursor-pointer">
+                                <i class="fa-solid fa-stamp mr-1"></i>智能抠图与防盗水印
+                            </button>
+                        </div>
+
+                        <!-- Sub-panel 1: Color Grading & Tone Mapping -->
+                        <div id="igProcTabColor" class="space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">曝光与亮度 (Brightness)</span>
+                                        <span id="igValBrightness" class="text-accent">0</span>
+                                    </div>
+                                    <input id="igProcBrightness" type="range" min="-100" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">对比度 (Contrast)</span>
+                                        <span id="igValContrast" class="text-accent">0</span>
+                                    </div>
+                                    <input id="igProcContrast" type="range" min="-100" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">饱和度 (Saturation)</span>
+                                        <span id="igValSaturation" class="text-accent">0</span>
+                                    </div>
+                                    <input id="igProcSaturation" type="range" min="-100" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">色相旋转 (Hue Shift °)</span>
+                                        <span id="igValHue" class="text-accent">0°</span>
+                                    </div>
+                                    <input id="igProcHue" type="range" min="-180" max="180" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">色温冷暖 (Temperature)</span>
+                                        <span id="igValTemp" class="text-accent">0</span>
+                                    </div>
+                                    <input id="igProcTemp" type="range" min="-100" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">色调偏移 (Tint G/M)</span>
+                                        <span id="igValTint" class="text-accent">0</span>
+                                    </div>
+                                    <input id="igProcTint" type="range" min="-100" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">高光动态调节 (Highlights)</span>
+                                        <span id="igValHighlights" class="text-accent">0</span>
+                                    </div>
+                                    <input id="igProcHighlights" type="range" min="-100" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">暗部细节提亮 (Shadows)</span>
+                                        <span id="igValShadows" class="text-accent">0</span>
+                                    </div>
+                                    <input id="igProcShadows" type="range" min="-100" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">Gamma 非线性校正</span>
+                                        <span id="igValGamma" class="text-accent">1.00</span>
+                                    </div>
+                                    <input id="igProcGamma" type="range" min="20" max="300" value="100" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">复古棕褐怀旧 (Sepia)</span>
+                                        <span id="igValSepia" class="text-accent">0%</span>
+                                    </div>
+                                    <input id="igProcSepia" type="range" min="0" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-4 pt-2 border-t border-border/50 text-xs font-mono">
+                                <label class="inline-flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="igProcInvert" class="rounded border-border" />
+                                    <span>负片反相 (Invert RGB)</span>
+                                </label>
+                                <label class="inline-flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="igProcSolarize" class="rounded border-border" />
+                                    <span>中途曝光 (Solarize)</span>
+                                </label>
+                                <label class="inline-flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="igProcAutoLevels" class="rounded border-border" />
+                                    <span>自动色阶拉伸 (Auto Contrast Levels)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Sub-panel 2: Geometry, Crop, Rounded Corners & Frame -->
+                        <div id="igProcTabGeometry" class="hidden space-y-4">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button type="button" id="igRotLeftBtn" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                    <i class="fa-solid fa-rotate-left mr-1"></i>逆时针 90°
+                                </button>
+                                <button type="button" id="igRotRightBtn" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                    <i class="fa-solid fa-rotate-right mr-1"></i>顺时针 90°
+                                </button>
+                                <button type="button" id="igFlipHBtn" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                    <i class="fa-solid fa-left-right mr-1"></i>水平镜像翻转
+                                </button>
+                                <button type="button" id="igFlipVBtn" class="px-3 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent cursor-pointer">
+                                    <i class="fa-solid fa-up-down mr-1"></i>垂直镜像翻转
+                                </button>
+                                <button type="button" id="igCropAspect169Btn" class="px-2.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-meta hover:text-accent cursor-pointer">居中裁为 16:9</button>
+                                <button type="button" id="igCropAspect11Btn" class="px-2.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-meta hover:text-accent cursor-pointer">居中裁为 1:1</button>
+                                <button type="button" id="igCropResetBtn" class="px-2.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-meta hover:text-main cursor-pointer">还原完整画幅</button>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">自由微调旋转角度 (Angle)</span>
+                                        <span id="igValRotateFine" class="text-accent">0°</span>
+                                    </div>
+                                    <input id="igProcRotateFine" type="range" min="-45" max="45" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">输出分辨率缩放比例 (Scale)</span>
+                                        <span id="igValScalePct" class="text-accent">100%</span>
+                                    </div>
+                                    <input id="igProcScalePct" type="range" min="10" max="200" value="100" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">圆角裁切半径 (Border Radius)</span>
+                                        <span id="igValBorderRadius" class="text-accent">0%</span>
+                                    </div>
+                                    <input id="igProcBorderRadius" type="range" min="0" max="50" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">画框留白内边距 (Frame Padding)</span>
+                                        <span id="igValPadding" class="text-accent">0px</span>
+                                    </div>
+                                    <input id="igProcPadding" type="range" min="0" max="120" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                            </div>
+
+                            <!-- Normalized Crop Box Sliders -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-border/50">
+                                <div>
+                                    <label class="block text-[10px] font-mono text-meta mb-1">裁剪起点 X (%)</label>
+                                    <input id="igCropX" type="number" min="0" max="90" value="0" class="w-full px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main" />
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-mono text-meta mb-1">裁剪起点 Y (%)</label>
+                                    <input id="igCropY" type="number" min="0" max="90" value="0" class="w-full px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main" />
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-mono text-meta mb-1">裁剪宽度 W (%)</label>
+                                    <input id="igCropW" type="number" min="10" max="100" value="100" class="w-full px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main" />
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-mono text-meta mb-1">裁剪高度 H (%)</label>
+                                    <input id="igCropH" type="number" min="10" max="100" value="100" class="w-full px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-panel 3: Convolution Kernels & Blur/Sharpen -->
+                        <div id="igProcTabKernel" class="hidden space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">光学高斯模糊半径 (Blur)</span>
+                                        <span id="igValBlur" class="text-accent">0px</span>
+                                    </div>
+                                    <input id="igProcBlur" type="range" min="0" max="30" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">细节锐化强度 (Sharpen)</span>
+                                        <span id="igValSharpen" class="text-accent">0%</span>
+                                    </div>
+                                    <input id="igProcSharpen" type="range" min="0" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/50">
+                                <div class="space-y-2">
+                                    <label class="block text-[11px] font-mono text-meta">预设算子与卷积矩阵模式 (Convolution Filter)</label>
+                                    <select id="igProcKernelPreset" class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                        <option value="none" selected>无附加算子 (Identity)</option>
+                                        <option value="sobel-color">Sobel 全彩梯度边缘算子</option>
+                                        <option value="sobel-mono">Sobel 黑白高对比边缘提取</option>
+                                        <option value="laplacian">Laplacian 二阶拉普拉斯边缘</option>
+                                        <option value="emboss">Emboss 45° 立体岩石浮雕</option>
+                                        <option value="edge-enhance">High-Pass 高通轮廓强化</option>
+                                        <option value="box-blur">3×3 均值平滑滤波 (Box Blur)</option>
+                                        <option value="custom">自定义 3×3 卷积核矩阵 (右侧输入)</option>
+                                    </select>
+                                    <p class="text-[11px] text-meta leading-relaxed">
+                                        支持实时修改右侧 3×3 卷积权重矩阵，自动对全图每个像素邻域执行乘积求和运算。
+                                    </p>
+                                </div>
+                                <div>
+                                    <div class="flex items-center justify-between text-[11px] font-mono text-meta mb-1.5">
+                                        <span>3×3 卷积核权重矩阵 (Custom Kernel)</span>
+                                        <label class="inline-flex items-center gap-1 cursor-pointer">
+                                            <input type="checkbox" id="igKernelNormalize" checked class="rounded border-border" />
+                                            <span>自动归一化</span>
+                                        </label>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-1.5">
+                                        <input type="number" step="0.1" value="0" data-kidx="0" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                        <input type="number" step="0.1" value="-1" data-kidx="1" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                        <input type="number" step="0.1" value="0" data-kidx="2" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                        <input type="number" step="0.1" value="-1" data-kidx="3" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                        <input type="number" step="0.1" value="5" data-kidx="4" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-accent font-bold" />
+                                        <input type="number" step="0.1" value="-1" data-kidx="5" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                        <input type="number" step="0.1" value="0" data-kidx="6" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                        <input type="number" step="0.1" value="-1" data-kidx="7" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                        <input type="number" step="0.1" value="0" data-kidx="8" class="ig-kernel-cell px-2 py-1.5 rounded-lg bg-input-bg border border-border text-center text-xs font-mono text-main" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-panel 4: Pixelation, Quantization & Retro Dithering -->
+                        <div id="igProcTabDither" class="hidden space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">像素块马赛克粒度 (Pixelate Block)</span>
+                                        <span id="igValPixelate" class="text-accent">1px (关闭)</span>
+                                    </div>
+                                    <input id="igProcPixelate" type="range" min="1" max="32" value="1" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">色调阶梯分离 (Posterize Levels)</span>
+                                        <span id="igValPosterize" class="text-accent">256 (无压缩)</span>
+                                    </div>
+                                    <input id="igProcPosterize" type="range" min="2" max="32" value="32" class="w-full ig-range cursor-pointer" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/50">
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">误差扩散与有序矩阵抖动算法 (Dithering)</label>
+                                    <select id="igProcDitherAlgo" class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                        <option value="none" selected>关闭抖动 (No Dithering)</option>
+                                        <option value="floyd-steinberg">Floyd-Steinberg 经典误差扩散抖动</option>
+                                        <option value="atkinson">Atkinson (Apple Macintosh 高反差抖动)</option>
+                                        <option value="bayer-4x4">Bayer 4×4 复古游戏机有序矩阵抖动</option>
+                                        <option value="bayer-8x8">Bayer 8×8 精细印刷网格有序抖动</option>
+                                        <option value="threshold">硬阈值二值化分割 (Binary Threshold)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-meta mb-1">抖动目标复古调色板 (Target Palette)</label>
+                                    <select id="igProcDitherPalette" class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                        <option value="1bit-bw" selected>1-Bit 纯黑白墨水 (Black &amp; White)</option>
+                                        <option value="gameboy">Nintendo GameBoy 经典四阶绿</option>
+                                        <option value="cga">IBM CGA 复古赛博四色 (青/品红/白/黑)</option>
+                                        <option value="pico8">PICO-8 幻想主机 16 色调色板</option>
+                                        <option value="rgb-3bit">8-Bit 复古真彩色量化</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-panel 5: Glitch, Chromatic Aberration, Duotone, Noise & Vignette -->
+                        <div id="igProcTabFx" class="hidden space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">RGB 通道分离色差 (Chromatic Shift)</span>
+                                        <span id="igValChroma" class="text-accent">0px</span>
+                                    </div>
+                                    <input id="igProcChroma" type="range" min="0" max="40" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">赛博扫描线错位故障 (Glitch Slices)</span>
+                                        <span id="igValGlitch" class="text-accent">0%</span>
+                                    </div>
+                                    <input id="igProcGlitch" type="range" min="0" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">胶片颗粒噪点注入 (Film Grain)</span>
+                                        <span id="igValNoise" class="text-accent">0%</span>
+                                    </div>
+                                    <input id="igProcNoise" type="range" min="0" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-mono mb-1">
+                                        <span class="text-main">光学镜头暗角 (Lens Vignette)</span>
+                                        <span id="igValVignette" class="text-accent">0%</span>
+                                    </div>
+                                    <input id="igProcVignette" type="range" min="0" max="100" value="0" class="w-full ig-range cursor-pointer" />
+                                </div>
+                            </div>
+
+                            <!-- Duotone Mapping -->
+                            <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border/50">
+                                <label class="inline-flex items-center gap-2 text-xs font-mono text-main cursor-pointer">
+                                    <input type="checkbox" id="igProcDuotoneEnable" class="rounded border-border" />
+                                    <span>启用双色调艺术映射 (Duotone Gradient Map)</span>
+                                </label>
+                                <div class="flex items-center gap-3 text-xs font-mono text-meta">
+                                    <span>暗部色:</span>
+                                    <input type="color" id="igProcDuotoneDark" value="#1e1b4b" class="w-7 h-7 rounded border border-border bg-transparent cursor-pointer" />
+                                    <span>亮部色:</span>
+                                    <input type="color" id="igProcDuotoneLight" value="#10b981" class="w-7 h-7 rounded border border-border bg-transparent cursor-pointer" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-panel 6: Chroma Key Background Removal & Tiled Watermark -->
+                        <div id="igProcTabWatermark" class="hidden space-y-4">
+                            <!-- Chroma Key -->
+                            <div class="p-3.5 rounded-xl bg-input-bg/50 border border-border space-y-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <label class="inline-flex items-center gap-2 text-xs font-bold text-main cursor-pointer">
+                                        <input type="checkbox" id="igChromaKeyEnable" class="rounded border-border" />
+                                        <span>启用色彩抠图去背 (Chroma Key 将指定背景色转为透明通道)</span>
+                                    </label>
+                                    <div class="flex items-center gap-2 text-xs font-mono">
+                                        <span class="text-meta">目标背景色:</span>
+                                        <input type="color" id="igChromaKeyColor" value="#ffffff" class="w-7 h-7 rounded border border-border bg-transparent cursor-pointer" />
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <div class="flex justify-between text-[11px] font-mono mb-1">
+                                            <span class="text-meta">色彩距离容差 (Tolerance)</span>
+                                            <span id="igValChromaTol" class="text-accent">25</span>
+                                        </div>
+                                        <input id="igChromaKeyTol" type="range" min="1" max="120" value="25" class="w-full ig-range cursor-pointer" />
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between text-[11px] font-mono mb-1">
+                                            <span class="text-meta">边缘柔和羽化 (Feather)</span>
+                                            <span id="igValChromaFeather" class="text-accent">15</span>
+                                        </div>
+                                        <input id="igChromaKeyFeather" type="range" min="0" max="60" value="15" class="w-full ig-range cursor-pointer" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Watermark -->
+                            <div class="p-3.5 rounded-xl bg-input-bg/50 border border-border space-y-3">
+                                <div class="text-xs font-bold text-main">防盗平铺斜印水印 / 版权角标 (适合证件防盗用与原创文章配图保护)</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div class="sm:col-span-2">
+                                        <label class="block text-[10px] font-mono text-meta mb-1">水印文字内容 (留空不显示)</label>
+                                        <input id="igWatermarkText" type="text" placeholder="例如：仅供实名认证使用 他用无效 · WindBlog"
+                                               class="w-full px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-main focus:border-accent outline-none" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-mono text-meta mb-1">水印模式</label>
+                                        <select id="igWatermarkMode" class="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs font-mono text-main">
+                                            <option value="tiled" selected>全图满屏斜向平铺</option>
+                                            <option value="bottom-right">右下角版权印章</option>
+                                            <option value="center">正中央大号防盗印</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <div class="flex justify-between text-[10px] font-mono mb-1">
+                                            <span class="text-meta">水印不透明度</span>
+                                            <span id="igValWmOpacity" class="text-accent">28%</span>
+                                        </div>
+                                        <input id="igWatermarkOpacity" type="range" min="5" max="100" value="28" class="w-full ig-range cursor-pointer" />
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between text-[10px] font-mono mb-1">
+                                            <span class="text-meta">字号与间距密度</span>
+                                            <span id="igValWmSize" class="text-accent">50</span>
+                                        </div>
+                                        <input id="igWatermarkSize" type="range" min="15" max="100" value="50" class="w-full ig-range cursor-pointer" />
+                                    </div>
+                                    <div class="flex items-center justify-between pt-3">
+                                        <span class="text-[10px] font-mono text-meta">水印颜色:</span>
+                                        <input type="color" id="igWatermarkColor" value="#ffffff" class="w-7 h-7 rounded border border-border bg-transparent cursor-pointer" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================================= -->
+                <!-- MODE 3: LOCAL TRANSCODER & BATCH CONVERTER                -->
+                <!-- ========================================================= -->
+                <div id="igPanelTranscode" class="hidden space-y-5">
+
+                    <!-- 3A. Current Workspace Quick Transcode & Snippet Generator -->
+                    <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xs font-bold">1</span>
+                                <h2 class="text-sm font-bold text-main">当前画布即时转码与多格式导出 (零上传 · 自动剥离隐私 EXIF)</h2>
+                            </div>
+                            <span id="igTranscodeSizeEstimate" class="text-xs font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                实时体积估算中...
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-mono text-meta mb-1">目标编码格式 (Format)</label>
+                                <select id="igExportFormat" class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                    <option value="image/png">PNG (.png 无损透明通道)</option>
+                                    <option value="image/webp" selected>WebP (.webp 高压缩比现代格式)</option>
+                                    <option value="image/jpeg">JPEG (.jpg 照片有损压缩)</option>
+                                    <option value="image/avif">AVIF (.avif 下一代超低体积编码)</option>
+                                    <option value="image/bmp">BMP (.bmp 24-Bit 无压缩原始位图)</option>
+                                    <option value="image/x-icon">ICO (.ico 网站 Favicon 图标容器)</option>
+                                    <option value="image/svg+xml">SVG (.svg 矢量封装与内嵌图像)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono mb-1">
+                                    <span class="text-meta">编码质量 (Quality)</span>
+                                    <span id="igExportQualityVal" class="text-accent font-bold">88%</span>
+                                </div>
+                                <input id="igExportQuality" type="range" min="10" max="100" value="88" class="w-full ig-range mt-1.5 cursor-pointer" />
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-mono text-meta mb-1">ICO / 导出尺寸覆盖</label>
+                                <select id="igExportScaleOverride" class="w-full px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main focus:border-accent outline-none">
+                                    <option value="original" selected>保持当前画布原始分辨率</option>
+                                    <option value="ico-multi">ICO 多尺寸打包 (16/32/48/64px)</option>
+                                    <option value="32x32">32 × 32 (标准 Favicon)</option>
+                                    <option value="64x64">64 × 64 (高清图标)</option>
+                                    <option value="128x128">128 × 128 (应用小图标)</option>
+                                    <option value="256x256">256 × 256 (桌面高清图标)</option>
+                                    <option value="512x512">512 × 512 (PWA 标准图标)</option>
+                                    <option value="half">50% 长宽等比缩减</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2.5 pt-1">
+                            <button type="button" id="igExportDownloadBtn" class="px-4 py-2 rounded-xl bg-accent text-[var(--accent-foreground)] text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer flex items-center gap-1.5">
+                                <i class="fa-solid fa-download"></i>
+                                <span>下载转码后图像文件</span>
+                            </button>
+                            <button type="button" id="igCopyDataUrlBtn" class="px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent transition-colors cursor-pointer">
+                                <i class="fa-solid fa-code mr-1 text-accent"></i>复制 Base64 DataURL
+                            </button>
+                            <button type="button" id="igCopyHtmlTagBtn" class="px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent transition-colors cursor-pointer">
+                                <i class="fa-brands fa-html5 mr-1 text-orange-400"></i>复制 &lt;img&gt; 标签
+                            </button>
+                            <button type="button" id="igCopyCssBgBtn" class="px-3 py-2 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent transition-colors cursor-pointer">
+                                <i class="fa-brands fa-css3-alt mr-1 text-sky-400"></i>复制 CSS 背景代码
+                            </button>
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-mono text-meta mb-1">Base64 Data URL / 内联代码预览：</label>
+                            <textarea id="igDataUrlOutput" rows="2" readonly placeholder="点击上方按钮或切换至此标签页时自动生成 Base64 编码预览..."
+                                      class="w-full p-2.5 rounded-xl bg-input-bg border border-border text-[11px] font-mono text-meta focus:border-accent outline-none resize-none"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- 3B. Multi-File Local Batch Transcoder -->
+                    <div class="rounded-2xl bg-card border border-border p-4 sm:p-5 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xs font-bold">2</span>
+                                <h2 class="text-sm font-bold text-main">多文件本地批量图像转码器 (支持拖拽多张 PNG/JPG/WebP/SVG/BMP/GIF)</h2>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" id="igBatchAddCanvasBtn" class="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-[11px] font-mono text-purple-300 hover:bg-purple-500/25 cursor-pointer">
+                                    <i class="fa-solid fa-plus mr-1"></i>将右侧画布加入队列
+                                </button>
+                                <button type="button" id="igBatchClearBtn" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[11px] font-mono text-meta hover:text-rose-400 cursor-pointer">
+                                    <i class="fa-solid fa-trash-can mr-1"></i>清空队列
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Batch Settings Row -->
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                            <div>
+                                <label class="block text-[10px] font-mono text-meta mb-1">批量输出格式</label>
+                                <select id="igBatchFormat" class="w-full px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main">
+                                    <option value="image/webp" selected>WebP (.webp)</option>
+                                    <option value="image/png">PNG (.png)</option>
+                                    <option value="image/jpeg">JPEG (.jpg)</option>
+                                    <option value="image/bmp">BMP (.bmp)</option>
+                                    <option value="image/x-icon">Favicon ICO (.ico)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-mono text-meta mb-1">批量压缩质量 (<span id="igBatchQualityLabel">85%</span>)</label>
+                                <input id="igBatchQuality" type="range" min="10" max="100" value="85" class="w-full ig-range mt-2 cursor-pointer" />
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-mono text-meta mb-1">最大边长限制 (Max Edge)</label>
+                                <select id="igBatchMaxDim" class="w-full px-2.5 py-1.5 rounded-lg bg-input-bg border border-border text-xs font-mono text-main">
+                                    <option value="0" selected>不限制 (保持原图尺寸)</option>
+                                    <option value="2560">最大 2560px (2K)</option>
+                                    <option value="1920">最大 1920px (FHD)</option>
+                                    <option value="1280">最大 1280px (Web 推荐)</option>
+                                    <option value="800">最大 800px (缩略图)</option>
+                                    <option value="64">64×64 (图标尺寸)</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button type="button" id="igBatchDownloadAllBtn" class="w-full px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold hover:bg-emerald-500/30 transition-colors cursor-pointer">
+                                    <i class="fa-solid fa-file-arrow-down mr-1"></i>一键全部下载
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Batch Dropzone -->
+                        <label id="igBatchDropzone" class="ig-dropzone flex flex-col items-center justify-center p-5 rounded-xl border-2 border-dashed border-border hover:border-accent/50 bg-input-bg/30 text-center transition-colors cursor-pointer">
+                            <i class="fa-solid fa-images text-2xl text-accent mb-2"></i>
+                            <div class="text-xs font-bold text-main">拖拽多张图片文件到此处立即执行本地并行转码，或点击选择文件</div>
+                            <div class="text-[11px] font-mono text-meta mt-0.5">支持 PNG / JPG / WebP / SVG / BMP / GIF · 自动计算压缩率并剥离 EXIF 地理隐私信息</div>
+                            <input id="igBatchFileInput" type="file" accept="image/*" multiple class="hidden" />
+                        </label>
+
+                        <!-- Batch Queue List -->
+                        <div id="igBatchQueueList" class="space-y-2 max-h-80 overflow-y-auto">
+                            <div id="igBatchEmptyHint" class="text-center py-4 text-xs font-mono text-meta">
+                                队列暂无文件，拖入任意图片或点击「将右侧画布加入队列」即可体验毫秒级本地转码。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: Sticky Live Canvas Preview, Pixel Inspector & Histogram (5 cols on xl) -->
+            <div class="xl:col-span-5 xl:sticky xl:top-20 space-y-4">
+
+                <!-- Live Canvas Card -->
+                <div class="rounded-2xl bg-card border border-border overflow-hidden shadow-lg">
+                    <!-- Canvas Top Bar -->
+                    <div class="px-4 py-3 border-b border-border/60 flex flex-wrap items-center justify-between gap-2 bg-input-bg/40">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span class="text-xs font-bold text-main">实时渲染监视器</span>
+                            <span id="igCanvasInfoBadge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-card border border-border text-meta">
+                                1200×630 · 0ms
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" id="igToggleZoomBtn" class="px-2 py-1 rounded-lg bg-card border border-border text-[10px] font-mono text-meta hover:text-main cursor-pointer" title="切换自适应缩放与 1:1 像素视图">
+                                <i class="fa-solid fa-magnifying-glass-plus mr-0.5"></i><span>自适应</span>
+                            </button>
+                            <button type="button" id="igCopyClipboardBtn" class="px-2.5 py-1 rounded-lg bg-card border border-border text-[10px] font-mono text-main hover:border-accent cursor-pointer" title="复制当前图像到系统剪贴板">
+                                <i class="fa-regular fa-copy mr-1"></i>复制图像
+                            </button>
+                            <button type="button" id="igQuickDownloadBtn" class="px-2.5 py-1 rounded-lg bg-accent text-[var(--accent-foreground)] text-[10px] font-bold hover:opacity-90 cursor-pointer">
+                                <i class="fa-solid fa-download mr-1"></i>保存图片
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Viewport Container -->
+                    <div id="igViewportWrap" class="ig-checkerboard relative p-3 sm:p-4 flex items-center justify-center min-h-[260px] max-h-[480px] overflow-auto">
+                        <canvas id="igMainCanvas" width="1200" height="630"></canvas>
+                    </div>
+
+                    <!-- Before / After Split Slider (Visible in Process Mode) -->
+                    <div id="igCompareBar" class="hidden px-4 py-2.5 bg-input-bg/70 border-t border-border/60 flex items-center gap-3 text-xs font-mono">
+                        <span class="text-meta shrink-0"><i class="fa-solid fa-columns mr-1 text-accent"></i>原图/精修对比分界:</span>
+                        <input id="igCompareSplit" type="range" min="0" max="100" value="0" class="w-full ig-range cursor-pointer" title="向右拖动左侧显示未加滤镜的原图" />
+                        <span id="igCompareSplitLabel" class="text-main shrink-0 w-16 text-right">100% 精修</span>
+                    </div>
+
+                    <!-- Quick Pipeline Action Bar -->
+                    <div class="px-4 py-3 border-t border-border/60 bg-card flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" id="igRandomSeedBtn" class="px-2.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent transition-colors cursor-pointer">
+                                <i class="fa-solid fa-dice mr-1 text-purple-400"></i>随机演化
+                            </button>
+                            <button type="button" id="igRandomPaletteBtn" class="px-2.5 py-1.5 rounded-xl bg-input-bg border border-border text-xs font-mono text-main hover:border-accent transition-colors cursor-pointer">
+                                <i class="fa-solid fa-palette mr-1 text-pink-400"></i>随机配色
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" id="igSendToProcessorBtn" class="px-2.5 py-1.5 rounded-xl bg-pink-500/15 border border-pink-500/30 text-xs font-mono text-pink-300 hover:bg-pink-500/25 transition-colors cursor-pointer">
+                                <i class="fa-solid fa-sliders mr-1"></i>送入图像精修
+                            </button>
+                            <button type="button" id="igSendToTranscoderBtn" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-xs font-mono text-emerald-300 hover:bg-emerald-500/25 transition-colors cursor-pointer">
+                                <i class="fa-solid fa-arrows-rotate mr-1"></i>加入转码
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pixel Eyedropper Inspector & Live RGB Histogram -->
+                <div class="rounded-2xl bg-card border border-border p-4 space-y-3">
+                    <!-- Eyedropper Bar -->
+                    <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-border/50">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <canvas id="igColorSwatchCanvas" width="28" height="28" class="w-7 h-7 rounded-lg border border-border shrink-0"></canvas>
+                            <div class="min-w-0">
+                                <div class="text-[11px] font-mono text-main font-bold truncate" id="igInspectHex">#7C3AED · RGB(124, 58, 237)</div>
+                                <div class="text-[10px] font-mono text-meta truncate" id="igInspectCoord">点击或移动鼠标于画布上取色 · HSL(262°, 83%, 58%)</div>
+                            </div>
+                        </div>
+                        <button type="button" id="igCopyHexBtn" class="px-2.5 py-1 rounded-lg bg-input-bg border border-border text-[10px] font-mono text-meta hover:text-accent shrink-0 cursor-pointer">
+                            复制 HEX
+                        </button>
+                    </div>
+
+                    <!-- Live RGB + Luminance Histogram -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between text-[10px] font-mono text-meta">
+                            <span><i class="fa-solid fa-chart-area mr-1 text-accent"></i>实时 RGB 与亮度分布直方图 (Histogram)</span>
+                            <span id="igHistogramStats">平均亮度: 128 · 动态范围: 255</span>
+                        </div>
+                        <div class="rounded-xl bg-input-bg/80 border border-border/70 p-2">
+                            <canvas id="igHistogramCanvas" width="360" height="84" class="w-full h-20 block"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+</div>

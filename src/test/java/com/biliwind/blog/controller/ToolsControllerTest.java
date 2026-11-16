@@ -164,6 +164,43 @@ class ToolsControllerTest {
     }
 
     @Test
+    void shouldReturnImageGeneratorPageAndFullRowOrderInToolbox() {
+        String indexHtml = given()
+                .when().get("/zh-cn/tools")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("程序化图像生成与全能图像处理工作台"))
+                .extract().asString();
+
+        int ftIndex = indexHtml.indexOf("data-tool-id=\"file-transfer\"");
+        int igIndex = indexHtml.indexOf("data-tool-id=\"image-generator\"");
+        int subnetIndex = indexHtml.indexOf("data-tool-id=\"subnet-calculator\"");
+        org.junit.jupiter.api.Assertions.assertTrue(ftIndex >= 0 && igIndex > ftIndex && subnetIndex > igIndex,
+                "image-generator should be positioned immediately below file-transfer and before subnet-calculator");
+
+        given()
+                .when().get("/tools/image-generator")
+                .then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("程序化图像生成与全能图像处理工作台"))
+                .body(containsString("imageGeneratorToolApp"))
+                .body(containsString("domain-warping"))
+                .body(containsString("floyd-steinberg"))
+                .body(containsString("image/x-icon"))
+                .body(containsString("tools.js"));
+
+        given()
+                .when().get("/assets/js/image-generator.js")
+                .then()
+                .statusCode(200)
+                .body(containsString("WindBlogImageGenerator"))
+                .body(containsString("encodeCanvasToIcoBlob"))
+                .body(containsString("encodeCanvasToBmpBlob"));
+    }
+
+    @Test
     void shouldSupportPjaxHeader() {
         given()
                 .header("X-PJAX", "true")

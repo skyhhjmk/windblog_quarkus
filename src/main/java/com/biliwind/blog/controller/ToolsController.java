@@ -70,6 +70,15 @@ public class ToolsController {
                     "emerald"
             ),
             new ToolItem(
+                    "image-generator",
+                    "程序化图像生成与全能图像处理工作台",
+                    "内置 18+ 种程序化算法图像生成（柏林分形噪声、域扭曲流体、德劳内低多边形、曼德博/朱利亚分形、奇异吸引子、图灵反应扩散等），支持全链路像素级图像精修、卷积滤镜、复古抖动与纯本地批量转码。",
+                    "fa-solid fa-wand-magic-sparkles",
+                    "/tools/image-generator",
+                    "图像视觉",
+                    "purple"
+            ),
+            new ToolItem(
                     "subnet-calculator",
                     "新一代智能子网掩码计算器",
                     "可视化 IP/CIDR 掩码计算与网络划分工具。支持 IPv4/IPv6、二/十/十六进制位图对比、通配符计算、可变长子网 (VLSM) 划分与层级可视化。",
@@ -359,6 +368,19 @@ public class ToolsController {
                 "Serverless P2P File Transfer - Encrypted WebRTC & WASM ECC",
                 "Send files and text peer-to-peer without a server using WebRTC DataChannel, QR/code signaling, ECDH+AES-GCM encryption and WASM Reed-Solomon ECC.",
                 "p2p file transfer,webrtc file transfer,encrypted file sharing,serverless transfer");
+    }
+
+    @GET
+    @Path("/image-generator")
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance imageGenerator(@Context HttpHeaders headers) {
+        return renderTool(headers, PageView.TOOLS_IMAGE_GENERATOR, "/tools/image-generator",
+                "程序化图像生成与全能图像处理工作台 - 算法绘图/滤镜矩阵/抖动量化/本地转码",
+                "纯前端零上传的程序化图像生成、像素级图像处理与本地批量转码工作台。内置分形柏林噪声、域扭曲流体、德劳内低多边形、曼德博/朱利亚分形、混沌吸引子、图灵反应扩散等18种生成器，以及色彩分级、自定义卷积核、Floyd-Steinberg/Atkinson抖动、去背水印与 PNG/WebP/JPG/BMP/ICO 本地转码。",
+                "图片生成器,程序化图像生成,在线图像处理,本地图片转码,Perlin噪声,Low-Poly生成,分形生成,Floyd-Steinberg抖动,卷积滤镜,ICO生成",
+                "Procedural Image Generator, Pixel Processor & Local Transcoder Studio",
+                "Client-side procedural art generator (Perlin fBm, Domain Warping, Delaunay Low-Poly, Mandelbrot/Julia fractals, Strange Attractors, Reaction-Diffusion), non-destructive image processor (color grading, custom 3x3 convolution, retro dithering, chroma key, watermarks) and batch local format transcoder (PNG/WebP/JPEG/BMP/ICO/Base64).",
+                "procedural image generator,online image processor,local image converter,perlin noise generator,low poly generator,dithering tool,favicon ico generator");
     }
 
     @GET

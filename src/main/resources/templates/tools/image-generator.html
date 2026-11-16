@@ -1,0 +1,5 @@
+{#include "base.html"}
+    {#title}{pageTitle ?: '程序化图像生成与全能图像处理工作台'}{/title}
+    {#navPath}{config:siteNavRoot} / <a href="{languagePrefix}/tools" class="hover:text-accent transition-colors">tools</a> / image-generator{/navPath}
+    {#content}{#include "tools/image-generator.content.html"}{/include}{/content}
+{/include}
