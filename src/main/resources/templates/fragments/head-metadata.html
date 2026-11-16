@@ -2,11 +2,15 @@
 <meta name="robots" content="{seoRobots}" data-pjax-managed="true"/>
 <meta name="keywords" content="{pageKeywords ?: config:siteKeywords}" data-pjax-managed="true"/>
 <link rel="canonical" href="{canonicalUrl}" data-pjax-managed="true"/>
+<link rel="alternate" type="application/rss+xml" title="{config:siteTitle}" href="/rss.xml"/>
 {#for alternate in seoAlternates}
 <link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}" data-pjax-managed="true"/>
 {/for}
 {#if ampUrl.or(null)}
 <link rel="amphtml" href="{ampUrl}" data-pjax-managed="true"/>
+{/if}
+{#if markdownUrl.or(null)}
+<link rel="alternate" type="text/markdown" href="{markdownUrl}" data-pjax-managed="true"/>
 {/if}
 {#if ogData.or(null)}
 {#for entry in ogData.entrySet}

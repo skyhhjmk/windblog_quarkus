@@ -63,6 +63,8 @@ public class PostController {
 
     @Inject com.biliwind.blog.service.SeoAuditService seoAuditService;
     @Inject com.biliwind.blog.service.SeoPageService seoPageService;
+    @Inject com.biliwind.blog.service.og.OgImageService ogImageService;
+    @Inject com.biliwind.blog.service.LlmsService llmsService;
     @Inject com.biliwind.blog.service.PageIdentityService pageIdentityService;
     @Inject com.biliwind.blog.context.PageIdentityContext pageIdentityContext;
 
@@ -457,6 +459,14 @@ public class PostController {
                 .put("repostOriginalUrl", repostOriginalUrl)
                 .put("canonicalUrl", canonicalUrl)
                 .put("ampUrl", ampUrl)
+                .put("markdownUrl", (llmsService != null && llmsService.isEnabled()
+                        && !identity.robots().contains("noindex")
+                        && snapshot.visibility() == 0 && snapshot.postPrice() <= 0)
+                        ? canonicalUrlService.buildLocalizedPath(
+                                "/post/" + java.net.URLEncoder.encode(snapshot.slug(), java.nio.charset.StandardCharsets.UTF_8)
+                                        .replace("+", "%20") + ".md",
+                                contentLanguage)
+                        : null)
                 .derived("ogData", () -> buildOgData(canonicalUrl, seoTitle, pageDescription,
                         publicHtml.get(), snapshot, contentLanguage))
                 .derived("jsonLd", () -> structuredDataService.article(snapshot, seoTitle, pageDescription,
@@ -532,10 +542,26 @@ public class PostController {
         }
 
         List<String> images = com.biliwind.blog.service.StructuredDataService.imageUrls(publicHtml, canonicalUrl);
-        String imageUrl = images.isEmpty()
-                ? structuredDataService.publisherLogoUrl()
-                : images.getFirst();
-        if (imageUrl != null) og.put("og:image", imageUrl);
+        String imageUrl;
+        boolean usingDynamicOg = false;
+        if (!images.isEmpty()) {
+            imageUrl = images.getFirst();
+        } else if (ogImageService != null && ogImageService.isEnabled()
+                && snapshot.visibility() == 0 && snapshot.slug() != null && !snapshot.slug().isBlank()) {
+            String encodedSlug = java.net.URLEncoder.encode(snapshot.slug(), java.nio.charset.StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            imageUrl = canonicalUrlService.buildLocalizedPath("/og/post/" + encodedSlug + ".png", language);
+            usingDynamicOg = true;
+        } else {
+            imageUrl = structuredDataService.publisherLogoUrl();
+        }
+        if (imageUrl != null) {
+            og.put("og:image", imageUrl);
+            if (usingDynamicOg) {
+                og.put("og:image:width", "1200");
+                og.put("og:image:height", "630");
+            }
+        }
 
         og.put("twitter:card", "summary_large_image");
         og.put("twitter:title", title);

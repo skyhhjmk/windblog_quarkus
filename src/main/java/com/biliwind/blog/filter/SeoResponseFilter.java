@@ -55,6 +55,7 @@ public class SeoResponseFilter {
 
     private static boolean isCrawlDocument(String path) {
         return path.equals("/robots.txt") || path.equals("/feed") || path.equals("/rss.xml")
+                || path.equals("/llms.txt") || path.equals("/llms-full.txt")
                 || path.startsWith("/sitemap");
     }
 }

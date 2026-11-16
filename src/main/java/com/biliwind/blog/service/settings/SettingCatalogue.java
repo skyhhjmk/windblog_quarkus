@@ -597,11 +597,23 @@ public final class SettingCatalogue {
         fields.addObject().put("key", "follow_enabled").put("widget", "switch").put("label", "允许跟踪页面链接");
         fields.addObject().put("key", "internal_link_graph_enabled").put("widget", "switch").put("label", "启用内部链接图")
                 .put("hint", "前台显示当前文章的直接引用关系；后台支持递归分析。");
+        fields.addObject().put("key", "dynamic_og_enabled").put("widget", "switch").put("label", "启用动态 OG 分享图")
+                .put("hint", "当文章正文未包含图片时，自动使用 /og/post/{slug}.png 作为 OpenGraph 与 Twitter 预览图。");
+        fields.addObject().put("key", "llms_txt_enabled").put("widget", "switch").put("label", "启用 /llms.txt 与 Markdown 端点")
+                .put("hint", "公开 /llms.txt、/llms-full.txt 与 /post/{slug}.md，便于 AI 搜索引擎与编程助手索引和引用。");
+        fields.addObject().put("key", "indexnow_enabled").put("widget", "switch").put("label", "启用 IndexNow 实时收录推送")
+                .put("hint", "文章发布或更新后自动向 IndexNow（Bing / Yandex 等）推送 URL。");
+        fields.addObject().put("key", "indexnow_key").put("widget", "input").put("label", "IndexNow API Key")
+                .put("hint", "8-128 位字母、数字或连字符；配置后将在 /{key}.txt 自动提供验证文件。");
         ObjectNode value = MAPPER.createObjectNode();
         value.put("google_site_verification", "");
         value.put("index_enabled", true);
         value.put("follow_enabled", true);
         value.put("internal_link_graph_enabled", false);
+        value.put("dynamic_og_enabled", true);
+        value.put("llms_txt_enabled", true);
+        value.put("indexnow_enabled", false);
+        value.put("indexnow_key", "");
         return definition(SettingKey.SEO, value, "seo", schema, "SEO 收录控制与站点验证");
     }
 

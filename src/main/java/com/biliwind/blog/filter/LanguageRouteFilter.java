@@ -41,6 +41,8 @@ public class LanguageRouteFilter {
                 || path.startsWith("/.well-known/") || path.startsWith("/favicon")
                 || path.startsWith("/robots.txt") || path.startsWith("/sitemap")
                 || path.startsWith("/feed") || path.startsWith("/ads.txt")
+                || path.equals("/llms.txt") || path.equals("/llms-full.txt")
+                || path.startsWith("/og/")
                 || path.equals("/sw.js") || path.equals("/manifest.webmanifest")) {
             return;
         }

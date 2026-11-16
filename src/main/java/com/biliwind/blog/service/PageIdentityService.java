@@ -101,14 +101,37 @@ public class PageIdentityService {
         if (lookupPath.startsWith("/amp/post/")) {
             lookupPath = "/post/" + lookupPath.substring("/amp/post/".length());
         }
-        String canonicalPath = queryIndex >= 0
-                ? lookupPath + normalized.substring(queryIndex)
-                : lookupPath;
+        String sanitizedQuery = queryIndex >= 0 ? sanitizeCanonicalQuery(normalized.substring(queryIndex + 1)) : "";
+        String canonicalPath = sanitizedQuery.isEmpty()
+                ? lookupPath
+                : lookupPath + "?" + sanitizedQuery;
         return new PageIdentity(
                 canonical.buildLocalizedPath(canonicalPath, language),
                 seoPages.alternates(lookupPath),
                 seoManagement.robots(lookupPath),
                 null);
+    }
+
+    static String sanitizeCanonicalQuery(String query) {
+        if (query == null || query.isBlank()) {
+            return "";
+        }
+        for (String param : query.split("&")) {
+            int eq = param.indexOf('=');
+            String key = eq >= 0 ? param.substring(0, eq) : param;
+            String value = eq >= 0 ? param.substring(eq + 1) : "";
+            if ("page".equals(key)) {
+                try {
+                    int pageNum = Integer.parseInt(value);
+                    if (pageNum > 1) {
+                        return "page=" + pageNum;
+                    }
+                } catch (NumberFormatException ignored) {
+                    return "";
+                }
+            }
+        }
+        return "";
     }
 
     /**

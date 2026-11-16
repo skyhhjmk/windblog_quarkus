@@ -30,6 +30,7 @@ public class StructuredDataService {
     @Inject CanonicalUrlService canonicalUrlService;
     @Inject LanguageContext languageContext;
     @Inject I18n i18n;
+    @Inject com.biliwind.blog.service.og.OgImageService ogImageService;
 
     public record Breadcrumb(String name, String path) {}
 
@@ -128,6 +129,31 @@ public class StructuredDataService {
         if (!images.isEmpty()) {
             ArrayNode array = article.putArray("image");
             images.forEach(array::add);
+        } else if (ogImageService != null && ogImageService.isEnabled()
+                && snapshot.visibility() == 0 && snapshot.slug() != null && !snapshot.slug().isBlank()) {
+            String encodedSlug = java.net.URLEncoder.encode(snapshot.slug(), java.nio.charset.StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            article.putArray("image").add(
+                    canonicalUrlService.buildLocalizedPath("/og/post/" + encodedSlug + ".png", language));
+        }
+        String section = LanguageHelper.resolveLocalizedValue(snapshot.categoryName(), language);
+        if (section != null && !section.isBlank()) {
+            article.put("articleSection", section.strip());
+        }
+        String seoKeywords = LanguageHelper.lookupIgnoreCase(snapshot.seoKeywords(), language);
+        if (seoKeywords != null && !seoKeywords.isBlank()) {
+            article.put("keywords", seoKeywords.strip());
+        } else if (snapshot.tags() != null && !snapshot.tags().isEmpty()) {
+            List<String> tagNames = new ArrayList<>();
+            for (var tag : snapshot.tags()) {
+                String tagName = LanguageHelper.resolveLocalizedValue(tag.name(), language);
+                if (tagName != null && !tagName.isBlank()) {
+                    tagNames.add(tagName.strip());
+                }
+            }
+            if (!tagNames.isEmpty()) {
+                article.put("keywords", String.join(", ", tagNames));
+            }
         }
         ObjectNode publisher = publisher();
         article.putObject("publisher").put("@id", publisher.path("@id").asText());

@@ -27,8 +27,8 @@ public class SeoManagementService {
     public String robots(String path) {
         boolean noindex = false;
         boolean nofollow = false;
-        if (path.matches("(?i)(/zh-cn|/en-us)?/(search|offline)(/.*)?") || path.startsWith("/admin")
-                || path.startsWith("/api/") || path.startsWith("/user/")
+        if (path.matches("(?i)(/zh-cn|/en-us)?/(search|offline|user)(/.*)?") || path.startsWith("/admin")
+                || path.startsWith("/api/") || path.startsWith("/og/")
                 || path.startsWith("/link/go/")) noindex = true;
         String plain = path.replaceFirst("^/(?i:zh-cn|en-us)(?=/|$)", "").replace("/amp/post/", "/post/");
         if (plain.startsWith("/post/")) {
