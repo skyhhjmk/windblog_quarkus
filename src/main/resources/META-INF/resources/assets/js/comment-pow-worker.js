@@ -111,11 +111,23 @@
         return bits;
     }
 
-    function solve(challenge, difficulty) {
+    var HEX = '0123456789abcdef';
+
+    function digestToHex(digest) {
+        var out = '';
+        for (var i = 0; i < digest.length; i = i + 1) {
+            var b = digest[i];
+            out += HEX[(b >>> 4) & 15] + HEX[b & 15];
+        }
+        return out;
+    }
+
+    function solve(challenge, difficulty, onProgress) {
         var prefix = new TextEncoder().encode(challenge + ':');
         var buffer = new Uint8Array(prefix.length + 20);
         buffer.set(prefix, 0);
         var nonce = 0;
+        var lastReportAt = 0;
         while (true) {
             var text = String(nonce);
             for (var index = 0; index < text.length; index = index + 1) {
@@ -123,13 +135,20 @@
             }
             var digest = sha256Bytes(buffer.subarray(0, prefix.length + text.length));
             if (leadingZeroBits(digest) >= difficulty) {
-                return text;
+                return { nonce: text, hash: digestToHex(digest) };
+            }
+            if (onProgress && (nonce === 0 || (nonce & 1023) === 0)) {
+                var now = Date.now();
+                if (nonce === 0 || now - lastReportAt >= 450) {
+                    lastReportAt = now;
+                    onProgress(digestToHex(digest), text);
+                }
             }
             nonce = nonce + 1;
         }
     }
 
-    var core = { sha256Bytes: sha256Bytes, leadingZeroBits: leadingZeroBits };
+    var core = { sha256Bytes: sha256Bytes, leadingZeroBits: leadingZeroBits, digestToHex: digestToHex };
     if (typeof self !== 'undefined') {
         self.WindBlogPowCore = core;
         if (typeof self.postMessage === 'function') {
@@ -138,11 +157,13 @@
                 var challenge = typeof data.challenge === 'string' ? data.challenge : '';
                 var difficulty = Number(data.difficulty);
                 if (!challenge || !isFinite(difficulty) || difficulty < 1 || difficulty > 32) {
-                    self.postMessage({ ok: false, reason: 'invalid' });
+                    self.postMessage({ type: 'done', ok: false, reason: 'invalid' });
                     return;
                 }
-                var nonce = solve(challenge, difficulty);
-                self.postMessage({ ok: true, nonce: nonce });
+                var result = solve(challenge, difficulty, function (hash, nonce) {
+                    self.postMessage({ type: 'progress', ok: false, hash: hash, nonce: nonce });
+                });
+                self.postMessage({ type: 'done', ok: true, nonce: result.nonce, hash: result.hash });
             };
         }
     }

@@ -2722,15 +2722,20 @@
         }
 
         function decorateShortcutButtons() {
+            const hintText = window.wbT('js.enter_hint', '（回车）');
             document.querySelectorAll('form:not([data-shortcut-form="search"]):not([data-pagination-form]) button[type="submit"]')
                 .forEach((button) => {
                     button.dataset.shortcut = button.dataset.shortcut || 'enter';
                     button.setAttribute('aria-keyshortcuts', SHORTCUTS.submit);
                     if (button.querySelector('[data-shortcut-hint]')) return;
-                                        const hint = document.createElement('span');
+                    const labelText = (button.querySelector('.btn-text')?.textContent || button.textContent || '').trim();
+                    if (labelText.includes(hintText.trim()) || labelText.includes('（回车）') || labelText.includes('(Enter)')) {
+                        return;
+                    }
+                    const hint = document.createElement('span');
                     hint.dataset.shortcutHint = 'enter';
                     hint.className = 'ml-1 text-xs opacity-70';
-                    hint.textContent = window.wbT('js.enter_hint', '（回车）');
+                    hint.textContent = hintText;
                     button.appendChild(hint);
                 });
         }
@@ -4053,6 +4058,7 @@
         let reactionPowAbort = null;
         let cachedReactionChallenge = null;
         let currentReactionPowPromise = null;
+        let activeReactionVisualCtrl = null;
 
         function solveReactionPow(challenge, difficulty) {
             if (reactionPowAbort) {
@@ -4064,23 +4070,51 @@
             }
             const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
             reactionPowAbort = controller;
+            let solvedHash = '';
             return window.WindBlogPow.solve(challenge, difficulty, {
                 timeoutMs: 25000,
-                signal: controller ? controller.signal : undefined
-            }).finally(() => {
+                signal: controller ? controller.signal : undefined,
+                onProgress: (info) => {
+                    if (activeReactionVisualCtrl && info && info.hash) {
+                        activeReactionVisualCtrl.updateHash(info.hash);
+                    }
+                },
+                onSolved: (info) => {
+                    if (info && info.hash) {
+                        solvedHash = info.hash;
+                    }
+                }
+            }).then((nonce) => ({ nonce: nonce, hash: solvedHash })).finally(() => {
                 if (reactionPowAbort === controller) {
                     reactionPowAbort = null;
                 }
             });
         }
 
-        async function ensureReactionChallenge() {
+        async function ensureReactionChallenge(visualBtn) {
             const now = Math.floor(Date.now() / 1000);
             if (cachedReactionChallenge && cachedReactionChallenge.expiresAt > now + 15) {
                 return cachedReactionChallenge;
             }
+            let ctrl = null;
+            if (visualBtn && window.WindBlogPow && typeof window.WindBlogPow.attachButton === 'function') {
+                ctrl = window.WindBlogPow.attachButton(visualBtn, { compact: true });
+                activeReactionVisualCtrl = ctrl;
+                ctrl.start();
+            }
             if (currentReactionPowPromise) {
-                return currentReactionPowPromise;
+                const res = await currentReactionPowPromise;
+                if (ctrl) {
+                    if (res) {
+                        ctrl.complete(res.hash || '');
+                        await new Promise(r => setTimeout(r, 2020));
+                    } else {
+                        ctrl.fail();
+                    }
+                    if (activeReactionVisualCtrl === ctrl) activeReactionVisualCtrl = null;
+                    ctrl.destroy();
+                }
+                return res;
             }
 
             currentReactionPowPromise = (async () => {
@@ -4090,10 +4124,14 @@
                     const json = await res.json();
                     if (!json.success || !json.data) throw new Error('Invalid challenge response');
                     const ch = json.data;
-                    const nonce = await solveReactionPow(ch.id, ch.difficulty);
+                    if (activeReactionVisualCtrl) {
+                        activeReactionVisualCtrl.setDifficulty(ch.difficulty);
+                    }
+                    const solved = await solveReactionPow(ch.id, ch.difficulty);
                     cachedReactionChallenge = {
                         challengeId: ch.id,
-                        powNonce: nonce,
+                        powNonce: solved.nonce,
+                        hash: solved.hash,
                         expiresAt: ch.expiresAt
                     };
                     return cachedReactionChallenge;
@@ -4105,7 +4143,18 @@
                 }
             })();
 
-            return currentReactionPowPromise;
+            const ch = await currentReactionPowPromise;
+            if (ctrl) {
+                if (ch) {
+                    ctrl.complete(ch.hash || '');
+                    await new Promise(r => setTimeout(r, 2020));
+                } else {
+                    ctrl.fail();
+                }
+                if (activeReactionVisualCtrl === ctrl) activeReactionVisualCtrl = null;
+                ctrl.destroy();
+            }
+            return ch;
         }
 
         function initPostReactions(root = document) {
@@ -4235,7 +4284,7 @@
                             let ch = cachedReactionChallenge;
                             cachedReactionChallenge = null;
                             if (!ch) {
-                                ch = await ensureReactionChallenge();
+                                ch = await ensureReactionChallenge(btn);
                             }
                             if (ch) {
                                 payload.challengeId = ch.challengeId;

@@ -71,17 +71,9 @@
             </div>
 
             <div id="errorMessage" class="hidden text-red-400 text-sm text-center"></div>
-            <p id="registerPowStatus" class="text-xs text-[var(--muted)] text-center min-h-[1rem]" aria-live="polite"></p>
+            <p id="registerPowStatus" class="sr-only" aria-live="polite"></p>
 
-            <button type="submit"
-                    id="registerSubmit"
-                    data-seeray-goal="registration_submit"
-                    data-shortcut="enter"
-                    aria-keyshortcuts="Enter"
-                    class="w-full py-2 bg-[var(--accent)] text-[var(--accent-foreground)] font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
-                <span class="btn-text">{i18n.t('user.register_button')}</span>
-                <span class="spinner hidden"></span>
-            </button>
+            {pow:submitButton('registerSubmit', i18n.t('user.register_button'), 'w-full py-2 bg-[var(--accent)] text-[var(--accent-foreground)] font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2', 'registration_submit', 'data-shortcut="enter" aria-keyshortcuts="Enter"')}
         </form>
 
         <div class="mt-6 text-center text-sm">

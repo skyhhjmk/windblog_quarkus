@@ -1431,3 +1431,167 @@ button:disabled {
         transform: translate(-50%, -24px) scale(0.9);
     }
 }
+
+/* ==========================================
+   Visual Proof-of-Work Submit Button
+   ========================================== */
+.pow-submit-btn {
+    position: relative;
+    overflow: hidden;
+    transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.pow-submit-btn .pow-btn-progress {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0%;
+    z-index: 0;
+    pointer-events: none;
+    background: color-mix(in srgb, currentColor 16%, transparent);
+    border-bottom: 2px solid color-mix(in srgb, currentColor 65%, transparent);
+    transition: width 0.1s linear, background-color 0.25s ease;
+}
+
+.pow-submit-btn .pow-btn-visual {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    max-width: 100%;
+}
+
+.pow-submit-btn .pow-btn-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: color-mix(in srgb, currentColor 15%, transparent);
+    flex-shrink: 0;
+}
+
+.pow-submit-btn .pow-btn-difficulty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    opacity: 0.88;
+    flex-shrink: 0;
+}
+
+.pow-submit-btn .pow-btn-difficulty.hidden {
+    display: none;
+}
+
+@keyframes powWaveSweep {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.pow-submit-btn[data-pow-state="solving"]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in srgb, currentColor 10%, transparent) 30%,
+        color-mix(in srgb, currentColor 26%, transparent) 50%,
+        color-mix(in srgb, currentColor 10%, transparent) 70%,
+        transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: powWaveSweep 1.35s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pow-submit-btn[data-pow-state="solving"]::after {
+        animation: none;
+    }
+}
+
+.pow-submit-btn .pow-btn-hash {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pow-submit-btn .btn-text,
+.pow-submit-btn .spinner {
+    position: relative;
+    z-index: 1;
+}
+
+.pow-submit-btn[data-pow-state="idle"] .btn-text,
+.pow-submit-btn[data-pow-state="solving"] .btn-text,
+.pow-submit-btn[data-pow-state="verified"] .btn-text,
+.pow-submit-btn[data-pow-state="error"] .btn-text,
+.pow-submit-btn[data-pow-state="idle"] [data-shortcut-hint],
+.pow-submit-btn[data-pow-state="solving"] [data-shortcut-hint],
+.pow-submit-btn[data-pow-state="verified"] [data-shortcut-hint],
+.pow-submit-btn[data-pow-state="error"] [data-shortcut-hint] {
+    display: none;
+}
+
+.pow-submit-btn[data-pow-state="ready"] .pow-btn-visual,
+.pow-submit-btn[data-pow-state="ready"] .pow-btn-progress {
+    display: none;
+}
+
+.pow-submit-btn[data-pow-state="idle"],
+.pow-submit-btn[data-pow-state="solving"] {
+    cursor: wait;
+    opacity: 0.92;
+}
+
+.pow-submit-btn[data-pow-state="verified"] {
+    background: #16a34a !important;
+    border-color: #15803d !important;
+    color: #ffffff !important;
+    cursor: default;
+    opacity: 1 !important;
+}
+
+.pow-submit-btn[data-pow-state="verified"] .pow-btn-progress {
+    background: rgba(255, 255, 255, 0.16);
+    border-bottom-color: #bbf7d0;
+}
+
+.pow-submit-btn[data-pow-state="verified"] .pow-btn-badge {
+    background: rgba(255, 255, 255, 0.24);
+    color: #ffffff;
+}
+
+.pow-submit-btn[data-pow-state="error"] {
+    border-color: #ef4444 !important;
+    cursor: pointer;
+}
+
+.pow-submit-btn--compact .pow-btn-visual {
+    font-size: 0.6875rem;
+    gap: 0.3rem;
+}
+
+.pow-submit-btn--compact .pow-btn-badge {
+    display: none;
+}

@@ -7,9 +7,29 @@
     let hasMore = true;
     const commentIndex = new Map();
     const guestInfoStorageKey = 'windblog.comment.guest-info.v1';
+    const commentButtonCtrls = new WeakMap();
 
     function getCommentRoot() {
         return document.getElementById('comment-section');
+    }
+
+    function getCommentPowController(root) {
+        const submit = root?.querySelector('#comment-submit');
+        if (!submit || !window.WindBlogPow || typeof window.WindBlogPow.attachButton !== 'function') {
+            return null;
+        }
+        let ctrl = commentButtonCtrls.get(submit);
+        if (!ctrl) {
+            ctrl = window.WindBlogPow.attachButton(submit, {
+                canEnable: () => root.dataset.commentSubmitting !== 'true'
+                    && Boolean(root.dataset.captchaId && root.dataset.powNonce),
+                onRetry: () => {
+                    loadChallenge(root);
+                }
+            });
+            commentButtonCtrls.set(submit, ctrl);
+        }
+        return ctrl;
     }
 
     function getProfile() {
@@ -21,6 +41,11 @@
     function updateSubmitState(root) {
         const submit = root.querySelector('#comment-submit');
         if (!submit) return;
+        const ctrl = getCommentPowController(root);
+        if (ctrl) {
+            ctrl.syncDisabled();
+            return;
+        }
         submit.disabled = root.dataset.commentSubmitting === 'true'
             || !root.dataset.captchaId
             || !root.dataset.powNonce;
@@ -367,15 +392,31 @@
         }
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         powAbortController = controller;
+        const powCtrl = getCommentPowController(root);
+        let solvedHash = '';
         try {
             const nonce = await window.WindBlogPow.solve(challenge, difficulty, {
                 timeoutMs: POW_SOLVE_TIMEOUT_MS,
-                signal: controller ? controller.signal : undefined
+                signal: controller ? controller.signal : undefined,
+                onProgress: (info) => {
+                    if (root.dataset.captchaVersion === version && powCtrl && info && info.hash) {
+                        powCtrl.updateHash(info.hash);
+                    }
+                },
+                onSolved: (info) => {
+                    if (info && info.hash) {
+                        solvedHash = info.hash;
+                    }
+                }
             });
             if (root.dataset.captchaVersion === version) {
                 root.dataset.powNonce = String(nonce);
                 setVerificationStatus(root, 'js.comment_verification_ready', '安全校验已就绪。');
-                updateSubmitState(root);
+                if (powCtrl) {
+                    powCtrl.complete(solvedHash);
+                } else {
+                    updateSubmitState(root);
+                }
             }
         } finally {
             if (powAbortController === controller) {
@@ -391,6 +432,10 @@
         root.dataset.captchaLoadedAt = '0';
         root.dataset.captchaLoading = 'true';
         cancelPendingProof(root);
+        const powCtrl = getCommentPowController(root);
+        if (powCtrl) {
+            powCtrl.start();
+        }
         setVerificationStatus(root, 'js.comment_verification_preparing', '正在准备安全校验...');
         updateSubmitState(root);
         try {
@@ -405,7 +450,11 @@
             }
             root.dataset.captchaId = result.data.id;
             root.dataset.captchaLoadedAt = String(Date.now());
-            await solveProof(root, version, result.data.id, Number(result.data.difficulty) || 16);
+            const difficulty = Number(result.data.difficulty) || 16;
+            if (powCtrl) {
+                powCtrl.setDifficulty(difficulty);
+            }
+            await solveProof(root, version, result.data.id, difficulty);
             return true;
         } catch (error) {
             if (root.dataset.captchaVersion !== version) return false;
@@ -428,6 +477,9 @@
             const errorCode = error.errorCode
                 || window.getErrorCode?.(message, 'WB-UI-COMMENT-CAPTCHA-002');
             setVerificationStatus(root, 'js.comment_verification_failed', '安全校验准备失败，点击提交可重试。');
+            if (powCtrl) {
+                powCtrl.fail();
+            }
             setFeedback(root, window.formatErrorMessage
                 ? window.formatErrorMessage(message, errorCode)
                 : message, 'error', errorCode);

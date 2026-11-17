@@ -112,6 +112,29 @@ class ProofOfWorkServiceTest {
                 () -> service.verifyForRequest(lowChallenge.id(), proof, PowScene.LOGIN, null));
     }
 
+    @Test
+    void submitButtonTemplateEscapesAndIncludesVisualMarkup() {
+        String html = ProofOfWorkService.submitButton(
+                "registerSubmit",
+                "注册 <script>",
+                "btn-minimal",
+                "registration_submit",
+                "data-shortcut=\"enter\""
+        ).getValue();
+
+        assertTrue(html.contains("id=\"registerSubmit\""));
+        assertTrue(html.contains("data-seeray-goal=\"registration_submit\""));
+        assertTrue(html.contains("data-shortcut=\"enter\""));
+        assertTrue(html.contains("data-pow-visual-button=\"true\""));
+        assertTrue(html.contains("data-pow-state=\"idle\""));
+        assertTrue(html.contains("class=\"pow-submit-btn btn-minimal\""));
+        assertTrue(html.contains("<span class=\"pow-btn-progress\""));
+        assertTrue(html.contains("<span class=\"pow-btn-hash\">"));
+        assertTrue(html.contains("<span class=\"btn-text\">注册 &lt;script&gt;</span>"));
+        assertTrue(html.contains("<span class=\"spinner hidden\"></span>"));
+        assertTrue(html.contains("disabled>"));
+    }
+
     private static ProofOfWorkService createService() {
         ProofOfWorkService service = new ProofOfWorkService();
         setField(service, "powSecret", Optional.of(SECRET));

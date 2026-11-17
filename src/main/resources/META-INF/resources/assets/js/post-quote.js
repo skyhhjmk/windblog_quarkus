@@ -370,11 +370,26 @@
                     <textarea class="post-quote-modal-textarea" id="correction-textarea" rows="4" placeholder="请详细写下这里存在的错误或修改建议..."></textarea>
                     <div class="post-quote-modal-actions">
                         <button type="button" class="post-quote-modal-btn cancel" id="correction-btn-cancel">取消</button>
-                        <button type="button" class="post-quote-modal-btn submit" id="correction-btn-submit">提交反馈</button>
+                        ${window.WindBlogPow && typeof window.WindBlogPow.renderSubmitButtonHtml === 'function'
+                            ? window.WindBlogPow.renderSubmitButtonHtml({
+                                id: 'correction-btn-submit',
+                                type: 'button',
+                                cssClass: 'post-quote-modal-btn submit',
+                                label: window.wbT('js.submit_feedback', '提交反馈')
+                            })
+                            : '<button type="button" class="post-quote-modal-btn submit" id="correction-btn-submit"><span class="btn-text">提交反馈</span><span class="spinner hidden"></span></button>'}
                     </div>
                 </div>
             `;
             document.body.appendChild(overlay);
+
+            const submitBtnEl = document.getElementById('correction-btn-submit');
+            if (submitBtnEl && window.WindBlogPow && typeof window.WindBlogPow.createChallengeManager === 'function') {
+                overlay._powManager = window.WindBlogPow.createChallengeManager({
+                    challengeUrl: '/api/comments/captcha',
+                    button: submitBtnEl
+                });
+            }
 
             document.getElementById('correction-btn-cancel').onclick = function () {
                 overlay.classList.remove('active');
@@ -399,6 +414,9 @@
         }
 
         overlay.classList.add('active');
+        if (overlay._powManager) {
+            overlay._powManager.ensure().catch(() => {});
+        }
 
         document.getElementById('correction-btn-submit').onclick = async function () {
             const explanation = textarea.value.trim();
@@ -455,15 +473,21 @@
             };
 
             const submitBtn = document.getElementById('correction-btn-submit');
-            submitBtn.disabled = true;
-            submitBtn.textContent = "提交中...";
+            if (typeof window.setLoading === 'function') {
+                window.setLoading(submitBtn, true);
+            } else {
+                submitBtn.disabled = true;
+            }
 
+            let succeeded = false;
             try {
                 // The correction dialog posts to the same endpoint as the comment
-                // form, so it must carry the same invisible verification proof.
-                const proof = typeof window.acquireCommentProof === 'function'
-                    ? await window.acquireCommentProof()
-                    : null;
+                // form, so it must carry the same verification proof.
+                const proof = overlay._powManager
+                    ? await overlay._powManager.acquire()
+                    : (typeof window.acquireCommentProof === 'function'
+                        ? await window.acquireCommentProof()
+                        : null);
                 if (!proof) {
                     throw new Error(window.wbT('js.comment_verification_preparing', '正在准备安全校验，请稍候再提交。'));
                 }
@@ -485,6 +509,7 @@
                     throw new Error(msg);
                 }
 
+                succeeded = true;
                 window.showToast(window.wbT('js.correction_success', '纠错成功，已提交审核，感谢反馈！'), "success");
                 overlay.classList.remove('active');
 
@@ -497,8 +522,18 @@
                 window.showToast(message, "error", 8000,
                     window.getErrorCode?.(error.message, "WB-UI-CORRECTION-SUBMIT-001"));
             } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = window.wbT('js.submit_feedback', '提交反馈');
+                if (typeof window.setLoading === 'function') {
+                    window.setLoading(submitBtn, false);
+                } else {
+                    submitBtn.disabled = false;
+                }
+                if (overlay._powManager) {
+                    if (succeeded) {
+                        overlay._powManager.invalidate();
+                    } else {
+                        overlay._powManager.refresh().catch(() => {});
+                    }
+                }
             }
         };
     }

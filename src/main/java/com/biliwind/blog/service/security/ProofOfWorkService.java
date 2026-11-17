@@ -2,6 +2,8 @@ package com.biliwind.blog.service.security;
 
 import com.biliwind.blog.service.settings.SettingKey;
 import com.biliwind.blog.service.settings.SettingsReader;
+import io.quarkus.qute.RawString;
+import io.quarkus.qute.TemplateExtension;
 import io.quarkus.redis.datasource.RedisDataSource;
 import io.quarkus.redis.datasource.value.SetArgs;
 import io.quarkus.runtime.annotations.RegisterForReflection;
@@ -630,6 +632,84 @@ public class ProofOfWorkService {
         } catch (IllegalArgumentException exception) {
             return null;
         }
+    }
+
+    /**
+     * Generates a Qute-ready visual PoW submit button template.
+     *
+     * @param id       optional button DOM id
+     * @param label    button label shown once PoW completes and transitions to clickable state
+     * @param cssClass additional CSS classes for the button
+     * @return unescaped HTML fragment for Qute templates
+     */
+    @TemplateExtension(namespace = "pow")
+    public static RawString submitButton(String id, String label, String cssClass) {
+        return submitButton(id, label, cssClass, null, null);
+    }
+
+    /**
+     * Generates a Qute-ready visual PoW submit button template with optional tracking and extra attributes.
+     *
+     * @param id         optional button DOM id
+     * @param label      button label shown once PoW completes and transitions to clickable state
+     * @param cssClass   additional CSS classes for the button
+     * @param seerayGoal optional {@code data-seeray-goal} attribute value
+     * @param extraAttrs optional extra HTML attributes (e.g. {@code data-shortcut="enter" aria-keyshortcuts="Enter"})
+     * @return unescaped HTML fragment for Qute templates
+     */
+    @TemplateExtension(namespace = "pow")
+    public static RawString submitButton(String id, String label, String cssClass, String seerayGoal, String extraAttrs) {
+        return new RawString(buildSubmitButtonHtml(id, label, cssClass, seerayGoal, extraAttrs));
+    }
+
+    public static String buildSubmitButtonHtml(String id, String label, String cssClass, String seerayGoal, String extraAttrs) {
+        String safeLabel = escapeHtml(hasText(label) ? label : "提交");
+        String combinedClass = hasText(cssClass)
+                ? "pow-submit-btn " + cssClass.trim()
+                : "pow-submit-btn";
+
+        StringBuilder html = new StringBuilder(256);
+        html.append("<button type=\"submit\"");
+        if (hasText(id)) {
+            html.append(" id=\"").append(escapeHtml(id.trim())).append("\"");
+        }
+        if (hasText(seerayGoal)) {
+            html.append(" data-seeray-goal=\"").append(escapeHtml(seerayGoal.trim())).append("\"");
+        }
+        if (hasText(extraAttrs)) {
+            html.append(' ').append(extraAttrs.trim());
+        }
+        html.append(" class=\"").append(escapeHtml(combinedClass)).append("\"");
+        html.append(" data-pow-visual-button=\"true\" data-pow-state=\"idle\" disabled>");
+        html.append("<span class=\"pow-btn-progress\" aria-hidden=\"true\"></span>");
+        html.append("<span class=\"pow-btn-visual\" aria-live=\"polite\">");
+        html.append("<span class=\"pow-btn-badge\">PoW 验证中</span>");
+        html.append("<span class=\"pow-btn-difficulty hidden\"></span>");
+        html.append("<span class=\"pow-btn-hash\">00000000…0000</span>");
+        html.append("</span>");
+        html.append("<span class=\"btn-text\">").append(safeLabel).append("</span>");
+        html.append("<span class=\"spinner hidden\"></span>");
+        html.append("</button>");
+        return html.toString();
+    }
+
+    private static String escapeHtml(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            switch (ch) {
+                case '&' -> out.append("&amp;");
+                case '<' -> out.append("&lt;");
+                case '>' -> out.append("&gt;");
+                case '"' -> out.append("&quot;");
+                case '\'' -> out.append("&#39;");
+                default -> out.append(ch);
+            }
+        }
+        return out.toString();
     }
 
     private static boolean hasText(String value) {

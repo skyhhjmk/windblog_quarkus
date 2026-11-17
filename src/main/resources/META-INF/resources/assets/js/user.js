@@ -109,12 +109,13 @@
         });
     }
 
-    function createFormPowManager(action, statusElement) {
+    function createFormPowManager(action, statusElement, submitBtn) {
         if (!window.WindBlogPow || typeof window.WindBlogPow.createChallengeManager !== 'function') {
             return null;
         }
         return window.WindBlogPow.createChallengeManager({
             challengeUrl: '/user/api/pow/challenge?action=' + encodeURIComponent(action),
+            button: submitBtn,
             onStatus: (state) => {
                 if (!statusElement) return;
                 if (state === 'preparing') {
@@ -142,7 +143,7 @@
 
         if (!form) return;
 
-        const powManager = createFormPowManager('login', statusDiv);
+        const powManager = createFormPowManager('login', statusDiv, submitBtn);
         if (powManager) {
             powManager.ensure().catch(() => {});
             form.addEventListener('focusin', () => powManager.ensure().catch(() => {}), { passive: true });
@@ -1000,7 +1001,7 @@
 
         if (!form) return;
 
-        const powManager = createFormPowManager('register', statusDiv);
+        const powManager = createFormPowManager('register', statusDiv, submitBtn);
         if (powManager) {
             powManager.ensure().catch(() => {});
             form.addEventListener('focusin', () => powManager.ensure().catch(() => {}), { passive: true });

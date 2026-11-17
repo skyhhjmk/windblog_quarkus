@@ -359,10 +359,7 @@
                                 <p class="text-xs text-gray-500 max-w-md">
                                     {i18n.t('post.markdown_hint')}
                                 </p>
-                                <button type="submit" id="comment-submit" disabled data-seeray-goal="comment_submit" class="btn-minimal min-w-[140px]">
-                                    <span class="btn-text">{i18n.t('post.comment_submit')}</span>
-                                    <span class="spinner hidden"></span>
-                                </button>
+                                {pow:submitButton('comment-submit', i18n.t('post.comment_submit'), 'btn-minimal min-w-[180px]', 'comment_submit', null)}
                             </div>
                         </form>
                     </div>
