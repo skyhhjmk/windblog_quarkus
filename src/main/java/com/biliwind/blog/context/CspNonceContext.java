@@ -1,10 +1,12 @@
 package com.biliwind.blog.context;
 
+import io.quarkus.arc.Unremovable;
 import jakarta.enterprise.context.RequestScoped;
 
 import java.security.SecureRandom;
 import java.util.Base64;
 
+@Unremovable
 @RequestScoped
 public class CspNonceContext {
 
