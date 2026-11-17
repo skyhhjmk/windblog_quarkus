@@ -12,7 +12,7 @@ source=("git+https://github.com/skyhhjmk/windblog_admin_flutter.git#commit=0fe4d
         'windblog-admin.desktop'
         'windblog-admin')
 sha256sums=('SKIP'
-            '25c69ae587685a209b153ec7ec0957fbbc8ce5eaed09015be5cf897d7f6f5729'
+            'bc5e20361570bf2073ae87c4c78da9db7a45129a4a464886a1e9153b1a8d1551'
             'a722723d3caaa3a1cfdc7709b4fed1305018844444041262bf7422b282797953')
 
 prepare() {
@@ -36,9 +36,9 @@ package() {
   install -Dm755 "$srcdir/windblog-admin" \
     "$pkgdir/usr/bin/windblog-admin"
   install -Dm644 "$srcdir/windblog-admin.desktop" \
-    "$pkgdir/usr/share/applications/windblog-admin.desktop"
+    "$pkgdir/usr/share/applications/com.biliwind.blog.admin.windblog_admin_flutter.desktop"
   install -Dm644 "$srcdir/windblog_admin_flutter/LICENSE" \
     "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 "$srcdir/windblog_admin_flutter/web/icons/Icon-512.png" \
-    "$pkgdir/usr/share/pixmaps/windblog-admin.png"
+    "$pkgdir/usr/share/icons/hicolor/512x512/apps/com.biliwind.blog.admin.windblog_admin_flutter.png"
 }
