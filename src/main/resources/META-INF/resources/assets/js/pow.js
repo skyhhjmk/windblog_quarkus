@@ -3,7 +3,21 @@
 (function () {
     'use strict';
 
-    const DEFAULT_WORKER_URL = '/assets/js/comment-pow-worker.js?v=pow-visual-20261117';
+    function resolveAssetUrl(assetPath) {
+        if (typeof document === 'undefined') {
+            return assetPath;
+        }
+        const versionMeta = document.querySelector('meta[name="windblog-asset-version"]');
+        const minMeta = document.querySelector('meta[name="windblog-asset-minified"]');
+        const version = versionMeta && versionMeta.content ? versionMeta.content.trim() : '';
+        const useMin = minMeta && minMeta.content === 'true';
+        const resolvedPath = useMin
+            ? assetPath.replace(/(\.(?:js|css))$/i, '.min$1')
+            : assetPath;
+        return version ? `${resolvedPath}?v=${encodeURIComponent(version)}` : resolvedPath;
+    }
+
+    const DEFAULT_WORKER_URL = resolveAssetUrl('/assets/js/comment-pow-worker.js');
     const DEFAULT_SOLVE_TIMEOUT_MS = 30000;
     const DEFAULT_FETCH_TIMEOUT_MS = 10000;
     const DEFAULT_MAX_AGE_MS = 240000;

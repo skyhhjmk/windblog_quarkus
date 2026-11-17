@@ -2,6 +2,7 @@ package com.biliwind.blog.common.helper;
 
 import io.quarkus.arc.Arc;
 import io.quarkus.qute.TemplateGlobal;
+import io.quarkus.runtime.LaunchMode;
 import io.vertx.core.http.HttpServerRequest;
 import jakarta.enterprise.context.ApplicationScoped;
 import com.biliwind.blog.common.constant.LanguageConstant;
@@ -9,15 +10,82 @@ import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.i18n.I18n;
 import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.service.PageIdentity;
+import org.eclipse.microprofile.config.ConfigProvider;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 /**
  * Qute 模板全局变量提供者
  */
 @ApplicationScoped
 public class QuteGlobalProvider {
+
+    private static final String ASSET_VERSION = resolveAssetVersion();
+    private static final boolean ASSET_MINIFIED = resolveAssetMinified();
+    private static final String ASSET_MIN_SUFFIX = ASSET_MINIFIED ? ".min" : "";
+
+    private static String resolveAssetVersion() {
+        String configured = ConfigProvider.getConfig()
+                .getOptionalValue("quarkus.application.version", String.class)
+                .map(String::trim)
+                .orElse("");
+        if (LaunchMode.current() == LaunchMode.DEVELOPMENT
+                || configured.isEmpty()
+                || configured.endsWith("-SNAPSHOT")) {
+            String base = configured.isEmpty() ? "dev" : configured;
+            return base + "-" + Long.toString(System.currentTimeMillis(), 36);
+        }
+        return configured;
+    }
+
+    private static boolean resolveAssetMinified() {
+        var explicit = ConfigProvider.getConfig()
+                .getOptionalValue("windblog.assets.minified", Boolean.class);
+        if (explicit.isPresent()) {
+            return explicit.get();
+        }
+        if (LaunchMode.current() == LaunchMode.DEVELOPMENT) {
+            return false;
+        }
+        try (InputStream stream = Thread.currentThread().getContextClassLoader()
+                .getResourceAsStream("windblog-assets.properties")) {
+            if (stream != null) {
+                Properties props = new Properties();
+                props.load(stream);
+                return Boolean.parseBoolean(props.getProperty("minified", "false").trim());
+            }
+        } catch (Exception ignored) {
+            // Fall back to unminified assets when manifest cannot be read
+        }
+        return false;
+    }
+
+    /**
+     * 获取当前构建的静态资源版本号（用于 ?v= 自动缓存失效）
+     */
+    @TemplateGlobal
+    public static String assetVersion() {
+        return ASSET_VERSION;
+    }
+
+    /**
+     * 当前是否启用了构建期生成的 .min 压缩静态资源
+     */
+    @TemplateGlobal
+    public static boolean assetMinified() {
+        return ASSET_MINIFIED;
+    }
+
+    /**
+     * 返回 ".min" 或 ""，用于在模板中拼接自研静态资源路径
+     */
+    @TemplateGlobal
+    public static String assetMinSuffix() {
+        return ASSET_MIN_SUFFIX;
+    }
 
     /**
      * 获取 CSRF Token

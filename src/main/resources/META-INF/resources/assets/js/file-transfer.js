@@ -1,7 +1,11 @@
 (function () {
     'use strict';
 
-    const WASM_URL = '/assets/vendor/file-transfer-wasm/file_transfer_ecc.wasm?v=20261115';
+    const assetVersionMeta = typeof document !== 'undefined'
+        ? document.querySelector('meta[name="windblog-asset-version"]')
+        : null;
+    const assetVersion = assetVersionMeta && assetVersionMeta.content ? assetVersionMeta.content.trim() : '20261115';
+    const WASM_URL = '/assets/vendor/file-transfer-wasm/file_transfer_ecc.wasm?v=' + encodeURIComponent(assetVersion);
     const QR_GEN_URL = '/assets/vendor/qrcode/qrcode.js?v=2.0.4';
     const QR_SCAN_URL = '/assets/vendor/qrcode/jsQR.js?v=1.4.0';
 

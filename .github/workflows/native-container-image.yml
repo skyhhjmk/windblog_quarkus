@@ -50,6 +50,9 @@ jobs:
       - name: Prepare Maven wrapper
         run: chmod +x ./mvnw
 
+      - name: Install esbuild for frontend asset minification
+        run: npm install -g esbuild
+
       - name: Calculate version and publish policy
         id: release
         shell: bash

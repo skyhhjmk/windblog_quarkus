@@ -3683,10 +3683,21 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
         unmount: disposeActive
     });
 
+    function resolveToolAssetUrl(assetPath) {
+        const versionMeta = document.querySelector('meta[name="windblog-asset-version"]');
+        const minMeta = document.querySelector('meta[name="windblog-asset-minified"]');
+        const version = versionMeta && versionMeta.content ? versionMeta.content.trim() : '';
+        const useMin = minMeta && minMeta.content === 'true';
+        const resolvedPath = useMin
+            ? assetPath.replace(/(\.(?:js|css))$/i, '.min$1')
+            : assetPath;
+        return version ? `${resolvedPath}?v=${encodeURIComponent(version)}` : resolvedPath;
+    }
+
     WindBlogLifecycle.register('tool-file-transfer', {
         mount: function () {
             if (!document.getElementById('fileTransferToolApp')) return;
-            loadScriptOnce('/assets/js/file-transfer.js?v=20261115e')
+            loadScriptOnce(resolveToolAssetUrl('/assets/js/file-transfer.js'))
                 .then(() => {
                     if (document.getElementById('fileTransferToolApp') && window.WindBlogFileTransfer) {
                         window.WindBlogFileTransfer.mount();
@@ -3706,7 +3717,7 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
     WindBlogLifecycle.register('tool-image-generator', {
         mount: function () {
             if (!document.getElementById('imageGeneratorToolApp')) return;
-            loadScriptOnce('/assets/js/image-generator.js?v=20261116a')
+            loadScriptOnce(resolveToolAssetUrl('/assets/js/image-generator.js'))
                 .then(() => {
                     if (document.getElementById('imageGeneratorToolApp') && window.WindBlogImageGenerator) {
                         window.WindBlogImageGenerator.mount();
@@ -3726,7 +3737,7 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
     WindBlogLifecycle.register('tool-image-converter', {
         mount: function () {
             if (!document.getElementById('imageConverterToolApp')) return;
-            loadScriptOnce('/assets/js/image-converter.js?v=20261116a')
+            loadScriptOnce(resolveToolAssetUrl('/assets/js/image-converter.js'))
                 .then(() => {
                     if (document.getElementById('imageConverterToolApp') && window.WindBlogImageConverter) {
                         window.WindBlogImageConverter.mount();
@@ -3754,7 +3765,7 @@ Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" becau
                 || document.getElementById('jsonlTableToolApp')
                 || /^(\/(zh-cn|en-us))?\/tools(\/|$)/i.test(window.location.pathname || '');
             if (!isToolsPage) return;
-            loadScriptOnce('/assets/js/tools-suite.js?v=20261115c')
+            loadScriptOnce(resolveToolAssetUrl('/assets/js/tools-suite.js'))
                 .then(() => {
                     if (window.WindBlogToolsSuite) {
                         window.WindBlogToolsSuite.mount();

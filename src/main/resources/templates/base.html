@@ -40,12 +40,14 @@
     <meta name="theme-color" content="{config:themeColor}"/>
     <meta id="color-scheme-meta" name="color-scheme" content="dark" />
     <meta name="csrf-token" content="{csrfToken ?: ''}">
+    <meta name="windblog-asset-version" content="{assetVersion}">
+    <meta name="windblog-asset-minified" content="{assetMinified}">
 
     <!-- 本地化 Font Awesome，避免运行时依赖外部 CDN -->
     <link rel="stylesheet" href="/assets/vendor/fontawesome/css/all.min.css"/>
 
-    <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety.js?v=pjax-20260912"></script>
-    <script src="/assets/js/webmcp.js?v=webmcp-20261114" defer></script>
+    <script nonce="{cspNonce}" src="/assets/js/windblog-dom-safety{assetMinSuffix}.js?v={assetVersion}"></script>
+    <script src="/assets/js/webmcp{assetMinSuffix}.js?v={assetVersion}" defer></script>
 
     {#if config:analyticsTrackingEnabled}
         <script src="{config:analyticsTrackingScriptUrl}" data-site-id="{config:analyticsTrackingSiteId}" data-navigation-mode="manual" data-credentials="include"
@@ -101,12 +103,12 @@
     </script>
 
     <!-- Custom Theme Styles -->
-    <link rel="stylesheet" href="/assets/css/theme.css?v=post-cover-flip-fix-20261112" />
-    <link rel="stylesheet" href="/assets/css/drag-character-trail.css?v=card-rainbow-20261108" />
-    <link rel="stylesheet" href="/assets/css/ruler-hud.css?v=ruler-hud-20261106-elastic" />
-    <link rel="stylesheet" href="/assets/css/ui.css?v=pow-visual-20261117"/>
-    <link rel="stylesheet" href="/assets/css/post-quote.css?v=quote-identity-20261113"/>
-    <link rel="stylesheet" href="/assets/css/relax-games.css?v=relax-games-20261104-v2"/>
+    <link rel="stylesheet" href="/assets/css/theme{assetMinSuffix}.css?v={assetVersion}" />
+    <link rel="stylesheet" href="/assets/css/drag-character-trail{assetMinSuffix}.css?v={assetVersion}" />
+    <link rel="stylesheet" href="/assets/css/ruler-hud{assetMinSuffix}.css?v={assetVersion}" />
+    <link rel="stylesheet" href="/assets/css/ui{assetMinSuffix}.css?v={assetVersion}"/>
+    <link rel="stylesheet" href="/assets/css/post-quote{assetMinSuffix}.css?v={assetVersion}"/>
+    <link rel="stylesheet" href="/assets/css/relax-games{assetMinSuffix}.css?v={assetVersion}"/>
 </head>
 
 <body class="min-h-screen flex flex-col bg-bg text-body font-sans selection:bg-accent/20 selection:text-accent">
@@ -416,23 +418,23 @@
 </style>
 
 <!-- JS Scripts -->
-<script src="/assets/js/pjax-lifecycle.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/ui.js?v=error-codes-20261020" defer></script>
-<script src="/assets/js/pow.js?v=pow-visual-20261117" defer></script>
-<script src="/assets/js/main.js?v=pjax-flip-scroll-20261113" defer></script>
-<script src="/assets/js/drag-character-trail.js?v=card-rainbow-20261108" defer></script>
-<script src="/assets/js/ruler-hud.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/internal-link-graph.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/article-images.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/article-lightbox.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/user.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/comment.js?v=quote-correct-fix-20261113" defer></script>
-<script src="/assets/js/ads.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/link.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/tools.js?v=20261115c" defer></script>
-<script src="/assets/js/post-premium.js?v=20261115" defer></script>
-<script src="/assets/js/post-quote.js?v=quote-identity-fix2-20261113" defer></script>
-<script src="/assets/js/article-modes.js?v=pjax-lifecycle-20261112" defer></script>
-<script src="/assets/js/relax-games.js?v=pjax-lifecycle-20261112" defer></script>
+<script src="/assets/js/pjax-lifecycle{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/ui{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/pow{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/main{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/drag-character-trail{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/ruler-hud{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/internal-link-graph{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/article-images{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/article-lightbox{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/user{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/comment{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/ads{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/link{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/tools{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/post-premium{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/post-quote{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/article-modes{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/relax-games{assetMinSuffix}.js?v={assetVersion}" defer></script>
 </body>
 </html>
