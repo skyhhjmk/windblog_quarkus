@@ -182,6 +182,9 @@ class AdminAuthorizationPolicyTest {
                 "PUT", "/api/admin/ai/topics/automation").action());
         assertEquals("user.write", AdminAuthorizationPolicy.decide("PUT", "/api/admin/users/7").action());
         assertEquals("outbox.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/outbox").action());
+        assertEquals("database.read", AdminAuthorizationPolicy.decide("GET", "/api/admin/database/storage").action());
+        assertFalse(AdminAuthorizationPolicy.requiresStepUp("GET", "/api/admin/database/storage"));
+        assertTrue(AdminAuthorizationPolicy.decide("GET", "/api/admin/database/storage").superAdminOnly());
         assertEquals("outbox.replay", AdminAuthorizationPolicy.decide(
                 "POST", "/api/admin/outbox/7/replay").action());
     }

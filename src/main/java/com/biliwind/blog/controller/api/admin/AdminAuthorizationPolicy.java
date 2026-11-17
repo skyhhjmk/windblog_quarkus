@@ -314,6 +314,9 @@ public final class AdminAuthorizationPolicy {
             return "database.import";
         }
         if (path.startsWith("/api/admin/database")) {
+            if ("GET".equals(method)) {
+                return "database.read";
+            }
             return path.endsWith("/migrate") ? "database.migrate" : "database.seed";
         }
         if (path.startsWith("/api/admin/settings")) {

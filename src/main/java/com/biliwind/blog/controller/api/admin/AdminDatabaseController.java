@@ -1,13 +1,16 @@
 package com.biliwind.blog.controller.api.admin;
 
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
+import com.biliwind.blog.service.DatabaseStorageMonitorService;
 import io.agroal.api.AgroalDataSource;
 import io.quarkus.liquibase.LiquibaseFactory;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -38,6 +41,48 @@ public class AdminDatabaseController {
 
     @Inject
     com.biliwind.blog.context.AdminRequestContext adminRequestContext;
+
+    @Inject
+    DatabaseStorageMonitorService databaseStorageMonitorService;
+
+    @GET
+    @Path("/storage")
+    @SecurityRequirement(name = "adminBearerAuth")
+    @Operation(summary = "获取数据库表级磁盘存储占用", description = "返回数据库及各数据表的磁盘空间、索引、TOAST 与预估行数")
+    @APIResponse(responseCode = "200", description = "查询成功")
+    public Response storage(
+            @QueryParam("schema") String schema,
+            @QueryParam("search") String search,
+            @QueryParam("limit") Integer limit) {
+        mustFindAdmin();
+        try {
+            DatabaseStorageMonitorService.DatabaseStorageSnapshot snapshot =
+                    databaseStorageMonitorService.collectSnapshot();
+            DatabaseStorageMonitorService.DatabaseStorageSnapshot filtered =
+                    databaseStorageMonitorService.filterSnapshot(
+                            snapshot,
+                            schema,
+                            search,
+                            limit == null ? 200 : limit);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("databaseName", filtered.databaseName());
+            result.put("databaseTotalBytes", filtered.databaseTotalBytes());
+            result.put("tableTotalBytes", filtered.tableTotalBytes());
+            result.put("tableDataBytes", filtered.tableDataBytes());
+            result.put("tableIndexBytes", filtered.tableIndexBytes());
+            result.put("tableToastBytes", filtered.tableToastBytes());
+            result.put("tableCount", filtered.tableCount());
+            result.put("collectedAt", filtered.collectedAt().toString());
+            result.put("tables", filtered.tables());
+            return Response.ok(result).build();
+        } catch (SQLException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "查询数据库表级存储占用失败：" + SensitiveMessageSanitizer.sanitize(e.getMessage()));
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(error).build();
+        }
+    }
 
     @POST
     @Path("/migrate")
