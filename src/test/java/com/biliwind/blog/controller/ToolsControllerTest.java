@@ -258,4 +258,31 @@ class ToolsControllerTest {
         given().when().get("/assets/js/tools-suite.js").then().statusCode(200)
                 .body(containsString("WindBlogToolsSuite"));
     }
+
+    @Test
+    void shouldReturnImageGeneratorSeoAndBilingualContent() {
+        given().when().get("/tools/image-generator").then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("<title>程序化图像生成与全能图像处理工作台 - 免费在线图像处理与图像转码</title>"))
+                .body(containsString("在线图像处理"))
+                .body(containsString("免费图像转码"))
+                .body(containsString("/og/tool/image-generator.png"))
+                .body(containsString("summary_large_image"))
+                .body(containsString("twitter:image"))
+                .body(containsString("/tools/image-converter"))
+                .body(containsString("常见问题解答 (FAQ)"));
+
+        given().when().get("/en-us/tools/image-generator").then()
+                .statusCode(200)
+                .contentType("text/html;charset=UTF-8")
+                .body(containsString("<title>Procedural Image Generator &amp; Free Online Image Processor</title>"))
+                .body(containsString("Procedural Image Generator &amp; Local Pixel Studio</h1>"))
+                .body(containsString("Frequently Asked Questions (FAQ)"))
+                .body(containsString("/en-US/og/tool/image-generator.png"));
+
+        given().when().get("/og/tool/image-generator.png").then()
+                .statusCode(200)
+                .contentType("image/png");
+    }
 }

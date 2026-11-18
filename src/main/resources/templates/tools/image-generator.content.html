@@ -64,40 +64,44 @@
                 <div class="flex flex-wrap items-center gap-2">
                     <a href="{languagePrefix}/tools" class="text-xs font-mono text-meta hover:text-accent transition-colors flex items-center gap-1">
                         <i class="fa-solid fa-chevron-left text-[10px]"></i>
-                        <span>返回工具箱</span>
+                        <span>{#if language.startsWith('en')}Back to Tools{#else}返回工具箱{/if}</span>
                     </a>
                     <span class="text-xs text-meta/40">•</span>
                     <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                        <i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1"></i>18+ 程序化算法引擎
+                        <i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1"></i>{#if language.startsWith('en')}18+ Procedural Engines{#else}18+ 程序化算法引擎{/if}
                     </span>
                     <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/20">
-                        <i class="fa-solid fa-sliders text-[9px] mr-1"></i>非破坏性像素管线
+                        <i class="fa-solid fa-sliders text-[9px] mr-1"></i>{#if language.startsWith('en')}Non-Destructive Pixel Pipeline{#else}非破坏性像素管线{/if}
                     </span>
                     <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        <i class="fa-solid fa-shield-halved text-[9px] mr-1"></i>100% 本地零上传转码
+                        <i class="fa-solid fa-shield-halved text-[9px] mr-1"></i>{#if language.startsWith('en')}100% Local Zero-Upload{#else}100% 本地零上传转码{/if}
                     </span>
                 </div>
-                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">程序化图像生成与全能图像处理工作台</h1>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-main tracking-tight">{#if language.startsWith('en')}Procedural Image Generator &amp; Local Pixel Studio{#else}程序化图像生成与全能图像处理工作台{/if}</h1>
                 <p class="text-body text-xs md:text-sm max-w-3xl leading-relaxed">
-                    集数学程序化图像生成（柏林分形噪声、域扭曲流体、德劳内低多边形、曼德博/朱利亚分形、混沌吸引子、图灵反应扩散等）、全链路像素级图像精修（色彩分级、自定义卷积核、复古误差扩散抖动、智能去背与防盗水印）以及多格式本地批量转码（PNG / WebP / JPEG / BMP / 多尺寸 ICO / SVG / Base64）于一体的浏览器端图形工作站。
+                    {#if language.startsWith('en')}
+                        A browser-native graphics studio combining 18+ mathematical procedural art generators (Perlin fBm, Domain Warping, Delaunay Low-Poly, Mandelbrot/Julia fractals, Strange Attractors, Reaction-Diffusion), non-destructive pixel processing (color grading, custom 3×3 convolution kernels, Floyd-Steinberg/Atkinson dithering, chroma key, watermarks), and zero-upload local batch transcoding (PNG, WebP, JPEG, BMP, multi-size ICO, SVG, Base64).
+                    {#else}
+                        集数学程序化图像生成（柏林分形噪声、域扭曲流体、德劳内低多边形、曼德博/朱利亚分形、混沌吸引子、图灵反应扩散等）、免费在线图像处理（色彩分级、自定义卷积核、复古误差扩散抖动、智能去背与防盗水印）以及免费图像转码（PNG / WebP / JPEG / BMP / 多尺寸 ICO / SVG / Base64 本地零上传批量互转）于一体的浏览器端图形工作站。
+                    {/if}
                 </p>
             </div>
             <!-- Top Mode Switcher -->
-            <div class="flex flex-wrap items-center gap-2 shrink-0" role="tablist" aria-label="图像工作台模式切换">
+            <div class="flex flex-wrap items-center gap-2 shrink-0" role="tablist" aria-label="{#if language.startsWith('en')}Image studio mode switcher{#else}图像工作台模式切换{/if}">
                 <button type="button" id="igModeTabGenerate" data-ig-mode="generate" data-active="true"
                         class="ig-main-tab px-3.5 py-2 rounded-xl border border-border bg-card text-xs font-bold text-main hover:border-accent/50 transition-all cursor-pointer flex items-center gap-1.5">
                     <i class="fa-solid fa-wand-magic-sparkles"></i>
-                    <span>1. 程序化图像生成</span>
+                    <span>{#if language.startsWith('en')}1. Procedural Generator{#else}1. 程序化图像生成{/if}</span>
                 </button>
                 <button type="button" id="igModeTabProcess" data-ig-mode="process" data-active="false"
                         class="ig-main-tab px-3.5 py-2 rounded-xl border border-border bg-card text-xs font-bold text-main hover:border-accent/50 transition-all cursor-pointer flex items-center gap-1.5">
                     <i class="fa-solid fa-sliders"></i>
-                    <span>2. 图像处理与滤镜</span>
+                    <span>{#if language.startsWith('en')}2. Pixel Processor &amp; Filters{#else}2. 图像处理与滤镜{/if}</span>
                 </button>
                 <button type="button" id="igModeTabTranscode" data-ig-mode="transcode" data-active="false"
                         class="ig-main-tab px-3.5 py-2 rounded-xl border border-border bg-card text-xs font-bold text-main hover:border-accent/50 transition-all cursor-pointer flex items-center gap-1.5">
                     <i class="fa-solid fa-arrows-rotate"></i>
-                    <span>3. 本地转码与导出</span>
+                    <span>{#if language.startsWith('en')}3. Local Transcoder &amp; Export{#else}3. 本地转码与导出{/if}</span>
                 </button>
             </div>
         </header>
@@ -1194,6 +1198,66 @@
                     </div>
                 </div>
 
+            </div>
+        </div>
+
+        <!-- SEO Guide: Procedural Algorithm Matrix, Cross-Tool Links & FAQ -->
+        <div class="space-y-6 pt-4 border-t border-border/60">
+            <div class="rounded-2xl bg-card border border-border p-5 sm:p-6 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h2 class="text-base sm:text-lg font-extrabold text-main flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-purple-400"></i>
+                        <span>{#if language.startsWith('en')}18+ Procedural Algorithms &amp; Pixel Pipeline Overview{#else}18+ 程序化算法引擎与像素管线能力一览{/if}</span>
+                    </h2>
+                    <div class="flex flex-wrap items-center gap-3 text-xs font-mono">
+                        <a href="{languagePrefix}/tools/image-converter" class="text-accent hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-images text-[11px]"></i>
+                            <span>{#if language.startsWith('en')}Dedicated Batch Image Converter →{#else}前往专用批量图片格式转换器 →{/if}</span>
+                        </a>
+                        <a href="{languagePrefix}/tools" class="text-meta hover:text-accent hover:underline">
+                            {#if language.startsWith('en')}All Developer Tools{#else}全部在线工具{/if}
+                        </a>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs text-body leading-relaxed">
+                    <div class="p-3.5 rounded-xl bg-input-bg/50 border border-border/60 space-y-1.5">
+                        <h3 class="font-bold text-main">{#if language.startsWith('en')}Noise &amp; Fluid Fields{#else}噪声与流体场算法{/if}</h3>
+                        <p>{#if language.startsWith('en')}Generate seamless organic textures, marble patterns, and atmospheric covers using Domain Warping, Perlin fBm, Ridged Multifractal, and Curl Flow Field streamlines.{#else}内置域扭曲流体大理石、Perlin fBm 分形噪声、山脊多倍分形与旋度流体矢量线，适合生成博客封面、抽象壁纸与无缝材质纹理。{/if}</p>
+                    </div>
+                    <div class="p-3.5 rounded-xl bg-input-bg/50 border border-border/60 space-y-1.5">
+                        <h3 class="font-bold text-main">{#if language.startsWith('en')}Geometry, Fractals &amp; Chaos{#else}几何晶格、分形与混沌吸引子{/if}</h3>
+                        <p>{#if language.startsWith('en')}Render Delaunay Low-Poly meshes, Voronoi cells, Mandelbrot/Julia sets, Clifford/De Jong Strange Attractors, and Gray-Scott Reaction-Diffusion patterns directly on HTML5 Canvas.{#else}支持德劳内 Low-Poly 低多边形、泰森多边形 Voronoi 细胞、曼德博/朱利亚分形、Clifford 奇异吸引子与 Gray-Scott 图灵反应扩散模拟。{/if}</p>
+                    </div>
+                    <div class="p-3.5 rounded-xl bg-input-bg/50 border border-border/60 space-y-1.5">
+                        <h3 class="font-bold text-main">{#if language.startsWith('en')}Non-Destructive Filters &amp; Local Transcoding{#else}非破坏性像素精修与本地转码{/if}</h3>
+                        <p>{#if language.startsWith('en')}Apply custom 3×3 convolution kernels, Floyd-Steinberg or Atkinson retro dithering, chroma key background removal, and export to PNG, WebP, JPEG, BMP, multi-size Favicon ICO, or Base64 without server uploads.{#else}支持自定义 3×3 卷积核、Floyd-Steinberg / Atkinson 复古抖动、色键去背与水印叠加，并可零上传导出 PNG、WebP、JPG、BMP、多尺寸 ICO 与 Base64。{/if}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl bg-card border border-border p-5 sm:p-6 space-y-4">
+                <h2 class="text-base font-extrabold text-main flex items-center gap-2">
+                    <i class="fa-solid fa-circle-question text-accent"></i>
+                    <span>{#if language.startsWith('en')}Frequently Asked Questions (FAQ){#else}常见问题解答 (FAQ){/if}</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-body leading-relaxed">
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">{#if language.startsWith('en')}Q1: Are my images uploaded to any server during generation or processing?{#else}Q1：图像生成、滤镜精修或格式转码会上传图片到服务器吗？{/if}</h3>
+                        <p>{#if language.startsWith('en')}No. All procedural rendering, pixel convolution, dithering, and format transcoding run 100% locally inside your browser using HTML5 Canvas and Web APIs. Your files never leave your device.{#else}不会。所有程序化绘图、像素卷积、误差扩散抖动与格式转码均在浏览器本地通过 HTML5 Canvas 完成，图片文件不会离开您的设备，并自动剥离 EXIF/GPS 隐私元数据。{/if}</p>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">{#if language.startsWith('en')}Q2: Can I create blog cover images or multi-size Favicon ICO files here?{#else}Q2：可以直接用它制作文章封面图或网站 Favicon.ico 吗？{/if}</h3>
+                        <p>{#if language.startsWith('en')}Yes. Use the built-in 1200×630 OpenGraph cover preset with custom title typography, or switch to the Local Transcoder tab to package 16×16 to 256×256 multi-resolution ICO icons in one click.{#else}可以。生成模式内置 1200×630 封面尺寸与标题排版徽章叠加；转码模式支持一键打包 16×16 至 256×256 多分辨率 Favicon.ico 图标。{/if}</p>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">{#if language.startsWith('en')}Q3: What is the difference between this studio and the Image Format Converter?{#else}Q3：本工作台与「图片格式转换器」有什么区别？{/if}</h3>
+                        <p>{#if language.startsWith('en')}This studio focuses on procedural art synthesis, non-destructive pixel editing, and canvas-to-format export, while our Image Format Converter specializes in fast one-click batch transcoding across WebP, AVIF, SVG, PNG, JPG, and ICO.{#else}本工作台侧重数学算法生图、非破坏性像素精修与封面创作；如果你只需快速批量互转 WebP、AVIF、SVG、PNG、JPG 或 ICO，可使用更轻量的「图片格式转换器」。{/if}</p>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-bold text-main">{#if language.startsWith('en')}Q4: How do Floyd-Steinberg and Atkinson dithering work?{#else}Q4：什么是 Floyd-Steinberg 和 Atkinson 复古抖动？{/if}</h3>
+                        <p>{#if language.startsWith('en')}Error-diffusion dithering distributes quantization errors to neighboring pixels, creating classic Macintosh 1-bit or retro pixel-art shading from continuous-tone photos or procedural gradients.{#else}误差扩散抖动会将颜色量化后的误差按权重分散到相邻像素，从而将连续色调图片或算法渐变转换为经典的 Macintosh 1-bit 黑白点阵或复古像素风效果。{/if}</p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>

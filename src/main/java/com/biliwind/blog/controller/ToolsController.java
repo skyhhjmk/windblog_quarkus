@@ -3,6 +3,7 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.i18n.I18n;
+import com.biliwind.blog.service.CanonicalUrlService;
 import com.biliwind.blog.service.PageRenderModel;
 import com.biliwind.blog.service.PageRenderer;
 import com.biliwind.blog.service.PageView;
@@ -35,6 +36,9 @@ public class ToolsController {
 
     @Inject
     StructuredDataService structuredDataService;
+
+    @Inject
+    CanonicalUrlService canonicalUrlService;
 
     @RegisterForReflection
     public static record ToolItem(
@@ -228,6 +232,26 @@ public class ToolsController {
         return ALL_TOOLS;
     }
 
+    public static ToolItem findTool(String toolId) {
+        if (toolId == null || toolId.isBlank()) {
+            return null;
+        }
+        return ALL_TOOLS.stream()
+                .filter(tool -> tool.id().equals(toolId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static ToolItem findToolByPath(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        return ALL_TOOLS.stream()
+                .filter(tool -> tool.url().equals(path))
+                .findFirst()
+                .orElse(null);
+    }
+
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance index(@Context HttpHeaders headers) {
@@ -384,12 +408,12 @@ public class ToolsController {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance imageGenerator(@Context HttpHeaders headers) {
         return renderTool(headers, PageView.TOOLS_IMAGE_GENERATOR, "/tools/image-generator",
-                "程序化图像生成与全能图像处理工作台 - 算法绘图/滤镜矩阵/抖动量化/本地转码",
-                "纯前端零上传的程序化图像生成、像素级图像处理与本地批量转码工作台。内置分形柏林噪声、域扭曲流体、德劳内低多边形、曼德博/朱利亚分形、混沌吸引子、图灵反应扩散等18种生成器，以及色彩分级、自定义卷积核、Floyd-Steinberg/Atkinson抖动、去背水印与 PNG/WebP/JPG/BMP/ICO 本地转码。",
-                "图片生成器,程序化图像生成,在线图像处理,本地图片转码,Perlin噪声,Low-Poly生成,分形生成,Floyd-Steinberg抖动,卷积滤镜,ICO生成",
-                "Procedural Image Generator, Pixel Processor & Local Transcoder Studio",
-                "Client-side procedural art generator (Perlin fBm, Domain Warping, Delaunay Low-Poly, Mandelbrot/Julia fractals, Strange Attractors, Reaction-Diffusion), non-destructive image processor (color grading, custom 3x3 convolution, retro dithering, chroma key, watermarks) and batch local format transcoder (PNG/WebP/JPEG/BMP/ICO/Base64).",
-                "procedural image generator,online image processor,local image converter,perlin noise generator,low poly generator,dithering tool,favicon ico generator");
+                "程序化图像生成与全能图像处理工作台 - 免费在线图像处理与图像转码",
+                "纯前端免费在线图像处理、程序化图像生成与免费图像转码工作台。支持柏林噪声/Low-Poly/分形等18种算法生图，卷积滤镜、复古抖动与 PNG/WebP/ICO 零上传转码。",
+                "在线图像处理,免费图像转码,免费在线图像处理,在线图像生成,免费图片处理,图片格式转换,图片生成器,程序化图像生成,本地图片转码,在线图片滤镜,Perlin噪声,Low-Poly生成,分形生成,Floyd-Steinberg抖动,卷积滤镜,ICO生成",
+                "Procedural Image Generator & Free Online Image Processor",
+                "Free zero-upload online image processor, procedural art generator (Perlin fBm, Low-Poly, fractals) & local PNG/WebP/ICO transcoder.",
+                "online image processor,free image transcoder,free online image editor,procedural image generator,local image converter,perlin noise generator,low poly generator,dithering tool,favicon ico generator");
     }
 
     @GET
@@ -492,7 +516,11 @@ public class ToolsController {
         String desc = en ? enDesc : zhDesc;
         String keywords = en ? enKeywords : zhKeywords;
         String jsonLd = structuredDataService.toolApplication(title, desc, path, lang, i18n.t("tools.title"));
-        return pageRenderer.render(view, headers, toolModel(headers, title, desc, keywords, jsonLd));
+        ToolItem tool = findToolByPath(path);
+        String ogImageUrl = tool == null
+                ? null
+                : canonicalUrlService.buildLocalizedPath("/og/tool/" + tool.id() + ".png", lang);
+        return pageRenderer.render(view, headers, toolModel(headers, title, desc, keywords, jsonLd, ogImageUrl));
     }
 
     private static boolean isEnglish(String lang) {
@@ -501,11 +529,21 @@ public class ToolsController {
 
     private PageRenderModel toolModel(HttpHeaders headers, String pageTitle,
                                       String pageDescription, String pageKeywords, String jsonLd) {
-        return new PageRenderModel()
+        return toolModel(headers, pageTitle, pageDescription, pageKeywords, jsonLd, null);
+    }
+
+    private PageRenderModel toolModel(HttpHeaders headers, String pageTitle,
+                                      String pageDescription, String pageKeywords,
+                                      String jsonLd, String ogImageUrl) {
+        PageRenderModel model = new PageRenderModel()
                 .put("pjaxRequest", PjaxHelper.isPjaxRequest(headers))
                 .put("pageTitle", pageTitle)
                 .put("pageDescription", pageDescription)
                 .put("pageKeywords", pageKeywords)
                 .put("jsonLd", jsonLd);
+        if (ogImageUrl != null && !ogImageUrl.isBlank()) {
+            model.put("ogImageUrl", ogImageUrl);
+        }
+        return model;
     }
 }

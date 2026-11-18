@@ -2,7 +2,6 @@
 <meta name="robots" content="{seoRobots}" data-pjax-managed="true"/>
 <meta name="keywords" content="{pageKeywords ?: config:siteKeywords}" data-pjax-managed="true"/>
 <link rel="canonical" href="{canonicalUrl}" data-pjax-managed="true"/>
-<link rel="alternate" type="application/rss+xml" title="{config:siteTitle}" href="/rss.xml"/>
 {#for alternate in seoAlternates}
 <link rel="alternate" hreflang="{alternate.language}" href="{alternate.url}" data-pjax-managed="true"/>
 {/for}
@@ -27,10 +26,17 @@
 <meta property="og:url" content="{canonicalUrl}" data-pjax-managed="true"/>
 <meta property="og:site_name" content="{config:siteTitle}" data-pjax-managed="true"/>
 <meta property="og:locale" content="{ogLocale}" data-pjax-managed="true"/>
+{#if ogImageUrl.or(null)}
+<meta property="og:image" content="{ogImageUrl}" data-pjax-managed="true"/>
+<meta name="twitter:card" content="summary_large_image" data-pjax-managed="true"/>
+<meta name="twitter:image" content="{ogImageUrl}" data-pjax-managed="true"/>
+{#else}
 {#if publisherLogoUrl.or(null)}
 <meta property="og:image" content="{publisherLogoUrl}" data-pjax-managed="true"/>
+<meta name="twitter:image" content="{publisherLogoUrl}" data-pjax-managed="true"/>
 {/if}
 <meta name="twitter:card" content="summary" data-pjax-managed="true"/>
+{/if}
 <meta name="twitter:title" content="{pageTitle ?: config:siteTitle}" data-pjax-managed="true"/>
 <meta name="twitter:description" content="{pageDescription ?: config:siteDescription}" data-pjax-managed="true"/>
 {/if}

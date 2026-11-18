@@ -86,6 +86,49 @@ public class OgImageService {
         return rasterizeOrFallback(meta);
     }
 
+    /**
+     * Generates and caches a 1200x630 PNG OpenGraph card for a public tool page.
+     */
+    public byte[] getToolOgPng(String toolId, String title, String summary, String tag, String lang) {
+        String safeLang = lang == null || lang.isBlank() ? "zh-CN" : lang;
+        String siteTitle = settings.text(SettingKey.SITE_INFO, "title");
+        String resolvedSiteTitle = (siteTitle == null || siteTitle.isBlank()) ? "WindBlog" : siteTitle;
+        String author = settings.text(SettingKey.SITE_INFO, "author");
+        String resolvedAuthor = (author == null || author.isBlank()) ? resolvedSiteTitle : author;
+        String cacheKey = "og:tool:png:v1:" + toolId + ":" + safeLang;
+        String cachedBase64 = cacheService.getOrLoad(cacheKey, String.class, OG_CACHE_TTL, () -> {
+            String svg = OgImageRenderer.renderSvg(
+                    title,
+                    summary,
+                    tag,
+                    resolvedAuthor,
+                    resolvedSiteTitle,
+                    "ONLINE TOOL",
+                    "tool:" + toolId + ":" + safeLang
+            );
+            byte[] png = tryRsvgConvert(svg);
+            if (png == null) {
+                png = OgImageRenderer.renderFallbackPng(
+                        resolvedSiteTitle,
+                        toolId,
+                        "ONLINE TOOL",
+                        "tool:" + toolId + ":" + safeLang
+                );
+            }
+            return Base64.getEncoder().encodeToString(png);
+        }).orElse(null);
+
+        if (cachedBase64 != null && !cachedBase64.isEmpty()) {
+            return Base64.getDecoder().decode(cachedBase64);
+        }
+        return OgImageRenderer.renderFallbackPng(
+                resolvedSiteTitle,
+                toolId,
+                "ONLINE TOOL",
+                "tool:" + toolId + ":" + safeLang
+        );
+    }
+
     private byte[] rasterizeOrFallback(PostMeta meta) {
         String svg = OgImageRenderer.renderSvg(
                 meta.title(),
