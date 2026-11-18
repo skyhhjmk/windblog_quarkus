@@ -4158,202 +4158,289 @@
         }
 
         function initPostReactions(root = document) {
-            const container = root.querySelector?.('.post-reactions-container') ||
-                (root.matches?.('.post-reactions-container') ? root : null);
-            if (!container || container.dataset.reactionsBound === 'true') return;
-            container.dataset.reactionsBound = 'true';
-
-            const slug = container.dataset.postSlug;
-            if (!slug) return;
-
-            const storageReactionsKey = `windblog_reactions_${slug}`;
-            const storageCountsKey = `windblog_reaction_counts_${slug}`;
-
-            const getSlugSeed = (s) => {
-                if (!s) return 42;
-                let h = 0;
-                for (let i = 0; i < s.length; i++) {
-                    h = ((h << 5) - h) + s.charCodeAt(i);
-                    h |= 0;
-                }
-                return Math.abs(h & 0x7fffffff);
-            };
-
-            const seedCount = (type) => {
-                const seed = getSlugSeed(slug);
-                switch (type) {
-                    case 'like': return 16 + (seed % 23);
-                    case 'heart': return 11 + (Math.floor(seed / 7) % 18);
-                    case 'insightful': return 6 + (Math.floor(seed / 13) % 14);
-                    case 'rocket': return 3 + (Math.floor(seed / 19) % 12);
-                    case 'celebrate': return 2 + (Math.floor(seed / 29) % 10);
-                    default: return 5 + (seed % 10);
-                }
-            };
-
-            let userReactions = [];
-            try {
-                const stored = localStorage.getItem(storageReactionsKey);
-                if (stored) userReactions = JSON.parse(stored);
-            } catch {
-                userReactions = [];
+            const found = Array.from(root.querySelectorAll?.('.post-reactions-container') || []);
+            if (root.matches?.('.post-reactions-container') && !found.includes(root)) {
+                found.unshift(root);
             }
+            const containers = found.filter(el => el && el.dataset.reactionsBound !== 'true' && el.dataset.postSlug);
+            if (containers.length === 0) return;
 
-            let counts = {};
-            try {
-                const storedCounts = localStorage.getItem(storageCountsKey);
-                if (storedCounts) counts = JSON.parse(storedCounts);
-            } catch {
-                counts = {};
-            }
-
-            const buttons = container.querySelectorAll('.post-reaction-btn');
-            const updateButtonViews = () => {
-                buttons.forEach(btn => {
-                    const type = btn.dataset.reactionType;
-                    if (!type) return;
-                    if (typeof counts[type] !== 'number') {
-                        counts[type] = seedCount(type);
-                    }
-                    const isActive = userReactions.includes(type);
-                    btn.classList.toggle('is-active', isActive);
-                    btn.setAttribute('aria-pressed', isActive.toString());
-                    const countEl = btn.querySelector('.reaction-count');
-                    if (countEl) countEl.textContent = String(counts[type]);
-                });
-            };
-            updateButtonViews();
-
-            // Fetch live counts from backend
-            fetch(`/api/reactions/${encodeURIComponent(slug)}`, { credentials: 'same-origin', cache: 'no-cache' })
-                .then(r => r.ok ? r.json() : null)
-                .then(json => {
-                    if (json && json.success && json.data) {
-                        counts = { ...counts, ...json.data };
-                        updateButtonViews();
-                        try { localStorage.setItem(storageCountsKey, JSON.stringify(counts)); } catch {}
-                    }
-                })
-                .catch(() => {});
-
-            // Proactively pre-fetch and background-solve a PoW challenge so human clicks are instantaneous
-            ensureReactionChallenge();
-
-            buttons.forEach(btn => {
-                const type = btn.dataset.reactionType;
-                if (!type) return;
-
-                btn.addEventListener('click', async () => {
-                    const activeNow = btn.classList.contains('is-active');
-                    const action = activeNow ? 'unreact' : 'react';
-
-                    // Optimistic UI update
-                    if (activeNow) {
-                        btn.classList.remove('is-active');
-                        btn.setAttribute('aria-pressed', 'false');
-                        counts[type] = Math.max(0, (counts[type] || 0) - 1);
-                        userReactions = userReactions.filter(r => r !== type);
-                    } else {
-                        btn.classList.add('is-active');
-                        btn.setAttribute('aria-pressed', 'true');
-                        counts[type] = (counts[type] || 0) + 1;
-                        if (!userReactions.includes(type)) {
-                            userReactions.push(type);
-                        }
-
-                        // Burst animation
-                        const badge = document.createElement('span');
-                        badge.className = 'reaction-float-badge';
-                        badge.textContent = '+1';
-                        btn.appendChild(badge);
-                        setTimeout(() => badge.remove(), 700);
-                    }
-
-                    const countEl = btn.querySelector('.reaction-count');
-                    if (countEl) countEl.textContent = String(counts[type]);
-
-                    try {
-                        localStorage.setItem(storageReactionsKey, JSON.stringify(userReactions));
-                        localStorage.setItem(storageCountsKey, JSON.stringify(counts));
-                    } catch {}
-
-                    // Server sync with PoW challenge
-                    try {
-                        let payload = { reactionType: type, action: action };
-                        if (action === 'react') {
-                            let ch = cachedReactionChallenge;
-                            cachedReactionChallenge = null;
-                            if (!ch) {
-                                ch = await ensureReactionChallenge(btn);
-                            }
-                            if (ch) {
-                                payload.challengeId = ch.challengeId;
-                                payload.powNonce = ch.powNonce;
-                            }
-                        }
-
-                        const headers = { 'Content-Type': 'application/json' };
-                        const csrfToken = typeof window.getCsrfToken === 'function' ? window.getCsrfToken() : '';
-                        if (csrfToken) {
-                            headers['X-XSRF-TOKEN'] = csrfToken;
-                        }
-
-                        const res = await fetch(`/api/reactions/${encodeURIComponent(slug)}`, {
-                            method: 'POST',
-                            headers: headers,
-                            credentials: 'same-origin',
-                            body: JSON.stringify(payload)
-                        });
-
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data.success && data.data) {
-                                counts = { ...counts, ...data.data };
-                                updateButtonViews();
-                                try { localStorage.setItem(storageCountsKey, JSON.stringify(counts)); } catch {}
-                            }
-                        } else if (res.status === 429) {
-                            if (typeof window.showToast === 'function') {
-                                window.showToast('操作过于频繁，请稍后重试', 'warning');
-                            }
-                        } else {
-                            console.warn('[Reactions] Server returned error status:', res.status);
-                        }
-                    } catch (netErr) {
-                        console.warn('[Reactions] Sync error:', netErr.message);
-                    } finally {
-                        // Keep a challenge solved and warm for subsequent interactions
-                        ensureReactionChallenge();
-                    }
-                });
+            const bySlug = new Map();
+            containers.forEach(container => {
+                container.dataset.reactionsBound = 'true';
+                const slug = container.dataset.postSlug;
+                if (!bySlug.has(slug)) bySlug.set(slug, []);
+                bySlug.get(slug).push(container);
             });
 
-            // Share button
-            const shareBtn = container.querySelector('#postShareBtn');
-            if (shareBtn && !shareBtn.dataset.bound) {
-                shareBtn.dataset.bound = 'true';
-                shareBtn.addEventListener('click', async () => {
-                    const url = window.location.href;
-                    try {
-                        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-                            await navigator.clipboard.writeText(url);
-                        } else {
-                            const input = document.createElement('input');
-                            input.value = url;
-                            document.body.appendChild(input);
-                            input.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(input);
-                        }
-                        if (typeof window.showToast === 'function') {
-                            window.showToast(window.wbT('post.share_copied', '文章链接已复制到剪贴板！'), 'success');
-                        }
-                    } catch {
-                        if (typeof window.showToast === 'function') {
-                            window.showToast(url, 'info');
-                        }
+            bySlug.forEach((slugContainers, slug) => {
+                const storageReactionsKey = `windblog_reactions_${slug}`;
+                const storageCountsKey = `windblog_reaction_counts_${slug}`;
+
+                const getSlugSeed = (s) => {
+                    if (!s) return 42;
+                    let h = 0;
+                    for (let i = 0; i < s.length; i++) {
+                        h = ((h << 5) - h) + s.charCodeAt(i);
+                        h |= 0;
                     }
+                    return Math.abs(h & 0x7fffffff);
+                };
+
+                const seedCount = (type) => {
+                    const seed = getSlugSeed(slug);
+                    switch (type) {
+                        case 'like': return 16 + (seed % 23);
+                        case 'heart': return 11 + (Math.floor(seed / 7) % 18);
+                        case 'insightful': return 6 + (Math.floor(seed / 13) % 14);
+                        case 'rocket': return 3 + (Math.floor(seed / 19) % 12);
+                        case 'celebrate': return 2 + (Math.floor(seed / 29) % 10);
+                        default: return 5 + (seed % 10);
+                    }
+                };
+
+                let userReactions = [];
+                try {
+                    const stored = localStorage.getItem(storageReactionsKey);
+                    if (stored) userReactions = JSON.parse(stored);
+                } catch {
+                    userReactions = [];
+                }
+
+                let counts = {};
+                try {
+                    const storedCounts = localStorage.getItem(storageCountsKey);
+                    if (storedCounts) counts = JSON.parse(storedCounts);
+                } catch {
+                    counts = {};
+                }
+
+                const getAllSlugContainers = () => {
+                    return Array.from(document.querySelectorAll('.post-reactions-container'))
+                        .filter(el => el.dataset.postSlug === slug);
+                };
+
+                const updateButtonViews = () => {
+                    getAllSlugContainers().forEach(container => {
+                        container.querySelectorAll('.post-reaction-btn').forEach(btn => {
+                            const type = btn.dataset.reactionType;
+                            if (!type) return;
+                            if (typeof counts[type] !== 'number') {
+                                counts[type] = seedCount(type);
+                            }
+                            const isActive = userReactions.includes(type);
+                            btn.classList.toggle('is-active', isActive);
+                            btn.setAttribute('aria-pressed', isActive.toString());
+                            const countEl = btn.querySelector('.reaction-count');
+                            if (countEl) countEl.textContent = String(counts[type]);
+                        });
+                    });
+                };
+                updateButtonViews();
+
+                // Fetch live counts from backend once per slug mount
+                fetch(`/api/reactions/${encodeURIComponent(slug)}`, { credentials: 'same-origin', cache: 'no-cache' })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(json => {
+                        if (json && json.success && json.data) {
+                            counts = { ...counts, ...json.data };
+                            updateButtonViews();
+                            try { localStorage.setItem(storageCountsKey, JSON.stringify(counts)); } catch {}
+                        }
+                    })
+                    .catch(() => {});
+
+                // Proactively pre-fetch and background-solve a PoW challenge so human clicks are instantaneous
+                ensureReactionChallenge();
+
+                slugContainers.forEach(container => {
+                    container.querySelectorAll('.post-reaction-btn').forEach(btn => {
+                        const type = btn.dataset.reactionType;
+                        if (!type) return;
+
+                        btn.addEventListener('click', async () => {
+                            const activeNow = btn.classList.contains('is-active');
+                            const action = activeNow ? 'unreact' : 'react';
+
+                            // Optimistic UI update across all containers for this slug
+                            if (activeNow) {
+                                counts[type] = Math.max(0, (counts[type] || 0) - 1);
+                                userReactions = userReactions.filter(r => r !== type);
+                            } else {
+                                counts[type] = (counts[type] || 0) + 1;
+                                if (!userReactions.includes(type)) {
+                                    userReactions.push(type);
+                                }
+
+                                // Burst animation on clicked button
+                                const badge = document.createElement('span');
+                                badge.className = 'reaction-float-badge';
+                                badge.textContent = '+1';
+                                btn.appendChild(badge);
+                                setTimeout(() => badge.remove(), 700);
+                            }
+
+                            updateButtonViews();
+
+                            try {
+                                localStorage.setItem(storageReactionsKey, JSON.stringify(userReactions));
+                                localStorage.setItem(storageCountsKey, JSON.stringify(counts));
+                            } catch {}
+
+                            // Server sync with PoW challenge
+                            try {
+                                let payload = { reactionType: type, action: action };
+                                if (action === 'react') {
+                                    let ch = cachedReactionChallenge;
+                                    cachedReactionChallenge = null;
+                                    if (!ch) {
+                                        ch = await ensureReactionChallenge(btn);
+                                    }
+                                    if (ch) {
+                                        payload.challengeId = ch.challengeId;
+                                        payload.powNonce = ch.powNonce;
+                                    }
+                                }
+
+                                const headers = { 'Content-Type': 'application/json' };
+                                const csrfToken = typeof window.getCsrfToken === 'function' ? window.getCsrfToken() : '';
+                                if (csrfToken) {
+                                    headers['X-XSRF-TOKEN'] = csrfToken;
+                                }
+
+                                const res = await fetch(`/api/reactions/${encodeURIComponent(slug)}`, {
+                                    method: 'POST',
+                                    headers: headers,
+                                    credentials: 'same-origin',
+                                    body: JSON.stringify(payload)
+                                });
+
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    if (data.success && data.data) {
+                                        counts = { ...counts, ...data.data };
+                                        updateButtonViews();
+                                        try { localStorage.setItem(storageCountsKey, JSON.stringify(counts)); } catch {}
+                                    }
+                                } else if (res.status === 429) {
+                                    if (typeof window.showToast === 'function') {
+                                        window.showToast('操作过于频繁，请稍后重试', 'warning');
+                                    }
+                                } else {
+                                    console.warn('[Reactions] Server returned error status:', res.status);
+                                }
+                            } catch (netErr) {
+                                console.warn('[Reactions] Sync error:', netErr.message);
+                            } finally {
+                                // Keep a challenge solved and warm for subsequent interactions
+                                ensureReactionChallenge();
+                            }
+                        });
+                    });
+
+                    // Share button
+                    container.querySelectorAll('.post-share-btn').forEach(shareBtn => {
+                        if (shareBtn.dataset.bound === 'true') return;
+                        shareBtn.dataset.bound = 'true';
+                        shareBtn.addEventListener('click', async () => {
+                            const url = window.location.href;
+                            try {
+                                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                                    await navigator.clipboard.writeText(url);
+                                } else {
+                                    const input = document.createElement('input');
+                                    input.value = url;
+                                    document.body.appendChild(input);
+                                    input.select();
+                                    document.execCommand('copy');
+                                    document.body.removeChild(input);
+                                }
+                                if (typeof window.showToast === 'function') {
+                                    window.showToast(window.wbT('post.share_copied', '文章链接已复制到剪贴板！'), 'success');
+                                }
+                            } catch {
+                                if (typeof window.showToast === 'function') {
+                                    window.showToast(url, 'info');
+                                }
+                            }
+                        });
+                    });
                 });
+            });
+        }
+
+        function updateViewCountElements(slug, viewCount) {
+            if (!slug || typeof viewCount !== 'number') return;
+            document.querySelectorAll('[data-post-view-count]').forEach(el => {
+                if (el.dataset.postViewCount === slug) {
+                    el.textContent = String(viewCount);
+                }
+            });
+        }
+
+        function initPostViews(root = document) {
+            const trackedSlugs = new Set();
+            const trackTargets = Array.from(root.querySelectorAll?.('[data-post-view-track]') || []);
+            if (root.matches?.('[data-post-view-track]') && !trackTargets.includes(root)) {
+                trackTargets.unshift(root);
+            }
+
+            trackTargets.forEach(el => {
+                const slug = (el.dataset.postViewTrack || '').trim();
+                if (!slug || el.dataset.viewTracked === 'true') return;
+                el.dataset.viewTracked = 'true';
+                trackedSlugs.add(slug);
+
+                const headers = {};
+                const csrfToken = typeof window.getCsrfToken === 'function' ? window.getCsrfToken() : '';
+                if (csrfToken) {
+                    headers['X-XSRF-TOKEN'] = csrfToken;
+                }
+
+                fetch(`/api/public/posts/${encodeURIComponent(slug)}/view`, {
+                    method: 'POST',
+                    headers,
+                    credentials: 'same-origin',
+                    keepalive: true
+                })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(json => {
+                        if (json && json.success && json.data && typeof json.data.viewCount === 'number') {
+                            updateViewCountElements(slug, json.data.viewCount);
+                        }
+                    })
+                    .catch(() => {});
+            });
+
+            const listSlugs = new Set();
+            const countTargets = Array.from(root.querySelectorAll?.('[data-post-view-count]') || []);
+            if (root.matches?.('[data-post-view-count]') && !countTargets.includes(root)) {
+                countTargets.unshift(root);
+            }
+            countTargets.forEach(el => {
+                const slug = (el.dataset.postViewCount || '').trim();
+                if (slug && !trackedSlugs.has(slug)) {
+                    listSlugs.add(slug);
+                }
+            });
+
+            if (listSlugs.size > 0) {
+                const slugsParam = Array.from(listSlugs).slice(0, 100).join(',');
+                fetch(`/api/public/posts/views?slugs=${encodeURIComponent(slugsParam)}`, {
+                    credentials: 'same-origin',
+                    cache: 'no-cache'
+                })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(json => {
+                        if (json && json.success && json.data && typeof json.data === 'object') {
+                            Object.entries(json.data).forEach(([slug, count]) => {
+                                if (typeof count === 'number') {
+                                    updateViewCountElements(slug, count);
+                                }
+                            });
+                        }
+                    })
+                    .catch(() => {});
             }
         }
 
@@ -4374,6 +4461,11 @@
         WindBlogLifecycle.register('post-reactions', {
             mount() {
                 initPostReactions(document);
+            }
+        });
+        WindBlogLifecycle.register('post-views', {
+            mount() {
+                initPostViews(document);
             }
         });
         WindBlogLifecycle.register('search-forms', {

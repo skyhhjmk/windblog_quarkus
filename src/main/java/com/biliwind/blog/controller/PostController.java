@@ -430,6 +430,7 @@ public class PostController {
                 .derived("postBody", () -> renderedBody.get().body())
                 .derived("postBodyHtml", () -> renderedBody.get().html())
                 .put("publishedAt", snapshot.publishedAt())
+                .put("postViewCount", snapshot.viewCount() != null ? snapshot.viewCount() : 0L)
                 .put("authorName", authorName)
                 .put("authorAvatar", authorAvatar)
                 .put("postRenderType", renderTypeName)

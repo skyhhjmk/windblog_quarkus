@@ -324,7 +324,7 @@ public class IndexController {
                     snapshot.slug(), title, summary, snapshot.aiSummary(), aiSummaryStatusValue,
                     snapshot.publishedAt(), snapshot.createdAt(), categoryName, categorySlug,
                     categories, snapshot.authorName(), tags, snapshot.coverImageUrl(), snapshot.coverThumbhash(),
-                    articleMode, modeBadge));
+                    articleMode, modeBadge, snapshot.viewCount()));
         }
         return result;
     }
@@ -354,7 +354,8 @@ public class IndexController {
             String coverImageUrl,
             String coverThumbhash,
             String articleMode,
-            String modeBadge
+            String modeBadge,
+            long viewCount
     ) {
         public IndexPostItem(
                 String slug,
@@ -372,7 +373,7 @@ public class IndexController {
                 String coverImageUrl
         ) {
             this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, createdAt,
-                    categoryName, categorySlug, categories, authorName, tags, coverImageUrl, null, "standard", null);
+                    categoryName, categorySlug, categories, authorName, tags, coverImageUrl, null, "standard", null, 0L);
         }
     }
 }

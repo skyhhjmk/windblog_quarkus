@@ -43,6 +43,7 @@ class CsrfFilterTest {
         assertFalse(CsrfFilter.requiresCsrf("POST", null));
         assertFalse(CsrfFilter.requiresCsrf("POST", "/api/reactions/welcome-to-windblog"));
         assertFalse(CsrfFilter.requiresCsrf("POST", "/api/reactions/challenge"));
+        assertFalse(CsrfFilter.requiresCsrf("POST", "/api/public/posts/welcome-to-windblog/view"));
         assertTrue(CsrfFilter.requiresCsrf("post", "/api/comments"));
     }
 }

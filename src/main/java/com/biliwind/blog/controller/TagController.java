@@ -194,7 +194,7 @@ public class TagController {
                 item.tags().stream()
                         .map(tag -> new TagItem(tag.name(), tag.slug()))
                         .toList(),
-                item.coverImageUrl(), item.coverThumbhash());
+                item.coverImageUrl(), item.coverThumbhash(), item.viewCount());
     }
 
     private String pageDescription(PublicCacheRefreshService.PublicTagDetailItem item) {
@@ -281,9 +281,9 @@ public class TagController {
     }
 
     @TemplateData
-    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags, String coverImageUrl, String coverThumbhash) {
+    public record TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags, String coverImageUrl, String coverThumbhash, long viewCount) {
         public TagPostItem(String slug, String title, String summary, String publishedAtText, String categoryName, List<CategoryItem> categories, List<TagItem> tags, String coverImageUrl) {
-            this(slug, title, summary, publishedAtText, categoryName, categories, tags, coverImageUrl, null);
+            this(slug, title, summary, publishedAtText, categoryName, categories, tags, coverImageUrl, null, 0L);
         }
     }
 }

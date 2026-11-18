@@ -490,7 +490,8 @@ public class PublicCacheRefreshService {
         return new PublicCategoryPostItem(post.slug, title, summary, formatDate(date),
                 post.category != null
                         ? LanguageHelper.resolveLocalizedValue(post.category.name, language) : "未分类",
-                categories, tags, coverInfo.url(), coverInfo.thumbhash());
+                categories, tags, coverInfo.url(), coverInfo.thumbhash(),
+                post.viewCount != null ? post.viewCount : 0L);
     }
 
     private PublicTagPostItem toTagPostItem(Post post, String language, List<PublicTagRef> tags,
@@ -510,7 +511,8 @@ public class PublicCacheRefreshService {
         return new PublicTagPostItem(post.slug, title, summary, formatDate(date),
                 post.category != null
                         ? LanguageHelper.resolveLocalizedValue(post.category.name, language) : "未分类",
-                categories, tags, coverInfo.url(), coverInfo.thumbhash());
+                categories, tags, coverInfo.url(), coverInfo.thumbhash(),
+                post.viewCount != null ? post.viewCount : 0L);
     }
 
     private List<PublicCategoryRef> categoryRefs(Post post, String language) {
@@ -828,7 +830,8 @@ public class PublicCacheRefreshService {
                     coverInfo.thumbhash(),
                     post.articleMode == null ? com.biliwind.blog.model.ArticleMode.STANDARD : post.articleMode,
                     post.tutorialMeta,
-                    post.resourceMeta));
+                    post.resourceMeta,
+                    post.viewCount != null ? post.viewCount : 0L));
         }
         return result;
     }
@@ -1076,7 +1079,33 @@ public class PublicCacheRefreshService {
             String coverThumbhash,
             com.biliwind.blog.model.ArticleMode articleMode,
             com.biliwind.blog.model.TutorialMeta tutorialMeta,
-            com.biliwind.blog.model.ResourceMeta resourceMeta) {
+            com.biliwind.blog.model.ResourceMeta resourceMeta,
+            long viewCount) {
+
+        public PublicPostListSnapshot(
+                String slug,
+                Map<String, String> title,
+                Map<String, String> summary,
+                Map<String, String> aiSummary,
+                Short aiSummaryStatus,
+                OffsetDateTime publishedAt,
+                OffsetDateTime updatedAt,
+                OffsetDateTime createdAt,
+                Map<String, String> categoryName,
+                String categorySlug,
+                List<PublicCategorySnapshot> categories,
+                String authorName,
+                List<PublicTagSnapshot> tags,
+                List<String> visibilityRegions,
+                String coverImageUrl,
+                String coverThumbhash,
+                com.biliwind.blog.model.ArticleMode articleMode,
+                com.biliwind.blog.model.TutorialMeta tutorialMeta,
+                com.biliwind.blog.model.ResourceMeta resourceMeta) {
+            this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, updatedAt, createdAt,
+                    categoryName, categorySlug, categories, authorName, tags, visibilityRegions,
+                    coverImageUrl, coverThumbhash, articleMode, tutorialMeta, resourceMeta, 0L);
+        }
 
         public PublicPostListSnapshot(
                 String slug,
@@ -1097,7 +1126,7 @@ public class PublicCacheRefreshService {
                 String coverThumbhash) {
             this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, updatedAt, createdAt,
                     categoryName, categorySlug, categories, authorName, tags, visibilityRegions,
-                    coverImageUrl, coverThumbhash, com.biliwind.blog.model.ArticleMode.STANDARD, null, null);
+                    coverImageUrl, coverThumbhash, com.biliwind.blog.model.ArticleMode.STANDARD, null, null, 0L);
         }
 
         public PublicPostListSnapshot(
@@ -1118,7 +1147,7 @@ public class PublicCacheRefreshService {
                 String coverImageUrl) {
             this(slug, title, summary, aiSummary, aiSummaryStatus, publishedAt, updatedAt, createdAt,
                     categoryName, categorySlug, categories, authorName, tags, visibilityRegions,
-                    coverImageUrl, null, com.biliwind.blog.model.ArticleMode.STANDARD, null, null);
+                    coverImageUrl, null, com.biliwind.blog.model.ArticleMode.STANDARD, null, null, 0L);
         }
     }
 
@@ -1233,7 +1262,20 @@ public class PublicCacheRefreshService {
             List<PublicCategoryRef> categories,
             List<PublicTagRef> tags,
             String coverImageUrl,
-            String coverThumbhash) {
+            String coverThumbhash,
+            long viewCount) {
+        public PublicCategoryPostItem(
+                String slug,
+                String title,
+                String summary,
+                String publishedAtText,
+                String categoryName,
+                List<PublicCategoryRef> categories,
+                List<PublicTagRef> tags,
+                String coverImageUrl,
+                String coverThumbhash) {
+            this(slug, title, summary, publishedAtText, categoryName, categories, tags, coverImageUrl, coverThumbhash, 0L);
+        }
     }
 
     @RegisterForReflection
@@ -1246,7 +1288,20 @@ public class PublicCacheRefreshService {
             List<PublicCategoryRef> categories,
             List<PublicTagRef> tags,
             String coverImageUrl,
-            String coverThumbhash) {
+            String coverThumbhash,
+            long viewCount) {
+        public PublicTagPostItem(
+                String slug,
+                String title,
+                String summary,
+                String publishedAtText,
+                String categoryName,
+                List<PublicCategoryRef> categories,
+                List<PublicTagRef> tags,
+                String coverImageUrl,
+                String coverThumbhash) {
+            this(slug, title, summary, publishedAtText, categoryName, categories, tags, coverImageUrl, coverThumbhash, 0L);
+        }
     }
 
     @RegisterForReflection
