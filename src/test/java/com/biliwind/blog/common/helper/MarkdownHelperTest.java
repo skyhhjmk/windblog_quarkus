@@ -284,4 +284,42 @@ class MarkdownHelperTest {
         org.junit.jupiter.api.Assertions.assertFalse(html.contains("data-price"));
         org.junit.jupiter.api.Assertions.assertFalse(html.contains("data-post-ref"));
     }
+
+    @Test
+    void shouldRenderAsciinemaPlayerBlockWithDefaultsAndCustomAttributes() {
+        String markdown = """
+                ::: asciinema-player {src="/uploads/demo.cast", title="部署演示", idleTimeLimit=2, pauseOnMarkers=true, speed=1.5, markers="3.0:安装依赖;8.5:启动服务"}
+                [部署演示](/uploads/demo.cast)
+                ::: /asciinema-player
+                """;
+        String html = MarkdownHelper.toHtml(markdown);
+        var doc = org.jsoup.Jsoup.parseBodyFragment(html);
+        var card = doc.selectFirst(".asciinema-player-card");
+        assertTrue(card != null);
+        assertEquals("true", card.attr("data-asciinema-player"));
+        assertEquals("/uploads/demo.cast", card.attr("data-src"));
+        assertEquals("部署演示", card.attr("data-title"));
+        assertEquals("2", card.attr("data-idle-time-limit"));
+        assertEquals("true", card.attr("data-pause-on-markers"));
+        assertEquals("1.5", card.attr("data-speed"));
+        assertEquals("true", card.attr("data-controls"));
+        assertEquals("3.0:安装依赖;8.5:启动服务", card.attr("data-markers"));
+        org.junit.jupiter.api.Assertions.assertFalse(card.hasClass("custom-block"));
+    }
+
+    @Test
+    void shouldRenderAsciinemaShortAliasAndSanitizeUnsafeCastUrls() {
+        String validAlias = "::: asciinema\n[demo.cast](/assets/demo.cast)\n::: /asciinema";
+        var doc = org.jsoup.Jsoup.parseBodyFragment(MarkdownHelper.toHtml(validAlias));
+        var card = doc.selectFirst(".asciinema-player-card");
+        assertTrue(card != null);
+        assertEquals("/assets/demo.cast", card.attr("data-src"));
+        assertEquals("2", card.attr("data-idle-time-limit"));
+        assertEquals("true", card.attr("data-pause-on-markers"));
+
+        String unsafe = "::: asciinema-player {src=\"javascript:alert(1)\"}\n[bad](javascript:alert(1))\n::: /asciinema-player";
+        var unsafeCard = org.jsoup.Jsoup.parseBodyFragment(MarkdownHelper.toHtml(unsafe)).selectFirst(".asciinema-player-card");
+        assertTrue(unsafeCard != null);
+        assertEquals("", unsafeCard.attr("data-src"));
+    }
 }

@@ -40,7 +40,10 @@ public final class MarkdownHelper {
             .addAttributes("code", "class")
             .addAttributes("pre", "class")
             .addAttributes("span", "class")
-            .addAttributes("div", "class", "data-name", "data-group", "data-title", "data-block-id", "data-translation-status")
+            .addAttributes("div", "class", "data-name", "data-group", "data-title", "data-block-id", "data-translation-status",
+                    "data-asciinema-player", "data-src", "data-idle-time-limit", "data-speed",
+                    "data-pause-on-markers", "data-controls", "data-auto-play", "data-loop",
+                    "data-cols", "data-rows", "data-markers", "data-theme")
             .addAttributes("canvas", "class", "data-thumbhash")
             .addAttributes("img", "width", "height", "loading", "decoding", "class")
             .addAttributes("picture", "class")

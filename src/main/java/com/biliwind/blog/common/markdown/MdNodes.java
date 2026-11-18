@@ -13,6 +13,7 @@ public class MdNodes {
         private String group;
         private java.util.Set<String> excludeRegions = new java.util.HashSet<>();
         private String title;
+        private java.util.Map<String, String> attributes = new java.util.LinkedHashMap<>();
 
         public CustomContainerBlock(BasedSequence chars, String name) {
             super(chars);
@@ -53,6 +54,23 @@ public class MdNodes {
 
         public void setTitle(String title) {
             this.title = title;
+        }
+
+        public java.util.Map<String, String> getAttributes() {
+            return attributes;
+        }
+
+        public void setAttributes(java.util.Map<String, String> attributes) {
+            this.attributes = attributes == null
+                    ? new java.util.LinkedHashMap<>()
+                    : new java.util.LinkedHashMap<>(attributes);
+        }
+
+        public String getAttribute(String key) {
+            if (key == null || attributes == null) {
+                return null;
+            }
+            return attributes.get(key.toLowerCase(java.util.Locale.ROOT));
         }
 
         public boolean isExcluded(com.biliwind.blog.model.BlogRegion region) {

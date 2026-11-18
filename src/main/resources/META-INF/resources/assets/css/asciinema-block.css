@@ -1,0 +1,438 @@
+/* WindBlog Asciinema Player Block & Theme Adaptation */
+
+.asciinema-player-card {
+    margin: 1.75rem 0;
+    border-radius: var(--radius-lg, 14px);
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.asciinema-player-card:hover {
+    border-color: var(--border-hover);
+}
+
+/* Header Bar */
+.wb-asciinema-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--inset-bg) 75%, var(--card-bg));
+    flex-wrap: wrap;
+}
+
+.wb-asciinema-title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.wb-asciinema-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.wb-asciinema-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    display: inline-block;
+}
+
+.wb-asciinema-dot-red { background-color: #ef4444; }
+.wb-asciinema-dot-yellow { background-color: #f59e0b; }
+.wb-asciinema-dot-green { background-color: #10b981; }
+
+.wb-asciinema-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    border: 1px solid var(--tag-border);
+    flex-shrink: 0;
+}
+
+.wb-asciinema-title {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wb-asciinema-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+/* Marker Bar */
+.wb-asciinema-markers-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 50%, var(--card-bg));
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.wb-asciinema-markers-bar[hidden] {
+    display: none !important;
+}
+
+.wb-asciinema-markers-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-meta);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.wb-asciinema-marker-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-body);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.wb-asciinema-marker-chip:hover,
+.wb-asciinema-marker-chip.is-active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+
+.wb-asciinema-marker-time {
+    opacity: 0.75;
+    font-size: 10px;
+}
+
+/* Pause-on-marker Notification Banner */
+.wb-asciinema-marker-notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.45rem 0.9rem;
+    background: color-mix(in srgb, var(--accent) 12%, var(--card-bg));
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    font-size: 12px;
+    color: var(--text-main);
+}
+
+.wb-asciinema-marker-notice[hidden] {
+    display: none !important;
+}
+
+/* Stage / Player Viewport */
+.wb-asciinema-stage {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    background: var(--term-stage-bg, #0b0e14);
+}
+
+html.light .wb-asciinema-stage {
+    --term-stage-bg: #f8fafc;
+}
+
+.wb-asciinema-mount {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.wb-asciinema-mount .ap-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+}
+
+.wb-asciinema-mount .ap-player {
+    max-width: 100% !important;
+    border-radius: 0 !important;
+}
+
+/* Hide initial start overlay after programmatic seek (e.g. "查看最终结果") */
+.wb-asciinema-seeked .ap-overlay-start {
+    display: none !important;
+}
+
+/* Custom Controller Bar */
+.wb-asciinema-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.65rem 0.9rem;
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--inset-bg) 80%, var(--card-bg));
+}
+
+.wb-asciinema-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    width: 100%;
+}
+
+.wb-asciinema-time {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-meta);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.wb-asciinema-scrubber {
+    flex: 1 1 auto;
+    height: 6px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--border);
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.wb-asciinema-scrubber::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--card-bg);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    transition: transform 0.12s ease;
+}
+
+.wb-asciinema-scrubber::-webkit-slider-thumb:hover {
+    transform: scale(1.18);
+}
+
+.wb-asciinema-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.wb-asciinema-left-controls,
+.wb-asciinema-right-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.wb-asciinema-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.32rem 0.65rem;
+    border-radius: var(--radius-sm, 6px);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    color: var(--text-body);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    line-height: 1.2;
+}
+
+.wb-asciinema-btn:hover {
+    color: var(--text-main);
+    border-color: var(--border-hover);
+    background: var(--hover-surface);
+}
+
+.wb-asciinema-btn-primary {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    background: var(--accent-dim);
+}
+
+.wb-asciinema-btn-primary:hover {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.wb-asciinema-btn-final {
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.wb-asciinema-btn-final:hover,
+.wb-asciinema-btn-final.is-active {
+    color: #059669;
+    html:not(.light) & {
+        color: #34d399;
+    }
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.18);
+}
+
+/* Speed Controller Group */
+.wb-asciinema-speed-group {
+    display: inline-flex;
+    align-items: center;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 6px);
+    padding: 2px;
+    gap: 2px;
+}
+
+.wb-asciinema-speed-btn {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-meta);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.wb-asciinema-speed-btn:hover {
+    color: var(--text-main);
+}
+
+.wb-asciinema-speed-btn.is-active {
+    background: var(--accent);
+    color: var(--accent-foreground, #fff);
+}
+
+/* WindBlog Adaptive Dark Theme for asciinema-player */
+.asciinema-player-theme-windblog-dark {
+    --term-color-foreground: #e2e8f0;
+    --term-color-background: #0b0e14;
+    --term-color-0: #1e293b;
+    --term-color-1: #f87171;
+    --term-color-2: #4ade80;
+    --term-color-3: #facc15;
+    --term-color-4: #38bdf8;
+    --term-color-5: #c084fc;
+    --term-color-6: #2dd4bf;
+    --term-color-7: #e2e8f0;
+    --term-color-8: #64748b;
+    --term-color-9: #fca5a5;
+    --term-color-10: #86efac;
+    --term-color-11: #fde047;
+    --term-color-12: #7dd3fc;
+    --term-color-13: #d8b4fe;
+    --term-color-14: #5eead4;
+    --term-color-15: #f8fafc;
+}
+
+/* WindBlog Adaptive Light Theme for asciinema-player */
+.asciinema-player-theme-windblog-light {
+    --term-color-foreground: #1e293b;
+    --term-color-background: #f8fafc;
+    --term-color-0: #0f172a;
+    --term-color-1: #dc2626;
+    --term-color-2: #16a34a;
+    --term-color-3: #ca8a04;
+    --term-color-4: #0284c7;
+    --term-color-5: #9333ea;
+    --term-color-6: #0d9488;
+    --term-color-7: #cbd5e1;
+    --term-color-8: #475569;
+    --term-color-9: #ef4444;
+    --term-color-10: #22c55e;
+    --term-color-11: #eab308;
+    --term-color-12: #0ea5e9;
+    --term-color-13: #a855f7;
+    --term-color-14: #14b8a6;
+    --term-color-15: #0f172a;
+}
+
+.asciinema-player-theme-windblog-light .ap-overlay-start .ap-play-button svg .ap-play-btn-fill {
+    fill: #0284c7;
+}
+
+.asciinema-player-theme-windblog-light .ap-overlay-start .ap-play-button svg .ap-play-btn-stroke {
+    stroke: #0284c7;
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 640px) {
+    .asciinema-player-card {
+        margin: 1.25rem 0;
+        border-radius: var(--radius-md, 10px);
+    }
+
+    .wb-asciinema-header {
+        padding: 0.55rem 0.75rem;
+    }
+
+    .wb-asciinema-controls {
+        padding: 0.55rem 0.75rem;
+    }
+
+    .wb-asciinema-actions-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .wb-asciinema-left-controls,
+    .wb-asciinema-right-controls {
+        justify-content: space-between;
+        width: 100%;
+    }
+
+    .wb-asciinema-btn {
+        min-height: 32px;
+        padding: 0.35rem 0.55rem;
+        font-size: 11px;
+    }
+}

@@ -25,6 +25,7 @@ public class CustomContainerBlockParser extends AbstractBlockParser {
         this.name = name.trim();
         this.block = new MdNodes.CustomContainerBlock(chars, this.name);
         if (attrs != null) {
+            this.block.setAttributes(attrs);
             this.block.setGroup(attrs.get("group"));
             this.block.setTitle(attrs.get("title"));
             String excludeStr = attrs.get("exclude");
@@ -40,15 +41,15 @@ public class CustomContainerBlockParser extends AbstractBlockParser {
     }
 
     private static java.util.Map<String, String> parseAttributes(String attrStr) {
-        java.util.Map<String, String> attrs = new java.util.HashMap<>();
+        java.util.Map<String, String> attrs = new java.util.LinkedHashMap<>();
         if (attrStr == null || attrStr.isBlank()) {
             return attrs;
         }
-        Pattern p = Pattern.compile("([a-zA-Z0-9_-]+)\\s*=\\s*(?:\"([^\"]*)\"|([^,\\s}]+))");
+        Pattern p = Pattern.compile("([a-zA-Z0-9_-]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^,\\s}]+))");
         Matcher m = p.matcher(attrStr);
         while (m.find()) {
-            String key = m.group(1).toLowerCase();
-            String val = m.group(2) != null ? m.group(2) : m.group(3);
+            String key = m.group(1).toLowerCase(java.util.Locale.ROOT);
+            String val = m.group(2) != null ? m.group(2) : (m.group(3) != null ? m.group(3) : m.group(4));
             if (val != null) {
                 attrs.put(key, val.trim());
             }

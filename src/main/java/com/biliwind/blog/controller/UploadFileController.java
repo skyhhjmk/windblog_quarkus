@@ -232,6 +232,10 @@ public class UploadFileController {
     }
 
     private String probeMimeType(java.nio.file.Path path) {
+        if (path != null && path.getFileName() != null
+                && path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".cast")) {
+            return "application/x-asciicast; charset=utf-8";
+        }
         String detected = null;
         try {
             detected = Files.probeContentType(path);
