@@ -75,9 +75,7 @@ public final class SearchContentHelper {
             return;
         }
 
-        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-        while (fields.hasNext()) {
-            Map.Entry<String, JsonNode> field = fields.next();
+        for (Map.Entry<String, JsonNode> field : node.properties()) {
             String fieldName = field.getKey();
             if (isFormattingField(fieldName)) {
                 continue;

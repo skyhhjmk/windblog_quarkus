@@ -39,9 +39,7 @@ public final class ElasticsearchWriteAliasRepair {
         }
 
         List<AliasIndex> indices = new ArrayList<>();
-        Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
-        while (fields.hasNext()) {
-            Map.Entry<String, JsonNode> field = fields.next();
+        for (Map.Entry<String, JsonNode> field : root.properties()) {
             JsonNode aliasNode = field.getValue().path("aliases").path(aliasName);
             if (aliasNode.isObject()) {
                 indices.add(new AliasIndex(

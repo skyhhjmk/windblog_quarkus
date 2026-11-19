@@ -71,9 +71,7 @@ public class StorageConfigProtector {
         }
         if (node.isObject()) {
             ObjectNode copiedObject = objectMapper.createObjectNode();
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
                 JsonNode childNode = field.getValue();
                 if (isSensitiveField(field.getKey()) && childNode != null && childNode.isTextual()) {
                     copiedObject.set(field.getKey(), new TextNode(protectSensitiveValue(childNode.asText())));
@@ -99,9 +97,7 @@ public class StorageConfigProtector {
         }
         if (node.isObject()) {
             ObjectNode copiedObject = objectMapper.createObjectNode();
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
                 JsonNode childNode = field.getValue();
                 JsonNode existingChildNode = null;
                 if (existingNode != null && existingNode.isObject()) {
@@ -140,9 +136,7 @@ public class StorageConfigProtector {
         }
         if (node.isObject()) {
             ObjectNode copiedObject = objectMapper.createObjectNode();
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
                 JsonNode childNode = field.getValue();
                 if (childNode != null && childNode.isTextual() && isEncryptedValue(childNode.asText())) {
                     copiedObject.set(field.getKey(), new TextNode(decryptValue(childNode.asText())));
@@ -168,9 +162,7 @@ public class StorageConfigProtector {
         }
         if (node.isObject()) {
             ObjectNode copiedObject = objectMapper.createObjectNode();
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
                 JsonNode childNode = field.getValue();
                 if (isSensitiveField(field.getKey()) && childNode != null && childNode.isTextual()) {
                     copiedObject.set(field.getKey(), new TextNode(maskSensitiveValue(childNode.asText())));

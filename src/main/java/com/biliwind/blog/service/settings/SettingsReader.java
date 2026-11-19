@@ -164,9 +164,7 @@ public class SettingsReader {
         }
         ObjectNode merged = ((ObjectNode) stored).deepCopy();
         if (defaultValue.isObject()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = defaultValue.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : defaultValue.properties()) {
                 if (!merged.has(field.getKey())) {
                     merged.set(field.getKey(), field.getValue().deepCopy());
                 }

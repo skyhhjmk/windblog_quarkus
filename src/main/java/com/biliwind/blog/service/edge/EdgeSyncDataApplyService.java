@@ -540,7 +540,7 @@ public class EdgeSyncDataApplyService {
             String language = com.biliwind.blog.common.constant.LanguageConstant.DEFAULT_LANG;
             if (titleNode != null && titleNode.isObject()) {
                 Map<String, String> title = new LinkedHashMap<>();
-                titleNode.fields().forEachRemaining(entry -> {
+                titleNode.properties().forEach(entry -> {
                     if (entry.getValue() != null && entry.getValue().isTextual()) {
                         title.put(entry.getKey(), entry.getValue().asText());
                     }
@@ -562,7 +562,7 @@ public class EdgeSyncDataApplyService {
             throw new IllegalArgumentException("媒体公开快照字段类型无效: " + fieldName);
         }
         Map<String, String> result = new LinkedHashMap<>();
-        value.fields().forEachRemaining(entry -> {
+        value.properties().forEach(entry -> {
             if (!entry.getValue().isNull() && !entry.getValue().isTextual()) {
                 throw new IllegalArgumentException("媒体公开快照字段类型无效: " + fieldName);
             }
@@ -645,13 +645,13 @@ public class EdgeSyncDataApplyService {
         }
 
         Map<String, Object> providers = new LinkedHashMap<>();
-        value.fields().forEachRemaining(providerEntry -> {
+        value.properties().forEach(providerEntry -> {
             JsonNode providerValue = providerEntry.getValue();
             if (!providerValue.isObject()) {
                 throw new IllegalArgumentException("媒体公开存储类字段类型无效");
             }
             Map<String, Object> variants = new LinkedHashMap<>();
-            providerValue.fields().forEachRemaining(variantEntry -> {
+            providerValue.properties().forEach(variantEntry -> {
                 JsonNode variantValue = variantEntry.getValue();
                 if (!variantValue.isObject()) {
                     throw new IllegalArgumentException("媒体公开存储变体字段类型无效");

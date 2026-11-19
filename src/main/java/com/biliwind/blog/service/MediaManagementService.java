@@ -117,16 +117,17 @@ public class MediaManagementService {
         List<AdminMediaDtos.BatchRetryItemResult> results = new ArrayList<>();
         long lastMediaId = 0L;
         while (true) {
-            List<Media> failedMedias = Media.getEntityManager()
+            List<?> rawMedias = Media.getEntityManager()
                     .createNativeQuery("select * from media where " + failedWhere
                             + " and id > :lastMediaId order by id", Media.class)
                     .setParameter("lastMediaId", lastMediaId)
                     .setMaxResults(200)
                     .getResultList();
-            if (failedMedias.isEmpty()) {
+            if (rawMedias.isEmpty()) {
                 break;
             }
-            for (Media media : failedMedias) {
+            for (Object rawMedia : rawMedias) {
+                Media media = (Media) rawMedia;
                 Long mediaId = media.id;
                 String fileName = media.fileName;
                 boolean success = false;
@@ -203,11 +204,15 @@ public class MediaManagementService {
                     .getSingleResult()).longValue();
 
             // 执行分页查询
-            medias = Media.getEntityManager()
+            List<?> rawMedias = Media.getEntityManager()
                     .createNativeQuery("select * from media where " + nativeWhere + " order by created_at desc", Media.class)
                     .setFirstResult((safePage - 1) * safeSize)
                     .setMaxResults(safeSize)
                     .getResultList();
+            medias = new ArrayList<>(rawMedias.size());
+            for (Object rawMedia : rawMedias) {
+                medias.add((Media) rawMedia);
+            }
         } else {
             io.quarkus.hibernate.orm.panache.PanacheQuery<Media> query = Media.find(where + " order by createdAt desc");
             total = query.count();
@@ -1559,7 +1564,7 @@ public class MediaManagementService {
 
         // 查找所有包含 oldUrl 的版本
         // 使用原生 SQL 查找 ID 提高效率（PostgreSQL 语法）
-        List<Object> revisionIds = Media.getEntityManager()
+        List<?> revisionIds = Media.getEntityManager()
                 .createNativeQuery("SELECT id FROM post_revisions WHERE content_markdown::text LIKE :url")
                 .setParameter("url", "%" + oldUrl + "%")
                 .getResultList();

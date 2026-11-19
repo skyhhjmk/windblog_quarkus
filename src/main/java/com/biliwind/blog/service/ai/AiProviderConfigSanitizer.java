@@ -46,9 +46,7 @@ public final class AiProviderConfigSanitizer {
         }
         if (node.isObject()) {
             ObjectNode result = OBJECT_MAPPER.createObjectNode();
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
                 if (isSensitiveField(field.getKey())) {
                     result.set(field.getKey(), TextNode.valueOf("******"));
                 } else {
@@ -73,9 +71,7 @@ public final class AiProviderConfigSanitizer {
         }
         if (submitted.isObject() && existing != null && existing.isObject()) {
             ObjectNode result = (ObjectNode) existing.deepCopy();
-            Iterator<Map.Entry<String, JsonNode>> fields = submitted.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
+            for (Map.Entry<String, JsonNode> field : submitted.properties()) {
                 JsonNode existingValue = existing.get(field.getKey());
                 if (isSensitiveField(field.getKey()) && isMaskedValue(field.getValue())) {
                     if (existingValue != null) {

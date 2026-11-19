@@ -189,7 +189,7 @@ public class WespSyncService {
             Map<String, String> responseHeaders = new java.util.HashMap<>();
             JsonNode responseHeadersNode = result.get("headers");
             if (responseHeadersNode != null && responseHeadersNode.isObject()) {
-                responseHeadersNode.fields().forEachRemaining(entry -> responseHeaders.put(entry.getKey(), entry.getValue().asText()));
+                responseHeadersNode.properties().forEach(entry -> responseHeaders.put(entry.getKey(), entry.getValue().asText()));
             }
             String errorMessage = text(result, "errorMessage");
             return new RoutedHttpExchange.Response(status, responseHeaders, responseBody,

@@ -5,16 +5,18 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.util.Timeout;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
@@ -104,9 +106,11 @@ public class SafeExternalHttpService {
         InetAddress[] pinnedAddresses = resolvePublicAddresses(uri.getHost());
         PoolingHttpClientConnectionManager connectionManager = PoolingHttpClientConnectionManagerBuilder.create()
                 .setDnsResolver(new PinnedPublicAddressDnsResolver(uri.getHost(), pinnedAddresses))
+                .setDefaultConnectionConfig(ConnectionConfig.custom()
+                        .setConnectTimeout(Timeout.ofSeconds(5))
+                        .build())
                 .build();
         RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout(Timeout.ofSeconds(5))
                 .setResponseTimeout(Timeout.ofSeconds(10))
                 .setRedirectsEnabled(false)
                 .build();
@@ -117,7 +121,7 @@ public class SafeExternalHttpService {
                 .build()) {
             HttpGet request = new HttpGet(uri);
             request.setHeader("User-Agent", safeUserAgent(userAgent));
-            try (CloseableHttpResponse response = httpClient.execute(request)) {
+            return httpClient.execute(request, response -> {
                 List<HeaderValue> headers = validateResponseHeaders(response.getHeaders());
                 long declaredLength = response.getEntity() == null
                         ? -1L : response.getEntity().getContentLength();
@@ -125,7 +129,7 @@ public class SafeExternalHttpService {
                 byte[] body = readLimitedBody(response, maxResponseBytes, listener,
                         response.getCode(), redirectCount);
                 return new ExternalHttpResponse(response.getCode(), body, headers);
-            }
+            });
         } catch (IllegalArgumentException exception) {
             throw exception;
         } catch (Exception exception) {
@@ -135,13 +139,13 @@ public class SafeExternalHttpService {
         }
     }
 
-    private byte[] readLimitedBody(CloseableHttpResponse response, int maxResponseBytes) throws Exception {
+    private byte[] readLimitedBody(ClassicHttpResponse response, int maxResponseBytes) throws IOException {
         return readLimitedBody(response, maxResponseBytes, null, response.getCode(), 0);
     }
 
-    private byte[] readLimitedBody(CloseableHttpResponse response, int maxResponseBytes,
+    private byte[] readLimitedBody(ClassicHttpResponse response, int maxResponseBytes,
                                    DownloadProgressListener listener, int statusCode,
-                                   int redirectCount) throws Exception {
+                                   int redirectCount) throws IOException {
         if (response.getEntity() == null) {
             return new byte[0];
         }
@@ -153,12 +157,12 @@ public class SafeExternalHttpService {
         }
     }
 
-    static byte[] readLimitedStream(InputStream input, long declaredLength, int maxResponseBytes) throws Exception {
+    static byte[] readLimitedStream(InputStream input, long declaredLength, int maxResponseBytes) throws IOException {
         return readLimitedStream(input, declaredLength, maxResponseBytes, null);
     }
 
     static byte[] readLimitedStream(InputStream input, long declaredLength, int maxResponseBytes,
-                                    LongConsumer progressConsumer) throws Exception {
+                                    LongConsumer progressConsumer) throws IOException {
         if (declaredLength > maxResponseBytes) {
             throw new IllegalArgumentException("外部响应内容超过限制");
         }

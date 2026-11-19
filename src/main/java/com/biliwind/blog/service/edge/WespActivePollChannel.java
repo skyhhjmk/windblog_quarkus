@@ -138,7 +138,7 @@ public class WespActivePollChannel {
             if (body.length > MAX_BODY) return false;
             Map<String, String> headers = new java.util.HashMap<>();
             JsonNode headerNode = result.path("headers");
-            if (headerNode.isObject()) headerNode.fields().forEachRemaining(entry -> {
+            if (headerNode.isObject()) headerNode.properties().forEach(entry -> {
                 if (entry.getValue().isTextual()) headers.put(entry.getKey(), entry.getValue().asText());
             });
             return command.response.complete(new RoutedHttpExchange.Response(
@@ -207,7 +207,7 @@ public class WespActivePollChannel {
         if (body.length > MAX_BODY) return;
         Map<String, String> headers = new java.util.HashMap<>();
         JsonNode headerNode = command.path("headers");
-        if (headerNode.isObject()) headerNode.fields().forEachRemaining(entry -> {
+        if (headerNode.isObject()) headerNode.properties().forEach(entry -> {
             if (entry.getValue().isTextual()) headers.put(entry.getKey(), entry.getValue().asText());
         });
         RoutedHttpExchange.Response result;

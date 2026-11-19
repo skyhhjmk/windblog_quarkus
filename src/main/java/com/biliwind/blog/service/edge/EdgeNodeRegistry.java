@@ -91,6 +91,7 @@ public class EdgeNodeRegistry {
         return true;
     }
 
+    @SuppressWarnings("deprecation")
     private void updateNodeGrpcAddress(EdgeNode node, int grpcPort) {
         String host = extractHostFromAddress(node.grpcAddress);
         if (host == null) {
@@ -159,10 +160,7 @@ public class EdgeNodeRegistry {
         ).await().atMost(java.time.Duration.ofSeconds(30));
 
         for (EdgeNode node : activeNodes) {
-            String grpcAddress = node.grpcAddress;
-            if (grpcAddress == null || grpcAddress.isEmpty()) {
-                grpcAddress = node.address;
-            }
+            String grpcAddress = resolveLegacyOrGrpcAddress(node);
             if (grpcAddress == null || grpcAddress.isEmpty()) {
                 continue;
             }
@@ -265,6 +263,11 @@ public class EdgeNodeRegistry {
             node.lastHeartbeat = OffsetDateTime.now(java.time.ZoneOffset.UTC);
             node.metrics = metrics;
         }
+    }
+
+    @SuppressWarnings("deprecation")
+    private String resolveLegacyOrGrpcAddress(EdgeNode node) {
+        return (node.grpcAddress == null || node.grpcAddress.isEmpty()) ? node.address : node.grpcAddress;
     }
 
     /**

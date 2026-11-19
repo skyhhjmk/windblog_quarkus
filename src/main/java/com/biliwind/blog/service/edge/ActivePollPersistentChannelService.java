@@ -226,6 +226,7 @@ public class ActivePollPersistentChannelService {
                 .build();
     }
 
+    @SuppressWarnings("deprecation")
     private String resolveGrpcAddress(EdgeNode node) {
         if (node.grpcAddress != null && !node.grpcAddress.isBlank()) {
             return node.grpcAddress;

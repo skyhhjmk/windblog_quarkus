@@ -47,11 +47,14 @@ public class AdminSeoController {
     @GET @Path("/not-found")
     public Map<String, Object> notFound(@QueryParam("page") @DefaultValue("1") int page) {
         page = page(page);
-        List<Object[]> rows = em.createNativeQuery("select path, referer, hits, last_seen, resolved from seo_not_found order by last_seen desc")
+        List<?> rows = em.createNativeQuery("select path, referer, hits, last_seen, resolved from seo_not_found order by last_seen desc")
                 .setFirstResult((page - 1) * 50).setMaxResults(50).getResultList();
         List<Map<String, Object>> items = new ArrayList<>();
-        for (Object[] row : rows) items.add(Map.of("path", row[0], "referer", Objects.toString(row[1], ""),
-                "hits", row[2], "lastSeen", row[3].toString(), "resolved", row[4]));
+        for (Object rawRow : rows) {
+            Object[] row = (Object[]) rawRow;
+            items.add(Map.of("path", row[0], "referer", Objects.toString(row[1], ""),
+                    "hits", row[2], "lastSeen", row[3].toString(), "resolved", row[4]));
+        }
         return Map.of("items", items, "page", page,
                 "total", em.createNativeQuery("select count(*) from seo_not_found").getSingleResult());
     }

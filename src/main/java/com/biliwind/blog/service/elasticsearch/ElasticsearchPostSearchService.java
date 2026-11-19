@@ -1393,9 +1393,7 @@ public class ElasticsearchPostSearchService {
             return Map.of();
         }
         Map<String, String> map = new java.util.HashMap<>();
-        var fields = node.fields();
-        while (fields.hasNext()) {
-            var entry = fields.next();
+        for (var entry : node.properties()) {
             if (entry.getValue() != null && !entry.getValue().isNull()) {
                 map.put(entry.getKey(), entry.getValue().asText(""));
             }

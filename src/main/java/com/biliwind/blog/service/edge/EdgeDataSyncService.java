@@ -615,11 +615,9 @@ public class EdgeDataSyncService {
     @Inject
     jakarta.enterprise.inject.Instance<EdgeDataSyncService> self;
 
+    @SuppressWarnings("deprecation")
     private MutinyEdgeNodeServiceGrpc.MutinyEdgeNodeServiceStub getStub(EdgeNode node) {
-        String grpcAddress = node.grpcAddress;
-        if (grpcAddress == null || grpcAddress.isEmpty()) {
-            grpcAddress = node.address;
-        }
+        String grpcAddress = resolveGrpcAddress(node);
         return stubCache.computeIfAbsent(grpcAddress, addr ->
                 MutinyEdgeNodeServiceGrpc.newMutinyStub(channelFactory.createChannel(addr, node.nodeId))
         );
@@ -1045,6 +1043,7 @@ public class EdgeDataSyncService {
     /**
      * 获取节点的 gRPC 地址，优先使用 grpcAddress，回退到已废弃的 address 字段
      */
+    @SuppressWarnings("deprecation")
     private String resolveGrpcAddress(EdgeNode node) {
         if (node.grpcAddress != null && !node.grpcAddress.isEmpty()) {
             return node.grpcAddress;

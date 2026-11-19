@@ -3,7 +3,6 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.model.MediaDownloadEvent;
 import com.biliwind.blog.service.MediaDownloadAuditService;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
-import io.quarkus.panache.common.Parameters;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DefaultValue;
@@ -41,40 +40,40 @@ public class AdminMediaDownloadAuditController {
             @DefaultValue("1") @QueryParam("page") int page,
             @DefaultValue("50") @QueryParam("pageSize") int pageSize) {
         StringBuilder queryText = new StringBuilder("1 = 1");
-        Parameters parameters = new Parameters();
+        Map<String, Object> parameters = new LinkedHashMap<>();
         if (postId != null) {
             queryText.append(" and postId = :postId");
-            parameters.and("postId", postId);
+            parameters.put("postId", postId);
         }
         if (mediaId != null) {
             queryText.append(" and mediaId = :mediaId");
-            parameters.and("mediaId", mediaId);
+            parameters.put("mediaId", mediaId);
         }
         if (ticketId != null) {
             queryText.append(" and ticketId = :ticketId");
-            parameters.and("ticketId", ticketId);
+            parameters.put("ticketId", ticketId);
         }
         if (userId != null) {
             queryText.append(" and subjectHash = :subjectHash");
-            parameters.and("subjectHash", auditService.hashSubject(userId));
+            parameters.put("subjectHash", auditService.hashSubject(userId));
         }
         if (referrerDomain != null && !referrerDomain.isBlank()) {
             queryText.append(" and referrerHash = :referrerHash");
-            parameters.and("referrerHash", auditService.hashReferrer(referrerDomain.trim().toLowerCase()));
+            parameters.put("referrerHash", auditService.hashReferrer(referrerDomain.trim().toLowerCase()));
         }
         if (status != null && !status.isBlank()) {
             queryText.append(" and status = :status");
-            parameters.and("status", status.trim().toUpperCase());
+            parameters.put("status", status.trim().toUpperCase());
         }
         OffsetDateTime fromTime = parseTime(from);
         if (fromTime != null) {
             queryText.append(" and createdAt >= :fromTime");
-            parameters.and("fromTime", fromTime);
+            parameters.put("fromTime", fromTime);
         }
         OffsetDateTime toTime = parseTime(to);
         if (toTime != null) {
             queryText.append(" and createdAt <= :toTime");
-            parameters.and("toTime", toTime);
+            parameters.put("toTime", toTime);
         }
 
         int safePage = Math.max(1, page);

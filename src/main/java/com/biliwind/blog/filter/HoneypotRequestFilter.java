@@ -83,6 +83,7 @@ public class HoneypotRequestFilter {
                 result == null ? Uni.createFrom().nullItem() : Uni.createFrom().item(result));
     }
 
+    @SuppressWarnings("deprecation")
     @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 50, readBody = true)
     public Optional<Response> filter(ContainerRequestContext request) {
         if (isAuthenticatedWespSyncRequest(request)) return Optional.empty();

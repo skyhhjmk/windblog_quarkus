@@ -445,11 +445,13 @@ public class StorageService {
         HashSet<VariantType> variants = new HashSet<>();
         for (String storageClassName : media.storageClasses.keySet()) {
             Object providerValue = media.storageClasses.get(storageClassName);
-            if (providerValue instanceof Map) {
-                Map<String, Object> providerData = (Map<String, Object>) providerValue;
-                for (String variantName : providerData.keySet()) {
+            if (providerValue instanceof Map<?, ?> providerData) {
+                for (Object variantName : providerData.keySet()) {
+                    if (variantName == null) {
+                        continue;
+                    }
                     try {
-                        VariantType variant = VariantType.valueOf(variantName.toUpperCase());
+                        VariantType variant = VariantType.valueOf(variantName.toString().toUpperCase());
                         variants.add(variant);
                     } catch (IllegalArgumentException e) {
                     }
@@ -796,15 +798,13 @@ public class StorageService {
 
     private String getSourcePathFromStorageClasses(Media media, VariantType variant, String storageClassName) {
         Object providerDataObj = media.storageClasses.get(storageClassName);
-        if (!(providerDataObj instanceof Map)) {
+        if (!(providerDataObj instanceof Map<?, ?> primaryProviderData)) {
             return null;
         }
-        Map<String, Object> primaryProviderData = (Map<String, Object>) providerDataObj;
         Object variantDataObj = primaryProviderData.get(variant.name().toLowerCase());
-        if (!(variantDataObj instanceof Map)) {
+        if (!(variantDataObj instanceof Map<?, ?> variantData)) {
             return null;
         }
-        Map<String, Object> variantData = (Map<String, Object>) variantDataObj;
         Object pathObj = variantData.get("path");
         if (pathObj == null) {
             return null;
@@ -905,16 +905,14 @@ public class StorageService {
         for (StorageClass provider : providers) {
             String storageClassName = provider.getName();
             Object providerDataObj = media.storageClasses.get(storageClassName);
-            if (!(providerDataObj instanceof Map)) {
+            if (!(providerDataObj instanceof Map<?, ?> providerData)) {
                 continue;
             }
-            Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
             String variantKey = variant.name().toLowerCase();
             Object variantDataObj = providerData.get(variantKey);
-            if (!(variantDataObj instanceof Map)) {
+            if (!(variantDataObj instanceof Map<?, ?> variantData)) {
                 continue;
             }
-            Map<String, Object> variantData = (Map<String, Object>) variantDataObj;
             Object statusObj = variantData.get("status");
             if (!"synced".equals(statusObj)) {
                 continue;
@@ -992,16 +990,14 @@ public class StorageService {
             }
 
             Object providerDataObj = media.storageClasses.get(storageClassName);
-            if (!(providerDataObj instanceof Map)) {
+            if (!(providerDataObj instanceof Map<?, ?> providerData)) {
                 continue;
             }
-            Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
             String variantKey = variant.name().toLowerCase();
             Object variantDataObj = providerData.get(variantKey);
-            if (!(variantDataObj instanceof Map)) {
+            if (!(variantDataObj instanceof Map<?, ?> variantData)) {
                 continue;
             }
-            Map<String, Object> variantData = (Map<String, Object>) variantDataObj;
             Object statusObj = variantData.get("status");
             if (!"synced".equals(statusObj)) {
                 continue;
@@ -1034,16 +1030,14 @@ public class StorageService {
             }
 
             Object providerDataObj = media.storageClasses.get(storageClassName);
-            if (!(providerDataObj instanceof Map)) {
+            if (!(providerDataObj instanceof Map<?, ?> providerData)) {
                 continue;
             }
-            Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
             String variantKey = variant.name().toLowerCase();
             Object variantDataObj = providerData.get(variantKey);
-            if (!(variantDataObj instanceof Map)) {
+            if (!(variantDataObj instanceof Map<?, ?> variantData)) {
                 continue;
             }
-            Map<String, Object> variantData = (Map<String, Object>) variantDataObj;
             Object statusObj = variantData.get("status");
             if (!"synced".equals(statusObj)) {
                 continue;
@@ -1081,17 +1075,15 @@ public class StorageService {
             for (Map.Entry<String, Object> entry : media.storageClasses.entrySet()) {
                 String storageClassName = entry.getKey();
                 Object providerDataObj = entry.getValue();
-                if (!(providerDataObj instanceof Map)) {
+                if (!(providerDataObj instanceof Map<?, ?> providerData)) {
                     continue;
                 }
-                Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
                 Map<String, String> providerVariants = new LinkedHashMap<>();
 
-                for (Map.Entry<String, Object> variantEntry : providerData.entrySet()) {
-                    String variantKey = variantEntry.getKey();
+                for (Map.Entry<?, ?> variantEntry : providerData.entrySet()) {
+                    String variantKey = String.valueOf(variantEntry.getKey());
                     Object variantDataObj = variantEntry.getValue();
-                    if (variantDataObj instanceof Map) {
-                        Map<String, Object> variantData = (Map<String, Object>) variantDataObj;
+                    if (variantDataObj instanceof Map<?, ?> variantData) {
                         Object statusObj = variantData.get("status");
                         String variantStatus = "unknown";
                         if (statusObj != null) {
@@ -1124,11 +1116,11 @@ public class StorageService {
             return;
         }
 
-        Map<String, Object> sourceStorageData = null;
+        Map<?, ?> sourceStorageData = null;
         for (String name : media.storageClasses.keySet()) {
             Object value = media.storageClasses.get(name);
             if (value instanceof Map<?, ?> candidate && !candidate.isEmpty()) {
-                sourceStorageData = (Map<String, Object>) candidate;
+                sourceStorageData = candidate;
                 break;
             }
         }
@@ -1137,8 +1129,10 @@ public class StorageService {
         }
 
         List<String> variantNames = new ArrayList<>();
-        for (String variantName : sourceStorageData.keySet()) {
-            variantNames.add(variantName);
+        for (Object variantName : sourceStorageData.keySet()) {
+            if (variantName != null) {
+                variantNames.add(variantName.toString());
+            }
         }
 
         List<StorageClassEntity> storageClasses = getAllStorageClassEntities();
@@ -1149,8 +1143,8 @@ public class StorageService {
             }
             Object existingData = media.storageClasses.get(storageClassName);
             Map<String, Object> storageClassData;
-            if (existingData instanceof Map) {
-                storageClassData = (Map<String, Object>) existingData;
+            if (existingData instanceof Map<?, ?> existingMap) {
+                storageClassData = asMutableStringObjectMap(existingMap);
             } else {
                 storageClassData = new LinkedHashMap<>();
                 media.storageClasses.put(storageClassName, storageClassData);
@@ -1170,10 +1164,15 @@ public class StorageService {
     private Map<String, Object> findPrimaryStorageClassData(Media media) {
         String primaryName = getPrimaryProviderName();
         Object primaryData = media.storageClasses.get(primaryName);
-        if (primaryData instanceof Map) {
-            return (Map<String, Object>) primaryData;
+        if (primaryData instanceof Map<?, ?> primaryMap) {
+            return asMutableStringObjectMap(primaryMap);
         }
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asMutableStringObjectMap(Map<?, ?> map) {
+        return (Map<String, Object>) map;
     }
 
     public void reconcileMedia(Long mediaId) {

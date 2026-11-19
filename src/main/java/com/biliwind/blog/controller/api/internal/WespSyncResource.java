@@ -174,7 +174,7 @@ public class WespSyncResource {
             Map<String, String> headers = new java.util.HashMap<>();
             JsonNode headerNode = request.get("headers");
             if (headerNode != null && headerNode.isObject()) {
-                headerNode.fields().forEachRemaining(entry -> {
+                headerNode.properties().forEach(entry -> {
                     if (entry.getKey() != null && entry.getValue().isTextual()) headers.put(entry.getKey(), entry.getValue().asText());
                 });
             }

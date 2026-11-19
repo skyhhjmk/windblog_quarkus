@@ -390,11 +390,9 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
 
                 for (Map.Entry<String, Object> providerEntry : media.storageClasses.entrySet()) {
                     String storageClassName = providerEntry.getKey();
-                    if (providerEntry.getValue() instanceof Map) {
-                        Map<String, Object> providerData = (Map<String, Object>) providerEntry.getValue();
+                    if (providerEntry.getValue() instanceof Map<?, ?> providerData) {
                         Object variantDataObj = providerData.get(variantName);
-                        if (variantDataObj instanceof Map) {
-                            Map<String, Object> variantData = (Map<String, Object>) variantDataObj;
+                        if (variantDataObj instanceof Map<?, ?> variantData) {
                             NodeVariantStatus.Builder statusBuilder = NodeVariantStatus.newBuilder();
                             if (variantData.get("path") != null)
                                 statusBuilder.setPath(variantData.get("path").toString());
@@ -441,12 +439,11 @@ public class EdgeNodeGrpcService implements EdgeNodeService {
                                 }
                                 String variantName = req.getVariantType().toLowerCase();
                                 Object providerDataObj = media.storageClasses.get(getStorageService().getPrimaryProviderName());
-                                if (!(providerDataObj instanceof Map)) {
+                                if (!(providerDataObj instanceof Map<?, ?> providerData)) {
                                     multi = Multi.createFrom().failure(new Exception("Primary provider data not found"));
                                 } else {
-                                    Map<String, Object> providerData = (Map<String, Object>) providerDataObj;
-                                    Map<String, Object> variantData = (Map<String, Object>) providerData.get(variantName);
-                                    if (variantData == null || variantData.get("path") == null) {
+                                    Object variantDataObj = providerData.get(variantName);
+                                    if (!(variantDataObj instanceof Map<?, ?> variantData) || variantData.get("path") == null) {
                                         multi = Multi.createFrom().failure(new Exception("Variant path not found"));
                                     } else {
                                         String path = variantData.get("path").toString();

@@ -54,8 +54,13 @@ public class PostHelper {
 
     public static void updateExtraInfo(Post post, Long pointsPrice, Integer freeLines) {
         Map<String, Object> extra = null;
-        if (post.extraInfo instanceof Map) {
-            extra = new HashMap<>((Map<String, Object>) post.extraInfo);
+        if (post.extraInfo instanceof Map<?, ?> rawMap) {
+            extra = new HashMap<>();
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                if (entry.getKey() != null) {
+                    extra.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
         } else if (post.extraInfo != null) {
             try {
                 if (post.extraInfo instanceof String) {

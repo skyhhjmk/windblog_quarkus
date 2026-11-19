@@ -143,7 +143,7 @@ public class AdminCategoryController {
 
         List<Long> categoryIds = categories.stream().map(category -> category.id).toList();
         Map<Long, Long> postCounts = new HashMap<>();
-        List<Object[]> rows = Category.getEntityManager().createNativeQuery("""
+        List<?> rows = Category.getEntityManager().createNativeQuery("""
                         select related_posts.category_id, count(distinct related_posts.post_id)
                         from (
                             select p.category_id, p.id as post_id
@@ -164,7 +164,8 @@ public class AdminCategoryController {
                 .setParameter("legacyCategoryIds", categoryIds)
                 .setParameter("relationCategoryIds", categoryIds)
                 .getResultList();
-        for (Object[] row : rows) {
+        for (Object rawRow : rows) {
+            Object[] row = (Object[]) rawRow;
             postCounts.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
         }
         return postCounts;

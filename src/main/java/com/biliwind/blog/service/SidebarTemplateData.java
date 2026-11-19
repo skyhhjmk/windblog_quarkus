@@ -292,8 +292,9 @@ public class SidebarTemplateData {
         String region = getRegionContext().getCurrentRegion().getCode();
         String cacheKey = CacheService.Keys.recentPosts(lang, region, safeLimit);
         Object localValue = getLocalValue(cacheKey);
-        if (localValue instanceof List) {
-            return (List<PostView>) localValue;
+        List<PostView> cachedLocal = castList(localValue, PostView.class);
+        if (cachedLocal != null) {
+            return cachedLocal;
         }
 
         java.util.Optional<List<PostView>> cached = getCacheService().get(cacheKey, new com.fasterxml.jackson.core.type.TypeReference<List<PostView>>() {
@@ -363,8 +364,9 @@ public class SidebarTemplateData {
         String lang = getLanguageContext().getLang();
         String cacheKey = CacheService.Keys.categories(lang);
         Object localValue = getLocalValue(cacheKey);
-        if (localValue instanceof List) {
-            return (List<CategoryView>) localValue;
+        List<CategoryView> cachedLocal = castList(localValue, CategoryView.class);
+        if (cachedLocal != null) {
+            return cachedLocal;
         }
 
         java.util.Optional<List<CategoryView>> cached = getCacheService().get(cacheKey, new com.fasterxml.jackson.core.type.TypeReference<List<CategoryView>>() {
@@ -405,8 +407,9 @@ public class SidebarTemplateData {
         String lang = getLanguageContext().getLang();
         String cacheKey = CacheService.Keys.tags(lang);
         Object localValue = getLocalValue(cacheKey);
-        if (localValue instanceof List) {
-            return (List<TagView>) localValue;
+        List<TagView> cachedLocal = castList(localValue, TagView.class);
+        if (cachedLocal != null) {
+            return cachedLocal;
         }
 
         java.util.Optional<List<TagView>> cached = getCacheService().get(cacheKey, new com.fasterxml.jackson.core.type.TypeReference<List<TagView>>() {
@@ -531,5 +534,19 @@ public class SidebarTemplateData {
     }
 
     private record LocalCacheEntry(Object value, long expiresAtMillis) {
+    }
+
+    private static <T> List<T> castList(Object value, Class<T> elementType) {
+        if (!(value instanceof List<?> rawList)) {
+            return null;
+        }
+        List<T> result = new ArrayList<>(rawList.size());
+        for (Object item : rawList) {
+            if (!elementType.isInstance(item)) {
+                return null;
+            }
+            result.add(elementType.cast(item));
+        }
+        return result;
     }
 }

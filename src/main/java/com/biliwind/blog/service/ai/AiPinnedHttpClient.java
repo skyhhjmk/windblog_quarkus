@@ -8,6 +8,7 @@ import org.apache.hc.client5.http.async.methods.SimpleRequestProducer;
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
 import org.apache.hc.client5.http.impl.async.HttpAsyncClients;
 import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.core5.concurrent.FutureCallback;
 import org.apache.hc.core5.http.ContentType;
@@ -75,9 +76,11 @@ final class AiPinnedHttpClient {
         CloseableHttpAsyncClient client = HttpAsyncClients.custom()
                 .setConnectionManager(PoolingAsyncClientConnectionManagerBuilder.create()
                         .setDnsResolver(resolver)
+                        .setDefaultConnectionConfig(ConnectionConfig.custom()
+                                .setConnectTimeout(Timeout.ofSeconds(60))
+                                .build())
                         .build())
                 .setDefaultRequestConfig(RequestConfig.custom()
-                        .setConnectTimeout(Timeout.ofSeconds(60))
                         .setResponseTimeout(Timeout.ofMilliseconds(responseTimeoutMillis))
                         .build())
                 .disableRedirectHandling()

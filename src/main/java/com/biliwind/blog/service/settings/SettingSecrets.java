@@ -64,7 +64,7 @@ public final class SettingSecrets {
             return value.deepCopy();
         }
         ObjectNode result = MAPPER.createObjectNode();
-        value.fields().forEachRemaining(field -> {
+        value.properties().forEach(field -> {
             if (isDeclaredSecret(definition, field.getKey())) {
                 result.put(field.getKey(), REDACTED);
             } else {
@@ -85,7 +85,7 @@ public final class SettingSecrets {
             return submitted.deepCopy();
         }
         ObjectNode merged = (ObjectNode) current.deepCopy();
-        submitted.fields().forEachRemaining(field -> {
+        submitted.properties().forEach(field -> {
             String name = field.getKey();
             if (isDeclaredSecret(definition, name)) {
                 if (isRedacted(field.getValue())) {
@@ -110,9 +110,7 @@ public final class SettingSecrets {
             return false;
         }
         if (value.isObject()) {
-            var fields = value.fields();
-            while (fields.hasNext()) {
-                var entry = fields.next();
+            for (var entry : value.properties()) {
                 if (entry.getKey().equals(fieldName) || containsField(entry.getValue(), fieldName)) {
                     return true;
                 }
@@ -132,9 +130,7 @@ public final class SettingSecrets {
             return false;
         }
         if (value.isObject()) {
-            var fields = value.fields();
-            while (fields.hasNext()) {
-                var entry = fields.next();
+            for (var entry : value.properties()) {
                 if (isSecretFieldName(entry.getKey()) || containsSecretField(entry.getValue())) {
                     return true;
                 }

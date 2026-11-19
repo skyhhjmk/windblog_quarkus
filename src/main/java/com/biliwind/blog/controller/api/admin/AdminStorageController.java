@@ -282,12 +282,10 @@ public class AdminStorageController {
                 if (media.storageClasses != null) {
                     for (java.util.Map.Entry<String, Object> entry : media.storageClasses.entrySet()) {
                         Object providerDataObj = entry.getValue();
-                        if (providerDataObj instanceof java.util.Map) {
-                            java.util.Map<String, Object> providerData = (java.util.Map<String, Object>) providerDataObj;
-                            for (java.util.Map.Entry<String, Object> varEntry : providerData.entrySet()) {
+                        if (providerDataObj instanceof java.util.Map<?, ?> providerData) {
+                            for (java.util.Map.Entry<?, ?> varEntry : providerData.entrySet()) {
                                 Object variantDataObj = varEntry.getValue();
-                                if (variantDataObj instanceof java.util.Map) {
-                                    java.util.Map<String, Object> variantData = (java.util.Map<String, Object>) variantDataObj;
+                                if (variantDataObj instanceof java.util.Map<?, ?> variantData) {
                                     Object statusObj = variantData.get("status");
                                     String status = "unknown";
                                     if (statusObj != null) {

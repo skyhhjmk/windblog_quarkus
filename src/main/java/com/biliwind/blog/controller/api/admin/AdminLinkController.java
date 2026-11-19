@@ -341,15 +341,15 @@ public class AdminLinkController {
                     if (icon.startsWith("//")) {
                         icon = "https:" + icon;
                     } else if (icon.startsWith("/")) {
-                        java.net.URL parsedUrl = new java.net.URL(url);
-                        icon = parsedUrl.getProtocol() + "://" + parsedUrl.getHost() + icon;
+                        java.net.URI parsedUri = java.net.URI.create(url);
+                        icon = parsedUri.getScheme() + "://" + parsedUri.getHost() + icon;
                     } else {
-                        java.net.URL parsedUrl = new java.net.URL(url);
-                        String path = parsedUrl.getPath();
+                        java.net.URI parsedUri = java.net.URI.create(url);
+                        String path = parsedUri.getPath() != null ? parsedUri.getPath() : "";
                         if (path.isEmpty() || path.equals("/")) {
-                            icon = parsedUrl.getProtocol() + "://" + parsedUrl.getHost() + "/" + icon;
+                            icon = parsedUri.getScheme() + "://" + parsedUri.getHost() + "/" + icon;
                         } else {
-                            icon = parsedUrl.getProtocol() + "://" + parsedUrl.getHost() + path.substring(0, path.lastIndexOf("/") + 1) + icon;
+                            icon = parsedUri.getScheme() + "://" + parsedUri.getHost() + path.substring(0, path.lastIndexOf("/") + 1) + icon;
                         }
                     }
                 }

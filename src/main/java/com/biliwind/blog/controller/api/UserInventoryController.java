@@ -71,7 +71,8 @@ public class UserInventoryController {
         if (userId == null) return unauthorized();
         if (idempotencyKey == null || idempotencyKey.isBlank()) return badRequest("Idempotency-Key 必须存在");
         var result = backpackService.use(userId, instanceUuid,
-                new UseRequest(body == null || !body.isObject() ? Map.of() : objectMapper.convertValue(body, Map.class)),
+                new UseRequest(body == null || !body.isObject() ? Map.of() : objectMapper.convertValue(body,
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {})),
                 idempotencyKey);
         return result.success() ? Response.ok(Map.of("success", true, "message", result.message())).build()
                 : Response.status(Response.Status.BAD_REQUEST).entity(Map.of("success", false, "message", result.message())).build();

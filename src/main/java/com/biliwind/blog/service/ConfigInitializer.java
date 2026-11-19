@@ -90,9 +90,7 @@ public class ConfigInitializer {
 
     private boolean mergeMissingObjectFields(ObjectNode currentValue, JsonNode defaultValue) {
         boolean changed = false;
-        Iterator<Map.Entry<String, JsonNode>> defaultFields = defaultValue.fields();
-        while (defaultFields.hasNext()) {
-            Map.Entry<String, JsonNode> field = defaultFields.next();
+        for (Map.Entry<String, JsonNode> field : defaultValue.properties()) {
             String fieldKey = field.getKey();
             if (!currentValue.has(fieldKey)) {
                 currentValue.set(fieldKey, field.getValue().deepCopy());
