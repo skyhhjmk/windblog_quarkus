@@ -2187,3 +2187,28 @@ html.theme-transitioning * {
 .light .comment-feedback-success {
     color: #047857;
 }
+
+/* ==========================================================================
+   Device Performance Tiers (high / medium / low)
+   ========================================================================== */
+html[data-perf-tier="medium"] [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: blur(4px) !important;
+    backdrop-filter: blur(4px) !important;
+}
+
+html[data-perf-tier="low"] [class*="backdrop-blur"],
+html[data-perf-tier="low"] .glass,
+html[data-perf-tier="low"] .wb-ui-modal,
+html[data-perf-tier="low"] .wb-ui-toast {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+html[data-perf-tier="low"] *,
+html[data-perf-tier="low"] *::before,
+html[data-perf-tier="low"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+}

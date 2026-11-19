@@ -100,17 +100,43 @@
             if (theme === 'light') {
                 document.documentElement.classList.add('light');
             }
+            try {
+                const override = localStorage.getItem('wb_perf_tier_override');
+                if (override === 'high' || override === 'medium' || override === 'low') {
+                    document.documentElement.dataset.perfTier = override;
+                    return;
+                }
+                const cachedRaw = sessionStorage.getItem('wb_perf_tier_v1');
+                if (cachedRaw) {
+                    const cached = JSON.parse(cachedRaw);
+                    if (cached && (cached.tier === 'high' || cached.tier === 'medium' || cached.tier === 'low')) {
+                        document.documentElement.dataset.perfTier = cached.tier;
+                        return;
+                    }
+                }
+            } catch (_) {}
+            const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const saveData = navigator.connection && navigator.connection.saveData;
+            const cores = navigator.hardwareConcurrency;
+            const mem = navigator.deviceMemory;
+            if (reduced || saveData || (typeof cores === 'number' && cores <= 2) || (typeof mem === 'number' && mem <= 2)) {
+                document.documentElement.dataset.perfTier = 'low';
+            } else if (typeof cores === 'number' && cores >= 8 && (typeof mem !== 'number' || mem >= 8)) {
+                document.documentElement.dataset.perfTier = 'high';
+            } else {
+                document.documentElement.dataset.perfTier = 'medium';
+            }
         })();
     </script>
 
     <!-- Custom Theme Styles -->
     <link rel="stylesheet" href="/assets/css/theme{assetMinSuffix}.css?v={assetVersion}" />
-    <link rel="stylesheet" href="/assets/css/drag-character-trail{assetMinSuffix}.css?v={assetVersion}" />
-    <link rel="stylesheet" href="/assets/css/ruler-hud{assetMinSuffix}.css?v={assetVersion}" />
+    <link rel="stylesheet" href="/assets/css/drag-character-trail{assetMinSuffix}.css?v={assetVersion}" media="(min-width: 1024px) and (hover: hover) and (pointer: fine)" />
+    <link rel="stylesheet" href="/assets/css/ruler-hud{assetMinSuffix}.css?v={assetVersion}" media="(min-width: 1024px) and (hover: hover) and (pointer: fine)" />
     <link rel="stylesheet" href="/assets/css/ui{assetMinSuffix}.css?v={assetVersion}"/>
     <link rel="stylesheet" href="/assets/css/post-quote{assetMinSuffix}.css?v={assetVersion}"/>
     <link rel="stylesheet" href="/assets/css/asciinema-block{assetMinSuffix}.css?v={assetVersion}"/>
-    <link rel="stylesheet" href="/assets/css/relax-games{assetMinSuffix}.css?v={assetVersion}"/>
+    <link rel="stylesheet" href="/assets/css/relax-games{assetMinSuffix}.css?v={assetVersion}" media="(min-width: 1024px) and (hover: hover) and (pointer: fine)"/>
 </head>
 
 <body class="min-h-screen flex flex-col bg-bg text-body font-sans selection:bg-accent/20 selection:text-accent">
@@ -420,6 +446,7 @@
 </style>
 
 <!-- JS Scripts -->
+<script src="/assets/js/perf-tier{assetMinSuffix}.js?v={assetVersion}" defer></script>
 <script src="/assets/js/pjax-lifecycle{assetMinSuffix}.js?v={assetVersion}" defer></script>
 <script src="/assets/js/ui{assetMinSuffix}.js?v={assetVersion}" defer></script>
 <script src="/assets/js/pow{assetMinSuffix}.js?v={assetVersion}" defer></script>

@@ -1470,11 +1470,29 @@
     }
 
     let manager = null;
+    const desktopGameMedia = window.matchMedia
+        ? window.matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)')
+        : null;
 
     function init() {
+        // 移动端/触屏设备默认卸载桌面小游戏中心，减少 DOM、WebAudio 与事件监听开销
+        if (desktopGameMedia && !desktopGameMedia.matches) {
+            return;
+        }
+        if (manager) return;
         manager = new RelaxGameManager();
         manager.init();
         window.wbRelaxGameManager = manager;
+    }
+
+    if (desktopGameMedia && typeof desktopGameMedia.addEventListener === 'function') {
+        desktopGameMedia.addEventListener('change', (e) => {
+            if (e.matches) {
+                init();
+            } else {
+                manager?.stopGame();
+            }
+        });
     }
 
     WindBlogLifecycle.register('relax-games', {

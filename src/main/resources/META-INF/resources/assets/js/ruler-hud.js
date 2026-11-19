@@ -7,6 +7,21 @@
     const desktopMedia = window.matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
     const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
 
+    function isRulerBlocked() {
+        if (window.WindBlogPerf && typeof window.WindBlogPerf.shouldShowRuler === 'function') {
+            return !window.WindBlogPerf.shouldShowRuler();
+        }
+        return document.documentElement.dataset.perfTier === 'low';
+    }
+
+    function isRulerStatic() {
+        if (reducedMotionMedia.matches) return true;
+        if (window.WindBlogPerf && typeof window.WindBlogPerf.isRulerStatic === 'function') {
+            return window.WindBlogPerf.isRulerStatic();
+        }
+        return document.documentElement.dataset.perfTier === 'medium';
+    }
+
     // Configuration Tunables (faithful to ArtCraft's Ruler Layout / Motion / Look)
     const LAYOUT = {
         railW: 56,
@@ -795,7 +810,7 @@
         }
 
         state.introStart = performance.now();
-        state.introDone = reducedMotionMedia.matches;
+        state.introDone = isRulerStatic();
     }
 
     function updateTicksGeometry() {
@@ -827,7 +842,7 @@
             return;
         }
 
-        if (reducedMotionMedia.matches || !exitHudEl) {
+        if (isRulerStatic() || !exitHudEl) {
             hudEl.replaceChildren();
             sectionNodes = [];
             return;
@@ -1033,7 +1048,7 @@
         // Position characters immediately so they are already in their layout slots on frame 0
         tickFrame(performance.now());
 
-        if (animateEntrance && !reducedMotionMedia.matches) {
+        if (animateEntrance && !isRulerStatic()) {
             const now = performance.now();
             const waitForExit = state.exitAnimEndTime > now
                 ? Math.max(0, Math.min(180, state.exitAnimEndTime - now - 110))
@@ -1096,14 +1111,15 @@
         const mode = detectPageMode();
         const isDesktop = desktopMedia.matches;
 
-        if (!mode || !isDesktop) {
+        if (!mode || !isDesktop || isRulerBlocked()) {
             teardownRuler();
             return;
         }
 
         activeMode = mode;
+        attachRulerListeners();
         const htmlEl = document.documentElement;
-        htmlEl.dataset.ruler = reducedMotionMedia.matches ? 'static' : 'on';
+        htmlEl.dataset.ruler = isRulerStatic() ? 'static' : 'on';
         htmlEl.dataset.rulerSide = 'right';
         htmlEl.style.setProperty('--ruler-rail', LAYOUT.railW + 'px');
 
@@ -1160,6 +1176,7 @@
 
     function teardownRuler() {
         activeMode = null;
+        detachRulerListeners();
         cancelSmoothScroll();
         if (state.rafId) {
             window.cancelAnimationFrame(state.rafId);
@@ -1170,8 +1187,29 @@
         delete htmlEl.dataset.rulerSide;
         htmlEl.style.removeProperty('--ruler-rail');
         if (rootEl) {
-            rootEl.style.display = 'none';
+            rootEl.remove();
+            rootEl = null;
+            railEl = null;
+            ticksTrackEl = null;
+            bracketEl = null;
+            needleEl = null;
+            readoutEl = null;
+            digitColEls = [];
+            ghostWrapEl = null;
+            ghostLineEl = null;
+            poolTopEl = null;
+            poolBottomEl = null;
+            exitHudEl = null;
+            hudEl = null;
         }
+        tickData = [];
+        tickRowEls = [];
+        tickLineEls = [];
+        tickLabelEls = [];
+        sections = [];
+        sectionNodes = [];
+        state.currentSectionsSignature = '';
+        state.docH = 0;
     }
 
     // Main 60/120fps Animation Frame Loop
@@ -1517,7 +1555,7 @@
             Math.abs(state.vel) < 28 &&
             !state.dragging &&
             state.zoomP < 0.3 &&
-            !reducedMotionMedia.matches
+            !isRulerStatic()
         ) {
             if (state.snapSince === null) {
                 state.snapSince = now;
@@ -1734,32 +1772,36 @@
         }, wait);
     }
 
-    function init() {
-        refreshLayoutAndSections();
+    let listenersAttached = false;
+    let bodyResizeObserver = null;
+    let pjaxMutationObserver = null;
 
-        window.addEventListener('scroll', () => {
-            requestTick();
-        }, { passive: true });
+    function onWindowScroll() {
+        requestTick();
+    }
 
+    function onWindowKeydown(e) {
+        if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(e.key)) {
+            onUserScrollInput(e);
+        }
+    }
+
+    function onWindowResize() {
+        scheduleRefresh(80);
+    }
+
+    function attachRulerListeners() {
+        if (listenersAttached) return;
+        listenersAttached = true;
+
+        window.addEventListener('scroll', onWindowScroll, { passive: true });
         window.addEventListener('wheel', onUserScrollInput, { passive: true });
         window.addEventListener('touchmove', onUserScrollInput, { passive: true });
-        window.addEventListener('keydown', (e) => {
-            if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(e.key)) {
-                onUserScrollInput(e);
-            }
-        });
+        window.addEventListener('keydown', onWindowKeydown);
+        window.addEventListener('resize', onWindowResize, { passive: true });
 
-        window.addEventListener('resize', () => scheduleRefresh(80), { passive: true });
-        desktopMedia.addEventListener?.('change', () => scheduleRefresh(20));
-        reducedMotionMedia.addEventListener?.('change', () => scheduleRefresh(20));
-
-        if (document.fonts && document.fonts.ready) {
-            document.fonts.ready.then(() => scheduleRefresh(40)).catch(() => {});
-        }
-
-        // Observe dynamic height changes (lazy images, comments, Vditor, unlocked paywall blocks)
-        if (typeof ResizeObserver !== 'undefined') {
-            const ro = new ResizeObserver(() => {
+        if (typeof ResizeObserver !== 'undefined' && !bodyResizeObserver) {
+            bodyResizeObserver = new ResizeObserver(() => {
                 if (!activeMode) return;
                 const newDocH = Math.max(
                     document.documentElement.scrollHeight,
@@ -1770,23 +1812,57 @@
                     scheduleRefresh(90);
                 }
             });
-            ro.observe(document.body);
+            bodyResizeObserver.observe(document.body);
         }
 
-        if (typeof MutationObserver !== 'undefined') {
-            const mo = new MutationObserver((mutations) => {
-                if (!activeMode) return;
-                for (let i = 0; i < mutations.length; i++) {
-                    const target = mutations[i].target;
-                    if (target && rootEl && rootEl.contains(target)) continue;
-                    scheduleRefresh(120);
-                    break;
-                }
-            });
+        if (typeof MutationObserver !== 'undefined' && !pjaxMutationObserver) {
             const pjaxContainer = document.getElementById('pjax-container');
             if (pjaxContainer) {
-                mo.observe(pjaxContainer, { childList: true, subtree: true });
+                pjaxMutationObserver = new MutationObserver((mutations) => {
+                    if (!activeMode) return;
+                    for (let i = 0; i < mutations.length; i++) {
+                        const target = mutations[i].target;
+                        if (target && rootEl && rootEl.contains(target)) continue;
+                        scheduleRefresh(120);
+                        break;
+                    }
+                });
+                pjaxMutationObserver.observe(pjaxContainer, { childList: true, subtree: true });
             }
+        }
+    }
+
+    function detachRulerListeners() {
+        if (!listenersAttached) return;
+        listenersAttached = false;
+
+        window.removeEventListener('scroll', onWindowScroll);
+        window.removeEventListener('wheel', onUserScrollInput);
+        window.removeEventListener('touchmove', onUserScrollInput);
+        window.removeEventListener('keydown', onWindowKeydown);
+        window.removeEventListener('resize', onWindowResize);
+
+        if (bodyResizeObserver) {
+            bodyResizeObserver.disconnect();
+            bodyResizeObserver = null;
+        }
+        if (pjaxMutationObserver) {
+            pjaxMutationObserver.disconnect();
+            pjaxMutationObserver = null;
+        }
+    }
+
+    function init() {
+        refreshLayoutAndSections();
+
+        desktopMedia.addEventListener?.('change', () => scheduleRefresh(20));
+        reducedMotionMedia.addEventListener?.('change', () => scheduleRefresh(20));
+        window.addEventListener('windblog:perf-tier-change', () => scheduleRefresh(20));
+
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => {
+                if (activeMode) scheduleRefresh(40);
+            }).catch(() => {});
         }
     }
 

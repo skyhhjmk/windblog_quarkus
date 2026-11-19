@@ -16,7 +16,7 @@
 
     if (!window.matchMedia) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const coarsePointer = window.matchMedia('(max-width: 767px), (hover: none), (pointer: coarse)');
+    const coarsePointer = window.matchMedia('(max-width: 1023px), (hover: none), (pointer: coarse)');
     if (reducedMotion.matches || coarsePointer.matches || document.getElementById(canvasId)) {
         return;
     }
@@ -259,8 +259,13 @@
         animationFrame = window.requestAnimationFrame(animate);
     }
 
+    function isHighPerf() {
+        const tier = document.documentElement.dataset.perfTier;
+        return !tier || tier === 'high';
+    }
+
     function handlePointerMove(event) {
-        if (reducedMotion.matches) return;
+        if (reducedMotion.matches || !isHighPerf()) return;
         const x = event.clientX;
         const y = event.clientY;
         const dx = x - previousX;
@@ -301,6 +306,13 @@
         if (!event.matches) return;
         releaseCanvas();
         resetPointerPath();
+    });
+
+    window.addEventListener('windblog:perf-tier-change', () => {
+        if (!isHighPerf()) {
+            releaseCanvas();
+            resetPointerPath();
+        }
     });
 
     // The accent is read from the theme once and refreshed only when it changes,

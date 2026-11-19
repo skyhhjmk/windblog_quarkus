@@ -363,3 +363,23 @@ html[data-ruler="static"] {
 .wb-ruler-section-pulse {
     animation: wb-ruler-target-flash 1.1s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* Tiered performance degradation for side ruler */
+html[data-ruler="static"] .wb-ruler-rail-frost,
+html[data-ruler="static"] .wb-ruler-pool-top,
+html[data-ruler="static"] .wb-ruler-pool-bottom,
+html[data-perf-tier="medium"] .wb-ruler-rail-frost,
+html[data-perf-tier="medium"] .wb-ruler-pool-top,
+html[data-perf-tier="medium"] .wb-ruler-pool-bottom {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+html[data-perf-tier="medium"] .wb-ruler-section-pulse,
+html[data-perf-tier="low"] .wb-ruler-section-pulse {
+    animation: none;
+}
+
+html[data-perf-tier="low"] .wb-ruler-root {
+    display: none !important;
+}

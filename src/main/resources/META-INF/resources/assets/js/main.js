@@ -1668,7 +1668,11 @@
             if (!preparedItems || preparedItems.length === 0) {
                 return Promise.resolve();
             }
-            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            if (
+                window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+                (window.WindBlogPerf && window.WindBlogPerf.shouldReduceMotion()) ||
+                document.documentElement.dataset.perfTier === 'low'
+            ) {
                 cleanupArticleTransitionItems(preparedItems);
                 return Promise.resolve();
             }
