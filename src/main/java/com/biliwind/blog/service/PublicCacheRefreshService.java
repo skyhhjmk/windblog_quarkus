@@ -62,8 +62,12 @@ public class PublicCacheRefreshService {
     @Inject
     RepostPolicyCatalog repostPolicyCatalog;
 
+    @Inject
+    StaticHtmlCacheService staticHtmlCacheService;
+
     public void onPostChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) PostSyncedEvent event) {
         refreshPostCaches(event.getPostId());
+        staticHtmlCacheService.invalidateAll();
     }
 
     public void onDataChanged(@Observes(during = TransactionPhase.AFTER_SUCCESS) DataSyncEvent event) {
@@ -77,6 +81,7 @@ public class PublicCacheRefreshService {
         } else if ("LINK".equals(entityType)) {
             cacheService.deletePattern(CacheService.Keys.PUBLIC_LINKS_PREFIX + "*");
             refreshListCaches();
+            staticHtmlCacheService.invalidateAll();
         }
     }
 
@@ -636,6 +641,7 @@ public class PublicCacheRefreshService {
         cacheService.delete(CacheService.Keys.SIDEBAR_STATS);
         invalidatePublicPostReadModels();
         refreshListCaches();
+        staticHtmlCacheService.invalidateAll();
     }
 
     public void refreshTagCaches() {
@@ -643,6 +649,7 @@ public class PublicCacheRefreshService {
         cacheService.delete(CacheService.Keys.SIDEBAR_STATS);
         invalidatePublicPostReadModels();
         refreshListCaches();
+        staticHtmlCacheService.invalidateAll();
     }
 
     private void invalidatePublicPostReadModels() {

@@ -83,7 +83,16 @@ public class CsrfFilter implements ContainerRequestFilter, ContainerResponseFilt
 
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
-        // 2. 在响应中设置 CSRF Cookie，确保前端可以获取
+        // 仅在私有用户页或写请求响应中按需补发 CSRF Cookie；
+        // 公开静态/HTML/媒体 GET 响应绝不下发 Set-Cookie，改由前端按需调用 /api/csrf 获取，以确保 CDN 与全站静态缓存可安全命中。
+        String method = requestContext.getMethod();
+        String path = normalizePath(requestContext.getUriInfo() != null ? requestContext.getUriInfo().getPath() : "");
+        boolean isSafeMethod = SAFE_METHODS.contains(method == null ? "" : method.toUpperCase(java.util.Locale.ROOT));
+        boolean allowOnSafeGet = path.startsWith("/user/");
+        if (isSafeMethod && !allowOnSafeGet) {
+            return;
+        }
+
         Cookie existingCookie = requestContext.getCookies().get(CSRF_COOKIE_NAME);
         if (existingCookie == null) {
             String newToken = csrfTokenManager.generateToken();

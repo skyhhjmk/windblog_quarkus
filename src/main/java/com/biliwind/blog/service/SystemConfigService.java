@@ -93,12 +93,18 @@ public class SystemConfigService {
         return defaultValue;
     }
 
+    @jakarta.inject.Inject
+    StaticHtmlCacheService staticHtmlCacheService;
+
     public void evictCache(String key) {
         try {
             valueCommands.getdel(CACHE_PREFIX + key);
             log.infof("配置缓存已清除: %s", key);
         } catch (Exception e) {
             log.warnf("清除 Redis 配置缓存失败: %s, 错误: %s", key, e.getMessage());
+        }
+        if (staticHtmlCacheService != null) {
+            staticHtmlCacheService.invalidateAll();
         }
     }
 }

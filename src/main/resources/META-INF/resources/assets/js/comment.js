@@ -598,12 +598,15 @@
             setFeedback(root, '', 'success');
 
             try {
+                const csrfToken = typeof window.ensureCsrfToken === 'function'
+                    ? await window.ensureCsrfToken()
+                    : window.getCsrfToken();
                 const response = await fetch('/api/comments', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-XSRF-TOKEN': window.getCsrfToken()
+                        'X-XSRF-TOKEN': csrfToken
                     },
                     body: JSON.stringify(payload)
                 });

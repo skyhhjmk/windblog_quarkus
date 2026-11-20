@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.Response;
 public final class PageCachePolicy {
 
     public static final String VARY = "Accept-Language, Cookie";
+    public static final String PUBLIC_VARY = "Accept-Language, X-PJAX";
 
     private PageCachePolicy() {
     }
@@ -25,7 +26,7 @@ public final class PageCachePolicy {
         CacheControl cacheControl = new CacheControl();
         cacheControl.setMaxAge(maxAgeSeconds);
         cacheControl.setSMaxAge(sharedMaxAgeSeconds);
-        return builder.tag(etag).cacheControl(cacheControl).header("Vary", VARY);
+        return builder.tag(etag).cacheControl(cacheControl).header("Vary", PUBLIC_VARY);
     }
 
     public static Response.ResponseBuilder privateNoStore(Response.ResponseBuilder builder) {

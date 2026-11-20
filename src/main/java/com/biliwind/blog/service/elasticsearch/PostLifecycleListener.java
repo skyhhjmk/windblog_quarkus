@@ -39,6 +39,9 @@ public class PostLifecycleListener {
     @Inject
     com.biliwind.blog.service.OutboxEventService outboxEventService;
 
+    @Inject
+    com.biliwind.blog.service.StaticHtmlCacheService staticHtmlCacheService;
+
     private void invalidatePostCaches() {
         // 清理首页缓存 (1-5页)
         cacheService.deletePattern(CacheService.Keys.INDEX_PAGE_PREFIX + "*");
@@ -48,6 +51,8 @@ public class PostLifecycleListener {
         cacheService.delete(CacheService.Keys.SIDEBAR_STATS);
         // 清理搜索结果缓存
         cacheService.deletePattern(CacheService.Keys.SEARCH_CACHE_PREFIX + "*");
+        // 清理全站静态 HTML 缓存
+        staticHtmlCacheService.invalidateAll();
     }
 
     void onStart(@Observes StartupEvent event) {

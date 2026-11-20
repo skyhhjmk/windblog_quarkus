@@ -63,7 +63,7 @@ public class CdnCacheDiagnosticsService {
         // 1. 公开首页
         items.add(probeEndpoint(baseUrl, "/", Collections.emptyMap(),
                 "公开首页 (GET /)",
-                "必须声明 private 或 no-cache，因为存在动态 CSP Nonce 替换，绝不可被 CDN 共享强缓存"));
+                "匿名请求允许公共/静态缓存（max-age / s-maxage），且不应携带 Set-Cookie 或 Vary: Cookie"));
 
         // 2. 公开文章（若存在已发布文章）
         String sampleSlug = findSamplePublicSlug();
@@ -72,7 +72,7 @@ public class CdnCacheDiagnosticsService {
             // 匿名访问公开文章
             items.add(probeEndpoint(baseUrl, postPath, Collections.emptyMap(),
                     "公开文章-匿名访问 (GET " + postPath + ")",
-                    "允许适度缓存（max-age / s-maxage），但必须包含 Vary: Accept-Language, Cookie"));
+                    "允许适度缓存（max-age / s-maxage），建议 Vary: Accept-Language, X-PJAX"));
 
             // 携带登录态访问公开文章
             items.add(probeEndpoint(baseUrl, postPath, Map.of("Cookie", "user_token=diagnostic_mock_token"),
@@ -248,12 +248,12 @@ public class CdnCacheDiagnosticsService {
                 suggestion = "必须设置 Cache-Control: no-cache, no-store, must-revalidate。";
             }
         } else if (path.equals("/")) {
-            if (lowerCc.contains("private") || lowerCc.contains("no-cache") || lowerCc.contains("no-store")) {
-                summary = "安全受控：首页使用私有/协商缓存 (" + cc + ")，动态 CSP Nonce 受到保护。";
-            } else if (lowerCc.contains("public")) {
+            if (lowerCc.contains("no-store")) {
                 isSafe = false;
                 level = "WARNING";
-                summary = "风险提示：首页设置了 public 强缓存，可能导致多用户收到失效的 CSP Nonce。";
+                summary = "提示：首页返回了 no-store (" + cc + ")，CDN 无法缓存首页 HTML。";
+            } else if (lowerCc.contains("public") || lowerCc.contains("max-age") || lowerCc.contains("s-maxage")) {
+                summary = "良好：首页已启用匿名公共缓存 (" + cc + ")，可被 CDN 与全站静态缓存命中。";
             } else {
                 summary = "正常：首页缓存标头为 " + (cc.isBlank() ? "默认" : cc);
             }

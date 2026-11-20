@@ -290,4 +290,42 @@
         const meta = document.head.querySelector('meta[name="csrf-token"]');
         return (meta && meta.content) || getCookie('_token') || '';
     };
+
+    let csrfInFlight = null;
+    window.ensureCsrfToken = async function () {
+        const existing = window.getCsrfToken();
+        if (existing) return existing;
+        if (csrfInFlight) return csrfInFlight;
+        csrfInFlight = fetch('/api/csrf', {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(res => (res.ok ? res.json() : null))
+            .then(data => {
+                const token = (data && data.token) || window.getCsrfToken() || '';
+                if (token) {
+                    const meta = document.head.querySelector('meta[name="csrf-token"]');
+                    if (meta) meta.setAttribute('content', token);
+                }
+                return token;
+            })
+            .catch(() => window.getCsrfToken() || '')
+            .finally(() => {
+                csrfInFlight = null;
+            });
+        return csrfInFlight;
+    };
+
+    const bootstrapCsrf = () => {
+        if (!window.getCsrfToken()) {
+            window.ensureCsrfToken();
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootstrapCsrf, { once: true });
+    } else {
+        setTimeout(bootstrapCsrf, 0);
+    }
 })();

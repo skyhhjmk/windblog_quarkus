@@ -43,14 +43,11 @@ public class LangResponseFilter implements ContainerResponseFilter {
             }
         }
 
-        if (CsrfFilter.isCacheableHtmlResponse(responseContext.getMediaType(),
+        if (cookieNeedsUpdate && CsrfFilter.isCacheableHtmlResponse(responseContext.getMediaType(),
                 responseContext.getHeaderString(HttpHeaders.CACHE_CONTROL))) {
-            // Language and authentication cookies affect public HTML. Do not let a
-            // shared cache serve one cookie context to another visitor.
+            // An explicit ?lang=... switch sets a cookie; keep that response out of shared caches.
             PjaxResponseFilter.appendVary(responseContext.getHeaders(), "Cookie");
-            if (cookieNeedsUpdate) {
-                responseContext.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, "no-store");
-            }
+            responseContext.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, "no-store");
         }
     }
 }
