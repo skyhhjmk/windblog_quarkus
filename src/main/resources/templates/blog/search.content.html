@@ -128,7 +128,7 @@
                                     </span>
                                     <span class="text-meta/60">•</span>
                                 {/if}
-                                <time class="timestamp text-meta" data-timestamp="{hit.dateText}">{hit.dateText}</time>
+                                <time class="timestamp text-meta" data-date-only="true" datetime="{hit.dateText}" data-timestamp="{hit.dateText}">{date:formatDate(hit.dateText)}</time>
                                 {#if hit.type == 'post'}
                                     <span class="text-meta/60">•</span>
                                     <span class="inline-flex items-center gap-1 text-meta" title="{i18n.t('post.views')}" aria-label="{i18n.t('post.views')}">

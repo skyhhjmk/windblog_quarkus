@@ -2178,6 +2178,112 @@
             throw new Error('PJAX response has no content container');
         }
 
+        function resolveTimestampLocale() {
+            const rawLang = (document.documentElement.lang || 'zh-CN').trim();
+            if (!rawLang) return 'zh-CN';
+            if (rawLang.toLowerCase().startsWith('en')) return 'en-US';
+            if (rawLang.toLowerCase().startsWith('zh')) return 'zh-CN';
+            return rawLang;
+        }
+
+        function parseTimestampValue(raw, dateOnly = false) {
+            if (!raw) return null;
+            const trimmed = String(raw).trim();
+            if (!trimmed) return null;
+            const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (dateOnlyMatch) {
+                const year = Number(dateOnlyMatch[1]);
+                const month = Number(dateOnlyMatch[2]) - 1;
+                const day = Number(dateOnlyMatch[3]);
+                return { date: new Date(year, month, day), isDateOnly: true };
+            }
+            let isoStr = trimmed;
+            if (!isoStr.includes('T') && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(isoStr)) {
+                isoStr = isoStr.replace(' ', 'T');
+            }
+            const date = new Date(isoStr);
+            if (Number.isNaN(date.getTime())) {
+                return null;
+            }
+            return { date, isDateOnly: Boolean(dateOnly) };
+        }
+
+        function formatHumanTimestamp(raw, options = {}) {
+            const parsed = parseTimestampValue(raw, options.dateOnly);
+            if (!parsed) return { text: String(raw || ''), title: '' };
+
+            const locale = resolveTimestampLocale();
+            const { date, isDateOnly } = parsed;
+
+            if (isDateOnly) {
+                const formattedDate = new Intl.DateTimeFormat(locale, {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                }).format(date);
+                return { text: formattedDate, title: formattedDate };
+            }
+
+            const fullFormatted = new Intl.DateTimeFormat(locale, {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(date);
+
+            if (options.relative !== false && typeof Intl.RelativeTimeFormat === 'function') {
+                const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+                const absSeconds = Math.abs(diffSeconds);
+                if (absSeconds < 60) {
+                    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+                    return {
+                        text: diffSeconds <= 0 && absSeconds < 10
+                            ? (locale.startsWith('zh') ? '刚刚' : 'just now')
+                            : rtf.format(diffSeconds, 'second'),
+                        title: fullFormatted
+                    };
+                }
+                if (absSeconds < 3600) {
+                    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+                    return {
+                        text: rtf.format(Math.trunc(diffSeconds / 60), 'minute'),
+                        title: fullFormatted
+                    };
+                }
+                if (absSeconds < 86400) {
+                    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+                    return {
+                        text: rtf.format(Math.trunc(diffSeconds / 3600), 'hour'),
+                        title: fullFormatted
+                    };
+                }
+                if (absSeconds < 7 * 86400) {
+                    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+                    return {
+                        text: rtf.format(Math.trunc(diffSeconds / 86400), 'day'),
+                        title: fullFormatted
+                    };
+                }
+            }
+
+            const humanAbsolute = new Intl.DateTimeFormat(locale, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(date);
+
+            return { text: humanAbsolute, title: fullFormatted };
+        }
+
+        window.formatWindBlogTimestamp = function (raw, options = {}) {
+            return formatHumanTimestamp(raw, options).text;
+        };
+
         function formatTimestamps(root = document) {
             const elements = root.querySelectorAll('.timestamp:not(.formatted)');
             const candidates = root.matches?.('.timestamp:not(.formatted)')
@@ -2189,28 +2295,22 @@
                     const raw = el.getAttribute('data-timestamp') || el.textContent;
                     if (!raw) return;
 
-                    // 处理各种日期格式，确保能够被 new Date() 正确解析
-                    let isoStr = raw.trim();
-                    if (!isoStr.includes('T')) {
-                        isoStr = isoStr.replace(' ', 'T');
-                    }
-
-                    const date = new Date(isoStr);
-                    if (isNaN(date.getTime())) {
+                    const dateOnly = el.getAttribute('data-date-only') === 'true';
+                    const parsed = parseTimestampValue(raw, dateOnly);
+                    if (!parsed) {
                         console.warn('Invalid date format:', raw);
                         return;
                     }
 
-                    const formatted = new Intl.DateTimeFormat(document.documentElement.lang || 'zh-CN', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false
-                    }).format(date);
-
-                    el.textContent = formatted;
+                    const { text, title } = formatHumanTimestamp(raw, { dateOnly });
+                    el.textContent = text;
+                    if (title) {
+                        el.setAttribute('title', title);
+                        el.setAttribute('aria-label', title);
+                    }
+                    if (el.tagName === 'TIME' && !el.getAttribute('datetime')) {
+                        el.setAttribute('datetime', raw.trim());
+                    }
                     el.classList.add('formatted');
                 } catch (err) {
                     console.error('Failed to format timestamp:', err, el);

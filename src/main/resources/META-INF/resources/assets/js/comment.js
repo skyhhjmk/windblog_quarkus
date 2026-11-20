@@ -118,9 +118,20 @@
 
     function formatTime(value) {
         if (!value) return '';
+        if (typeof window.formatWindBlogTimestamp === 'function') {
+            return window.formatWindBlogTimestamp(value);
+        }
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return value;
-        return date.toLocaleString();
+        const locale = document.documentElement.lang || 'zh-CN';
+        return new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
     }
 
     function setFeedback(root, message, type, errorCode = 'WB-UI-UNCLASSIFIED-001') {
@@ -225,7 +236,7 @@
                     <div class="flex items-center gap-3">
                         <strong class="text-[var(--accent)]">${authorHtml(node, userName)}</strong>
                         ${renderClient(node)}
-                        <time class="timestamp text-xs opacity-70" data-timestamp="${escapeHtml(node.createdAt)}">${escapeHtml(node.createdAt)}</time>
+                        <time class="timestamp text-xs opacity-70" datetime="${escapeHtml(node.createdAt)}" data-timestamp="${escapeHtml(node.createdAt)}">${escapeHtml(formatTime(node.createdAt))}</time>
                     </div>
                 </div>
                 <div class="comment-body prose max-w-none">${body}</div>

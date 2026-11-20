@@ -37,7 +37,7 @@
                     </div>
                     <div class="post-meta-item">
                         <span class="post-meta-label">{i18n.t('post.published_at')}</span>
-                        <time class="timestamp post-meta-value text-xs" data-timestamp="{publishedAt}">{publishedAt}</time>
+                        <time class="timestamp post-meta-value text-xs" datetime="{publishedAt}" data-timestamp="{publishedAt}">{date:formatDateTime(publishedAt)}</time>
                     </div>
                     <div class="post-meta-item">
                         <span class="post-meta-label">{i18n.t('post.word_count')}</span>

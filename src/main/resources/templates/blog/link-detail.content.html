@@ -82,11 +82,12 @@
         <div class="card p-6">
             <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div class="flex items-center gap-4 text-sm text-gray-600">
-                    <time class="timestamp meta-mono" data-timestamp="{link.createdAt}">{link.createdAt}</time>
+                    <time class="timestamp meta-mono" datetime="{link.createdAt}" data-timestamp="{link.createdAt}">{date:formatDateTime(link.createdAt)}</time>
                     {#if link.updatedAt != link.createdAt}
                         <span>·</span>
-                        <span>更新于 <time class="timestamp meta-mono"
-                                           data-timestamp="{link.updatedAt}">{link.updatedAt}</time></span>
+                        <span>{i18n.t('link.updated_at')} <time class="timestamp meta-mono"
+                                           datetime="{link.updatedAt}"
+                                           data-timestamp="{link.updatedAt}">{date:formatDateTime(link.updatedAt)}</time></span>
                     {/if}
                 </div>
                 <a href="{link.url}" target="{link.target ?: '_blank'}" class="btn-action-primary px-8 py-2.5">

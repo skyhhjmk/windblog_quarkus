@@ -21,9 +21,9 @@
                     {#if !widget.or(null) || widget.showDate}
                         <span class="text-[10px] text-meta font-mono tracking-wider">
                             {#if post.publishedAt}
-                                {post.publishedAt.toLocalDate()}
+                                <time class="timestamp" data-date-only="true" datetime="{post.publishedAt.toLocalDate()}" data-timestamp="{post.publishedAt.toLocalDate()}">{date:formatDate(post.publishedAt)}</time>
                             {#else}
-                                {post.createdAt.toLocalDate()}
+                                <time class="timestamp" data-date-only="true" datetime="{post.createdAt.toLocalDate()}" data-timestamp="{post.createdAt.toLocalDate()}">{date:formatDate(post.createdAt)}</time>
                             {/if}
                         </span>
                     {/if}

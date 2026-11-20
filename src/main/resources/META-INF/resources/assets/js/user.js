@@ -524,7 +524,7 @@
             [
                 makeField(label('user_repost_target', '转载页面'), item.targetUrl),
                 makeField(label('user_repost_domain', '授权域名'), item.allowedDomain),
-                makeField(label('user_repost_created', '创建时间'), item.createdAt ? new Date(item.createdAt).toLocaleString() : ''),
+                makeField(label('user_repost_created', '创建时间'), item.createdAt ? (window.formatWindBlogTimestamp ? window.formatWindBlogTimestamp(item.createdAt) : new Date(item.createdAt).toLocaleString(document.documentElement.lang || 'zh-CN')) : ''),
                 makeField(label('user_repost_original_visits', '原文访问'), item.originalClicks ?? 0),
                 makeField(label('user_repost_go_clicks', '商业链接点击'), item.goClicks ?? 0)
             ].forEach(node => { if (node) card.appendChild(node); });
@@ -1121,7 +1121,7 @@
                     var amountBg = t.changeAmount > 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)';
                     var prefix = t.changeAmount > 0 ? '+' : '';
                     var desc = escapeHtml(t.description || t.bizType);
-                    var dateStr = new Date(t.createdAt).toLocaleString();
+                    var dateStr = window.formatWindBlogTimestamp ? window.formatWindBlogTimestamp(t.createdAt) : new Date(t.createdAt).toLocaleString(document.documentElement.lang || 'zh-CN');
 
                     return '<div class="group flex justify-between items-center p-4 border border-border/50 bg-bg/20 hover:bg-bg/40 hover:border-accent/30 rounded-xl transition-all duration-300">' +
                         '<div class="flex items-center gap-4">' +

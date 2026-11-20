@@ -47,7 +47,7 @@
 <main>
     <header>
         <h1>{title}</h1>
-        <p class="meta">{publishedAt ?: ''}</p>
+        <p class="meta">{#if publishedAt}<time datetime="{publishedAt}">{date:formatDateTime(publishedAt, language)}</time>{/if}</p>
     </header>
     <article>{postBody.raw}</article>
     <section class="repost-notice">

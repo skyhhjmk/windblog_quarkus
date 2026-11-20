@@ -52,7 +52,7 @@
                                             <a class="text-accent font-semibold hover:underline" href="{languagePrefix}/category/{category.slug}">{category.name}</a>
                                         {/for}
                                         <span class="text-meta/60">•</span>
-                                        <time class="timestamp text-meta" data-timestamp="{post.publishedAtText}">{post.publishedAtText}</time>
+                                        <time class="timestamp text-meta" data-date-only="true" datetime="{post.publishedAtText}" data-timestamp="{post.publishedAtText}">{date:formatDate(post.publishedAtText)}</time>
                                         <span class="text-meta/60">•</span>
                                         <span class="inline-flex items-center gap-1 text-meta" title="{i18n.t('post.views')}" aria-label="{i18n.t('post.views')}">
                                             <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -141,7 +141,7 @@
                                 <div class="flex items-center gap-4 pt-4 mt-auto">
                                     <span class="meta-mono">{i18n.format('tag.article_count', tag.postCount)}</span>
                                     <span class="w-1 h-1 rounded-full bg-border"></span>
-                                    <time class="timestamp meta-mono text-[9px]" data-timestamp="{tag.createdAtText}">{tag.createdAtText}</time>
+                                    <time class="timestamp meta-mono text-[9px]" data-date-only="true" datetime="{tag.createdAtText}" data-timestamp="{tag.createdAtText}">{date:formatDate(tag.createdAtText)}</time>
                                 </div>
                             </div>
                         </article>

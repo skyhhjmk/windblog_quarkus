@@ -155,13 +155,17 @@ const AdminUtils = {
     
     // 格式化日期
     formatDate(dateString) {
+        if (!dateString) return '-';
         const date = new Date(dateString);
-        return date.toLocaleString('zh-CN', {
+        if (Number.isNaN(date.getTime())) return String(dateString);
+        const locale = document.documentElement.lang || 'zh-CN';
+        return date.toLocaleString(locale, {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            hour12: false
         });
     },
     

@@ -81,7 +81,7 @@
                         </p>
 
                         <div class="mt-auto pt-4 border-t border-border flex items-center justify-between">
-                            <time class="timestamp meta-mono text-[9px] text-gray-600" data-timestamp="{link.createdAt}">{link.createdAt}</time>
+                            <time class="timestamp meta-mono text-[9px] text-gray-600" datetime="{link.createdAt}" data-timestamp="{link.createdAt}">{date:formatDateTime(link.createdAt)}</time>
                             <div class="flex items-center gap-2">
                                 <span class="tag-pill text-[9px] opacity-50">{link.redirectType ?: 'direct'}</span>
                             </div>
