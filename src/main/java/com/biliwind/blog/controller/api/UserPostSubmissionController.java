@@ -51,6 +51,9 @@ public class UserPostSubmissionController {
     @Inject
     AiManager aiManager;
 
+    @Inject
+    com.biliwind.blog.service.AdminNotificationEmailService adminNotificationEmailService;
+
     @GET
     @Transactional
     @Operation(summary = "查询当前用户的投稿")
@@ -172,6 +175,7 @@ public class UserPostSubmissionController {
         post.reviewNote = null;
         post.updatedAt = OffsetDateTime.now();
         notificationService.notifyPostSubmitted(post);
+        adminNotificationEmailService.notifyPostPendingReview(post);
         return Response.ok(toDetail(post)).build();
     }
 

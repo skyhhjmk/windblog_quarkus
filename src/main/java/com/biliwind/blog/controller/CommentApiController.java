@@ -58,6 +58,9 @@ public class CommentApiController {
     @Inject
     com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
 
+    @Inject
+    com.biliwind.blog.service.AdminNotificationEmailService adminNotificationEmailService;
+
     private void checkRate(io.vertx.ext.web.RoutingContext context, String action, int limit) {
         String ip = clientIpResolver.resolve(context).clientIp();
         if (!rateLimitService.tryAcquire("comment-" + action + ":" + ip, limit, java.time.Duration.ofMinutes(1))) {
@@ -250,6 +253,7 @@ public class CommentApiController {
         }
         // 清理侧边栏统计
         cacheService.delete(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_STATS);
+        adminNotificationEmailService.notifyNewComment(comment);
 
         return Response.status(Response.Status.CREATED)
                 .entity(Map.of(

@@ -60,6 +60,9 @@ public class UserProfileReviewService {
     @Inject
     ManagedExecutor managedExecutor;
 
+    @Inject
+    AdminNotificationEmailService adminNotificationEmailService;
+
     public record AvatarPayload(byte[] bytes, String mimeType) {
     }
 
@@ -151,6 +154,8 @@ public class UserProfileReviewService {
 
             if (autoAudit && review != null && review.id != null) {
                 triggerAsyncAiAudit(review.id);
+            } else if (review != null && review.id != null) {
+                adminNotificationEmailService.notifyUserProfileReviewPending(review);
             }
             return review;
         } catch (RuntimeException ex) {
@@ -270,7 +275,7 @@ public class UserProfileReviewService {
         Integer finalScore = minScore;
         boolean allowAutoDecision = isAllowAutoDecisionEnabled();
 
-        return QuarkusTransaction.requiringNew().call(() -> {
+        UserProfileReview updated = QuarkusTransaction.requiringNew().call(() -> {
             UserProfileReview review = UserProfileReview.findById(reviewId);
             if (review == null || !"PENDING".equals(review.status)) {
                 return review;
@@ -292,6 +297,10 @@ public class UserProfileReviewService {
             }
             return review;
         });
+        if (!allowAutoDecision && updated != null && "PENDING".equals(updated.status)) {
+            adminNotificationEmailService.notifyUserProfileReviewPending(updated);
+        }
+        return updated;
     }
 
     public UserProfileReview approve(Long reviewId, Long adminId, String note) {
@@ -389,7 +398,7 @@ public class UserProfileReviewService {
     }
 
     private UserProfileReview markManualRequired(Long reviewId, String reason, String rawResponse) {
-        return QuarkusTransaction.requiringNew().call(() -> {
+        UserProfileReview updated = QuarkusTransaction.requiringNew().call(() -> {
             UserProfileReview review = UserProfileReview.findById(reviewId);
             if (review == null) {
                 return null;
@@ -403,6 +412,10 @@ public class UserProfileReviewService {
             review.persist();
             return review;
         });
+        if (updated != null && "PENDING".equals(updated.status)) {
+            adminNotificationEmailService.notifyUserProfileReviewPending(updated);
+        }
+        return updated;
     }
 
     private void applyApprovalInTx(UserProfileReview review, Long adminId, String note) {

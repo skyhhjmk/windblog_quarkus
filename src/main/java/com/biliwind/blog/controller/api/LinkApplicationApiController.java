@@ -43,6 +43,9 @@ public class LinkApplicationApiController {
     LinkProbeService linkProbeService;
 
     @Inject
+    com.biliwind.blog.service.AdminNotificationEmailService adminNotificationEmailService;
+
+    @Inject
     LinkPublicTokenService linkPublicTokenService;
 
     @Inject
@@ -77,6 +80,7 @@ public class LinkApplicationApiController {
 
         Link application = createApplication(request, normalizedUrl, probeResult);
         application.persist();
+        adminNotificationEmailService.notifyFriendLinkPendingReview(application);
 
         return Response.status(Response.Status.CREATED)
                 .entity(Map.of(

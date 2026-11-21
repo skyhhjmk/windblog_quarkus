@@ -13,9 +13,14 @@ import jakarta.mail.Message;
 import jakarta.mail.Session;
 import jakarta.mail.Transport;
 import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -85,6 +90,13 @@ public class EmailDeliveryService {
     @Transactional
     public void queueRenderedHtml(String scenario, String recipientAddress, String subject, String htmlContent) {
         queueInternal(scenario, recipientAddress, subject, htmlContent, null, null, false);
+    }
+
+    /** Queues already-rendered HTML with explicit route hints without replacing it with a scenario template. */
+    @Transactional
+    public void queueRenderedHtmlWithRoute(String scenario, String recipientAddress, String subject,
+                                           String htmlContent, Long channelGroupId, Long channelId) {
+        queueInternal(scenario, recipientAddress, subject, htmlContent, channelGroupId, channelId, false);
     }
 
     private void queueInternal(String scenario, String recipientAddress, String subject, String htmlContent,
@@ -257,8 +269,43 @@ public class EmailDeliveryService {
         }
         message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(delivery.recipientAddress, false));
         message.setSubject(delivery.subject, "UTF-8");
-        message.setContent(delivery.htmlContent, "text/html; charset=UTF-8");
+
+        MimeMultipart multipart = new MimeMultipart("alternative");
+        MimeBodyPart textPart = new MimeBodyPart();
+        textPart.setText(htmlToPlainText(delivery.htmlContent), "UTF-8");
+        multipart.addBodyPart(textPart);
+
+        MimeBodyPart htmlPart = new MimeBodyPart();
+        htmlPart.setContent(delivery.htmlContent == null ? "" : delivery.htmlContent, "text/html; charset=UTF-8");
+        multipart.addBodyPart(htmlPart);
+
+        message.setContent(multipart);
         return message;
+    }
+
+    static String htmlToPlainText(String html) {
+        if (html == null || html.isBlank()) {
+            return "";
+        }
+        Document document = Jsoup.parse(html);
+        for (Element br : document.select("br")) {
+            br.after("\n");
+        }
+        for (Element block : document.select("p, div, tr, h1, h2, h3, h4, h5, h6, li, blockquote, pre, hr")) {
+            block.after("\n");
+        }
+        for (Element anchor : document.select("a[href]")) {
+            String href = anchor.attr("href").trim();
+            String text = anchor.text().trim();
+            if (!href.isEmpty() && !text.contains(href)) {
+                anchor.text(text.isEmpty() ? href : text + " (" + href + ")");
+            }
+        }
+        String text = document.body() != null ? document.body().wholeText() : document.wholeText();
+        return text.replaceAll("[ \\t\\x0B\\f\\r]+", " ")
+                .replaceAll(" *\\n *", "\n")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
     }
 
     private long durationMillis(java.time.Duration duration, long fallbackMillis) {
