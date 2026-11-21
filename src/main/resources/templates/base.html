@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{language ?: 'zh-CN'}" data-default-language="{defaultLanguage ?: 'zh-cn'}">
+<html lang="{language ?: 'zh-CN'}" data-default-language="{defaultLanguage ?: 'zh-cn'}" data-perf-tier="minimal">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
@@ -100,31 +100,79 @@
             if (theme === 'light') {
                 document.documentElement.classList.add('light');
             }
+            // Default to 'minimal' (weakest tier: zero animation, zero overlay blocking)
+            // before progressive evaluation upgrades the tier step-by-step.
+            document.documentElement.dataset.perfTier = 'minimal';
+
+            try {
+                const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
+                if (navEntries && navEntries.length > 0 && navEntries[0].type === 'back_forward') {
+                    window.__wbBfCachePersisted = true;
+                }
+            } catch (_) {}
+
+            let targetTier = 'minimal';
             try {
                 const override = localStorage.getItem('wb_perf_tier_override');
-                if (override === 'high' || override === 'medium' || override === 'low') {
-                    document.documentElement.dataset.perfTier = override;
-                    return;
-                }
-                const cachedRaw = sessionStorage.getItem('wb_perf_tier_v1');
-                if (cachedRaw) {
-                    const cached = JSON.parse(cachedRaw);
-                    if (cached && (cached.tier === 'high' || cached.tier === 'medium' || cached.tier === 'low')) {
-                        document.documentElement.dataset.perfTier = cached.tier;
-                        return;
+                if (override === 'high' || override === 'medium' || override === 'low' || override === 'minimal') {
+                    targetTier = override;
+                } else {
+                    const cachedRaw = sessionStorage.getItem('wb_perf_tier_v1');
+                    if (cachedRaw) {
+                        const cached = JSON.parse(cachedRaw);
+                        if (cached && (cached.tier === 'high' || cached.tier === 'medium' || cached.tier === 'low' || cached.tier === 'minimal')) {
+                            targetTier = cached.tier;
+                        }
                     }
                 }
             } catch (_) {}
+
             const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             const saveData = navigator.connection && navigator.connection.saveData;
             const cores = navigator.hardwareConcurrency;
             const mem = navigator.deviceMemory;
-            if (reduced || saveData || (typeof cores === 'number' && cores <= 2) || (typeof mem === 'number' && mem <= 2)) {
+
+            if (targetTier === 'minimal' && !reduced && !saveData) {
+                const isVeryWeak = (typeof cores === 'number' && cores <= 2) && (typeof mem === 'number' && mem <= 2);
+                if (isVeryWeak) {
+                    targetTier = 'minimal';
+                } else if ((typeof cores === 'number' && cores <= 2) || (typeof mem === 'number' && mem <= 2)) {
+                    targetTier = 'low';
+                } else if (typeof cores === 'number' && cores >= 8 && (typeof mem !== 'number' || mem >= 8)) {
+                    targetTier = 'high';
+                } else {
+                    targetTier = 'medium';
+                }
+            }
+            if (reduced || saveData) {
+                targetTier = 'minimal';
+            }
+
+            window.__wbInitialTargetTier = targetTier;
+            if (targetTier === 'high') {
+                document.documentElement.classList.add('wb-swarm-preblock');
+            }
+            if (targetTier !== 'minimal') {
+                // Step 1 of progressive upgrade: upgrade to 'low' immediately so solid mask + 3-symbol cursor activates first
                 document.documentElement.dataset.perfTier = 'low';
-            } else if (typeof cores === 'number' && cores >= 8 && (typeof mem !== 'number' || mem >= 8)) {
-                document.documentElement.dataset.perfTier = 'high';
-            } else {
-                document.documentElement.dataset.perfTier = 'medium';
+                if (targetTier === 'medium' || targetTier === 'high') {
+                    window.requestAnimationFrame(function() {
+                        if (document.documentElement.dataset.perfTier === 'low') {
+                            document.documentElement.dataset.perfTier = 'medium';
+                            window.dispatchEvent(new CustomEvent('windblog:perf-tier-change', {
+                                detail: { tier: 'medium', prevTier: 'low', source: 'progressive-early' }
+                            }));
+                        }
+                        if (targetTier === 'high') {
+                            window.setTimeout(function() {
+                                document.documentElement.dataset.perfTier = 'high';
+                                window.dispatchEvent(new CustomEvent('windblog:perf-tier-change', {
+                                    detail: { tier: 'high', prevTier: 'medium', source: 'progressive-early' }
+                                }));
+                            }, 90);
+                        }
+                    });
+                }
             }
         })();
     </script>
@@ -140,6 +188,416 @@
 </head>
 
 <body class="min-h-screen flex flex-col bg-bg text-body font-sans selection:bg-accent/20 selection:text-accent">
+<!-- Progressive Inline Loading Overlay (Minimal -> Low -> Medium -> High) -->
+<style nonce="{cspNonce}">
+    #wb-inline-loader {
+        --wb-loader-bg: var(--bg, #090B10);
+        --wb-loader-accent: var(--accent, #0ea5e9);
+        --wb-loader-text: var(--text-main, #f3f4f6);
+        position: fixed;
+        inset: 0;
+        z-index: 9998;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        background-color: var(--wb-loader-bg);
+        -webkit-backdrop-filter: blur(0px);
+        backdrop-filter: blur(0px);
+        opacity: 1;
+        transition:
+            background-color 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+            backdrop-filter 0.48s cubic-bezier(0.22, 1, 0.36, 1),
+            -webkit-backdrop-filter 0.48s cubic-bezier(0.22, 1, 0.36, 1),
+            opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    html.light #wb-inline-loader {
+        --wb-loader-bg: var(--bg, #f8fafc);
+        --wb-loader-accent: var(--accent, #0284c7);
+        --wb-loader-text: var(--text-main, #0f172a);
+    }
+    /* Minimal tier (default for weakest devices): no animation, completely hidden */
+    html[data-perf-tier="minimal"] #wb-inline-loader,
+    #wb-inline-loader.is-dismissed {
+        display: none !important;
+    }
+    /* Low tier: solid color background mask + 3-symbol smooth blinking cursor */
+    html[data-perf-tier="low"] #wb-inline-loader,
+    html[data-perf-tier="medium"] #wb-inline-loader,
+    html[data-perf-tier="high"] #wb-inline-loader {
+        display: flex;
+    }
+    /* Medium & High tier: progressive transition from solid color to Gaussian blur */
+    html[data-perf-tier="medium"] #wb-inline-loader,
+    html[data-perf-tier="high"] #wb-inline-loader,
+    #wb-inline-loader[data-loader-tier="medium"],
+    #wb-inline-loader[data-loader-tier="high"] {
+        background-color: color-mix(in srgb, var(--wb-loader-bg) 74%, transparent);
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px);
+    }
+    #wb-inline-loader.is-leaving {
+        opacity: 0;
+    }
+    .wb-loader-stage {
+        position: relative;
+        width: 300px;
+        height: 260px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    /* High Tier Hybrid Boids Orbit Canvas */
+    #wb-loader-orbit-canvas {
+        position: absolute;
+        inset: -30px;
+        width: 360px;
+        height: 320px;
+        pointer-events: none;
+        opacity: 0;
+        transform: scale(0.92);
+        transition: opacity 0.38s ease, transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    html[data-perf-tier="high"] #wb-loader-orbit-canvas,
+    #wb-inline-loader[data-loader-tier="high"] #wb-loader-orbit-canvas {
+        opacity: 1;
+        transform: scale(1);
+    }
+    /* Medium Tier Anthropomorphic GeekCoreLab Pixel Chip */
+    .wb-loader-chip-wrap {
+        position: relative;
+        z-index: 2;
+        width: 84px;
+        height: 84px;
+        opacity: 0;
+        transform: translateY(10px) scale(0.86);
+        transition: opacity 0.36s cubic-bezier(0.22, 1, 0.36, 1), transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    html[data-perf-tier="medium"] .wb-loader-chip-wrap,
+    html[data-perf-tier="high"] .wb-loader-chip-wrap,
+    #wb-inline-loader[data-loader-tier="medium"] .wb-loader-chip-wrap,
+    #wb-inline-loader[data-loader-tier="high"] .wb-loader-chip-wrap {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        animation: wb-chip-float 2.2s ease-in-out infinite;
+    }
+    @keyframes wb-chip-float {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-5px) rotate(-1.5deg); }
+    }
+    #wb-loader-chip-svg {
+        width: 100%;
+        height: 100%;
+        filter: drop-shadow(0 8px 22px rgba(249, 115, 22, 0.28));
+    }
+    #wb-loader-chip-svg .wb-chip-eye,
+    #wb-loader-chip-svg .wb-chip-pupil {
+        transition: transform 0.16s ease;
+        transform-origin: center;
+    }
+    #wb-loader-chip-svg[data-expression="look-left"] .wb-chip-pupil {
+        transform: translateX(-14px);
+    }
+    #wb-loader-chip-svg[data-expression="look-right"] .wb-chip-pupil {
+        transform: translateX(14px);
+    }
+    #wb-loader-chip-svg[data-expression="thinking"] .wb-chip-pupil {
+        transform: translate(10px, -12px);
+    }
+    #wb-loader-chip-svg[data-expression="blink"] .wb-chip-eye-group {
+        transform: scaleY(0.15);
+    }
+    #wb-loader-chip-svg .wb-chip-pin {
+        animation: wb-pin-pulse 1.2s ease-in-out infinite alternate;
+    }
+    #wb-loader-chip-svg .wb-chip-pin:nth-child(even) {
+        animation-delay: 0.35s;
+    }
+    @keyframes wb-pin-pulse {
+        0% { opacity: 0.65; }
+        100% { opacity: 1; }
+    }
+    /* Low Tier + Shared 3-Symbol Smooth Blinking Cursor & Medium AI Status Capsule */
+    .wb-loader-console-pill {
+        position: relative;
+        z-index: 3;
+        margin-top: 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 15px;
+        border-radius: 9999px;
+        border: 1px solid color-mix(in srgb, var(--wb-loader-accent) 28%, transparent);
+        background: color-mix(in srgb, var(--wb-loader-bg) 82%, var(--wb-loader-accent) 8%);
+        box-shadow: 0 6px 24px -4px rgba(0, 0, 0, 0.28);
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    }
+    #wb-loader-cursor-glyph {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 22px;
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--wb-loader-accent);
+        opacity: 0;
+        transform: scale(0.92);
+        transition: opacity 0.38s ease-in-out, transform 0.38s ease-in-out, color 0.25s ease;
+    }
+    #wb-loader-cursor-glyph.is-visible {
+        opacity: 1;
+        transform: scale(1);
+    }
+    #wb-loader-cursor-glyph[data-glyph="/"] {
+        color: #fb923c;
+    }
+    #wb-loader-cursor-glyph[data-glyph=">"] {
+        color: #34d399;
+    }
+    .wb-loader-status-viewport {
+        display: none;
+        height: 20px;
+        overflow: hidden;
+        align-items: center;
+    }
+    html[data-perf-tier="medium"] .wb-loader-status-viewport,
+    html[data-perf-tier="high"] .wb-loader-status-viewport,
+    #wb-inline-loader[data-loader-tier="medium"] .wb-loader-status-viewport,
+    #wb-inline-loader[data-loader-tier="high"] .wb-loader-status-viewport {
+        display: inline-flex;
+    }
+    #wb-loader-status-word {
+        display: inline-block;
+        font-size: 12.5px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: var(--wb-loader-text);
+        transform: translateY(0);
+        opacity: 1;
+        transition: transform 0.17s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.17s ease;
+    }
+    #wb-loader-status-word.is-rolling-out {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    #wb-loader-status-word.is-rolling-in {
+        transform: translateY(100%);
+        opacity: 0;
+        transition: none;
+    }
+    /* High Tier Swarm Rebuild & Zero-CLS Typing Styles */
+    html.wb-swarm-preblock #pjax-content-root article[data-article-transition-card],
+    html.wb-swarm-preblock #pjax-content-root article[data-article-transition-slug],
+    html.wb-swarm-preblock #pjax-content-root article.card,
+    html.wb-swarm-preblock #pjax-content-root .link-grid .link-card,
+    html.wb-swarm-preblock #pjax-content-root #toolsIndexGrid [data-tool-card="true"] {
+        opacity: 0 !important;
+    }
+    .wb-swarm-stage-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 9999;
+        pointer-events: none;
+    }
+    /* Pending card: completely invisible until a cursor drags its frame into existence (Zero-CLS preserved via min-height) */
+    .wb-swarm-item-pending {
+        opacity: 0 !important;
+        pointer-events: auto;
+    }
+    .wb-swarm-item-building {
+        opacity: 1 !important;
+        transition: opacity 0.16s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .wb-swarm-item-building [data-article-transition-part="meta"],
+    .wb-swarm-item-building [data-article-transition-part="cover"],
+    .wb-swarm-item-building [data-article-transition-part="title"],
+    .wb-swarm-item-building [data-article-transition-part="summary"],
+    .wb-swarm-item-building p.line-clamp-3,
+    .wb-swarm-item-building p.line-clamp-2,
+    .wb-swarm-item-building .border-t {
+        opacity: 0;
+        transition: opacity 0.16s ease;
+    }
+    .wb-swarm-item-building.wb-has-meta [data-article-transition-part="meta"] {
+        opacity: 1;
+    }
+    .wb-swarm-item-building.wb-has-cover [data-article-transition-part="cover"] {
+        opacity: 1;
+    }
+    .wb-swarm-item-building.wb-has-title [data-article-transition-part="title"] {
+        opacity: 1;
+    }
+    .wb-swarm-item-building.wb-has-summary [data-article-transition-part="summary"],
+    .wb-swarm-item-building.wb-has-summary p.line-clamp-3,
+    .wb-swarm-item-building.wb-has-summary p.line-clamp-2 {
+        opacity: 1;
+    }
+    .wb-swarm-item-building.wb-has-footer .border-t {
+        opacity: 1;
+    }
+    /* Individual tag / category / action badges built one by one via mini drag-box */
+    .wb-swarm-tag-pending {
+        opacity: 0 !important;
+        transform: scale(0.84);
+        transition: opacity 0.14s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .wb-swarm-tag-built {
+        opacity: 1 !important;
+        transform: scale(1);
+        transition: opacity 0.14s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    /* Zero-CLS Typing Host: original text stays in normal flow to lock width/height/line-breaks 100%,
+       while its color is made transparent and the absolute overlay types characters on top */
+    .wb-swarm-typing-host {
+        color: transparent !important;
+        -webkit-text-fill-color: transparent !important;
+    }
+    .wb-swarm-typing-host > :not(.wb-swarm-typing-overlay) {
+        color: transparent !important;
+        -webkit-text-fill-color: transparent !important;
+    }
+    .wb-swarm-typing-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        pointer-events: none;
+        color: var(--text-main) !important;
+        -webkit-text-fill-color: var(--text-main) !important;
+        white-space: normal;
+        overflow: hidden;
+    }
+    p.wb-swarm-typing-host > .wb-swarm-typing-overlay {
+        color: var(--text-body) !important;
+        -webkit-text-fill-color: var(--text-body) !important;
+    }
+    .wb-swarm-typing-overlay .wb-swarm-typed-text {
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+    }
+    .wb-swarm-typing-overlay .wb-swarm-typed-caret {
+        display: inline-block;
+        margin-left: 2px;
+        font-family: var(--font-mono, monospace);
+        font-weight: 900;
+        color: var(--wb-swarm-agent-color, var(--accent)) !important;
+        -webkit-text-fill-color: var(--wb-swarm-agent-color, var(--accent)) !important;
+    }
+    .wb-swarm-half-built-projectile {
+        box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.55) !important;
+        backdrop-filter: blur(6px);
+    }
+</style>
+
+<div id="wb-inline-loader" data-loader-tier="minimal" aria-live="polite" aria-label="Loading">
+    <div class="wb-loader-stage">
+        <canvas id="wb-loader-orbit-canvas" width="360" height="320" aria-hidden="true"></canvas>
+        <!-- GeekCoreLab Anthropomorphic Pixel Chip SVG (Medium & High Tiers) -->
+        <div class="wb-loader-chip-wrap" aria-hidden="true">
+            <svg id="wb-loader-chip-svg" data-expression="neutral" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="crispEdges">
+                <rect x="0" y="0" width="512" height="512" rx="64" fill="#080302"/>
+                <!-- Left Copper Pins -->
+                <rect class="wb-chip-pin" x="32" y="128" width="64" height="32" fill="#ea580c"/>
+                <rect class="wb-chip-pin" x="32" y="192" width="64" height="32" fill="#f97316"/>
+                <rect class="wb-chip-pin" x="32" y="256" width="64" height="32" fill="#fb923c"/>
+                <rect class="wb-chip-pin" x="32" y="320" width="64" height="32" fill="#f97316"/>
+                <rect class="wb-chip-pin" x="32" y="384" width="64" height="32" fill="#ea580c"/>
+                <!-- Right Copper Pins -->
+                <rect class="wb-chip-pin" x="416" y="128" width="64" height="32" fill="#ea580c"/>
+                <rect class="wb-chip-pin" x="416" y="192" width="64" height="32" fill="#f97316"/>
+                <rect class="wb-chip-pin" x="416" y="256" width="64" height="32" fill="#fb923c"/>
+                <rect class="wb-chip-pin" x="416" y="320" width="64" height="32" fill="#f97316"/>
+                <rect class="wb-chip-pin" x="416" y="384" width="64" height="32" fill="#ea580c"/>
+                <!-- Dark Carbon Body -->
+                <rect x="96" y="64" width="320" height="384" fill="#261009"/>
+                <rect x="112" y="80" width="288" height="352" fill="#140805"/>
+                <!-- Top Thermal Vent / Exhaust Notch -->
+                <rect x="208" y="64" width="96" height="32" fill="#f97316"/>
+                <rect x="224" y="64" width="64" height="16" fill="#fde047"/>
+                <!-- Superheated Chamber Recess -->
+                <rect x="148" y="128" width="216" height="240" fill="#431407"/>
+                <!-- Anthropomorphic Pixel Eyes & Molten Core Expression -->
+                <g class="wb-chip-eye-group" style="transform-origin: 256px 228px; transition: transform 0.14s ease;">
+                    <!-- Left Pixel Eye Socket & Incandescent Pupil -->
+                    <rect class="wb-chip-eye" x="176" y="188" width="64" height="64" fill="#ea580c"/>
+                    <rect class="wb-chip-pupil" x="192" y="200" width="36" height="36" fill="#fde047"/>
+                    <rect class="wb-chip-pupil" x="200" y="206" width="18" height="18" fill="#ffffff"/>
+                    <!-- Right Pixel Eye Socket & Incandescent Pupil -->
+                    <rect class="wb-chip-eye" x="272" y="188" width="64" height="64" fill="#ea580c"/>
+                    <rect class="wb-chip-pupil" x="288" y="200" width="36" height="36" fill="#fde047"/>
+                    <rect class="wb-chip-pupil" x="296" y="206" width="18" height="18" fill="#ffffff"/>
+                </g>
+                <!-- Pixel Mouth / Molten G-Core Status Bar -->
+                <rect x="196" y="292" width="120" height="24" fill="#f97316"/>
+                <rect x="220" y="296" width="72" height="14" fill="#fde047"/>
+                <!-- Corner Thermal Sparks -->
+                <rect class="wb-chip-pin" x="144" y="112" width="16" height="16" fill="#ea580c"/>
+                <rect class="wb-chip-pin" x="352" y="112" width="16" height="16" fill="#ea580c"/>
+                <rect class="wb-chip-pin" x="144" y="376" width="16" height="16" fill="#ea580c"/>
+                <rect class="wb-chip-pin" x="352" y="376" width="16" height="16" fill="#ea580c"/>
+            </svg>
+        </div>
+        <!-- Cursor Blink & Rolling AI Status Pill -->
+        <div class="wb-loader-console-pill">
+            <span id="wb-loader-cursor-glyph" class="is-visible" data-glyph="&#9608;">&#9608;</span>
+            <span class="wb-loader-status-viewport">
+                <span id="wb-loader-status-word">Thinking</span>
+            </span>
+        </div>
+    </div>
+</div>
+<script nonce="{cspNonce}">
+    (function() {
+        var loader = document.getElementById('wb-inline-loader');
+        if (!loader) return;
+        if (window.__wbBfCachePersisted) {
+            loader.classList.add('is-dismissed');
+            return;
+        }
+        // Extract primary theme color from Browser APIs (<meta name="theme-color"> & getComputedStyle)
+        try {
+            var root = document.documentElement;
+            var cs = window.getComputedStyle ? window.getComputedStyle(root) : null;
+            var bg = cs ? cs.getPropertyValue('--bg').trim() : '';
+            var accent = cs ? cs.getPropertyValue('--accent').trim() : '';
+            var metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (!bg && metaTheme && metaTheme.content) {
+                bg = metaTheme.content.trim();
+            }
+            if (bg) loader.style.setProperty('--wb-loader-bg', bg);
+            if (accent) loader.style.setProperty('--wb-loader-accent', accent);
+        } catch (_) {}
+
+        // Start Low-tier 3-symbol smooth fade-in / fade-out / hidden-switch cycle immediately inline
+        var glyphEl = document.getElementById('wb-loader-cursor-glyph');
+        var glyphs = ['\u2588', '/', '>'];
+        var idx = 0;
+        var visible = true;
+        if (glyphEl && document.documentElement.dataset.perfTier !== 'minimal') {
+            window.__wbEarlyCursorTimer = window.setInterval(function() {
+                if (!glyphEl || loader.classList.contains('is-dismissed')) {
+                    window.clearInterval(window.__wbEarlyCursorTimer);
+                    return;
+                }
+                if (visible) {
+                    glyphEl.classList.remove('is-visible');
+                    visible = false;
+                } else {
+                    idx = (idx + 1) % glyphs.length;
+                    glyphEl.textContent = glyphs[idx];
+                    glyphEl.dataset.glyph = glyphs[idx];
+                    glyphEl.classList.add('is-visible');
+                    visible = true;
+                }
+            }, 460);
+        }
+    })();
+</script>
+
 <!-- Header -->
 <header class="sticky top-0 z-50 bg-bg/85 backdrop-blur-md border-b border-border transition-colors">
     <div class="max-w-1400 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
@@ -448,6 +906,7 @@
 <!-- JS Scripts -->
 <script src="/assets/js/perf-tier{assetMinSuffix}.js?v={assetVersion}" defer></script>
 <script src="/assets/js/pjax-lifecycle{assetMinSuffix}.js?v={assetVersion}" defer></script>
+<script src="/assets/js/inline-loader{assetMinSuffix}.js?v={assetVersion}" defer></script>
 <script src="/assets/js/ui{assetMinSuffix}.js?v={assetVersion}" defer></script>
 <script src="/assets/js/pow{assetMinSuffix}.js?v={assetVersion}" defer></script>
 <script src="/assets/js/main{assetMinSuffix}.js?v={assetVersion}" defer></script>

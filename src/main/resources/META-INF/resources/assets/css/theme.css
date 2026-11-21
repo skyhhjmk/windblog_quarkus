@@ -2189,7 +2189,7 @@ html.theme-transitioning * {
 }
 
 /* ==========================================================================
-   Device Performance Tiers (high / medium / low)
+   Device Performance Tiers (high / medium / low / minimal)
    ========================================================================== */
 html[data-perf-tier="medium"] [class*="backdrop-blur"] {
     -webkit-backdrop-filter: blur(4px) !important;
@@ -2199,14 +2199,21 @@ html[data-perf-tier="medium"] [class*="backdrop-blur"] {
 html[data-perf-tier="low"] [class*="backdrop-blur"],
 html[data-perf-tier="low"] .glass,
 html[data-perf-tier="low"] .wb-ui-modal,
-html[data-perf-tier="low"] .wb-ui-toast {
+html[data-perf-tier="low"] .wb-ui-toast,
+html[data-perf-tier="minimal"] [class*="backdrop-blur"],
+html[data-perf-tier="minimal"] .glass,
+html[data-perf-tier="minimal"] .wb-ui-modal,
+html[data-perf-tier="minimal"] .wb-ui-toast {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
 }
 
-html[data-perf-tier="low"] *,
-html[data-perf-tier="low"] *::before,
-html[data-perf-tier="low"] *::after {
+html[data-perf-tier="low"] *:not(#wb-inline-loader):not(#wb-inline-loader *),
+html[data-perf-tier="low"] *:not(#wb-inline-loader):not(#wb-inline-loader *)::before,
+html[data-perf-tier="low"] *:not(#wb-inline-loader):not(#wb-inline-loader *)::after,
+html[data-perf-tier="minimal"] *,
+html[data-perf-tier="minimal"] *::before,
+html[data-perf-tier="minimal"] *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

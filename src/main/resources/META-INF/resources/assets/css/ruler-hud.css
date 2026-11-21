@@ -376,10 +376,12 @@ html[data-perf-tier="medium"] .wb-ruler-pool-bottom {
 }
 
 html[data-perf-tier="medium"] .wb-ruler-section-pulse,
-html[data-perf-tier="low"] .wb-ruler-section-pulse {
+html[data-perf-tier="low"] .wb-ruler-section-pulse,
+html[data-perf-tier="minimal"] .wb-ruler-section-pulse {
     animation: none;
 }
 
-html[data-perf-tier="low"] .wb-ruler-root {
+html[data-perf-tier="low"] .wb-ruler-root,
+html[data-perf-tier="minimal"] .wb-ruler-root {
     display: none !important;
 }
