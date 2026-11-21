@@ -68,3 +68,4 @@ nb-configuration.xml
 *-secret
 *-password
 *-token
+/data/
