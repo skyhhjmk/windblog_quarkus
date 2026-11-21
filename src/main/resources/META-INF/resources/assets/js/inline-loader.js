@@ -604,28 +604,102 @@
         return unique;
     }
 
+    // Per-URL build progress cache so FLIP entering an article and returning back
+    // inherits the exact previous build progress (completed cards stay built,
+    // partially built cards resume remaining parts, unseen offscreen cards wait for scroll).
+    const SWARM_CACHE_STORAGE_KEY = 'wb_swarm_progress_v1';
+    const pageProgressCache = new Map();
+
+    function getPageCacheKey() {
+        return (window.location.pathname || '/') + (window.location.search || '');
+    }
+
+    function readPageProgress(pageKey) {
+        if (pageProgressCache.has(pageKey)) {
+            return pageProgressCache.get(pageKey);
+        }
+        try {
+            const raw = sessionStorage.getItem(SWARM_CACHE_STORAGE_KEY);
+            if (raw) {
+                const all = JSON.parse(raw);
+                if (all && all[pageKey]) {
+                    pageProgressCache.set(pageKey, all[pageKey]);
+                    return all[pageKey];
+                }
+            }
+        } catch (_) {}
+        const empty = { completed: {}, partial: {} };
+        pageProgressCache.set(pageKey, empty);
+        return empty;
+    }
+
+    function persistPageProgress(pageKey, state) {
+        pageProgressCache.set(pageKey, state);
+        try {
+            const raw = sessionStorage.getItem(SWARM_CACHE_STORAGE_KEY);
+            const all = raw ? JSON.parse(raw) : {};
+            all[pageKey] = state;
+            // Keep at most 12 recent list pages in sessionStorage
+            const keys = Object.keys(all);
+            if (keys.length > 12) {
+                delete all[keys[0]];
+            }
+            sessionStorage.setItem(SWARM_CACHE_STORAGE_KEY, JSON.stringify(all));
+        } catch (_) {}
+    }
+
+    function clearPageProgress(pageKey) {
+        const key = pageKey || getPageCacheKey();
+        pageProgressCache.delete(key);
+        try {
+            const raw = sessionStorage.getItem(SWARM_CACHE_STORAGE_KEY);
+            if (raw) {
+                const all = JSON.parse(raw);
+                delete all[key];
+                sessionStorage.setItem(SWARM_CACHE_STORAGE_KEY, JSON.stringify(all));
+            }
+        } catch (_) {}
+    }
+
     // Wrap a text element with a Zero-CLS typing overlay:
     // The original text remains in-flow with transparent color so exact line breaks and box height
-    // never shift by even 0.1px. An absolute overlay reveals the typed substring and cursor caret.
+    // never shift by even 0.1px. IMPORTANT: never set position:relative directly on an <a> with
+    // Tailwind `after:inset-0`, otherwise the stretched-link hit area collapses and breaks FLIP PJAX!
     function prepareZeroClsTypingTarget(el) {
         if (!el || el.dataset.wbTypingPrepared === 'true') return null;
-        // Find the leaf text container (e.g., h2 > a, h3 > a, or p)
         let targetNode = el;
         if ((el.tagName === 'H2' || el.tagName === 'H3') && el.querySelector('a')) {
             targetNode = el.querySelector('a');
         }
-        // Avoid breaking complex highlighted search markup with <mark>; if it has child elements other than text,
-        // still extract full textContent for typing overlay and restore original DOM on completion.
         const fullText = (targetNode.textContent || '').replace(/\s+/g, ' ').trim();
         if (!fullText) return null;
 
         el.dataset.wbTypingPrepared = 'true';
-        const computed = window.getComputedStyle(targetNode);
-        const origPosition = targetNode.style.position;
-        if (computed.position === 'static') {
-            targetNode.style.position = 'relative';
+
+        let hostNode = targetNode;
+        let wrapperSpan = null;
+        let origPosition = '';
+
+        if (targetNode.tagName === 'A') {
+            // Wrap inner content in a relative block span so <a> stays position:static and
+            // its `after:absolute after:inset-0` stretched link still covers the entire card!
+            wrapperSpan = document.createElement('span');
+            wrapperSpan.className = 'wb-swarm-typing-wrap wb-swarm-typing-host';
+            wrapperSpan.style.position = 'relative';
+            wrapperSpan.style.display = 'block';
+            while (targetNode.firstChild) {
+                wrapperSpan.appendChild(targetNode.firstChild);
+            }
+            targetNode.appendChild(wrapperSpan);
+            hostNode = wrapperSpan;
+        } else {
+            const computed = window.getComputedStyle(targetNode);
+            origPosition = targetNode.style.position;
+            if (computed.position === 'static') {
+                targetNode.style.position = 'relative';
+            }
+            targetNode.classList.add('wb-swarm-typing-host');
         }
-        targetNode.classList.add('wb-swarm-typing-host');
 
         const overlay = document.createElement('span');
         overlay.className = 'wb-swarm-typing-overlay';
@@ -641,11 +715,13 @@
 
         overlay.appendChild(typedSpan);
         overlay.appendChild(caretSpan);
-        targetNode.appendChild(overlay);
+        hostNode.appendChild(overlay);
 
         return {
             hostEl: el,
             targetNode,
+            hostNode,
+            wrapperSpan,
             origPosition,
             overlay,
             typedSpan,
@@ -660,7 +736,6 @@
     function restoreZeroClsTypingTarget(typingState, freezeHalfBuilt) {
         if (!typingState) return;
         if (freezeHalfBuilt && !typingState.done) {
-            // Freeze at the exact half-built characters!
             typingState.frozen = true;
             if (typingState.caretSpan) {
                 typingState.caretSpan.textContent = '\u258F';
@@ -672,7 +747,13 @@
         if (typingState.overlay && typingState.overlay.parentNode) {
             typingState.overlay.remove();
         }
-        if (typingState.targetNode) {
+        if (typingState.wrapperSpan && typingState.wrapperSpan.parentNode) {
+            const parent = typingState.wrapperSpan.parentNode;
+            while (typingState.wrapperSpan.firstChild) {
+                parent.insertBefore(typingState.wrapperSpan.firstChild, typingState.wrapperSpan);
+            }
+            typingState.wrapperSpan.remove();
+        } else if (typingState.targetNode) {
             typingState.targetNode.classList.remove('wb-swarm-typing-host');
             if (typingState.origPosition) {
                 typingState.targetNode.style.position = typingState.origPosition;
@@ -704,6 +785,13 @@
             el.classList.remove('wb-swarm-tag-pending', 'wb-swarm-tag-built');
         });
         document.querySelectorAll('.wb-swarm-typing-overlay').forEach((el) => el.remove());
+        document.querySelectorAll('.wb-swarm-typing-wrap').forEach((wrap) => {
+            const parent = wrap.parentNode;
+            if (parent) {
+                while (wrap.firstChild) parent.insertBefore(wrap.firstChild, wrap);
+                wrap.remove();
+            }
+        });
         document.querySelectorAll('.wb-swarm-typing-host').forEach((el) => el.classList.remove('wb-swarm-typing-host'));
         document.documentElement.classList.remove('wb-swarm-preblock');
     }
@@ -755,12 +843,20 @@
             }
         }
 
+        const pageKey = getPageCacheKey();
+        if (forceDebug) {
+            clearPageProgress(pageKey);
+        }
+        const cachedPage = readPageProgress(pageKey);
+
         const stageHInit = window.innerHeight || 800;
         const cardJobs = items.map((cardEl, idx) => {
+            const cardKey = cardEl.dataset.articleTransitionSlug ||
+                cardEl.dataset.toolId ||
+                cardEl.dataset.id ||
+                ('idx:' + idx);
+
             const rect = cardEl.getBoundingClientRect();
-            if (rect.height > 0) {
-                cardEl.style.minHeight = rect.height.toFixed(1) + 'px';
-            }
             const isInViewport = rect.bottom > 0 && rect.top < stageHInit;
 
             const titleEl = cardEl.querySelector('[data-article-transition-part="title"], h2, h3');
@@ -776,17 +872,64 @@
                 return r.width > 0 && r.height > 0;
             });
 
-            const titleTyping = isInViewport ? prepareZeroClsTypingTarget(titleEl) : null;
-            const summaryTyping = isInViewport ? prepareZeroClsTypingTarget(summaryTextEl) : null;
+            // Inherit cached progress when returning via FLIP / PJAX
+            const alreadyCompleted = Boolean(cachedPage.completed && cachedPage.completed[cardKey]);
+            const savedPartial = (!alreadyCompleted && cachedPage.partial && cachedPage.partial[cardKey])
+                ? cachedPage.partial[cardKey]
+                : null;
 
-            if (isInViewport) {
-                cardEl.classList.add('wb-swarm-item-pending');
-                badgeEls.forEach((b) => b.classList.add('wb-swarm-tag-pending'));
+            const builtParts = {
+                frameBuilt: Boolean(alreadyCompleted || (savedPartial && savedPartial.frameBuilt)),
+                hasMeta: Boolean(alreadyCompleted || (savedPartial && savedPartial.hasMeta)),
+                hasCover: Boolean(alreadyCompleted || (savedPartial && savedPartial.hasCover)),
+                hasTitle: Boolean(alreadyCompleted || (savedPartial && savedPartial.hasTitle)),
+                hasSummary: Boolean(alreadyCompleted || (savedPartial && savedPartial.hasSummary)),
+                hasFooter: Boolean(alreadyCompleted || (savedPartial && savedPartial.hasFooter)),
+                builtBadgeSet: new Set(
+                    alreadyCompleted
+                        ? badgeEls.map((_, bi) => bi)
+                        : (savedPartial && Array.isArray(savedPartial.builtBadges) ? savedPartial.builtBadges : [])
+                )
+            };
+
+            let titleTyping = null;
+            let summaryTyping = null;
+
+            if (!alreadyCompleted) {
+                if (rect.height > 0) {
+                    cardEl.style.minHeight = rect.height.toFixed(1) + 'px';
+                }
+                if (!builtParts.hasTitle) {
+                    titleTyping = prepareZeroClsTypingTarget(titleEl);
+                }
+                if (!builtParts.hasSummary) {
+                    summaryTyping = prepareZeroClsTypingTarget(summaryTextEl);
+                }
+                if (builtParts.frameBuilt) {
+                    cardEl.classList.add('wb-swarm-item-building');
+                    if (builtParts.hasMeta) cardEl.classList.add('wb-has-meta');
+                    if (builtParts.hasCover) cardEl.classList.add('wb-has-cover');
+                    if (builtParts.hasTitle) cardEl.classList.add('wb-has-title');
+                    if (builtParts.hasSummary) cardEl.classList.add('wb-has-summary');
+                    if (builtParts.hasFooter) cardEl.classList.add('wb-has-footer');
+                } else {
+                    // Both in-viewport and off-screen unbuilt cards start hidden until dragged into view!
+                    cardEl.classList.add('wb-swarm-item-pending');
+                }
+                badgeEls.forEach((b, bi) => {
+                    if (builtParts.builtBadgeSet.has(bi)) {
+                        b.classList.add('wb-swarm-tag-built');
+                    } else {
+                        b.classList.add('wb-swarm-tag-pending');
+                    }
+                });
             }
+
             cardEl.dataset.wbSwarmIndex = String(idx);
 
             return {
                 index: idx,
+                cardKey,
                 cardEl,
                 rect,
                 isInViewport,
@@ -799,9 +942,16 @@
                 badgeEls,
                 titleTyping,
                 summaryTyping,
-                state: isInViewport ? 'pending' : 'offscreen', // 'pending' | 'building' | 'completed' | 'frozen' | 'offscreen'
-                frameBuilt: false,
-                progress: 0,
+                state: alreadyCompleted ? 'completed' : 'pending', // 'pending' | 'building' | 'completed' | 'frozen'
+                tasksEnqueued: alreadyCompleted,
+                frameBuilt: builtParts.frameBuilt,
+                hasMeta: builtParts.hasMeta,
+                hasCover: builtParts.hasCover,
+                hasTitle: builtParts.hasTitle,
+                hasSummary: builtParts.hasSummary,
+                hasFooter: builtParts.hasFooter,
+                builtBadgeSet: builtParts.builtBadgeSet,
+                progress: alreadyCompleted ? 1 : 0,
                 remainingTasks: 0,
                 totalTasks: 0,
                 assignedAgent: null
@@ -810,10 +960,11 @@
         document.documentElement.classList.remove('wb-swarm-preblock');
 
         // Build discrete single-purpose Task Queue (Swarm Rebuild: 1 cursor = 1 atomic task!)
-        // Dependencies: drag-frame MUST complete before that card's internal tasks become claimable.
+        // Off-screen cards are NOT enqueued until IntersectionObserver sees them scroll into view.
         const taskQueue = [];
-        cardJobs.forEach((job) => {
-            if (!job.isInViewport) return;
+        function enqueueTasksForJob(job) {
+            if (!job || job.tasksEnqueued || job.state === 'completed' || job.state === 'frozen') return;
+            job.tasksEnqueued = true;
 
             const addTask = (task) => {
                 job.totalTasks++;
@@ -821,48 +972,46 @@
                 taskQueue.push(task);
             };
 
-            // 1. Drag outer card frame (top-left -> bottom-right marquee drag-box)
-            addTask({
-                type: 'drag-frame',
-                job,
-                el: job.cardEl,
-                requiresFrame: false,
-                status: 'queued', // 'queued' | 'active' | 'done'
-                moveDur: 190,
-                workDur: 280,
-                stageStart: 0
-            });
+            if (!job.frameBuilt) {
+                addTask({
+                    type: 'drag-frame',
+                    job,
+                    el: job.cardEl,
+                    requiresFrame: false,
+                    status: 'queued',
+                    moveDur: 185,
+                    workDur: 270,
+                    stageStart: 0
+                });
+            }
 
-            // 2. Drag cover box (if cover exists)
-            if (job.coverEl) {
+            if (job.coverEl && !job.hasCover) {
                 addTask({
                     type: 'drag-cover',
                     job,
                     el: job.coverEl,
                     requiresFrame: true,
                     status: 'queued',
-                    moveDur: 160,
-                    workDur: 220,
+                    moveDur: 155,
+                    workDur: 210,
                     stageStart: 0
                 });
             }
 
-            // 3. Drag meta row box (author / date / views)
-            if (job.metaEl) {
+            if (job.metaEl && !job.hasMeta) {
                 addTask({
                     type: 'drag-meta',
                     job,
                     el: job.metaEl,
                     requiresFrame: true,
                     status: 'queued',
-                    moveDur: 145,
-                    workDur: 170,
+                    moveDur: 140,
+                    workDur: 165,
                     stageStart: 0
                 });
             }
 
-            // 4. Type title (Zero-CLS caret tracking)
-            if (job.titleTyping) {
+            if (job.titleTyping && !job.hasTitle) {
                 addTask({
                     type: 'type-title',
                     job,
@@ -870,14 +1019,13 @@
                     typing: job.titleTyping,
                     requiresFrame: true,
                     status: 'queued',
-                    moveDur: 150,
-                    workDur: Math.min(520, Math.max(300, job.titleTyping.fullText.length * 14)),
+                    moveDur: 145,
+                    workDur: Math.min(500, Math.max(290, job.titleTyping.fullText.length * 14)),
                     stageStart: 0
                 });
             }
 
-            // 5. Drag & Type summary / AI summary box
-            if (job.summaryTyping) {
+            if (job.summaryTyping && !job.hasSummary) {
                 addTask({
                     type: 'type-summary',
                     job,
@@ -885,28 +1033,60 @@
                     typing: job.summaryTyping,
                     requiresFrame: true,
                     status: 'queued',
-                    moveDur: 160,
-                    workDur: Math.min(620, Math.max(360, job.summaryTyping.fullText.length * 8)),
+                    moveDur: 155,
+                    workDur: Math.min(600, Math.max(340, job.summaryTyping.fullText.length * 8)),
                     stageStart: 0
                 });
             }
 
-            // 6. Individual tag / category / read-more badge drag-boxes (1 badge = 1 crisp drag placement!)
-            job.badgeEls.forEach((badgeEl) => {
+            job.badgeEls.forEach((badgeEl, badgeIdx) => {
+                if (job.builtBadgeSet.has(badgeIdx)) return;
                 addTask({
                     type: 'drag-badge',
                     job,
                     el: badgeEl,
+                    badgeIdx,
                     requiresFrame: true,
                     status: 'queued',
-                    moveDur: 125,
-                    workDur: 120,
+                    moveDur: 120,
+                    workDur: 115,
                     stageStart: 0
                 });
             });
+
+            if (job.remainingTasks === 0) {
+                completeJobNormally(job);
+            }
+        }
+
+        function saveJobProgressToCache(job) {
+            if (!job || !job.cardKey) return;
+            if (job.state === 'completed') {
+                cachedPage.completed[job.cardKey] = true;
+                delete cachedPage.partial[job.cardKey];
+            } else if (job.frameBuilt || job.hasMeta || job.hasCover || job.hasTitle || job.hasSummary || job.builtBadgeSet.size > 0) {
+                cachedPage.partial[job.cardKey] = {
+                    frameBuilt: job.frameBuilt,
+                    hasMeta: job.hasMeta,
+                    hasCover: job.hasCover,
+                    hasTitle: job.hasTitle,
+                    hasSummary: job.hasSummary,
+                    hasFooter: job.hasFooter,
+                    builtBadges: Array.from(job.builtBadgeSet)
+                };
+            }
+            persistPageProgress(pageKey, cachedPage);
+        }
+
+        // Only enqueue cards currently visible in the viewport!
+        cardJobs.forEach((job) => {
+            if (job.isInViewport && job.state !== 'completed') {
+                enqueueTasksForJob(job);
+            }
         });
 
-        if (taskQueue.length === 0) {
+        const hasUnbuiltOffscreen = cardJobs.some((job) => !job.tasksEnqueued && job.state !== 'completed');
+        if (taskQueue.length === 0 && !hasUnbuiltOffscreen) {
             return;
         }
 
@@ -1035,16 +1215,24 @@
                 job.cardEl.classList.remove('wb-swarm-item-pending');
                 job.cardEl.classList.add('wb-swarm-item-building');
             } else if (task.type === 'drag-cover') {
+                job.hasCover = true;
                 job.cardEl.classList.add('wb-has-cover');
             } else if (task.type === 'drag-meta') {
+                job.hasMeta = true;
                 job.cardEl.classList.add('wb-has-meta');
             } else if (task.type === 'type-title') {
+                job.hasTitle = true;
                 job.cardEl.classList.add('wb-has-title');
                 restoreZeroClsTypingTarget(task.typing, false);
             } else if (task.type === 'type-summary') {
+                job.hasSummary = true;
                 job.cardEl.classList.add('wb-has-summary');
                 restoreZeroClsTypingTarget(task.typing, false);
             } else if (task.type === 'drag-badge') {
+                job.hasFooter = true;
+                if (typeof task.badgeIdx === 'number') {
+                    job.builtBadgeSet.add(task.badgeIdx);
+                }
                 job.cardEl.classList.add('wb-has-footer');
                 task.el.classList.remove('wb-swarm-tag-pending');
                 task.el.classList.add('wb-swarm-tag-built');
@@ -1055,12 +1243,89 @@
             if (job.remainingTasks === 0) {
                 completeJobNormally(job);
             }
+            saveJobProgressToCache(job);
         }
 
-        // Kick off initial task claims (each cursor grabs 1 task — initially the visible cards' drag-frames!)
+        let detached = false;
+        let scrollObserver = null;
+
+        function wakeUpSwarmForNewTasks(anchorRect) {
+            if (detached) return;
+            const now = simNow;
+            // Respawn agents cleanly near the newly scrolled-in card if they had hidden after scattering
+            const spawnX = anchorRect ? Math.min(stageW - 40, Math.max(40, anchorRect.left + anchorRect.width * 0.5)) : stageW * 0.5;
+            const spawnY = anchorRect ? Math.min(stageH - 40, Math.max(40, anchorRect.top - 24)) : stageH * 0.5;
+            for (let i = 0; i < agents.length; i++) {
+                const a = agents[i];
+                if (a.mode === 'hidden' || phase === 'idle-waiting') {
+                    const ang = (i / agents.length) * Math.PI * 2;
+                    a.x = spawnX + Math.cos(ang) * 36;
+                    a.y = spawnY + Math.sin(ang) * 20;
+                    a.vx = 0;
+                    a.vy = 0;
+                    a.scale = 1;
+                    a.alpha = 1;
+                    a.mode = 'idle';
+                    a.task = null;
+                    a.dragBox = null;
+                    a.isLastCarrier = false;
+                }
+            }
+            phase = 'building';
+            if (stageCanvas) {
+                stageCanvas.style.display = '';
+            }
+            for (let i = 0; i < agents.length; i++) {
+                if (agents[i].mode === 'idle') {
+                    claimNextTask(agents[i], now);
+                }
+            }
+            if (!rafId) {
+                lastRealNow = performance.now();
+                rafId = window.requestAnimationFrame(tickSwarm);
+            }
+        }
+
+        // Observe off-screen pending cards so they ONLY render/build when scrolled into view!
+        if (typeof IntersectionObserver === 'function') {
+            scrollObserver = new IntersectionObserver((entries) => {
+                if (detached) return;
+                let addedAny = false;
+                let firstRect = null;
+                entries.forEach((entry) => {
+                    if (!entry.isIntersecting) return;
+                    const job = cardJobs.find((j) => j.cardEl === entry.target);
+                    if (!job || job.tasksEnqueued || job.state === 'completed') {
+                        scrollObserver.unobserve(entry.target);
+                        return;
+                    }
+                    scrollObserver.unobserve(entry.target);
+                    job.isInViewport = true;
+                    enqueueTasksForJob(job);
+                    if (!firstRect) firstRect = entry.boundingClientRect;
+                    addedAny = true;
+                });
+                if (addedAny) {
+                    wakeUpSwarmForNewTasks(firstRect);
+                }
+            }, { threshold: 0.06, rootMargin: '20px 0px' });
+
+            cardJobs.forEach((job) => {
+                if (!job.tasksEnqueued && job.state !== 'completed') {
+                    scrollObserver.observe(job.cardEl);
+                }
+            });
+        }
+
+        // Kick off initial task claims for cards currently in viewport
         const startNow = performance.now();
-        for (let i = 0; i < agents.length; i++) {
-            claimNextTask(agents[i], startNow);
+        if (taskQueue.length > 0) {
+            for (let i = 0; i < agents.length; i++) {
+                claimNextTask(agents[i], startNow);
+            }
+        } else {
+            phase = 'idle-waiting';
+            if (stageCanvas) stageCanvas.style.display = 'none';
         }
 
         // Solidify a half-built card and create a visual clone to be dragged & thrown by the last leaving cursor
@@ -1142,7 +1407,13 @@
             // Underlying DOM card is immediately restored to clean state so FLIP transition or reading works seamlessly
             restoreZeroClsTypingTarget(job.titleTyping, false);
             restoreZeroClsTypingTarget(job.summaryTyping, false);
-            job.cardEl.classList.remove('wb-swarm-item-pending', 'wb-swarm-item-building');
+            job.badgeEls.forEach((b) => {
+                b.classList.remove('wb-swarm-tag-pending', 'wb-swarm-tag-built');
+            });
+            job.cardEl.classList.remove(
+                'wb-swarm-item-pending', 'wb-swarm-item-building',
+                'wb-has-meta', 'wb-has-cover', 'wb-has-title', 'wb-has-summary', 'wb-has-footer'
+            );
             job.cardEl.style.removeProperty('min-height');
             job.cardEl.style.removeProperty('--wb-swarm-agent-color');
         }
@@ -1151,7 +1422,7 @@
         function triggerStartledScatter(reason, clickedCardEl, clickClientX, clickClientY) {
             if (phase !== 'building') return;
             phase = 'scattering';
-            scatterStartTime = performance.now();
+            scatterStartTime = simNow;
             barrierRingAlpha = 0.92;
 
             if (typeof clickClientX === 'number' && typeof clickClientY === 'number') {
@@ -1163,7 +1434,7 @@
                 mouseY = stageH * 0.42;
             }
 
-            // Find the agent furthest from the mouse or currently working on the clicked/last card to be the "Last Leaving Cursor"
+            // Find the agent furthest from the mouse to be the "Last Leaving Cursor"
             let lastCarrierAgent = agents[agents.length - 1];
             let maxDistSq = -1;
             for (let i = 0; i < agents.length; i++) {
@@ -1178,27 +1449,31 @@
                 lastCarrierAgent.isLastCarrier = true;
             }
 
-            // Process any half-built or pending jobs
-            let thrownCount = 0;
-            for (let i = 0; i < cardJobs.length; i++) {
-                const job = cardJobs[i];
-                if (job.state === 'building') {
-                    // Do not abandon half-built items! Solidify and let the last leaving cursor carry & throw it
-                    if (thrownCount < 3) {
-                        solidifyAndSpawnHalfBuiltProjectile(job, job.assignedAgent || lastCarrierAgent, mouseX, mouseY);
-                        thrownCount++;
-                    } else {
-                        completeJobNormally(job);
-                    }
-                } else if (job.state === 'pending') {
-                    // If user clicked a specific pending card or interrupted early, also throw up to 1 pending/clicked card if none was building
-                    if (job.cardEl === clickedCardEl && thrownCount === 0) {
-                        job.progress = 0.52;
-                        solidifyAndSpawnHalfBuiltProjectile(job, lastCarrierAgent, mouseX, mouseY);
-                        thrownCount++;
-                    } else {
-                        completeJobNormally(job);
-                    }
+            // Save all current cards' partial progress into cache BEFORE scattering,
+            // so returning to this list via FLIP inherits the exact previous build progress!
+            cardJobs.forEach((job) => saveJobProgressToCache(job));
+
+            // ONLY when interrupted by clicking an unfinished card:
+            // Solidify & throw AT MOST 1 half-built card (carried by the last leaving cursor),
+            // NEVER throw all building cards! And immediately restore the clicked card's real DOM
+            // so WindBlog's native FLIP PJAX transition captures a clean, complete card!
+            if (reason === 'card-click') {
+                const clickedJob = cardJobs.find((j) => j.cardEl === clickedCardEl);
+                const carrierJob = (lastCarrierAgent && lastCarrierAgent.task) ? lastCarrierAgent.task.job : null;
+                // Prefer throwing the single clicked half-built card's solidified snapshot (or carrier's single half-built card)
+                const singleThrowTarget = (clickedJob && clickedJob.state !== 'completed')
+                    ? clickedJob
+                    : (carrierJob && carrierJob.state === 'building' ? carrierJob : null);
+
+                if (singleThrowTarget) {
+                    if (singleThrowTarget.progress <= 0.1) singleThrowTarget.progress = 0.48;
+                    solidifyAndSpawnHalfBuiltProjectile(singleThrowTarget, lastCarrierAgent, mouseX, mouseY);
+                }
+
+                // Ensure clicked card is 100% restored for FLIP capture right before `click` fires
+                if (clickedJob && clickedJob.state !== 'completed') {
+                    completeJobNormally(clickedJob);
+                    saveJobProgressToCache(clickedJob);
                 }
             }
 
@@ -1717,7 +1992,7 @@
                     drawAgentCursor(agents[i], now);
                 }
 
-                // Check if all queued/active tasks have completed
+                // Check if all currently enqueued tasks (visible viewport batch) have completed
                 let hasRemainingTasks = false;
                 for (let i = 0; i < taskQueue.length; i++) {
                     if (taskQueue[i].status !== 'done') {
@@ -1726,9 +2001,8 @@
                     }
                 }
                 if (!hasRemainingTasks) {
-                    // Complete any remaining offscreen cards silently before startling cursors
-                    cardJobs.forEach((job) => completeJobNormally(job));
-                    triggerStartledScatter('all-completed');
+                    // Do NOT force-complete off-screen cards! They stay hidden until scrolled into view.
+                    triggerStartledScatter('batch-completed');
                 }
             } else if (phase === 'scattering') {
                 drawBarrierWithBottomRightGap();
@@ -1739,6 +2013,14 @@
                 const activeProjectiles = stepProjectiles(dtFactor);
 
                 if (activeAgents === 0 && activeProjectiles === 0) {
+                    const moreOffscreen = !detached && cardJobs.some((j) => !j.tasksEnqueued && j.state !== 'completed');
+                    if (moreOffscreen) {
+                        // Sleep with 0 CPU until IntersectionObserver sees off-screen cards scroll into view
+                        phase = 'idle-waiting';
+                        rafId = 0;
+                        if (stageCanvas) stageCanvas.style.display = 'none';
+                        return;
+                    }
                     phase = 'done';
                     cleanupSession();
                     return;
@@ -1749,12 +2031,22 @@
             rafId = window.requestAnimationFrame(tickSwarm);
         }
 
+        function detachFromPageDom() {
+            detached = true;
+            if (scrollObserver) {
+                scrollObserver.disconnect();
+                scrollObserver = null;
+            }
+            document.removeEventListener('pointerdown', onDocumentPointerDown, { capture: true });
+        }
+
         function cleanupSession() {
+            const wasDetached = detached;
+            detachFromPageDom();
             if (rafId) {
                 window.cancelAnimationFrame(rafId);
                 rafId = 0;
             }
-            document.removeEventListener('pointerdown', onDocumentPointerDown, { capture: true });
             window.removeEventListener('resize', syncStageSize);
             thrownClones.forEach((p) => {
                 if (p.el) p.el.remove();
@@ -1765,29 +2057,35 @@
                 stageCanvas.height = 0;
                 stageCanvas.remove();
             }
-            cardJobs.forEach((job) => {
-                restoreZeroClsTypingTarget(job.titleTyping, false);
-                restoreZeroClsTypingTarget(job.summaryTyping, false);
-                job.badgeEls.forEach((b) => {
-                    b.classList.remove('wb-swarm-tag-pending', 'wb-swarm-tag-built');
+            if (!wasDetached) {
+                cardJobs.forEach((job) => {
+                    restoreZeroClsTypingTarget(job.titleTyping, false);
+                    restoreZeroClsTypingTarget(job.summaryTyping, false);
+                    job.badgeEls.forEach((b) => {
+                        b.classList.remove('wb-swarm-tag-pending', 'wb-swarm-tag-built');
+                    });
+                    job.cardEl.classList.remove(
+                        'wb-swarm-item-pending', 'wb-swarm-item-building', 'wb-swarm-item-built',
+                        'wb-has-meta', 'wb-has-cover', 'wb-has-title', 'wb-has-summary', 'wb-has-footer'
+                    );
+                    job.cardEl.style.removeProperty('min-height');
+                    job.cardEl.style.removeProperty('--wb-swarm-agent-color');
                 });
-                job.cardEl.classList.remove(
-                    'wb-swarm-item-pending', 'wb-swarm-item-building', 'wb-swarm-item-built',
-                    'wb-has-meta', 'wb-has-cover', 'wb-has-title', 'wb-has-summary', 'wb-has-footer'
-                );
-                job.cardEl.style.removeProperty('min-height');
-                job.cardEl.style.removeProperty('--wb-swarm-agent-color');
-            });
+            }
             if (activeSwarmSession === sessionApi) {
                 activeSwarmSession = null;
             }
         }
 
         window.addEventListener('resize', syncStageSize, { passive: true });
-        rafId = window.requestAnimationFrame(tickSwarm);
+        if (phase === 'building') {
+            rafId = window.requestAnimationFrame(tickSwarm);
+        }
 
         const sessionApi = {
             abortImmediately: cleanupSession,
+            detachFromPageDom,
+            isScattering: () => phase === 'scattering',
             triggerStartledScatter
         };
         activeSwarmSession = sessionApi;
@@ -1861,7 +2159,13 @@
             mount() {},
             unmount() {
                 if (activeSwarmSession) {
-                    activeSwarmSession.abortImmediately();
+                    if (typeof activeSwarmSession.isScattering === 'function' && activeSwarmSession.isScattering()) {
+                        // Let the startled cursors + 1 thrown half-built card finish animating
+                        // simultaneously alongside the PJAX FLIP transition!
+                        activeSwarmSession.detachFromPageDom();
+                    } else {
+                        activeSwarmSession.abortImmediately();
+                    }
                     activeSwarmSession = null;
                 }
             },
