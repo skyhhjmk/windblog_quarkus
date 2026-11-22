@@ -68,6 +68,26 @@ public class StructuredDataService {
         return graph(List.of(page, breadcrumb(url, completeTrail)));
     }
 
+    public String webPage(String title, String description, String path, String language, List<Breadcrumb> trail) {
+        String url = canonicalUrlService.buildPath(localizePath(path));
+        ObjectNode page = node("WebPage", url + "#webpage");
+        page.put("url", url);
+        page.put("name", title);
+        if (description != null && !description.isBlank()) {
+            page.put("description", description.strip());
+        }
+        page.put("inLanguage", language);
+        page.putObject("breadcrumb").put("@id", url + "#breadcrumb");
+        List<Breadcrumb> completeTrail = new ArrayList<>(trail);
+        String base = canonicalUrlService.buildPath("/");
+        String lastUrl = completeTrail.isEmpty() ? null
+                : absoluteUrl(localizePath(completeTrail.getLast().path()), base);
+        if (!absoluteUrl(url, base).equals(lastUrl)) {
+            completeTrail.add(new Breadcrumb(title, url));
+        }
+        return graph(List.of(page, breadcrumb(url, completeTrail)));
+    }
+
     public String toolApplication(String name, String description, String path,
                                   String language, String toolsIndexLabel) {
         String url = canonicalUrlService.buildPath(localizePath(path));
@@ -135,6 +155,11 @@ public class StructuredDataService {
                     .replace("+", "%20");
             article.putArray("image").add(
                     canonicalUrlService.buildLocalizedPath("/og/post/" + encodedSlug + ".png", language));
+        } else {
+            String fallbackLogo = publisherLogoUrl();
+            if (fallbackLogo != null) {
+                article.putArray("image").add(fallbackLogo);
+            }
         }
         String section = LanguageHelper.resolveLocalizedValue(snapshot.categoryName(), language);
         if (section != null && !section.isBlank()) {
@@ -176,35 +201,19 @@ public class StructuredDataService {
         entities.add(publisher);
         entities.add(breadcrumb(canonicalUrl, trail));
 
-        if (snapshot.articleMode() == com.biliwind.blog.model.ArticleMode.TUTORIAL && snapshot.tutorialMeta() != null) {
-            ObjectNode howTo = node("HowTo", canonicalUrl + "#howto");
-            howTo.put("name", title);
-            howTo.put("description", description == null ? "" : description);
-            howTo.put("inLanguage", language);
-            howTo.putObject("mainEntityOfPage").put("@type", "WebPage").put("@id", canonicalUrl);
-            if (snapshot.tutorialMeta().estimatedMinutes() != null && snapshot.tutorialMeta().estimatedMinutes() > 0) {
-                howTo.put("totalTime", "PT" + snapshot.tutorialMeta().estimatedMinutes() + "M");
-            }
-            List<String> prereqs = snapshot.tutorialMeta().prerequisites() != null
-                    ? snapshot.tutorialMeta().prerequisites().getOrDefault(language,
-                    snapshot.tutorialMeta().prerequisites().values().stream().findFirst().orElse(List.of()))
-                    : List.of();
-            if (prereqs != null && !prereqs.isEmpty()) {
-                ArrayNode supplyArray = howTo.putArray("supply");
-                for (String p : prereqs) {
-                    ObjectNode supply = mapper.createObjectNode();
-                    supply.put("@type", "HowToSupply");
-                    supply.put("name", p);
-                    supplyArray.add(supply);
-                }
-            }
-            entities.add(howTo);
-        } else if (snapshot.articleMode() == com.biliwind.blog.model.ArticleMode.RESOURCE && snapshot.resourceMeta() != null) {
+        if (snapshot.articleMode() == com.biliwind.blog.model.ArticleMode.RESOURCE && snapshot.resourceMeta() != null) {
             ObjectNode software = node("SoftwareApplication", canonicalUrl + "#software");
             software.put("name", title);
             software.put("description", description == null ? "" : description);
             software.put("inLanguage", language);
             software.put("applicationCategory", "UtilitiesApplication");
+            software.put("isAccessibleForFree", !paid);
+            if (!paid) {
+                ObjectNode offers = software.putObject("offers");
+                offers.put("@type", "Offer");
+                offers.put("price", "0");
+                offers.put("priceCurrency", "USD");
+            }
             if (snapshot.resourceMeta().version() != null && !snapshot.resourceMeta().version().isBlank()) {
                 software.put("softwareVersion", snapshot.resourceMeta().version());
             }
@@ -216,6 +225,8 @@ public class StructuredDataService {
             }
             if (snapshot.resourceMeta().officialUrl() != null && !snapshot.resourceMeta().officialUrl().isBlank()) {
                 software.put("url", snapshot.resourceMeta().officialUrl());
+            } else {
+                software.put("url", canonicalUrl);
             }
             entities.add(software);
         }

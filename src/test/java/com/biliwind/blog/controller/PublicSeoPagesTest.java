@@ -426,6 +426,15 @@ class PublicSeoPagesTest {
     }
 
     @Test
+    void linkIndexEmitsCollectionAndBreadcrumbStructuredData() {
+        given().get("/link").then().statusCode(200)
+                .body(containsString("application/ld+json"))
+                .body(containsString("\"@type\":\"CollectionPage\""))
+                .body(containsString("\"@type\":\"BreadcrumbList\""))
+                .body(containsString(SITE + "/link"));
+    }
+
+    @Test
     void articleCoverTransitionHooksRenderOnHomepageAndDetailPage() {
         given().get("/").then().statusCode(200)
                 .body(containsString("data-article-transition-part=\"cover\""))

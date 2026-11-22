@@ -77,6 +77,10 @@ class StructuredDataServiceTest {
 
     @Test
     void paidArticleMarksMatchingPaywallAndDoesNotInventImagesOrGuestLinks() throws Exception {
+        service.settings = reader(mapper, mapper.createObjectNode()
+                .put("title", "Test Blog")
+                .put("author", "Alice"),
+                mapper.createObjectNode());
         JsonNode article = article("Guest", 100, "").get(0);
         assertFalse(article.path("isAccessibleForFree").asBoolean());
         assertFalse(article.path("hasPart").path("isAccessibleForFree").asBoolean());
@@ -85,6 +89,13 @@ class StructuredDataServiceTest {
         assertFalse(article.path("author").has("url"));
         assertFalse(article.path("author").has("sameAs"));
         assertFalse(article("Unknown", 0, "").get(0).has("author"));
+    }
+
+    @Test
+    void articleWithoutBodyImagesFallsBackToPublisherLogo() throws Exception {
+        JsonNode article = article("Alice", 0, "<p>Text only</p>").get(0);
+        assertEquals(1, article.path("image").size());
+        assertEquals(ORIGIN + "/brand-logo.svg", article.path("image").get(0).asText());
     }
 
     @Test
@@ -161,7 +172,7 @@ class StructuredDataServiceTest {
     }
 
     @Test
-    void tutorialModeEmitsHowToSchema() throws Exception {
+    void tutorialModeEmitsStandardArticleWithoutHowToSchema() throws Exception {
         PublicCacheRefreshService.PublicPostSnapshot tutSnapshot = new PublicCacheRefreshService.PublicPostSnapshot(
                 1L, "tutorial-test", 1L, Map.of("zh-CN", "教程标题"), Map.of(), Map.of(), null,
                 Map.of(), null, null, null, null, Map.of("zh-CN", "Tech"), "tech", List.of(), "Author",
@@ -178,21 +189,18 @@ class StructuredDataServiceTest {
         JsonNode graph = mapper.readTree(service.article(tutSnapshot, "教程标题", "教程描述",
                 ORIGIN + "/post/tutorial-test", "zh-CN", "")).path("@graph");
 
-        boolean foundHowTo = false;
+        assertEquals(3, graph.size());
+        assertEquals("BlogPosting", graph.get(0).path("@type").asText());
+        assertEquals("Organization", graph.get(1).path("@type").asText());
+        assertEquals("BreadcrumbList", graph.get(2).path("@type").asText());
         for (JsonNode node : graph) {
-            if ("HowTo".equals(node.path("@type").asText())) {
-                foundHowTo = true;
-                assertEquals("PT30M", node.path("totalTime").asText());
-                assertEquals("教程标题", node.path("name").asText());
-                assertEquals(2, node.path("supply").size());
-                assertEquals("JDK 21", node.path("supply").get(0).path("name").asText());
-            }
+            assertNotEquals("HowTo", node.path("@type").asText(),
+                    "TUTORIAL mode should emit standard article structured data without HowTo");
         }
-        assertTrue(foundHowTo, "Graph should contain HowTo node for TUTORIAL mode");
     }
 
     @Test
-    void resourceModeEmitsSoftwareApplicationSchema() throws Exception {
+    void resourceModeEmitsSoftwareApplicationSchemaWithFreeOffer() throws Exception {
         PublicCacheRefreshService.PublicPostSnapshot resSnapshot = new PublicCacheRefreshService.PublicPostSnapshot(
                 2L, "resource-test", 1L, Map.of("zh-CN", "资源标题"), Map.of(), Map.of(), null,
                 Map.of(), null, null, null, null, Map.of("zh-CN", "Software"), "software", List.of(), "Author",
@@ -221,9 +229,51 @@ class StructuredDataServiceTest {
                 assertEquals("85 MB", node.path("fileSize").asText());
                 assertEquals("Windows, macOS", node.path("operatingSystem").asText());
                 assertEquals("https://example.com/app", node.path("url").asText());
+                assertTrue(node.path("isAccessibleForFree").asBoolean());
+                assertEquals("Offer", node.path("offers").path("@type").asText());
+                assertEquals("0", node.path("offers").path("price").asText());
+                assertEquals("USD", node.path("offers").path("priceCurrency").asText());
             }
         }
         assertTrue(foundSoftware, "Graph should contain SoftwareApplication node for RESOURCE mode");
+    }
+
+    @Test
+    void paidResourceModeMarksSoftwareAsNotFreeWithoutFabricatedCurrencyOffer() throws Exception {
+        PublicCacheRefreshService.PublicPostSnapshot paidResSnapshot = new PublicCacheRefreshService.PublicPostSnapshot(
+                3L, "paid-resource", 1L, Map.of("zh-CN", "付费资源"), Map.of(), Map.of(), null,
+                Map.of(), null, null, null, null, Map.of("zh-CN", "Software"), "software", List.of(), "Author",
+                OffsetDateTime.parse("2026-10-01T08:00:00+08:00"), null,
+                0L, false, true, (short) 0, 50L, List.of(), List.of(), List.of(), List.of(), null, List.of(),
+                com.biliwind.blog.model.ArticleMode.RESOURCE,
+                null,
+                new com.biliwind.blog.model.ResourceMeta(
+                        "v1.0.0", "12 MB", List.of("Linux"), null, null, null, null, List.of()));
+
+        JsonNode graph = mapper.readTree(service.article(paidResSnapshot, "付费资源", "资源描述",
+                ORIGIN + "/post/paid-resource", "zh-CN", "")).path("@graph");
+
+        JsonNode software = graph.get(3);
+        assertEquals("SoftwareApplication", software.path("@type").asText());
+        assertFalse(software.path("isAccessibleForFree").asBoolean());
+        assertFalse(software.has("offers"));
+        assertEquals(ORIGIN + "/post/paid-resource", software.path("url").asText());
+    }
+
+    @Test
+    void webPageEmitsWebPageAndOrderedBreadcrumbs() throws Exception {
+        JsonNode graph = mapper.readTree(service.webPage(
+                "Example Resource", "Helpful tool", "/link/42", "en-US",
+                List.of(new StructuredDataService.Breadcrumb("Links", "/link"),
+                        new StructuredDataService.Breadcrumb("Example Resource", "/link/42")))).path("@graph");
+        assertEquals("WebPage", graph.get(0).path("@type").asText());
+        assertEquals(ORIGIN + "/link/42", graph.get(0).path("url").asText());
+        assertEquals("Helpful tool", graph.get(0).path("description").asText());
+        assertEquals("BreadcrumbList", graph.get(1).path("@type").asText());
+        JsonNode items = graph.get(1).path("itemListElement");
+        assertEquals(3, items.size());
+        assertEquals(ORIGIN + "/link", items.get(1).path("item").asText());
+        assertEquals(ORIGIN + "/link/42", items.get(2).path("item").asText());
     }
 
     @Test

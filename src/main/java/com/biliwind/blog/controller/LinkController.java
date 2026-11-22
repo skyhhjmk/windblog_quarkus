@@ -3,6 +3,7 @@ package com.biliwind.blog.controller;
 import com.biliwind.blog.common.helper.PjaxHelper;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.i18n.I18n;
 import com.biliwind.blog.model.BlogRegion;
 import com.biliwind.blog.model.Link;
 import com.biliwind.blog.model.LinkType;
@@ -11,6 +12,7 @@ import com.biliwind.blog.service.PageRenderer;
 import com.biliwind.blog.service.PageView;
 import com.biliwind.blog.service.PublicCacheRefreshService;
 import com.biliwind.blog.service.PublicCacheRefreshService.PublicLinkItem;
+import com.biliwind.blog.service.StructuredDataService;
 import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
@@ -49,6 +51,12 @@ public class LinkController {
 
     @Inject
     PublicCacheRefreshService publicCacheRefreshService;
+
+    @Inject
+    StructuredDataService structuredDataService;
+
+    @Inject
+    I18n i18n;
 
         @GET
         @Produces(MediaType.TEXT_HTML)
@@ -93,10 +101,19 @@ public class LinkController {
                     .distinct()
                     .toList();
                 
+            String lang = languageContext.getLang();
+            String linkTitle = i18n.t("link.title");
+            String jsonLd = structuredDataService.collection(
+                    linkTitle,
+                    "/link",
+                    lang,
+                    List.of(new StructuredDataService.Breadcrumb(linkTitle, "/link")));
+
                 return pageRenderer.render(PageView.LINK, httpHeaders, new PageRenderModel()
                         .put("pjaxRequest", PjaxHelper.isPjaxRequest(httpHeaders))
-                        .put("pageTitle", "友情链接")
-                        .put("language", languageContext.getLang())
+                        .put("pageTitle", linkTitle)
+                        .put("language", lang)
+                        .put("jsonLd", jsonLd)
                         .put("linkTypes", activeTypes)
                         .put("currentType", type)
                         .put("links", links));
@@ -146,10 +163,24 @@ public class LinkController {
             pageTitle = linkEntity.name + " - 资源详情";
         }
 
+        String lang = languageContext.getLang();
+        String linkTitle = i18n.t("link.title");
+        String detailPath = "/link/" + linkEntity.id;
+        String detailName = (linkEntity.name != null && !linkEntity.name.isBlank()) ? linkEntity.name : pageTitle;
+        String jsonLd = structuredDataService.webPage(
+                pageTitle,
+                linkEntity.seoDescription,
+                detailPath,
+                lang,
+                List.of(
+                        new StructuredDataService.Breadcrumb(linkTitle, "/link"),
+                        new StructuredDataService.Breadcrumb(detailName, detailPath)));
+
         return pageRenderer.render(PageView.LINK_DETAIL, httpHeaders, new PageRenderModel()
                 .put("pjaxRequest", PjaxHelper.isPjaxRequest(httpHeaders))
                 .put("pageTitle", pageTitle)
-                .put("language", languageContext.getLang())
+                .put("language", lang)
+                .put("jsonLd", jsonLd)
                 .put("seoTitle", linkEntity.seoTitle)
                 .put("pageKeywords", linkEntity.seoKeywords)
                 .put("pageDescription", linkEntity.seoDescription)
