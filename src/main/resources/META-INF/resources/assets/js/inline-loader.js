@@ -576,12 +576,42 @@
     // 4. Swarm Rebuild List Engine + Zero-CLS Typing + Startled Scatter & Throw
     // =========================================================================
     const LIST_ITEM_SELECTOR = [
-        '#pjax-content-root article[data-article-transition-card]',
-        '#pjax-content-root article[data-article-transition-slug]',
-        '#pjax-content-root article.card',
+        '#pjax-content-root article[data-article-transition-card]:not(.card-static)',
+        '#pjax-content-root article.card:not(.card-static)',
         '#pjax-content-root .link-grid .link-card',
         '#pjax-content-root #toolsIndexGrid [data-tool-card="true"]'
     ].join(', ');
+
+    function collectArticleBodyBlocks(root) {
+        const scope = root || document.getElementById('pjax-content-root') || document;
+        if (!scope || typeof scope.querySelector !== 'function') return [];
+        const bodyRoot = scope.querySelector('#post-body-content, #vditor-preview');
+        if (!bodyRoot) return [];
+
+        const rawChildren = Array.from(bodyRoot.children || []);
+        const blocks = [];
+        for (let i = 0; i < rawChildren.length; i++) {
+            const el = rawChildren[i];
+            if (!el || el.hidden || el.classList.contains('hidden')) continue;
+            if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'TEMPLATE') continue;
+            const r = el.getBoundingClientRect();
+            if (r.width <= 0 && r.height <= 0) continue;
+            blocks.push(el);
+        }
+        return blocks;
+    }
+
+    function isPlainTypableParagraph(el) {
+        if (!el) return false;
+        const tag = el.tagName;
+        if (!/^H[1-6]$/.test(tag) && tag !== 'P') return false;
+        // Skip paragraphs that contain images, videos, svgs, iframes or complex interactive embeds
+        if (el.querySelector('img, video, audio, iframe, svg, canvas, pre, table, button, input')) {
+            return false;
+        }
+        const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        return text.length >= 2 && text.length <= 420;
+    }
 
     let activeSwarmSession = null;
     // [临时调试用] 动画速度倍率 (1.0 = 正常速度，如 0.25 = 0.25倍慢速播放)
@@ -781,6 +811,9 @@
             el.style.removeProperty('opacity');
             el.style.removeProperty('transform');
         });
+        document.querySelectorAll('.wb-swarm-block-pending, .wb-swarm-block-building, .wb-swarm-block-built').forEach((el) => {
+            el.classList.remove('wb-swarm-block-pending', 'wb-swarm-block-building', 'wb-swarm-block-built');
+        });
         document.querySelectorAll('.wb-swarm-tag-pending, .wb-swarm-tag-built').forEach((el) => {
             el.classList.remove('wb-swarm-tag-pending', 'wb-swarm-tag-built');
         });
@@ -817,7 +850,9 @@
             activeSwarmSession = null;
         }
 
-        const items = collectListItems();
+        const articleBlocks = collectArticleBodyBlocks();
+        const isArticlePage = articleBlocks.length > 0;
+        const items = isArticlePage ? articleBlocks : collectListItems();
         if (items.length === 0) {
             document.documentElement.classList.remove('wb-swarm-preblock');
             return;
@@ -851,6 +886,51 @@
 
         const stageHInit = window.innerHeight || 800;
         const cardJobs = items.map((cardEl, idx) => {
+            if (isArticlePage) {
+                const blockKey = 'blk:' + idx + ':' + cardEl.tagName.toLowerCase();
+                const rect = cardEl.getBoundingClientRect();
+                const isInViewport = rect.bottom > 0 && rect.top < stageHInit;
+                const alreadyCompleted = Boolean(cachedPage.completed && cachedPage.completed[blockKey]);
+                const typable = !alreadyCompleted && isPlainTypableParagraph(cardEl);
+                const blockTyping = typable ? prepareZeroClsTypingTarget(cardEl) : null;
+
+                if (!alreadyCompleted) {
+                    cardEl.classList.add('wb-swarm-block-pending');
+                }
+                cardEl.dataset.wbSwarmIndex = String(idx);
+
+                return {
+                    index: idx,
+                    isArticleBlock: true,
+                    cardKey: blockKey,
+                    cardEl,
+                    rect,
+                    isInViewport,
+                    metaEl: null,
+                    coverEl: null,
+                    titleEl: null,
+                    summaryBoxEl: null,
+                    summaryTextEl: null,
+                    footerEl: null,
+                    badgeEls: [],
+                    titleTyping: blockTyping,
+                    summaryTyping: null,
+                    state: alreadyCompleted ? 'completed' : 'pending',
+                    tasksEnqueued: alreadyCompleted,
+                    frameBuilt: true,
+                    hasMeta: true,
+                    hasCover: true,
+                    hasTitle: alreadyCompleted || !blockTyping,
+                    hasSummary: true,
+                    hasFooter: true,
+                    builtBadgeSet: new Set(),
+                    progress: alreadyCompleted ? 1 : 0,
+                    remainingTasks: 0,
+                    totalTasks: 0,
+                    assignedAgent: null
+                };
+            }
+
             const cardKey = cardEl.dataset.articleTransitionSlug ||
                 cardEl.dataset.toolId ||
                 cardEl.dataset.id ||
@@ -971,6 +1051,38 @@
                 job.remainingTasks++;
                 taskQueue.push(task);
             };
+
+            // Article detail page: build each paragraph/heading/code-block/quote/image individually!
+            if (job.isArticleBlock) {
+                if (job.titleTyping) {
+                    const isHeading = /^H[1-6]$/.test(job.cardEl.tagName);
+                    addTask({
+                        type: 'type-article-block',
+                        job,
+                        el: job.cardEl,
+                        typing: job.titleTyping,
+                        requiresFrame: false,
+                        status: 'queued',
+                        moveDur: 130,
+                        workDur: isHeading
+                            ? Math.min(360, Math.max(200, job.titleTyping.fullText.length * 14))
+                            : Math.min(460, Math.max(240, job.titleTyping.fullText.length * 4)),
+                        stageStart: 0
+                    });
+                } else {
+                    addTask({
+                        type: 'drag-article-block',
+                        job,
+                        el: job.cardEl,
+                        requiresFrame: false,
+                        status: 'queued',
+                        moveDur: 145,
+                        workDur: 230,
+                        stageStart: 0
+                    });
+                }
+                return;
+            }
 
             if (!job.frameBuilt) {
                 addTask({
@@ -1149,7 +1261,7 @@
 
         function getTaskStartPoint(task) {
             const r = task.el.getBoundingClientRect();
-            if (task.type === 'type-title' || task.type === 'type-summary') {
+            if (task.type === 'type-title' || task.type === 'type-summary' || task.type === 'type-article-block') {
                 return { x: r.left + 8, y: r.top + Math.min(18, r.height * 0.5) };
             }
             return { x: r.left, y: r.top };
@@ -1192,6 +1304,11 @@
             job.progress = 1;
             restoreZeroClsTypingTarget(job.titleTyping, false);
             restoreZeroClsTypingTarget(job.summaryTyping, false);
+            if (job.isArticleBlock) {
+                job.cardEl.classList.remove('wb-swarm-block-pending', 'wb-swarm-block-building');
+                job.cardEl.classList.add('wb-swarm-block-built');
+                return;
+            }
             job.badgeEls.forEach((b) => {
                 b.classList.remove('wb-swarm-tag-pending', 'wb-swarm-tag-built');
             });
@@ -1214,6 +1331,14 @@
                 job.frameBuilt = true;
                 job.cardEl.classList.remove('wb-swarm-item-pending');
                 job.cardEl.classList.add('wb-swarm-item-building');
+            } else if (task.type === 'drag-article-block') {
+                job.cardEl.classList.remove('wb-swarm-block-pending', 'wb-swarm-block-building');
+                job.cardEl.classList.add('wb-swarm-block-built');
+            } else if (task.type === 'type-article-block') {
+                job.hasTitle = true;
+                job.cardEl.classList.remove('wb-swarm-block-pending', 'wb-swarm-block-building');
+                job.cardEl.classList.add('wb-swarm-block-built');
+                restoreZeroClsTypingTarget(task.typing, false);
             } else if (task.type === 'drag-cover') {
                 job.hasCover = true;
                 job.cardEl.classList.add('wb-has-cover');
@@ -1287,6 +1412,39 @@
         }
 
         // Observe off-screen pending cards so they ONLY render/build when scrolled into view!
+        function checkAndEnqueueVisibleOffscreenCards() {
+            if (detached) return;
+            const vh = window.innerHeight || 800;
+            let addedAny = false;
+            let firstRect = null;
+            for (let i = 0; i < cardJobs.length; i++) {
+                const job = cardJobs[i];
+                if (job.tasksEnqueued || job.state === 'completed') continue;
+                const r = job.cardEl.getBoundingClientRect();
+                if (r.height > 0 && r.bottom > -20 && r.top < vh + 20) {
+                    if (scrollObserver) scrollObserver.unobserve(job.cardEl);
+                    job.isInViewport = true;
+                    enqueueTasksForJob(job);
+                    if (!firstRect) firstRect = r;
+                    addedAny = true;
+                }
+            }
+            if (addedAny) {
+                wakeUpSwarmForNewTasks(firstRect);
+            }
+        }
+
+        let scrollCheckQueued = false;
+        function onWindowScrollCheck() {
+            if (detached || scrollCheckQueued) return;
+            scrollCheckQueued = true;
+            window.requestAnimationFrame(() => {
+                scrollCheckQueued = false;
+                checkAndEnqueueVisibleOffscreenCards();
+            });
+        }
+        window.addEventListener('scroll', onWindowScrollCheck, { passive: true });
+
         if (typeof IntersectionObserver === 'function') {
             scrollObserver = new IntersectionObserver((entries) => {
                 if (detached) return;
@@ -1308,7 +1466,7 @@
                 if (addedAny) {
                     wakeUpSwarmForNewTasks(firstRect);
                 }
-            }, { threshold: 0.06, rootMargin: '20px 0px' });
+            }, { threshold: 0.04, rootMargin: '24px 0px' });
 
             cardJobs.forEach((job) => {
                 if (!job.tasksEnqueued && job.state !== 'completed') {
@@ -1358,13 +1516,17 @@
                     n.removeAttribute('data-article-transition-part');
                 });
                 projectileEl.className = job.cardEl.className + ' wb-swarm-half-built-projectile';
+                // Crucial: strip pending hidden classes so a card clicked during drag-frame is STILL 100% visible when thrown!
+                projectileEl.classList.remove('wb-swarm-item-pending', 'wb-swarm-block-pending');
+                projectileEl.classList.add('wb-swarm-item-building', 'wb-has-meta', 'wb-has-title');
                 projectileEl.style.position = 'fixed';
                 projectileEl.style.left = '0px';
                 projectileEl.style.top = '0px';
                 projectileEl.style.width = rect.width.toFixed(1) + 'px';
                 projectileEl.style.height = rect.height.toFixed(1) + 'px';
                 projectileEl.style.margin = '0';
-                projectileEl.style.zIndex = '9995';
+                projectileEl.style.opacity = '1';
+                projectileEl.style.zIndex = '10002';
                 projectileEl.style.pointerEvents = 'none';
                 projectileEl.style.transformOrigin = 'center center';
                 projectileEl.style.borderColor = carrierAgent ? carrierAgent.color : 'var(--accent)';
@@ -1925,6 +2087,12 @@
                                 if (a.task.typing && a.task.typing.caretSpan) {
                                     a.task.typing.caretSpan.style.color = a.color;
                                 }
+                            } else if (a.task.type === 'type-article-block') {
+                                a.task.job.cardEl.classList.remove('wb-swarm-block-pending');
+                                a.task.job.cardEl.classList.add('wb-swarm-block-building');
+                                if (a.task.typing && a.task.typing.caretSpan) {
+                                    a.task.typing.caretSpan.style.color = a.color;
+                                }
                             } else if (a.task.type === 'drag-badge') {
                                 a.task.job.cardEl.classList.add('wb-has-footer');
                             }
@@ -1936,7 +2104,13 @@
                         const workP = Math.min(1, (now - t.stageStart) / Math.max(1, t.workDur));
                         const r = t.el.getBoundingClientRect();
 
-                        if (t.type === 'drag-frame' || t.type === 'drag-cover' || t.type === 'drag-meta' || t.type === 'drag-badge') {
+                        if (
+                            t.type === 'drag-frame' ||
+                            t.type === 'drag-cover' ||
+                            t.type === 'drag-meta' ||
+                            t.type === 'drag-badge' ||
+                            t.type === 'drag-article-block'
+                        ) {
                             // Swarm Rebuild diagonal marquee drag-box (top-left -> bottom-right)
                             const dragE = easeOutCubic(workP);
                             const curW = Math.max(2, r.width * dragE);
@@ -1949,9 +2123,9 @@
                                 w: curW,
                                 h: curH,
                                 color: a.color,
-                                showSize: t.type === 'drag-frame' || t.type === 'drag-cover'
+                                showSize: t.type === 'drag-frame' || t.type === 'drag-cover' || t.type === 'drag-article-block'
                             };
-                        } else if (t.type === 'type-title' || t.type === 'type-summary') {
+                        } else if (t.type === 'type-title' || t.type === 'type-summary' || t.type === 'type-article-block') {
                             // Crisp Zero-CLS streaming typing with subtle edit bounding box & exact caret tracking
                             if (t.typing && !t.typing.done) {
                                 const charCount = Math.floor(t.typing.fullText.length * workP);
@@ -2037,6 +2211,7 @@
                 scrollObserver.disconnect();
                 scrollObserver = null;
             }
+            window.removeEventListener('scroll', onWindowScrollCheck);
             document.removeEventListener('pointerdown', onDocumentPointerDown, { capture: true });
         }
 
@@ -2066,6 +2241,7 @@
                     });
                     job.cardEl.classList.remove(
                         'wb-swarm-item-pending', 'wb-swarm-item-building', 'wb-swarm-item-built',
+                        'wb-swarm-block-pending', 'wb-swarm-block-building', 'wb-swarm-block-built',
                         'wb-has-meta', 'wb-has-cover', 'wb-has-title', 'wb-has-summary', 'wb-has-footer'
                     );
                     job.cardEl.style.removeProperty('min-height');
@@ -2086,6 +2262,7 @@
             abortImmediately: cleanupSession,
             detachFromPageDom,
             isScattering: () => phase === 'scattering',
+            isActive: () => phase === 'building' || phase === 'scattering',
             triggerStartledScatter
         };
         activeSwarmSession = sessionApi;
@@ -2149,7 +2326,8 @@
         mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     }
 
-    // Register with PJAX Lifecycle so navigating to any list page runs Swarm Rebuild
+    // Register with PJAX Lifecycle so navigating to any list/article page runs Swarm Rebuild
+    let pjaxStartRafId = 0;
     function registerWithPjaxLifecycle() {
         if (!window.WindBlogLifecycle || typeof window.WindBlogLifecycle.register !== 'function') {
             return false;
@@ -2158,6 +2336,10 @@
             persistent: true,
             mount() {},
             unmount() {
+                if (pjaxStartRafId) {
+                    window.cancelAnimationFrame(pjaxStartRafId);
+                    pjaxStartRafId = 0;
+                }
                 if (activeSwarmSession) {
                     if (typeof activeSwarmSession.isScattering === 'function' && activeSwarmSession.isScattering()) {
                         // Let the startled cursors + 1 thrown half-built card finish animating
@@ -2173,8 +2355,14 @@
                 if (!context || context.initial) return;
                 if (isBfCacheRestore) return;
                 if (getCurrentTier() === 'high') {
-                    // Run Swarm Rebuild on PJAX navigation to pages with list items
-                    startSwarmRebuildForPage({ fromOverlay: false });
+                    if (pjaxStartRafId) {
+                        window.cancelAnimationFrame(pjaxStartRafId);
+                    }
+                    // Wait 1 frame so rapid PJAX enter/back navigation settles scroll & Tailwind layout first
+                    pjaxStartRafId = window.requestAnimationFrame(() => {
+                        pjaxStartRafId = 0;
+                        startSwarmRebuildForPage({ fromOverlay: false });
+                    });
                 }
             }
         });
@@ -2212,6 +2400,7 @@
         dismissInlineOverlay,
         startSwarmRebuildForPage,
         abortAndRevealAllImmediately,
+        isBusy: () => Boolean(!overlayDismissed || (activeSwarmSession && activeSwarmSession.isActive && activeSwarmSession.isActive())),
         setDebugSpeed,
         debugRebuild
     };

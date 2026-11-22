@@ -2,9 +2,10 @@
 (function () {
     'use strict';
 
-    const STORAGE_KEY = 'wb_perf_tier_v1';
+    const STORAGE_KEY = 'wb_perf_tier_v2';
     const OVERRIDE_KEY = 'wb_perf_tier_override';
     const CACHE_TTL_MS = 30 * 60 * 1000;
+    const DOWNGRADE_CACHE_TTL_MS = 45 * 1000; // Short TTL when benchmark downgraded below static hardware tier so it auto-recovers
     const VALID_TIERS = new Set(['minimal', 'low', 'medium', 'high']);
     const TIER_RANK = { minimal: 0, low: 1, medium: 2, high: 3 };
 
@@ -63,13 +64,18 @@
         }
     }
 
-    function readSessionCache() {
+    function readSessionCache(staticTier) {
         try {
             const raw = sessionStorage.getItem(STORAGE_KEY);
             if (!raw) return null;
             const parsed = JSON.parse(raw);
             if (!parsed || !VALID_TIERS.has(parsed.tier)) return null;
-            if (typeof parsed.ts === 'number' && Date.now() - parsed.ts > CACHE_TTL_MS) return null;
+            const staticRank = typeof TIER_RANK[staticTier] === 'number' ? TIER_RANK[staticTier] : 0;
+            const cachedRank = typeof TIER_RANK[parsed.tier] === 'number' ? TIER_RANK[parsed.tier] : 0;
+            const ttl = (cachedRank < staticRank && parsed.source === 'benchmark')
+                ? DOWNGRADE_CACHE_TTL_MS
+                : CACHE_TTL_MS;
+            if (typeof parsed.ts === 'number' && Date.now() - parsed.ts > ttl) return null;
             return parsed;
         } catch (_) {
             return null;
@@ -116,17 +122,16 @@
         if ((hw.cores !== null && hw.cores <= 2) || (hw.memoryGB !== null && hw.memoryGB <= 2)) {
             return 'low';
         }
+        const isStrongHardware = hw.cores !== null && hw.cores >= 8 && (hw.memoryGB === null || hw.memoryGB >= 8);
         if (
             bench.jsCpuMs > 85 ||
-            bench.compositeAnim.jankFrames >= 7 ||
-            bench.compositeAnim.p95Ms > 55
+            (!isStrongHardware && (bench.compositeAnim.jankFrames >= 7 || bench.compositeAnim.p95Ms > 55))
         ) {
             return 'minimal';
         }
         if (
             bench.jsCpuMs > 55 ||
-            bench.compositeAnim.jankFrames >= 4 ||
-            bench.compositeAnim.p95Ms > 36
+            (!isStrongHardware && (bench.compositeAnim.jankFrames >= 4 || bench.compositeAnim.p95Ms > 36))
         ) {
             return 'low';
         }
@@ -135,9 +140,9 @@
         if (
             coresOk &&
             memOk &&
-            bench.jsCpuMs <= 22 &&
-            bench.compositeAnim.jankFrames <= 1 &&
-            bench.compositeAnim.p95Ms <= 22
+            bench.jsCpuMs <= 24 &&
+            bench.compositeAnim.jankFrames <= 2 &&
+            bench.compositeAnim.p95Ms <= 26
         ) {
             return 'high';
         }
@@ -279,7 +284,19 @@
         }
     }
 
+    function isPageAnimationBusy() {
+        const loader = document.getElementById('wb-inline-loader');
+        if (loader && !loader.classList.contains('is-dismissed')) return true;
+        if (window.WindBlogInlineLoader && typeof window.WindBlogInlineLoader.isBusy === 'function') {
+            return window.WindBlogInlineLoader.isBusy();
+        }
+        return false;
+    }
+
+    let benchScheduleTimer = 0;
+
     function init() {
+        window.clearTimeout(benchScheduleTimer);
         const override = readOverride();
         if (override) {
             applyTier(override, 'override', null);
@@ -287,23 +304,37 @@
         }
 
         const hw = getHardwareSnapshot();
-        const cached = readSessionCache();
+        const staticTier = classifyStatic(hw);
+        const cached = readSessionCache(staticTier);
         if (cached) {
             const effectiveTier = (hw.reducedMotion || hw.saveData) ? 'minimal' : cached.tier;
             applyTier(effectiveTier, 'session-cache', cached.bench);
-            return;
+            // If cached tier was previously downgraded below static hardware capability,
+            // schedule a calm idle re-check so the device can automatically upgrade back up!
+            const staticRank = TIER_RANK[staticTier] || 0;
+            const effRank = TIER_RANK[effectiveTier] || 0;
+            if (effRank >= staticRank || hw.reducedMotion || hw.saveData || hw.gpu.isSoftware) {
+                return;
+            }
+        } else {
+            applyTier(staticTier, 'static', null);
         }
-
-        const staticTier = classifyStatic(hw);
-        applyTier(staticTier, 'static', null);
 
         if (hw.reducedMotion || hw.saveData || hw.gpu.isSoftware) {
             writeSessionCache(currentReport);
             return;
         }
 
+        let waitRetries = 0;
         const scheduleBench = () => {
-            if (document.hidden) return;
+            if (document.hidden || readOverride()) return;
+            // Never run the micro-benchmark while initial page load, inline blur overlay,
+            // or Swarm Rebuild animations are actively contending for the main thread/GPU!
+            if ((document.readyState !== 'complete' || isPageAnimationBusy()) && waitRetries < 12) {
+                waitRetries++;
+                benchScheduleTimer = window.setTimeout(scheduleBench, 700);
+                return;
+            }
             runMicroBenchmark().then((bench) => {
                 if (!bench || readOverride()) return;
                 const freshHw = getHardwareSnapshot();
@@ -313,10 +344,20 @@
             }).catch(() => {});
         };
 
-        if (typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(() => window.setTimeout(scheduleBench, 120), { timeout: 1500 });
+        const queueCalmBench = () => {
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(() => {
+                    benchScheduleTimer = window.setTimeout(scheduleBench, 900);
+                }, { timeout: 2500 });
+            } else {
+                benchScheduleTimer = window.setTimeout(scheduleBench, 1400);
+            }
+        };
+
+        if (document.readyState === 'complete') {
+            queueCalmBench();
         } else {
-            window.setTimeout(scheduleBench, 450);
+            window.addEventListener('load', queueCalmBench, { once: true });
         }
     }
 

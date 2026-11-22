@@ -117,7 +117,7 @@
                 if (override === 'high' || override === 'medium' || override === 'low' || override === 'minimal') {
                     targetTier = override;
                 } else {
-                    const cachedRaw = sessionStorage.getItem('wb_perf_tier_v1');
+                    const cachedRaw = sessionStorage.getItem('wb_perf_tier_v2');
                     if (cachedRaw) {
                         const cached = JSON.parse(cachedRaw);
                         if (cached && (cached.tier === 'high' || cached.tier === 'medium' || cached.tier === 'low' || cached.tier === 'minimal')) {
@@ -389,12 +389,22 @@
         transition: none;
     }
     /* High Tier Swarm Rebuild & Zero-CLS Typing Styles */
-    html.wb-swarm-preblock #pjax-content-root article[data-article-transition-card],
-    html.wb-swarm-preblock #pjax-content-root article[data-article-transition-slug],
-    html.wb-swarm-preblock #pjax-content-root article.card,
+    html.wb-swarm-preblock #pjax-content-root article[data-article-transition-card]:not(.card-static),
+    html.wb-swarm-preblock #pjax-content-root article.card:not(.card-static),
     html.wb-swarm-preblock #pjax-content-root .link-grid .link-card,
-    html.wb-swarm-preblock #pjax-content-root #toolsIndexGrid [data-tool-card="true"] {
+    html.wb-swarm-preblock #pjax-content-root #toolsIndexGrid [data-tool-card="true"],
+    html.wb-swarm-preblock #pjax-content-root #post-body-content > * {
         opacity: 0 !important;
+    }
+    .wb-swarm-block-pending {
+        opacity: 0 !important;
+    }
+    .wb-swarm-block-building {
+        opacity: 1 !important;
+    }
+    .wb-swarm-block-built {
+        opacity: 1 !important;
+        transition: opacity 0.16s ease;
     }
     .wb-swarm-stage-canvas {
         position: fixed;
