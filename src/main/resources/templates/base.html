@@ -427,19 +427,25 @@
     .wb-swarm-item-building [data-article-transition-part="cover"],
     .wb-swarm-item-building [data-article-transition-part="title"],
     .wb-swarm-item-building [data-article-transition-part="summary"],
+    .wb-swarm-item-building h2,
+    .wb-swarm-item-building h3,
     .wb-swarm-item-building p.line-clamp-3,
     .wb-swarm-item-building p.line-clamp-2,
-    .wb-swarm-item-building .border-t {
+    .wb-swarm-item-building .border-t,
+    .wb-swarm-item-building .mt-auto {
         opacity: 0;
         transition: opacity 0.16s ease;
     }
-    .wb-swarm-item-building.wb-has-meta [data-article-transition-part="meta"] {
+    .wb-swarm-item-building.wb-has-meta [data-article-transition-part="meta"],
+    .wb-swarm-item-building.wb-has-meta .mt-auto {
         opacity: 1;
     }
     .wb-swarm-item-building.wb-has-cover [data-article-transition-part="cover"] {
         opacity: 1;
     }
-    .wb-swarm-item-building.wb-has-title [data-article-transition-part="title"] {
+    .wb-swarm-item-building.wb-has-title [data-article-transition-part="title"],
+    .wb-swarm-item-building.wb-has-title h2,
+    .wb-swarm-item-building.wb-has-title h3 {
         opacity: 1;
     }
     .wb-swarm-item-building.wb-has-summary [data-article-transition-part="summary"],
@@ -447,7 +453,8 @@
     .wb-swarm-item-building.wb-has-summary p.line-clamp-2 {
         opacity: 1;
     }
-    .wb-swarm-item-building.wb-has-footer .border-t {
+    .wb-swarm-item-building.wb-has-footer .border-t,
+    .wb-swarm-item-building.wb-has-footer .mt-auto {
         opacity: 1;
     }
     /* Individual tag / category / action badges built one by one via mini drag-box */

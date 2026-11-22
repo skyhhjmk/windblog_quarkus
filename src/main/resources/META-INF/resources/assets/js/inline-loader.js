@@ -942,9 +942,9 @@
             const titleEl = cardEl.querySelector('[data-article-transition-part="title"], h2, h3');
             const summaryBoxEl = cardEl.querySelector('[data-article-transition-part="summary"]');
             const summaryTextEl = cardEl.querySelector('[data-article-transition-part="summary"] p, p.line-clamp-3, p.line-clamp-2');
-            const metaEl = cardEl.querySelector('[data-article-transition-part="meta"], .meta-mono');
+            const metaEl = cardEl.querySelector('[data-article-transition-part="meta"], .mt-auto, .meta-mono');
             const coverEl = cardEl.querySelector('[data-article-transition-part="cover"]');
-            const footerEl = cardEl.querySelector('.border-t');
+            const footerEl = cardEl.querySelector('.border-t, .mt-auto');
             const badgeEls = Array.from(
                 cardEl.querySelectorAll('.badge-category, .badge-tag, .tag-pill, .border-t > a')
             ).filter((el) => {
@@ -1377,15 +1377,21 @@
         function wakeUpSwarmForNewTasks(anchorRect) {
             if (detached) return;
             const now = simNow;
-            // Respawn agents cleanly near the newly scrolled-in card if they had hidden after scattering
+            // Respawn hidden agents cleanly near the newly scrolled-in card;
+            // if agents were mid-scatter (startled / approach-gap / gap-sprint), smoothly pivot
+            // them from their current coordinates back into 'idle' so they never freeze with '!'!
             const spawnX = anchorRect ? Math.min(stageW - 40, Math.max(40, anchorRect.left + anchorRect.width * 0.5)) : stageW * 0.5;
             const spawnY = anchorRect ? Math.min(stageH - 40, Math.max(40, anchorRect.top - 24)) : stageH * 0.5;
+            const wasBuilding = phase === 'building';
             for (let i = 0; i < agents.length; i++) {
                 const a = agents[i];
-                if (a.mode === 'hidden' || phase === 'idle-waiting') {
-                    const ang = (i / agents.length) * Math.PI * 2;
-                    a.x = spawnX + Math.cos(ang) * 36;
-                    a.y = spawnY + Math.sin(ang) * 20;
+                const isScatteringMode = a.mode === 'startled' || a.mode === 'approach-gap' || a.mode === 'gap-sprint';
+                if (a.mode === 'hidden' || !wasBuilding || isScatteringMode) {
+                    if (a.mode === 'hidden' || phase === 'idle-waiting') {
+                        const ang = (i / agents.length) * Math.PI * 2;
+                        a.x = spawnX + Math.cos(ang) * 36;
+                        a.y = spawnY + Math.sin(ang) * 20;
+                    }
                     a.vx = 0;
                     a.vy = 0;
                     a.scale = 1;
@@ -1397,6 +1403,7 @@
                 }
             }
             phase = 'building';
+            barrierRingAlpha = 0;
             if (stageCanvas) {
                 stageCanvas.style.display = '';
             }
@@ -2059,6 +2066,16 @@
                 for (let i = 0; i < agents.length; i++) {
                     const a = agents[i];
 
+                    // Defensive normalization: never let an agent remain stuck in startled/scattering state during building
+                    if (a.mode !== 'idle' && a.mode !== 'moving' && a.mode !== 'working') {
+                        a.mode = 'idle';
+                        a.scale = 1;
+                        a.alpha = 1;
+                        a.task = null;
+                        a.dragBox = null;
+                        a.isLastCarrier = false;
+                    }
+
                     if (a.mode === 'idle') {
                         claimNextTask(a, now);
                     }
@@ -2326,6 +2343,35 @@
         mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     }
 
+    // Synchronously hide uncached list cards / article blocks inside onPage() BEFORE the browser
+    // paints a single frame after PJAX HTML injection, eliminating the "full list flash then disappear" glitch
+    // on /category, /tag, /search, /link, /tools, and article pages.
+    function preblockUncachedItemsSynchronously() {
+        const pageKey = getPageCacheKey();
+        const cachedPage = readPageProgress(pageKey);
+        const articleBlocks = collectArticleBodyBlocks();
+        if (articleBlocks.length > 0) {
+            articleBlocks.forEach((el, idx) => {
+                const blockKey = 'blk:' + idx + ':' + el.tagName.toLowerCase();
+                if (!(cachedPage.completed && cachedPage.completed[blockKey])) {
+                    el.classList.add('wb-swarm-block-pending');
+                }
+            });
+            return;
+        }
+        const items = collectListItems();
+        items.forEach((cardEl, idx) => {
+            if (cardEl.classList.contains('pjax-article-transition-target-card')) return;
+            const cardKey = cardEl.dataset.articleTransitionSlug ||
+                cardEl.dataset.toolId ||
+                cardEl.dataset.id ||
+                ('idx:' + idx);
+            if (!(cachedPage.completed && cachedPage.completed[cardKey])) {
+                cardEl.classList.add('wb-swarm-item-pending');
+            }
+        });
+    }
+
     // Register with PJAX Lifecycle so navigating to any list/article page runs Swarm Rebuild
     let pjaxStartRafId = 0;
     function registerWithPjaxLifecycle() {
@@ -2355,6 +2401,8 @@
                 if (!context || context.initial) return;
                 if (isBfCacheRestore) return;
                 if (getCurrentTier() === 'high') {
+                    // Synchronously pre-block uncached items before first paint (zero flash!)
+                    preblockUncachedItemsSynchronously();
                     if (pjaxStartRafId) {
                         window.cancelAnimationFrame(pjaxStartRafId);
                     }

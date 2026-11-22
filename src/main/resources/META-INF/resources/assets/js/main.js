@@ -2109,6 +2109,9 @@
                         }
                     } else {
                         logArticleTransitionMode(url, transitionSlug, false, 'current page does not expose a matching article transition source');
+                        // Mount page lifecycle hooks synchronously before the fade-in paints so
+                        // Swarm Rebuild can pre-block uncached list cards with zero flash.
+                        finalizeNavigation();
                         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && container.animate) {
                             await container.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' }).finished;
                         }
