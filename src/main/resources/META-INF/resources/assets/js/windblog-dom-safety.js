@@ -18,10 +18,6 @@
         };
     }
 
-    if (!window.trustedTypes || window.windblogTrustedTypesPolicy) {
-        return;
-    }
-
     var allowedElements = new Set([
         'a', 'article', 'b', 'blockquote', 'br', 'button', 'caption', 'code', 'col', 'colgroup',
         'dd', 'del', 'div', 'dl', 'dt', 'em', 'fieldset', 'figcaption', 'figure', 'footer',
@@ -58,16 +54,24 @@
     // DOMParser may invoke the default Trusted Types policy while the
     // sanitizer is already running. Returning a real TrustedHTML value for
     // that nested call prevents the browser from re-entering the policy.
-    var rawHtmlPolicy = window.trustedTypes.createPolicy('windblog-raw-html', {
-        createHTML: function (value) {
-            return String(value || '');
+    var rawHtmlPolicy = null;
+    if (window.trustedTypes && typeof window.trustedTypes.createPolicy === 'function') {
+        try {
+            rawHtmlPolicy = window.trustedTypes.createPolicy('windblog-raw-html', {
+                createHTML: function (value) {
+                    return String(value || '');
+                }
+            });
+        } catch (error) {
+            rawHtmlPolicy = null;
         }
-    });
+    }
 
     function sanitizeHtml(value) {
         var rawHtml = String(value || '');
         // The private raw policy is used only for inert parsing, never insertion.
-        var parsed = new DOMParser().parseFromString(rawHtmlPolicy.createHTML(rawHtml), 'text/html');
+        var parseInput = rawHtmlPolicy ? rawHtmlPolicy.createHTML(rawHtml) : rawHtml;
+        var parsed = new DOMParser().parseFromString(parseInput, 'text/html');
         function sanitizeTree(root) {
             var elements = Array.from(root.querySelectorAll('*'));
             elements.forEach(function (element) {
@@ -108,12 +112,24 @@
         return parsed.body.innerHTML;
     }
 
+    window.WindBlogDomSafety = {
+        sanitizeHtml: sanitizeHtml
+    };
+
+    if (!window.trustedTypes || window.windblogTrustedTypesPolicy) {
+        return;
+    }
+
     function sanitizeScriptUrl(value) {
         var url = new URL(String(value || ''), window.location.href);
-        if (url.origin !== window.location.origin) {
-            throw new TypeError('Only same-origin dynamic script URLs are allowed');
+        if (url.origin === window.location.origin) {
+            return url.href;
         }
-        return url.href;
+        if (url.origin === 'https://pagead2.googlesyndication.com'
+            && url.pathname === '/pagead/js/adsbygoogle.js') {
+            return url.href;
+        }
+        throw new TypeError('Only same-origin or allowlisted dynamic script URLs are allowed');
     }
 
     try {

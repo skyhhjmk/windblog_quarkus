@@ -8,6 +8,15 @@
     // 存储活跃的连线元素关系，便于 resize/scroll 时重新绘制
     const connectionPairs = [];
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     // 获取块级父元素，限制引用划线操作只在单个段落/块内进行，保障排版完整性
     function getBlockParent(node) {
         let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
@@ -163,15 +172,15 @@
             popcard.innerHTML = `
                 <button type="button" class="post-quote-popbtn primary-accent" id="popbtn-quote">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                    ${window.wbT('js.quote_comment', '引用评论')}
+                    ${escapeHtml(window.wbT('js.quote_comment', '引用评论'))}
                 </button>
                 <button type="button" class="post-quote-popbtn text-red-400 hover:text-red-300" id="popbtn-correct">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    ${window.wbT('js.correction_feedback', '纠错反馈')}
+                    ${escapeHtml(window.wbT('js.correction_feedback', '纠错反馈'))}
                 </button>
                 <button type="button" class="post-quote-popbtn" id="popbtn-copy">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                    ${window.wbT('js.copy_content', '复制内容')}
+                    ${escapeHtml(window.wbT('js.copy_content', '复制内容'))}
                 </button>
             `;
             document.body.appendChild(popcard);
@@ -307,13 +316,21 @@
 
         preview.innerHTML = `
             <div class="comment-quote-preview-text">
-                <span class="text-xs text-[var(--accent)] font-bold block mb-1">${window.wbT('js.quoting', '正在引用内容：')}</span>
-                “${selection.exact}”
+                <span class="text-xs text-[var(--accent)] font-bold block mb-1"></span>
+                <span class="comment-quote-preview-exact"></span>
             </div>
             <button type="button" class="comment-quote-preview-close" id="btn-close-quote-preview">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         `;
+        const previewLabel = preview.querySelector('.comment-quote-preview-text > span');
+        if (previewLabel) {
+            previewLabel.textContent = window.wbT('js.quoting', '正在引用内容：');
+        }
+        const previewExact = preview.querySelector('.comment-quote-preview-exact');
+        if (previewExact) {
+            previewExact.textContent = `“${selection.exact ?? ''}”`;
+        }
 
         // 存到表单 dataset 中
         const form = container.querySelector('#comment-form');
@@ -356,17 +373,17 @@
             overlay.className = 'post-quote-modal-overlay';
             overlay.innerHTML = `
                 <div class="post-quote-modal">
-                    <div class="post-quote-modal-title">${window.wbT('js.correction_title', '反馈文章内容争议/错误')}</div>
-                    <div class="post-quote-modal-label">${window.wbT('js.quoted_text', '被引用文字：')}</div>
+                    <div class="post-quote-modal-title">${escapeHtml(window.wbT('js.correction_title', '反馈文章内容争议/错误'))}</div>
+                    <div class="post-quote-modal-label">${escapeHtml(window.wbT('js.quoted_text', '被引用文字：'))}</div>
                     <div class="post-quote-modal-text-preview" id="correction-preview-text"></div>
                     <div id="correction-guest-fields" hidden>
-                        <p class="post-quote-modal-hint">${window.wbT('js.comment_identity_hint', '建议填写完整信息以提高审核通过概率。')}</p>
-                        <label class="post-quote-modal-label" for="correction-guest-name">${window.wbT('post.comment_nickname', '昵称')} <span>${window.wbT('js.comment_optional', '选填')}</span></label>
-                        <input class="post-quote-modal-input" type="text" id="correction-guest-name" maxlength="80" autocomplete="nickname" placeholder="${window.wbT('js.comment_name_placeholder', '您的昵称')}">
-                        <label class="post-quote-modal-label" for="correction-guest-email">${window.wbT('post.comment_email_label', '邮箱')} <span>${window.wbT('js.comment_optional', '选填')}</span></label>
+                        <p class="post-quote-modal-hint">${escapeHtml(window.wbT('js.comment_identity_hint', '建议填写完整信息以提高审核通过概率。'))}</p>
+                        <label class="post-quote-modal-label" for="correction-guest-name">${escapeHtml(window.wbT('post.comment_nickname', '昵称'))} <span>${escapeHtml(window.wbT('js.comment_optional', '选填'))}</span></label>
+                        <input class="post-quote-modal-input" type="text" id="correction-guest-name" maxlength="80" autocomplete="nickname" placeholder="${escapeHtml(window.wbT('js.comment_name_placeholder', '您的昵称'))}">
+                        <label class="post-quote-modal-label" for="correction-guest-email">${escapeHtml(window.wbT('post.comment_email_label', '邮箱'))} <span>${escapeHtml(window.wbT('js.comment_optional', '选填'))}</span></label>
                         <input class="post-quote-modal-input" type="email" id="correction-guest-email" maxlength="255" autocomplete="email" placeholder="you@example.com">
                     </div>
-                    <div class="post-quote-modal-label">${window.wbT('js.correction_reason', '您的修改意见 / 纠错说明：')}</div>
+                    <div class="post-quote-modal-label">${escapeHtml(window.wbT('js.correction_reason', '您的修改意见 / 纠错说明：'))}</div>
                     <textarea class="post-quote-modal-textarea" id="correction-textarea" rows="4" placeholder="请详细写下这里存在的错误或修改建议..."></textarea>
                     <div class="post-quote-modal-actions">
                         <button type="button" class="post-quote-modal-btn cancel" id="correction-btn-cancel">取消</button>
@@ -725,27 +742,39 @@
             const tipBox = document.createElement('div');
             tipBox.className = 'post-correction-tip-box';
             tipBox.dataset.quoteId = quoteId;
+            const safeCommentId = escapeHtml(commentId);
             tipBox.innerHTML = `
                 <div class="post-correction-tip-header">
                     <svg class="post-correction-warning-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                     正文内容有争议
                 </div>
-                <div class="post-correction-tip-author">由 <strong>${userName}</strong> 提出纠错：</div>
-                <div class="post-correction-tip-body">“${explanation}”</div>
-                <button type="button" class="post-correction-tip-btn" id="btn-tip-go-${commentId}">
+                <div class="post-correction-tip-author">由 <strong></strong> 提出纠错：</div>
+                <div class="post-correction-tip-body"></div>
+                <button type="button" class="post-correction-tip-btn" id="btn-tip-go-${safeCommentId}">
                     查看讨论
                     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
                 </button>
             `;
+            const tipAuthor = tipBox.querySelector('.post-correction-tip-author strong');
+            if (tipAuthor) {
+                tipAuthor.textContent = userName ?? '';
+            }
+            const tipBody = tipBox.querySelector('.post-correction-tip-body');
+            if (tipBody) {
+                tipBody.textContent = `“${explanation ?? ''}”`;
+            }
             sidebar.appendChild(tipBox);
 
             // 按钮事件
-            document.getElementById(`btn-tip-go-${commentId}`).onclick = function () {
-                const cEl = document.getElementById(`comment-${commentId}`);
-                if (cEl) {
-                    cEl.scrollIntoView({behavior: 'smooth'});
-                }
-            };
+            const goBtn = tipBox.querySelector('.post-correction-tip-btn');
+            if (goBtn) {
+                goBtn.onclick = function () {
+                    const cEl = document.getElementById(`comment-${commentId}`);
+                    if (cEl) {
+                        cEl.scrollIntoView({behavior: 'smooth'});
+                    }
+                };
+            }
 
             // 计算卡片 top 位置，使之在 Y 轴上对准划线 span 元素
             const spanTop = spanElement.offsetTop;
@@ -883,7 +912,7 @@
                 if (meta) {
                     const warning = document.createElement('span');
                     warning.className = 'status-warning text-xs ml-2 opacity-80';
-                    warning.innerHTML = `（原引用内容被编辑/删除）`;
+                    warning.textContent = '（原引用内容被编辑/删除）';
                     meta.appendChild(warning);
                 }
             }
@@ -935,8 +964,12 @@
                                         <span>原文引用</span>
                                         ${failedText}
                                     </div>
-                                    <div class="italic">“${q.quoteText}”</div>
+                                    <div class="italic"></div>
                                 `;
+                                const quoteTextEl = quoteBox.querySelector('.italic');
+                                if (quoteTextEl) {
+                                    quoteTextEl.textContent = `“${q.quoteText ?? ''}”`;
+                                }
                                 body.parentNode.insertBefore(quoteBox, body);
                             }
                         }

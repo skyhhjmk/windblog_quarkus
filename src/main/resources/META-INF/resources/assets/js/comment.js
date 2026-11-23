@@ -194,9 +194,19 @@
         return name;
     }
 
+    function sanitizeCommentHtml(value) {
+        const raw = String(value ?? '');
+        if (!raw) return '';
+        if (window.WindBlogDomSafety && typeof window.WindBlogDomSafety.sanitizeHtml === 'function') {
+            return window.WindBlogDomSafety.sanitizeHtml(raw);
+        }
+        return escapeHtml(raw);
+    }
+
     function renderComment(node, depth = 0) {
+        const safeId = escapeHtml(node.id);
         const userName = escapeHtml(node.userName || 'Guest');
-        const body = node.contentHtml || '';
+        const body = sanitizeCommentHtml(node.contentHtml || '');
         const replies = node.replies || [];
 
         let childrenHtml = '';
@@ -216,13 +226,13 @@
 
                 childrenHtml = visible.map(n => renderComment(n, nextDepth)).join('');
                 childrenHtml += `
-                    <div class="hidden-replies hidden" id="replies-${node.id}">
+                    <div class="hidden-replies hidden" id="replies-${safeId}">
                         ${hidden.map(n => renderComment(n, nextDepth)).join('')}
                     </div>
                 `;
                 expandBtnHtml = `
-                    <button type="button" class="expand-replies-btn" data-comment-id="${node.id}">
-                        ${window.wbTf('js.expand_replies', hidden.length, '展开 {0} 条回复')}
+                    <button type="button" class="expand-replies-btn" data-comment-id="${safeId}">
+                        ${escapeHtml(window.wbTf('js.expand_replies', hidden.length, '展开 {0} 条回复'))}
                     </button>
                 `;
             } else {
@@ -231,7 +241,7 @@
         }
 
         const commentHtml = `
-            <article class="comment-item card card-static ${isMini ? 'comment-mini' : ''}" id="comment-${node.id}">
+            <article class="comment-item card card-static ${isMini ? 'comment-mini' : ''}" id="comment-${safeId}">
                 <div class="comment-meta">
                     <div class="flex items-center gap-3">
                         <strong class="text-[var(--accent)]">${authorHtml(node, userName)}</strong>
@@ -244,9 +254,9 @@
                     <button
                         type="button"
                         class="comment-reply-btn"
-                        data-comment-id="${node.id}">
+                        data-comment-id="${safeId}">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
-                        ${window.i18n.reply || 'Reply'}
+                        ${escapeHtml(window.i18n.reply || 'Reply')}
                     </button>
                 </div>
             </article>
@@ -294,7 +304,10 @@
         if (!isAppend) {
             currentPage = 0;
             commentIndex.clear();
-            list.innerHTML = `<div class="comment-empty">${window.i18n.loading_comments || '正在加载评论...'}</div>`;
+            const loadingBox = document.createElement('div');
+            loadingBox.className = 'comment-empty';
+            loadingBox.textContent = window.i18n.loading_comments || '正在加载评论...';
+            list.replaceChildren(loadingBox);
         }
 
         if (loadMoreBtn) window.setLoading(loadMoreBtn, true);
@@ -311,11 +324,14 @@
 
             if (!isAppend) {
                 count.textContent = totalRoots + ' ' + (window.i18n.comments_unit || window.wbT('js.discussions', '条讨论'));
-                list.innerHTML = '';
+                list.replaceChildren();
             }
 
             if (!nodes.length && !isAppend) {
-                list.innerHTML = `<div class="comment-empty">${window.i18n.no_comments_yet || '暂无评论。'}</div>`;
+                const emptyBox = document.createElement('div');
+                emptyBox.className = 'comment-empty';
+                emptyBox.textContent = window.i18n.no_comments_yet || '暂无评论。';
+                list.replaceChildren(emptyBox);
                 if (loadMoreBox) loadMoreBox.classList.add('hidden');
                 return;
             }
@@ -353,9 +369,20 @@
         root.dataset.commentLoggedIn = loggedIn ? 'true' : 'false';
 
         if (hint) {
-            hint.innerHTML = loggedIn
-                ? `<span class="text-xs font-bold text-gray-500">${window.wbT('js.signed_in_as', '已登录为')}</span> <span class="text-xs font-black text-accent">${escapeHtml(profile.data.username)}</span>`
-                : `<span class="text-xs font-bold text-gray-400">${window.wbT('js.guest_mode', '访客模式')}</span>`;
+            if (loggedIn) {
+                const label = document.createElement('span');
+                label.className = 'text-xs font-bold text-gray-500';
+                label.textContent = window.wbT('js.signed_in_as', '已登录为');
+                const name = document.createElement('span');
+                name.className = 'text-xs font-black text-accent';
+                name.textContent = profile.data.username || '';
+                hint.replaceChildren(label, document.createTextNode(' '), name);
+            } else {
+                const guest = document.createElement('span');
+                guest.className = 'text-xs font-bold text-gray-400';
+                guest.textContent = window.wbT('js.guest_mode', '访客模式');
+                hint.replaceChildren(guest);
+            }
         }
 
         const guestFields = root.querySelector('#comment-guest-fields');

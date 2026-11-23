@@ -1,6 +1,7 @@
 package com.biliwind.blog.filter;
 
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.context.CspNonceContext;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
 import com.biliwind.blog.service.PageCachePolicy;
@@ -23,9 +24,12 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 import org.jboss.resteasy.reactive.server.ServerResponseFilter;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Intercepts anonymous public HTML GET requests (both full-page documents and
@@ -46,6 +50,10 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
     private static final String PROP_PJAX = "WINDBLOG_STATIC_CACHE_PJAX";
     private static final String PROP_HIT = "WINDBLOG_STATIC_CACHE_HIT";
     private static final String MARKDOWN_REQUEST_PROP = MarkdownNegotiationFilter.class.getName();
+    static final String NONCE_PLACEHOLDER = "__WINDBLOG_CSP_NONCE__";
+    private static final Pattern CACHED_TAG_NONCE_PATTERN = Pattern.compile(
+            "(<(?:script|style)\\b[^>]*?\\bnonce=\")[^\"]+(\")",
+            Pattern.CASE_INSENSITIVE);
 
     @Inject
     StaticHtmlCacheService staticHtmlCacheService;
@@ -55,6 +63,9 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
 
     @Inject
     Instance<RegionContext> regionContextInstance;
+
+    @Inject
+    Instance<CspNonceContext> cspNonceContextInstance;
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
@@ -100,7 +111,9 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
                 }
             }
 
-            Response.ResponseBuilder builder = Response.ok(cached.html())
+            String cachedHtml = new String(cached.html(), StandardCharsets.UTF_8);
+            String responseHtml = applyNonceToCachedHtml(cachedHtml, resolveCspNonce());
+            Response.ResponseBuilder builder = Response.ok(responseHtml)
                     .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"))
                     .header(HttpHeaders.VARY, PageCachePolicy.PUBLIC_VARY)
                     .header("X-WindBlog-Static-Cache", "HIT")
@@ -169,7 +182,8 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
             responseContext.setEntity(html, responseContext.getEntityAnnotations(),
                     MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"));
             String existingEtag = responseContext.getHeaderString(HttpHeaders.ETAG);
-            staticHtmlCacheService.put(key, path, lang, region, variant, html, existingEtag);
+            String cacheableHtml = stripNonceForCache(html, resolveCspNonce());
+            staticHtmlCacheService.put(key, path, lang, region, variant, cacheableHtml, existingEtag);
 
             if (!isPjax) {
                 if (responseContext.getHeaderString(HttpHeaders.CACHE_CONTROL) == null) {
@@ -217,6 +231,35 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
         } catch (Exception ignored) {
         }
         return "zh-CN";
+    }
+
+    private String resolveCspNonce() {
+        try {
+            if (cspNonceContextInstance != null && !cspNonceContextInstance.isUnsatisfied()) {
+                return cspNonceContextInstance.get().getNonce();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    static String stripNonceForCache(String html, String nonce) {
+        if (html == null || html.isEmpty() || nonce == null || nonce.isBlank()) {
+            return html;
+        }
+        return html.replace("nonce=\"" + nonce + "\"", "nonce=\"" + NONCE_PLACEHOLDER + "\"");
+    }
+
+    static String applyNonceToCachedHtml(String html, String nonce) {
+        if (html == null || html.isEmpty() || nonce == null || nonce.isBlank()) {
+            return html;
+        }
+        String placeholderAttr = "nonce=\"" + NONCE_PLACEHOLDER + "\"";
+        if (html.contains(placeholderAttr)) {
+            return html.replace(placeholderAttr, "nonce=\"" + nonce + "\"");
+        }
+        return CACHED_TAG_NONCE_PATTERN.matcher(html)
+                .replaceAll("$1" + Matcher.quoteReplacement(nonce) + "$2");
     }
 
     private String resolveRegion() {

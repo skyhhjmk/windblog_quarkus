@@ -205,11 +205,17 @@ public class AdminCommentController {
         comment.isReviewing = true;
         comment.auditStatus = Comment.AUDIT_STATUS_REVIEWING;
         comment.aiReviewData = null;
+        CommentQuote quote = CommentQuote.find(
+                "comment.id = ?1 order by id desc", comment.id).firstResult();
+        String auditContent = com.biliwind.blog.service.ai.CommentModerationPrompt.buildModerationInput(
+                comment.content,
+                quote != null ? quote.quoteType : null,
+                quote != null ? quote.quoteText : null);
         reliableAiTaskService.enqueueAudit(
-                new com.biliwind.blog.service.ai.AiAuditTask(id, comment.content),
+                new com.biliwind.blog.service.ai.AiAuditTask(id, auditContent),
                 UUID.randomUUID().toString());
 
-        return toItem(comment);
+        return toItem(comment, quote);
     }
 
     private AdminCommentItem toItem(Comment comment) {

@@ -29,6 +29,9 @@ public class CommentApiController {
     private static final short STATUS_PENDING = 0;
     private static final short STATUS_APPROVED = 1;
     private static final int MAX_COMMENT_LENGTH = 4000;
+    private static final int MAX_QUOTE_TEXT_LENGTH = 1000;
+    private static final int MAX_ANCHOR_DATA_LENGTH = 4096;
+    private static final Set<String> ALLOWED_QUOTE_TYPES = Set.of("QUOTE", "CORRECTION");
     private static final int MAX_PAGE_SIZE = 50;
     private static final int MAX_PAGE_INDEX = 1000;
     private static final int MAX_REPLY_DEPTH = 50;
@@ -192,12 +195,15 @@ public class CommentApiController {
         final Post post = findPublicPost(request.postSlug());
         final Comment parent = resolveParent(post, request.parentId());
         final String content = normalizeContent(request.content());
+        final String quoteType = normalizeQuoteType(request.quoteType());
+        final String quoteText = quoteType != null ? normalizeQuoteText(request.quoteText()) : null;
+        final Object anchorData = quoteType != null ? parseAnchorData(request.anchorDataJson()) : null;
 
         final Comment comment = new Comment();
         // 用于在事务外携带数据
         class CreateResult {
             Long id;
-            String content;
+            String auditInput;
             boolean isReviewing;
         }
         final CreateResult result = new CreateResult();
@@ -221,35 +227,27 @@ public class CommentApiController {
             }
             comment.persist();
 
-            if (request.quoteType() != null && !request.quoteType().isBlank()) {
+            if (quoteType != null) {
                 CommentQuote quote = new CommentQuote();
                 quote.comment = comment;
                 quote.post = post;
-                quote.quoteType = request.quoteType().trim().toUpperCase();
-                quote.quoteText = request.quoteText() != null ? request.quoteText() : "";
-
-                if (request.anchorDataJson() != null && !request.anchorDataJson().isBlank()) {
-                    try {
-                        quote.anchorData = objectMapper.readTree(request.anchorDataJson());
-                    } catch (Exception e) {
-                        quote.anchorData = new HashMap<String, Object>();
-                    }
-                } else {
-                    quote.anchorData = new HashMap<String, Object>();
-                }
+                quote.quoteType = quoteType;
+                quote.quoteText = quoteText;
+                quote.anchorData = anchorData;
                 quote.status = 0;
                 quote.persist();
             }
 
             result.id = comment.id;
-            result.content = comment.content;
+            result.auditInput = com.biliwind.blog.service.ai.CommentModerationPrompt
+                    .buildModerationInput(comment.content, quoteType, quoteText);
             result.isReviewing = comment.isReviewing;
         });
 
         // 提交成功后发送异步任务
         if (result.isReviewing) {
             reliableAiTaskService.enqueueAudit(
-                    new com.biliwind.blog.service.ai.AiAuditTask(result.id, result.content));
+                    new com.biliwind.blog.service.ai.AiAuditTask(result.id, result.auditInput));
         }
         // 清理侧边栏统计
         cacheService.delete(com.biliwind.blog.common.CacheService.Keys.SIDEBAR_STATS);
@@ -345,6 +343,49 @@ public class CommentApiController {
             throw new BadRequestException("Comment content is too long");
         }
         return trimmed;
+    }
+
+    String normalizeQuoteType(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (!ALLOWED_QUOTE_TYPES.contains(normalized)) {
+            throw new BadRequestException("Unsupported quote type");
+        }
+        return normalized;
+    }
+
+    String normalizeQuoteText(String value) {
+        if (value == null) {
+            throw new BadRequestException("Quote text is required");
+        }
+        String trimmed = value.trim();
+        if (trimmed.isBlank()) {
+            throw new BadRequestException("Quote text is required");
+        }
+        if (trimmed.length() > MAX_QUOTE_TEXT_LENGTH) {
+            throw new BadRequestException("Quote text is too long");
+        }
+        return trimmed;
+    }
+
+    Object parseAnchorData(String anchorDataJson) {
+        if (anchorDataJson == null || anchorDataJson.isBlank()) {
+            return new HashMap<String, Object>();
+        }
+        if (anchorDataJson.length() > MAX_ANCHOR_DATA_LENGTH) {
+            throw new BadRequestException("Anchor data is too long");
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(anchorDataJson);
+            if (node != null && node.isObject()) {
+                return node;
+            }
+        } catch (Exception ignored) {
+            // Fall back to empty anchor metadata when client anchor payload is malformed.
+        }
+        return new HashMap<String, Object>();
     }
 
     /** Loads usernames for a batch of comments in one query instead of one per comment. */

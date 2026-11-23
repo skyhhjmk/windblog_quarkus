@@ -312,6 +312,11 @@
     #wb-loader-chip-svg[data-expression="thinking"] .wb-chip-pupil {
         transform: translate(10px, -12px);
     }
+    .wb-chip-eye-group {
+        transform-origin: 256px 228px;
+        transition: transform 0.14s ease;
+    }
+
     #wb-loader-chip-svg[data-expression="blink"] .wb-chip-eye-group {
         transform: scaleY(0.15);
     }
@@ -544,7 +549,7 @@
                 <!-- Superheated Chamber Recess -->
                 <rect x="148" y="128" width="216" height="240" fill="#431407"/>
                 <!-- Anthropomorphic Pixel Eyes & Molten Core Expression -->
-                <g class="wb-chip-eye-group" style="transform-origin: 256px 228px; transition: transform 0.14s ease;">
+                <g class="wb-chip-eye-group">
                     <!-- Left Pixel Eye Socket & Incandescent Pupil -->
                     <rect class="wb-chip-eye" x="176" y="188" width="64" height="64" fill="#ea580c"/>
                     <rect class="wb-chip-pupil" x="192" y="200" width="36" height="36" fill="#fde047"/>
