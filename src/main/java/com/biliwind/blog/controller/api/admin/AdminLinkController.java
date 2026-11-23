@@ -40,6 +40,9 @@ public class AdminLinkController {
     LinkMonitorService linkMonitorService;
 
     @Inject
+    com.biliwind.blog.service.link.FriendLinkSiteUpdateNotificationService friendLinkSiteUpdateNotificationService;
+
+    @Inject
     SafeExternalHttpService safeExternalHttpService;
 
     @Inject
@@ -114,14 +117,74 @@ public class AdminLinkController {
     }
 
     @POST
+    @Path("/notify-site-update/preview")
+    @Operation(summary = "预览友链本站信息变更通知内容")
+    public LinkSiteUpdateNoticePreview previewSiteUpdateNotice(
+            @QueryParam("linkId") Long linkId,
+            LinkSiteUpdateNoticeRequest request) {
+        String subject = request == null ? null : request.subject();
+        String adminNote = request == null ? null : request.adminNote();
+        return friendLinkSiteUpdateNotificationService.preview(linkId, subject, adminNote);
+    }
+
+    @POST
+    @Path("/{id}/notify-site-update")
+    @Transactional
+    @Operation(summary = "向指定友链站长发送本站信息变更通知")
+    public LinkSiteUpdateNoticeResult notifySingleSiteUpdate(
+            @PathParam("id") Long id,
+            LinkSiteUpdateNoticeRequest request) {
+        String subject = request == null ? null : request.subject();
+        String adminNote = request == null ? null : request.adminNote();
+        boolean allowEmail = request == null || !Boolean.FALSE.equals(request.sendEmailNotification());
+        LinkSiteUpdateNoticeResult result = friendLinkSiteUpdateNotificationService.notifySingle(
+                id, subject, adminNote, allowEmail);
+        auditService.log(
+                "link",
+                String.valueOf(id),
+                "notify_site_update",
+                null,
+                java.util.Map.of(
+                        "queuedCount", result.queuedCount(),
+                        "skippedCount", result.skippedCount(),
+                        "allowEmail", allowEmail));
+        return result;
+    }
+
+    @POST
+    @Path("/notify-site-update")
+    @Transactional
+    @Operation(summary = "批量向友链站长发送本站信息变更通知")
+    public LinkSiteUpdateNoticeResult notifyBatchSiteUpdate(LinkBatchSiteUpdateNoticeRequest request) {
+        java.util.List<Long> linkIds = request == null ? null : request.linkIds();
+        String subject = request == null ? null : request.subject();
+        String adminNote = request == null ? null : request.adminNote();
+        boolean allowEmail = request == null || !Boolean.FALSE.equals(request.sendEmailNotification());
+        LinkSiteUpdateNoticeResult result = friendLinkSiteUpdateNotificationService.notifyBatch(
+                linkIds, subject, adminNote, allowEmail);
+        auditService.log(
+                "link",
+                "batch",
+                "notify_site_update",
+                null,
+                java.util.Map.of(
+                        "requestedCount", result.requestedCount(),
+                        "queuedCount", result.queuedCount(),
+                        "skippedCount", result.skippedCount(),
+                        "allowEmail", allowEmail));
+        return result;
+    }
+
+    @POST
     @Path("/{id}/check")
     @Operation(summary = "异步触发链接检查并更新链接状态")
-    public Response check(@PathParam("id") Long id) {
+    public Response check(@PathParam("id") Long id, LinkCheckRequest request) {
         Link link = Link.findById(id);
         if (link == null) {
             throw new NotFoundException("链接不存在");
         }
-        AdminLinkCheckJobItem job = linkMonitorService.enqueueCheck(id, LinkMonitorSource.MANUAL);
+        boolean allowEmailNotification = request == null || !Boolean.FALSE.equals(request.sendEmailNotification());
+        AdminLinkCheckJobItem job = linkMonitorService.enqueueCheck(id, LinkMonitorSource.MANUAL, allowEmailNotification);
         return Response.accepted(job).build();
     }
 
@@ -178,7 +241,8 @@ public class AdminLinkController {
                 java.util.Map.of("applicationStatus", link.applicationStatus)
         );
         if (request.approved() && LinkMonitorPolicy.isMonitoringEnabled(link)) {
-            linkMonitorService.enqueueCheck(link.id, LinkMonitorSource.AUTOMATIC);
+            boolean allowEmailNotification = !Boolean.FALSE.equals(request.sendEmailNotification());
+            linkMonitorService.enqueueCheck(link.id, LinkMonitorSource.AUTOMATIC, allowEmailNotification);
         }
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("LINK", link.id, "UPSERT"));
         return toItem(link);

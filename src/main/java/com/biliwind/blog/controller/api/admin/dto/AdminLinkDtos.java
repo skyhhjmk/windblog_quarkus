@@ -158,9 +158,14 @@ public class AdminLinkDtos {
                         String errorMessage) {
         }
 
+    public record LinkCheckRequest(
+            Boolean sendEmailNotification) {
+        }
+
     public record LinkApplicationReviewRequest(
             boolean approved,
-            String note) {
+            String note,
+            Boolean sendEmailNotification) {
         }
 
         public record AdminLinkAuditItem(
@@ -178,5 +183,39 @@ public class AdminLinkDtos {
             String title,
             String description,
             String icon) {
+    }
+
+    public record LinkSiteUpdateNoticeRequest(
+            String subject,
+            String adminNote,
+            Boolean sendEmailNotification) {
+    }
+
+    public record LinkBatchSiteUpdateNoticeRequest(
+            java.util.List<Long> linkIds,
+            String subject,
+            String adminNote,
+            Boolean sendEmailNotification) {
+    }
+
+    public record LinkSiteUpdateNoticePreview(
+            String siteName,
+            String siteSubtitle,
+            String siteUrl,
+            String siteDescription,
+            String siteIcon,
+            String defaultSubject,
+            String greeting,
+            String content,
+            String previewHtml,
+            long eligibleLinkCount) {
+    }
+
+    public record LinkSiteUpdateNoticeResult(
+            int requestedCount,
+            int queuedCount,
+            int skippedCount,
+            java.util.List<String> skippedLinks,
+            String message) {
     }
 }

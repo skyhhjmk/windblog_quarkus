@@ -113,6 +113,12 @@ public class LinkMonitorService {
 
     /** Starts a manual or system-triggered check without holding the HTTP request open. */
     public synchronized AdminLinkCheckJobItem enqueueCheck(long linkId, LinkMonitorSource source) {
+        return enqueueCheck(linkId, source, true);
+    }
+
+    /** Starts a manual or system-triggered check with optional external email notification suppression. */
+    public synchronized AdminLinkCheckJobItem enqueueCheck(long linkId, LinkMonitorSource source,
+                                                           boolean allowEmailNotification) {
         pruneFinishedJobs();
 
         String activeJobId = activeJobByLink.get(linkId);
@@ -137,7 +143,7 @@ public class LinkMonitorService {
         checkJobs.put(job.jobId, job);
         activeJobByLink.put(linkId, job.jobId);
         try {
-            managedExecutor.execute(() -> executeJob(job, target, siteName, source));
+            managedExecutor.execute(() -> executeJob(job, target, siteName, source, allowEmailNotification));
         } catch (RuntimeException exception) {
             activeJobByLink.remove(linkId, job.jobId);
             job.finish("FAILED", "检测任务暂时无法启动，请稍后重试");
@@ -160,13 +166,13 @@ public class LinkMonitorService {
     public void checkLink(Link link, boolean readOnly) {
         LinkCheckTarget target = buildTarget(link);
         runCheck(target, siteLinkUrlService.currentSiteName(), readOnly,
-                LinkMonitorSource.AUTOMATIC);
+                LinkMonitorSource.AUTOMATIC, true);
     }
 
     private void executeJob(CheckJob job, LinkCheckTarget target, String siteName,
-                            LinkMonitorSource source) {
+                            LinkMonitorSource source, boolean allowEmailNotification) {
         try {
-            runCheck(target, siteName, false, source);
+            runCheck(target, siteName, false, source, allowEmailNotification);
             job.finish("COMPLETED", null);
         } catch (Exception exception) {
             LOG.errorf(exception, "友链检测任务失败，linkId=%d", job.linkId);
@@ -185,7 +191,7 @@ public class LinkMonitorService {
     }
 
     private void runCheck(LinkCheckTarget target, String siteName, boolean readOnly,
-                          LinkMonitorSource source) {
+                          LinkMonitorSource source, boolean allowEmailNotification) {
         String checkBatchId = UUID.randomUUID().toString();
         OffsetDateTime checkedAt = OffsetDateTime.now(ZoneOffset.UTC);
         List<NodeLinkProbeResult> nodeResults = new ArrayList<>();
@@ -197,7 +203,7 @@ public class LinkMonitorService {
                 target.url(), target.backlinkPageUrl(), target.expectedSiteUrls(), siteName,
                 target.monitoringKeywords(), target.name()));
 
-        persistLogAndState(target.id(), checkBatchId, checkedAt, nodeResults, readOnly, source);
+        persistLogAndState(target.id(), checkBatchId, checkedAt, nodeResults, readOnly, source, allowEmailNotification);
     }
 
     private void persistLogAndState(
@@ -206,7 +212,8 @@ public class LinkMonitorService {
             OffsetDateTime checkedAt,
             List<NodeLinkProbeResult> nodeResults,
             boolean readOnly,
-            LinkMonitorSource source
+            LinkMonitorSource source,
+            boolean allowEmailNotification
     ) {
         QuarkusTransaction.requiringNew().run(() -> {
             Link dbLink = Link.findById(linkId);
@@ -219,7 +226,7 @@ public class LinkMonitorService {
             }
 
             if (!readOnly) {
-                updateLinkMonitoringState(dbLink, checkedAt, nodeResults);
+                updateLinkMonitoringState(dbLink, checkedAt, nodeResults, allowEmailNotification);
                 dbLink.persist();
                 dataSyncEvent.fire(new DataSyncEvent("LINK", dbLink.id, "UPSERT"));
             }
@@ -265,7 +272,8 @@ public class LinkMonitorService {
     private void updateLinkMonitoringState(
             Link link,
             OffsetDateTime checkedAt,
-            List<NodeLinkProbeResult> nodeResults
+            List<NodeLinkProbeResult> nodeResults,
+            boolean allowEmailNotification
     ) {
         boolean reachableFromAnyNode = false;
         boolean backlinkFoundFromReachableNode = false;
@@ -317,15 +325,16 @@ public class LinkMonitorService {
         link.settings.put("checkedNodeCount", nodeResults.size());
 
         OffsetDateTime evaluatedAt = OffsetDateTime.now(ZoneOffset.UTC);
-        advanceCondition(link, LinkMonitorPolicy.OFFLINE, !reachableFromAnyNode, evaluatedAt);
+        advanceCondition(link, LinkMonitorPolicy.OFFLINE, !reachableFromAnyNode, evaluatedAt, allowEmailNotification);
         advanceCondition(link, LinkMonitorPolicy.BACKLINK_MISSING,
                 reachableFromAnyNode && detectorAvailableOnReachableNode && !backlinkFoundFromReachableNode,
-                evaluatedAt);
+                evaluatedAt, allowEmailNotification);
         advanceCondition(link, LinkMonitorPolicy.KEYWORD_FRAUD,
-                reachableFromAnyNode && fraudDetectedFromReachableNode, evaluatedAt);
+                reachableFromAnyNode && fraudDetectedFromReachableNode, evaluatedAt, allowEmailNotification);
     }
 
-    private void advanceCondition(Link link, String condition, boolean failed, OffsetDateTime checkedAt) {
+    void advanceCondition(Link link, String condition, boolean failed, OffsetDateTime checkedAt,
+                          boolean allowEmailNotification) {
         Map<String, Object> state = LinkMonitorPolicy.lifecycleState(link, condition);
         if (!LinkMonitorPolicy.isHideEnabled(link, condition) || !failed) {
             state.clear();
@@ -344,15 +353,16 @@ public class LinkMonitorService {
             state.put("phase", "BUFFERING");
             state.put("bufferStartedAt", checkedAt.toString());
             state.put("graceEndsAt", graceEndsAt.toString());
-            if (queueNotification(link, condition, false)) {
+            if (allowEmailNotification && queueNotification(link, condition, false)) {
                 state.put("warningNotified", true);
             }
         } else if ("BUFFERING".equals(state.get("phase"))
+                && allowEmailNotification
                 && !Boolean.TRUE.equals(state.get("warningNotified"))
                 && queueNotification(link, condition, false)) {
             state.put("warningNotified", true);
         }
-        expireConditionIfDue(link, condition, state, checkedAt);
+        expireConditionIfDue(link, condition, state, checkedAt, allowEmailNotification);
         LinkMonitorPolicy.updateLifecycleState(link, condition, state);
     }
 
@@ -381,7 +391,7 @@ public class LinkMonitorService {
                         state.put("warningNotified", true);
                         conditionChanged = true;
                     }
-                    if (expireConditionIfDue(link, condition, state, now)) {
+                    if (expireConditionIfDue(link, condition, state, now, true)) {
                         conditionChanged = true;
                     }
                     if (conditionChanged) {
@@ -398,7 +408,7 @@ public class LinkMonitorService {
     }
 
     private boolean expireConditionIfDue(Link link, String condition, Map<String, Object> state,
-                                         OffsetDateTime now) {
+                                         OffsetDateTime now, boolean allowEmailNotification) {
         if (!"BUFFERING".equals(state.get("phase"))) {
             return false;
         }
@@ -406,7 +416,8 @@ public class LinkMonitorService {
         if (graceEndsAt == null || graceEndsAt.isAfter(now)) {
             return false;
         }
-        boolean notificationRequired = LinkMonitorPolicy.shouldNotify(link, condition)
+        boolean notificationRequired = allowEmailNotification
+                && LinkMonitorPolicy.shouldNotify(link, condition)
                 && link.email != null && !link.email.isBlank();
         if (notificationRequired && !Boolean.TRUE.equals(state.get("formalNotified"))
                 && !queueNotification(link, condition, true)) {
@@ -452,7 +463,7 @@ public class LinkMonitorService {
         }
     }
 
-    private String notificationSiteUrl(BlogRegion region) {
+    String notificationSiteUrl(BlogRegion region) {
         List<String> regionalUrls = regionRuleSiteUrls(region);
         return regionalUrls.isEmpty() ? siteLinkUrlService.urlFor(region) : regionalUrls.get(0);
     }

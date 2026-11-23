@@ -193,7 +193,9 @@ public class AdminCommentController {
 
         auditService.log("comment", String.valueOf(comment.id), "update", oldVal, newVal);
         if (shouldNotifyReplyRecipient) {
-            commentEmailNotificationService.notifyReplyRecipient(comment);
+            if (!Boolean.FALSE.equals(req.sendEmailNotification())) {
+                commentEmailNotificationService.notifyReplyRecipient(comment);
+            }
             userNotificationService.notifyCommentReply(comment);
         }
         invalidateCommentCaches();
@@ -301,7 +303,9 @@ public class AdminCommentController {
                             Map.of("status", oldStatus, "auditStatus", oldAudit),
                             Map.of("status", comment.status, "auditStatus", comment.auditStatus));
                     if (notify) {
-                        commentEmailNotificationService.notifyReplyRecipient(comment);
+                        if (!Boolean.FALSE.equals(req.sendEmailNotification())) {
+                            commentEmailNotificationService.notifyReplyRecipient(comment);
+                        }
                         userNotificationService.notifyCommentReply(comment);
                     }
                     succeeded++;
@@ -419,7 +423,7 @@ public class AdminCommentController {
                 .executeUpdate();
     }
 
-    private AdminCommentItem toItem(Comment comment) {
+    AdminCommentItem toItem(Comment comment) {
         CommentQuote quote = CommentQuote.find(
                 "comment.id = ?1 order by id desc", comment.id).firstResult();
         OutboxEvent outbox = OutboxEvent.find(

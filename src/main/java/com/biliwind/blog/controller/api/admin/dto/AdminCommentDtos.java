@@ -48,13 +48,15 @@ public class AdminCommentDtos {
     @RegisterForReflection
     public record CommentUpdateRequest(
             Short status,
-            String content) {
+            String content,
+            Boolean sendEmailNotification) {
     }
 
     @RegisterForReflection
     public record CommentBatchRequest(
             List<Long> ids,
-            String action) {
+            String action,
+            Boolean sendEmailNotification) {
     }
 
     @RegisterForReflection

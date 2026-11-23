@@ -3,9 +3,13 @@ package com.biliwind.blog.controller.api.admin;
 import com.biliwind.blog.model.EmailTemplate;
 import com.biliwind.blog.service.EmailDeliveryService;
 import com.biliwind.blog.service.EmailTemplateRenderer;
+import com.biliwind.blog.service.SystemEmailTemplateCatalog;
+import com.biliwind.blog.service.SystemEmailTemplateCatalog.EmailTemplatePreviewResponse;
+import com.biliwind.blog.service.SystemEmailTemplateCatalog.SystemEmailTemplateItem;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -26,10 +30,24 @@ public class AdminEmailTemplateController {
     EmailTemplateRenderer emailTemplateRenderer;
     @Inject
     EmailDeliveryService emailDeliveryService;
+    @Inject
+    SystemEmailTemplateCatalog systemEmailTemplateCatalog;
 
     @GET
     public List<EmailTemplate> list() {
         return EmailTemplate.list("order by updatedAt desc");
+    }
+
+    @GET
+    @Path("/system")
+    public List<SystemEmailTemplateItem> listSystemTemplates() {
+        return systemEmailTemplateCatalog.listAll();
+    }
+
+    @GET
+    @Path("/system/{templateKey}/preview")
+    public EmailTemplatePreviewResponse previewSystemTemplate(@PathParam("templateKey") String templateKey) {
+        return systemEmailTemplateCatalog.renderPreview(templateKey);
     }
 
     @POST
@@ -50,6 +68,7 @@ public class AdminEmailTemplateController {
         EmailTemplate template = EmailTemplate.findById(id);
         if (template == null) throw new WebApplicationException("邮件模板不存在", Response.Status.NOT_FOUND);
         validate(request);
+        template.templateKey = request.templateKey;
         template.name = request.name;
         template.subjectTemplate = request.subjectTemplate;
         template.title = request.title;
@@ -61,6 +80,15 @@ public class AdminEmailTemplateController {
         template.version = template.version + 1;
         template.updatedAt = OffsetDateTime.now();
         return template;
+    }
+
+    @DELETE
+    @Path("/{id}")
+    @Transactional
+    public void delete(@PathParam("id") Long id) {
+        EmailTemplate template = EmailTemplate.findById(id);
+        if (template == null) throw new WebApplicationException("邮件模板不存在", Response.Status.NOT_FOUND);
+        template.delete();
     }
 
     @GET
@@ -78,7 +106,10 @@ public class AdminEmailTemplateController {
         EmailTemplate template = EmailTemplate.findById(id);
         if (template == null || !template.published)
             throw new WebApplicationException("请先发布邮件模板", Response.Status.BAD_REQUEST);
-        emailDeliveryService.queue("TEMPLATE_TEST", request.recipientAddress, template.subjectTemplate, emailTemplateRenderer.render(template.title, template.greeting, template.content, template.buttonText, template.buttonUrl));
+        if (request == null || request.recipientAddress == null || request.recipientAddress.isBlank()) {
+            throw new WebApplicationException("测试收件邮箱不能为空", Response.Status.BAD_REQUEST);
+        }
+        emailDeliveryService.queue("TEMPLATE_TEST", request.recipientAddress.trim(), template.subjectTemplate, emailTemplateRenderer.render(template.title, template.greeting, template.content, template.buttonText, template.buttonUrl));
     }
 
     private void validate(EmailTemplate template) {
