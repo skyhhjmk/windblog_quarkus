@@ -30,15 +30,24 @@
         'vector', 'spark', 'matrix', 'node'
     ];
 
-    // Track BFCache restoration so persisted pages NEVER replay the loader or swarm rebuild
+    // Track BFCache restoration so persisted pages NEVER replay the loader or swarm rebuild,
+    // and track manual page reload so all cached swarm build progress is reset.
     let isBfCacheRestore = false;
+    let isManualReload = false;
     try {
         if (window.__wbBfCachePersisted) {
             isBfCacheRestore = true;
         }
+        if (window.__wbManualReload) {
+            isManualReload = true;
+        }
         const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
-        if (navEntries && navEntries.length > 0 && navEntries[0].type === 'back_forward') {
+        const navType = navEntries && navEntries.length > 0 ? navEntries[0].type : null;
+        if (navType === 'back_forward') {
             isBfCacheRestore = true;
+        } else if (navType === 'reload' || (!navType && performance.navigation && performance.navigation.type === 1)) {
+            isManualReload = true;
+            window.__wbManualReload = true;
         }
     } catch (_) {}
 
@@ -689,6 +698,19 @@
                 sessionStorage.setItem(SWARM_CACHE_STORAGE_KEY, JSON.stringify(all));
             }
         } catch (_) {}
+    }
+
+    function clearAllPageProgress() {
+        pageProgressCache.clear();
+        try {
+            sessionStorage.removeItem(SWARM_CACHE_STORAGE_KEY);
+        } catch (_) {}
+    }
+
+    // Manual browser reload resets the entire build cache so both the current page
+    // and any subsequently visited secondary pages replay the swarm build animation.
+    if (isManualReload) {
+        clearAllPageProgress();
     }
 
     // Wrap a text element with a Zero-CLS typing overlay:
@@ -2448,6 +2470,8 @@
         dismissInlineOverlay,
         startSwarmRebuildForPage,
         abortAndRevealAllImmediately,
+        clearPageProgress,
+        clearAllPageProgress,
         isBusy: () => Boolean(!overlayDismissed || (activeSwarmSession && activeSwarmSession.isActive && activeSwarmSession.isActive())),
         setDebugSpeed,
         debugRebuild

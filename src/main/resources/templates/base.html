@@ -106,8 +106,14 @@
 
             try {
                 const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
-                if (navEntries && navEntries.length > 0 && navEntries[0].type === 'back_forward') {
+                const navType = navEntries && navEntries.length > 0 ? navEntries[0].type : null;
+                if (navType === 'back_forward') {
                     window.__wbBfCachePersisted = true;
+                } else if (navType === 'reload' || (!navType && performance.navigation && performance.navigation.type === 1)) {
+                    window.__wbManualReload = true;
+                    try {
+                        sessionStorage.removeItem('wb_swarm_progress_v1');
+                    } catch (_) {}
                 }
             } catch (_) {}
 
