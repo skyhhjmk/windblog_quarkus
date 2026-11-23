@@ -13,6 +13,25 @@
     </div>
 
 
+    {#if isPreviewMode.or(false)}
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
+         role="status" data-post-preview-banner="true">
+        <div class="flex items-start gap-2.5">
+            <svg class="h-5 w-5 flex-shrink-0 mt-0.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <div>
+                <p class="font-semibold">{i18n.t('post.preview_banner_title')}</p>
+                <p class="text-xs opacity-90 mt-0.5">{i18n.t('post.preview_banner_desc')}</p>
+            </div>
+        </div>
+        {#if previewExpiresAt.or(null)}
+        <span class="text-xs font-mono opacity-85">{i18n.t('post.preview_expires_at')} <time datetime="{previewExpiresAt}">{date:formatDateTime(previewExpiresAt)}</time></span>
+        {/if}
+    </div>
+    {/if}
+
     <nav aria-label="{i18n.t('post.breadcrumb')}" class="relative z-40 text-xs text-meta font-mono mb-4 flex items-center gap-1.5">
         <a href="{languagePrefix}/" class="hover:text-accent transition-colors" data-article-return-link>{i18n.t('common.home')}</a>
         {#if breadcrumbCategorySlug}
@@ -22,7 +41,7 @@
     </nav>
 
     <div class="card card-static p-6 sm:p-7 md:p-8 rounded-2xl border border-border bg-card shadow-sm" data-article-transition-card="{postSlug}">
-        <article class="space-y-8 md:space-y-12" data-article-transition-slug="{postSlug}" data-post-view-track="{postSlug}">
+        <article class="space-y-8 md:space-y-12" data-article-transition-slug="{postSlug}"{#if !isPreviewMode.or(false)} data-post-view-track="{postSlug}"{/if}>
             <header class="space-y-6 md:space-y-8 mb-8 md:mb-12">
                 <div class="flex flex-wrap items-center gap-4 sm:gap-8 pb-4 sm:pb-5 border-b border-border/50 text-xs font-mono"
                      data-article-transition-part="meta"
@@ -256,6 +275,7 @@
         </article>
     </div>
 
+    {#if !isPreviewMode.or(false)}
     <div class="card card-static p-8 md:p-12 mt-16">
         {#if config:toggle('enable_comment')}
             <section id="comment-section" class="space-y-12" data-post-slug="{postSlug}">
@@ -348,6 +368,7 @@
             </section>
         {/if}
     </div>
+    {/if}
     {#if relatedArticles && !relatedArticles.isEmpty}
     <aside aria-label="{i18n.t('post.related_articles')}" class="mt-8 p-4">
         <h2 class="text-lg font-bold">{i18n.t('post.related_articles')}</h2>

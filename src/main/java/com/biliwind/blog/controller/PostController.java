@@ -92,6 +92,26 @@ public class PostController {
     @Inject
     com.biliwind.blog.service.PublicCacheRefreshService publicCacheRefreshService;
 
+    @Inject
+    com.biliwind.blog.service.PostPreviewService postPreviewService;
+
+    @GET
+    @Path("/preview/post/{token}")
+    @Produces(MediaType.TEXT_HTML)
+    public Response previewPost(@PathParam("token") String token,
+                                @Context HttpHeaders httpHeaders) {
+        return renderPreview(token, null, httpHeaders);
+    }
+
+    @GET
+    @Path("/{langCode}/preview/post/{token}")
+    @Produces(MediaType.TEXT_HTML)
+    public Response previewPostWithLang(@PathParam("langCode") String langCode,
+                                        @PathParam("token") String token,
+                                        @Context HttpHeaders httpHeaders) {
+        return renderPreview(token, langCode, httpHeaders);
+    }
+
     @GET
     @Path("/post/{slug}")
     @Produces(MediaType.TEXT_HTML)
@@ -504,6 +524,225 @@ public class PostController {
             responseBuilder = PageCachePolicy.publicDocument(responseBuilder, etag);
         }
         return responseBuilder.build();
+    }
+
+    private Response renderPreview(String token, String langCode, HttpHeaders httpHeaders) {
+        resolveLanguage(langCode);
+
+        Optional<com.biliwind.blog.service.PostPreviewService.PostPreviewSnapshot> previewResult =
+                postPreviewService.find(token);
+        if (previewResult.isEmpty()) {
+            throw new NotFoundException("Preview link expired or not found");
+        }
+        com.biliwind.blog.service.PostPreviewService.PostPreviewSnapshot snapshot = previewResult.get();
+
+        String resolvedLang = languageContext.getLang();
+        if (langCode == null && snapshot.preferredLanguage() != null && !snapshot.preferredLanguage().isBlank()
+                && (httpHeaders == null || httpHeaders.getHeaderString(com.biliwind.blog.filter.LanguageRouteFilter.LANG_HEADER) == null)) {
+            resolvedLang = snapshot.preferredLanguage();
+            languageContext.setLang(resolvedLang);
+        }
+        final String effectiveLang = resolvedLang;
+
+        boolean pjaxRequest = PjaxHelper.isPjaxRequest(httpHeaders);
+        String currentRegion = regionContext.getCurrentRegion().getCode();
+        Long requestUserId = resolveUserId(httpHeaders);
+        String slug = normalizeSlug(snapshot.slug());
+
+        Map<String, String> contentMap = snapshot.contentMarkdown() == null ? Map.of() : snapshot.contentMarkdown();
+        String contentLanguage = LanguageHelper.resolveLocalizedLanguage(contentMap, resolvedLang);
+        languageContext.setContentLanguage(contentLanguage);
+
+        String displayTitle = LanguageHelper.resolveLocalizedValue(snapshot.title(), resolvedLang);
+        if (displayTitle == null || displayTitle.isBlank()) {
+            displayTitle = slug;
+        }
+        String seoTitle = LanguageHelper.lookupIgnoreCase(snapshot.seoTitle(), contentLanguage);
+        if (seoTitle == null || seoTitle.isBlank()) {
+            seoTitle = displayTitle;
+        }
+        String pageDescription = LanguageHelper.lookupIgnoreCase(snapshot.seoDescription(), contentLanguage);
+        if (pageDescription == null || pageDescription.isBlank()) {
+            pageDescription = LanguageHelper.resolveLocalizedValue(snapshot.summary(), contentLanguage);
+        }
+        String pageKeywords = LanguageHelper.lookupIgnoreCase(snapshot.seoKeywords(), contentLanguage);
+        String canonicalUrl = canonicalUrlService.buildLocalizedPath("/preview/post/" + token, contentLanguage);
+
+        com.biliwind.blog.service.PageIdentity identity = new com.biliwind.blog.service.PageIdentity(
+                canonicalUrl, List.of(), "noindex,nofollow", null);
+        pageIdentityContext.set(identity);
+
+        String rawContent = LanguageHelper.resolveLocalizedValue(contentMap, resolvedLang);
+        PostBodyView body = resolvePostBody(snapshot.renderType(), rawContent, null);
+        if (body.html()) {
+            String rewritten = articleExternalLinkService.rewriteArticleExternalLinks(body.body());
+            body = new PostBodyView(rewritten, true, body.renderType());
+        }
+        final PostBodyView renderedBody = body;
+
+        String localizedAiSummary = LanguageHelper.resolveLocalizedValue(snapshot.aiSummary(), resolvedLang);
+        int aiSummaryStatusVal = snapshot.aiSummaryStatus() == null ? 0 : snapshot.aiSummaryStatus().intValue();
+        String authorName = snapshot.authorName() == null || snapshot.authorName().isBlank()
+                ? "Unknown" : snapshot.authorName();
+        String authorAvatar = "/assets/img/avatar-default.svg";
+
+        PostRenderType effectiveRenderType = snapshot.renderType() == null
+                ? PostRenderType.MARKDOWN : snapshot.renderType();
+
+        String postCategory = LanguageHelper.resolveLocalizedValue(snapshot.categoryName(), resolvedLang);
+        if (postCategory == null || postCategory.isBlank()) {
+            postCategory = "未分类";
+        }
+        String postCategorySlug = snapshot.categorySlug();
+        if (postCategorySlug == null || postCategorySlug.isBlank()) {
+            postCategorySlug = "uncategorized";
+        }
+        List<PostCategoryItem> postCategories = snapshot.categories() == null ? List.of()
+                : snapshot.categories().stream().map(item -> new PostCategoryItem(
+                        LanguageHelper.resolveLocalizedValue(item.name(), effectiveLang), item.slug())).toList();
+        if (postCategories.isEmpty() && snapshot.categorySlug() != null) {
+            postCategories = List.of(new PostCategoryItem(postCategory, postCategorySlug));
+        }
+
+        List<TagItem> postTags = new java.util.ArrayList<>();
+        if (snapshot.tags() != null) {
+            for (com.biliwind.blog.service.PublicCacheRefreshService.PublicTagSnapshot tag : snapshot.tags()) {
+                postTags.add(new TagItem(LanguageHelper.resolveLocalizedValue(tag.name(), resolvedLang), tag.slug()));
+            }
+        }
+
+        RepostPolicyCatalog.Policy repostPolicy = repostPolicyCatalog.resolve(
+                snapshot.repostPolicyCode(), snapshot.contentDeclarations());
+        String repostOriginalUrl = repostLicenseService.buildPostUrl(slug);
+        String repostDirectCopyText = repostPolicy.requiresApplication()
+                ? ""
+                : repostPolicyCatalog.buildDirectCopyText(repostPolicy, displayTitle, repostOriginalUrl, resolvedLang);
+
+        PostCoverImageHelper.CoverImageInfo featuredInfo = snapshot.postId() == null ? null
+                : PostCoverImageHelper.findFeaturedImageInfos(List.of(snapshot.postId())).get(snapshot.postId());
+        String postCoverImageUrl = featuredInfo != null && featuredInfo.url() != null && !featuredInfo.url().isBlank()
+                ? featuredInfo.url()
+                : PostCoverImageHelper.firstImageUrl(contentMap, resolvedLang);
+        String postCoverThumbhash = featuredInfo != null ? featuredInfo.thumbhash() : null;
+
+        ArticleMode articleMode = snapshot.articleMode() == null ? ArticleMode.STANDARD : snapshot.articleMode();
+        TutorialMeta tutorialMeta = snapshot.tutorialMeta();
+        String tutorialDifficulty = "";
+        Integer tutorialEstimatedMinutes = null;
+        List<String> tutorialPrerequisites = List.of();
+        String tutorialTargetAudience = "";
+        if (tutorialMeta != null) {
+            tutorialDifficulty = LanguageHelper.resolveLocalizedValue(tutorialMeta.difficulty(), resolvedLang);
+            tutorialEstimatedMinutes = tutorialMeta.estimatedMinutes();
+            if (tutorialMeta.prerequisites() != null) {
+                tutorialPrerequisites = tutorialMeta.prerequisites().getOrDefault(resolvedLang,
+                        tutorialMeta.prerequisites().values().stream().findFirst().orElse(List.of()));
+            }
+            tutorialTargetAudience = LanguageHelper.resolveLocalizedValue(tutorialMeta.targetAudience(), resolvedLang);
+        }
+
+        ResourceMeta resourceMeta = snapshot.resourceMeta();
+        String resourceVersion = "";
+        String resourceFileSize = "";
+        List<String> resourcePlatforms = List.of();
+        String resourceOfficialUrl = "";
+        String resourceLicense = "";
+        String resourceChecksumSha256 = "";
+        String resourceChecksumMd5 = "";
+        List<ResourceMirror> resourceMirrors = List.of();
+        if (resourceMeta != null) {
+            resourceVersion = resourceMeta.version() == null ? "" : resourceMeta.version();
+            resourceFileSize = resourceMeta.fileSize() == null ? "" : resourceMeta.fileSize();
+            resourcePlatforms = resourceMeta.platforms() == null ? List.of() : resourceMeta.platforms();
+            resourceOfficialUrl = resourceMeta.officialUrl() == null ? "" : resourceMeta.officialUrl();
+            resourceLicense = resourceMeta.license() == null ? "" : resourceMeta.license();
+            resourceChecksumSha256 = resourceMeta.checksumSha256() == null ? "" : resourceMeta.checksumSha256();
+            resourceChecksumMd5 = resourceMeta.checksumMd5() == null ? "" : resourceMeta.checksumMd5();
+            resourceMirrors = resourceMeta.mirrors() == null ? List.of() : resourceMeta.mirrors();
+        }
+
+        int wordCount = com.biliwind.blog.common.helper.PostHelper.calculateWordCount(renderedBody.body());
+        int readingTimeMinutes = com.biliwind.blog.common.helper.PostHelper.calculateReadingTimeMinutes(wordCount);
+        java.time.OffsetDateTime lastUpdated = snapshot.updatedAt() != null
+                ? snapshot.updatedAt()
+                : java.time.OffsetDateTime.now();
+
+        PageRenderModel model = new PageRenderModel()
+                .put("language", resolvedLang)
+                .put("pjaxRequest", pjaxRequest)
+                .put("contentLanguage", contentLanguage)
+                .put("isPreviewMode", true)
+                .put("previewExpiresAt", snapshot.expiresAt())
+                .put("postSlug", slug)
+                .put("articleMode", articleMode.value())
+                .put("tutorialDifficulty", tutorialDifficulty)
+                .put("tutorialEstimatedMinutes", tutorialEstimatedMinutes)
+                .put("tutorialPrerequisites", tutorialPrerequisites)
+                .put("tutorialTargetAudience", tutorialTargetAudience)
+                .put("resourceVersion", resourceVersion)
+                .put("resourceFileSize", resourceFileSize)
+                .put("resourcePlatforms", resourcePlatforms)
+                .put("resourceOfficialUrl", resourceOfficialUrl)
+                .put("resourceLicense", resourceLicense)
+                .put("resourceChecksumSha256", resourceChecksumSha256)
+                .put("resourceChecksumMd5", resourceChecksumMd5)
+                .put("resourceMirrors", resourceMirrors)
+                .put("postCoverImageUrl", postCoverImageUrl)
+                .put("postCoverThumbhash", postCoverThumbhash)
+                .put("wordCount", wordCount)
+                .put("readingTimeMinutes", readingTimeMinutes)
+                .put("internalLinkGraphVisible", false)
+                .put("isTranslationOutdated", false)
+                .put("postTitle", displayTitle)
+                .put("pageTitle", seoTitle)
+                .put("pageDescription", pageDescription)
+                .put("pageKeywords", pageKeywords)
+                .put("aiSummary", localizedAiSummary)
+                .put("aiSummaryStatus", aiSummaryStatusVal)
+                .put("postBody", renderedBody.body())
+                .put("postBodyHtml", renderedBody.html())
+                .put("publishedAt", snapshot.publishedAt())
+                .put("postViewCount", 0L)
+                .put("authorName", authorName)
+                .put("authorAvatar", authorAvatar)
+                .put("postRenderType", effectiveRenderType.name())
+                .put("postBodyJson", escapeJavaScript(renderedBody.body()))
+                .put("postCategory", postCategory)
+                .put("postCategorySlug", postCategorySlug)
+                .put("breadcrumbCategorySlug", snapshot.categorySlug())
+                .put("postCategories", postCategories)
+                .put("postPrice", snapshot.postPrice())
+                .put("hasPurchased", true)
+                .put("postTags", postTags)
+                .put("contentDeclarations", resolveContentDeclarationLabels(snapshot.contentDeclarations()))
+                .put("attachments", List.of())
+                .put("userAuthenticated", requestUserId != null)
+                .put("attachmentLoginUrl", buildAttachmentLoginUrl(slug, resolvedLang))
+                .put("relatedStoreItems", List.of())
+                .put("relatedArticles", List.of())
+                .put("repostPolicyCode", repostPolicy.code())
+                .put("repostPolicyName", repostPolicy.nameFor(resolvedLang))
+                .put("repostPolicySummary", repostPolicy.summaryFor(resolvedLang))
+                .put("repostPolicyRequiresApplication", repostPolicy.requiresApplication())
+                .put("repostPolicyConditions", repostPolicy.conditionsFor(resolvedLang))
+                .put("repostPolicyLicenseUrl", repostPolicy.licenseUrl())
+                .put("repostDirectCopyText", repostDirectCopyText)
+                .put("repostOriginalUrl", repostOriginalUrl)
+                .put("canonicalUrl", canonicalUrl)
+                .put("ampUrl", null)
+                .put("markdownUrl", null)
+                .put("ogData", null)
+                .put("jsonLd", null)
+                .put("pageIdentity", identity)
+                .put("siteConfig", pageIdentityService.environmentFingerprint())
+                .put("requestUser", requestUserId)
+                .put("region", currentRegion)
+                .put("updatedEpoch", lastUpdated.toEpochSecond());
+
+        TemplateInstance templateInstance = pageRenderer.render(PageView.POST, httpHeaders, model);
+        return PageCachePolicy.privateNoStore(Response.ok(templateInstance))
+                .header("X-Robots-Tag", "noindex,nofollow")
+                .build();
     }
 
     @RegisterForReflection

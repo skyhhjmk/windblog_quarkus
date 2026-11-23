@@ -96,6 +96,9 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.service.AdminPostEventService adminPostEventService;
 
+    @Inject
+    com.biliwind.blog.service.PostPreviewService postPreviewService;
+
     @GET
     @Path("/{id}/events")
     @Produces(MediaType.SERVER_SENT_EVENTS)
@@ -203,6 +206,15 @@ public class AdminPostApiController {
     @APIResponse(responseCode = "200", description = "返回由标题生成的 slug")
     public Map<String, String> previewSlug(@QueryParam("title") String title) {
         return Map.of("slug", generateSlugWithAiFallback(title));
+    }
+
+    @POST
+    @Path("/preview-links")
+    @Transactional
+    @Operation(summary = "生成文章临时预览链接")
+    @APIResponse(responseCode = "200", description = "返回临时预览链接和过期时间")
+    public PostPreviewLinkResponse createPreviewLink(PostPreviewLinkRequest request) {
+        return postPreviewService.createPreview(request, mustFindOperator());
     }
 
     private String generateSlugWithAiFallback(String title) {

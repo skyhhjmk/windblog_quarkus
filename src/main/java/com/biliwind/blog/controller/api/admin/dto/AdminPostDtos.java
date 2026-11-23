@@ -168,6 +168,44 @@ public final class AdminPostDtos {
     public record ReviewDecisionRequest(String note) {
     }
 
+        public record PostPreviewLinkRequest(
+                        Long postId,
+                        String slug,
+                        Map<String, String> title,
+                        Map<String, String> summary,
+                        Map<String, String> aiSummary,
+                        Map<String, String> contentMarkdown,
+                        Short visibility,
+                        String seoTitle,
+                        String seoKeywords,
+                        String seoDescription,
+                        Short renderType,
+                        Short aiSummaryStatus,
+                        Long pointsPrice,
+                        Long categoryId,
+                        List<Long> categoryIds,
+                        List<Long> tagIds,
+                        List<String> contentDeclarations,
+                        String repostPolicyCode,
+                        Map<String, String> seoTitleTranslations,
+                        Map<String, String> seoKeywordsTranslations,
+                        Map<String, String> seoDescriptionTranslations,
+                        Short articleMode,
+                        com.biliwind.blog.model.TutorialMeta tutorialMeta,
+                        com.biliwind.blog.model.ResourceMeta resourceMeta,
+                        String authorName,
+                        Long userId,
+                        String language,
+                        Integer ttlMinutes) {
+        }
+
+        public record PostPreviewLinkResponse(
+                        String token,
+                        String previewPath,
+                        String previewUrl,
+                        OffsetDateTime expiresAt) {
+        }
+
         public record AdminPostDetail(
                         Long id,
                         String slug,
