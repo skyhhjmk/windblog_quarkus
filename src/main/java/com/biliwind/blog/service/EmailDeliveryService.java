@@ -18,6 +18,7 @@ import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -30,8 +31,15 @@ import java.util.Properties;
 import java.util.UUID;
 
 @ApplicationScoped
-@RegisterForReflection(targets = org.eclipse.angus.mail.util.MailStreamProvider.class)
+@RegisterForReflection(
+        targets = org.eclipse.angus.mail.util.MailStreamProvider.class,
+        classNames = {
+                "org.eclipse.angus.activation.MailcapRegistryProviderImpl",
+                "org.eclipse.angus.activation.MimeTypeRegistryProviderImpl"
+        }
+)
 public class EmailDeliveryService {
+    private static final Logger LOG = Logger.getLogger(EmailDeliveryService.class);
     @ConfigProperty(name = "windblog.mail.enabled", defaultValue = "false")
     boolean enabled;
     @Inject
@@ -234,7 +242,10 @@ public class EmailDeliveryService {
             delivery.channelId = channelId;
             return new DeliveryOutcome(channelId, null);
         } catch (Exception exception) {
-            return new DeliveryOutcome(channelId, SensitiveMessageSanitizer.sanitize(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()));
+            String errorMessage = formatDeliveryError(exception);
+            LOG.warnf("邮件投递失败，deliveryId=%s, scenario=%s, channelId=%s, error=%s",
+                    delivery.id, delivery.scenario, channelId, errorMessage);
+            return new DeliveryOutcome(channelId, errorMessage);
         } finally {
             if (transport != null) {
                 try {
@@ -281,6 +292,26 @@ public class EmailDeliveryService {
 
         message.setContent(multipart);
         return message;
+    }
+
+    static String formatDeliveryError(Exception exception) {
+        String topMessage = exception.getMessage() == null || exception.getMessage().isBlank()
+                ? exception.getClass().getSimpleName()
+                : exception.getMessage().trim();
+        Throwable root = exception;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String combined = topMessage;
+        if (root != exception) {
+            String rootMessage = root.getMessage() == null || root.getMessage().isBlank()
+                    ? root.getClass().getSimpleName()
+                    : root.getMessage().trim();
+            if (!topMessage.contains(rootMessage)) {
+                combined = topMessage + ": " + rootMessage;
+            }
+        }
+        return SensitiveMessageSanitizer.sanitize(combined);
     }
 
     static String htmlToPlainText(String html) {

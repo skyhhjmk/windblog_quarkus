@@ -2,13 +2,24 @@ package com.biliwind.blog.service;
 
 import com.biliwind.blog.model.EmailChannel;
 import com.biliwind.blog.model.EmailDelivery;
+import jakarta.activation.CommandMap;
+import jakarta.activation.MailcapCommandMap;
+import jakarta.activation.spi.MailcapRegistryProvider;
+import jakarta.activation.spi.MimeTypeRegistryProvider;
+import jakarta.mail.MessagingException;
 import jakarta.mail.Session;
 import jakarta.mail.Transport;
 import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMultipart;
 import jakarta.mail.util.StreamProvider;
 import org.eclipse.angus.mail.util.MailStreamProvider;
 import org.eclipse.angus.mail.smtp.SMTPTransport;
 import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ServiceLoader;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -44,8 +55,19 @@ class EmailSmtpConfigurationTest {
         message.saveChanges();
         assertEquals("reply@example.com", ((InternetAddress) message.getReplyTo()[0]).getAddress());
         assertEquals(delivery.subject, message.getSubject());
-        assertEquals(delivery.htmlContent, message.getContent());
-        assertTrue(message.getContentType().toLowerCase().contains("utf-8"));
+        assertTrue(message.getContentType().toLowerCase().contains("multipart/alternative"));
+        var multipart = assertInstanceOf(MimeMultipart.class, message.getContent());
+        assertEquals(2, multipart.getCount());
+        assertEquals("中文内容", multipart.getBodyPart(0).getContent());
+        assertEquals(delivery.htmlContent, multipart.getBodyPart(1).getContent());
+        assertTrue(multipart.getBodyPart(1).getContentType().toLowerCase().contains("utf-8"));
+
+        var raw = new ByteArrayOutputStream();
+        message.writeTo(raw);
+        String serialized = raw.toString(StandardCharsets.UTF_8);
+        assertTrue(serialized.contains("multipart/alternative"));
+        assertTrue(serialized.contains("text/plain"));
+        assertTrue(serialized.contains("text/html"));
     }
 
     @Test
@@ -58,6 +80,27 @@ class EmailSmtpConfigurationTest {
     @Test
     void resolvesAngusStreamProvider() {
         assertInstanceOf(MailStreamProvider.class, StreamProvider.provider());
+    }
+
+    @Test
+    void resolvesAngusActivationProvidersAndMultipartHandlers() {
+        assertTrue(ServiceLoader.load(MailcapRegistryProvider.class).findFirst().isPresent());
+        assertTrue(ServiceLoader.load(MimeTypeRegistryProvider.class).findFirst().isPresent());
+        CommandMap commandMap = CommandMap.getDefaultCommandMap();
+        assertInstanceOf(MailcapCommandMap.class, commandMap);
+        assertNotNull(commandMap.createDataContentHandler("multipart/alternative"));
+        assertNotNull(commandMap.createDataContentHandler("text/plain"));
+        assertNotNull(commandMap.createDataContentHandler("text/html"));
+    }
+
+    @Test
+    void formatsDeliveryErrorWithRootCause() {
+        MessagingException exception = new MessagingException(
+                "IOException while sending message",
+                new IOException("no object DCH for MIME type multipart/alternative"));
+        String formatted = EmailDeliveryService.formatDeliveryError(exception);
+        assertTrue(formatted.contains("IOException while sending message"));
+        assertTrue(formatted.contains("no object DCH for MIME type multipart/alternative"));
     }
 
     private EmailChannel channel() {
