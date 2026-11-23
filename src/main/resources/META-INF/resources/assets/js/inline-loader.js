@@ -911,7 +911,7 @@
             if (isArticlePage) {
                 const blockKey = 'blk:' + idx + ':' + cardEl.tagName.toLowerCase();
                 const rect = cardEl.getBoundingClientRect();
-                const isInViewport = rect.bottom > 0 && rect.top < stageHInit;
+                const isInViewport = rect.height > 0 && rect.bottom > -20 && rect.top < stageHInit + 20;
                 const alreadyCompleted = Boolean(cachedPage.completed && cachedPage.completed[blockKey]);
                 const typable = !alreadyCompleted && isPlainTypableParagraph(cardEl);
                 const blockTyping = typable ? prepareZeroClsTypingTarget(cardEl) : null;
@@ -959,7 +959,7 @@
                 ('idx:' + idx);
 
             const rect = cardEl.getBoundingClientRect();
-            const isInViewport = rect.bottom > 0 && rect.top < stageHInit;
+            const isInViewport = rect.height > 0 && rect.bottom > -20 && rect.top < stageHInit + 20;
 
             const titleEl = cardEl.querySelector('[data-article-transition-part="title"], h2, h3');
             const summaryBoxEl = cardEl.querySelector('[data-article-transition-part="summary"]');
@@ -1280,6 +1280,8 @@
         let barrierRingAlpha = 0;
         const thrownClones = [];
         let rafId = 0;
+        let lastRealNow = performance.now();
+        let simNow = lastRealNow;
 
         function getTaskStartPoint(task) {
             const r = task.el.getBoundingClientRect();
@@ -1464,6 +1466,12 @@
         }
 
         let scrollCheckQueued = false;
+        const settleTimers = [];
+        function clearSettleTimers() {
+            while (settleTimers.length > 0) {
+                window.clearTimeout(settleTimers.pop());
+            }
+        }
         function onWindowScrollCheck() {
             if (detached || scrollCheckQueued) return;
             scrollCheckQueued = true;
@@ -1473,6 +1481,7 @@
             });
         }
         window.addEventListener('scroll', onWindowScrollCheck, { passive: true });
+        window.addEventListener('scrollend', onWindowScrollCheck, { passive: true });
 
         if (typeof IntersectionObserver === 'function') {
             scrollObserver = new IntersectionObserver((entries) => {
@@ -1505,7 +1514,7 @@
         }
 
         // Kick off initial task claims for cards currently in viewport
-        const startNow = performance.now();
+        const startNow = simNow;
         if (taskQueue.length > 0) {
             for (let i = 0; i < agents.length; i++) {
                 claimNextTask(agents[i], startNow);
@@ -1513,6 +1522,17 @@
         } else {
             phase = 'idle-waiting';
             if (stageCanvas) stageCanvas.style.display = 'none';
+            // Fallback viewport settle checks in case scroll/layout finishes after first frame
+            [60, 180, 380, 680].forEach((delayMs) => {
+                const timerId = window.setTimeout(() => {
+                    if (detached || phase !== 'idle-waiting') return;
+                    checkAndEnqueueVisibleOffscreenCards();
+                    if (phase !== 'idle-waiting') {
+                        clearSettleTimers();
+                    }
+                }, delayMs);
+                settleTimers.push(timerId);
+            });
         }
 
         // Solidify a half-built card and create a visual clone to be dragged & thrown by the last leaving cursor
@@ -2070,9 +2090,6 @@
             barrierRingAlpha *= 0.965;
         }
 
-        let lastRealNow = performance.now();
-        let simNow = lastRealNow;
-
         function tickSwarm(realNow) {
             if (!ctx) return;
             const realDt = Math.max(1, Math.min(64, realNow - lastRealNow));
@@ -2246,11 +2263,13 @@
 
         function detachFromPageDom() {
             detached = true;
+            clearSettleTimers();
             if (scrollObserver) {
                 scrollObserver.disconnect();
                 scrollObserver = null;
             }
             window.removeEventListener('scroll', onWindowScrollCheck);
+            window.removeEventListener('scrollend', onWindowScrollCheck);
             document.removeEventListener('pointerdown', onDocumentPointerDown, { capture: true });
         }
 

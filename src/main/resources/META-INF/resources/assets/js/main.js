@@ -826,11 +826,10 @@
                 window.history.pushState(nextHistoryState, '', url);
 
                 if (shouldScrollToTop) {
-                    if (options && options.instantScroll) {
-                        scrollToTopInstantly();
-                    } else {
-                        window.scrollTo(0, 0);
-                    }
+                    // Always reset scroll position immediately on PJAX page switch so global
+                    // `scroll-behavior: smooth` does not keep the viewport at the previous page's
+                    // bottom while the new page measures viewport cards for Swarm Rebuild.
+                    scrollToTopInstantly();
                 }
             } else if (options && options.restoreScrollPosition) {
                 // The browser must not restore a history entry with the global
@@ -2945,7 +2944,7 @@
         function completePaginationGoAnimation() {
             const animation = activePaginationGoAnimation;
             if (!animation) return;
-            window.scrollTo({top: 0, behavior: 'smooth'});
+            scrollToTopInstantly();
             animation.flight.classList.add('is-flying');
             window.setTimeout(() => {
                 if (activePaginationGoAnimation?.flight === animation.flight) {
