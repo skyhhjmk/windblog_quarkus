@@ -1,9 +1,28 @@
 package com.biliwind.blog.controller.api.admin.dto;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public class AdminCommentDtos {
 
+    @RegisterForReflection
+    public record AiAuditState(
+            String phase,
+            String label,
+            String detail,
+            boolean stuck,
+            boolean canAbort,
+            int attemptCount,
+            int maxAttempts,
+            Long elapsedSeconds,
+            String lastError,
+            OffsetDateTime updatedAt,
+            OffsetDateTime nextRetryAt) {
+    }
+
+    @RegisterForReflection
     public record AdminCommentItem(
             Long id,
             Long postId,
@@ -17,6 +36,7 @@ public class AdminCommentDtos {
             short auditStatus,
             Object aiReviewData,
             boolean isReviewing,
+            AiAuditState aiAuditState,
             OffsetDateTime createdAt,
             Long quoteId,
             String quoteType,
@@ -25,8 +45,25 @@ public class AdminCommentDtos {
             Short quoteStatus) {
     }
 
+    @RegisterForReflection
     public record CommentUpdateRequest(
             Short status,
             String content) {
+    }
+
+    @RegisterForReflection
+    public record CommentBatchRequest(
+            List<Long> ids,
+            String action) {
+    }
+
+    @RegisterForReflection
+    public record CommentBatchResult(
+            int requested,
+            int succeeded,
+            int skipped,
+            int failed,
+            List<Long> failedIds,
+            String message) {
     }
 }

@@ -48,6 +48,9 @@ public class AiTaskConsumer {
     @Inject
     com.biliwind.blog.service.AdminPostEventService adminPostEventService;
 
+    @Inject
+    AiTaskRuntimeTracker runtimeTracker;
+
     private volatile int maxRetries;
 
     @PostConstruct
@@ -103,24 +106,36 @@ public class AiTaskConsumer {
         log.info("{} 处理任务，postId={}, priority={}, retry={}/{}", MQ_TAG,
                 task.postId(), task.priority(), currentRetryCount, allowedMaxRetries);
 
+        String runId = runtimeTracker.startSummary(task.postId(), currentRetryCount, allowedMaxRetries, Thread.currentThread());
         long startTime = System.currentTimeMillis();
         try {
+            long timeoutSeconds = taskTimeoutSeconds();
+            runtimeTracker.updateStage(runId, "CALLING_AI", "AI 摘要生成中",
+                    String.format("正在调用 AI 模型生成摘要（超时上限 %ds）", timeoutSeconds));
             // 阻塞等待 AI 结果（在 @Blocking 工作线程上安全）
-            AiResult aiResult = aiManager.summarize(task.content())
-                    .toCompletableFuture()
-                    .get(taskTimeoutSeconds(), TimeUnit.SECONDS);
+            java.util.concurrent.CompletableFuture<AiResult> future = aiManager.summarize(task.content())
+                    .toCompletableFuture();
+            runtimeTracker.attachFuture(runId, future);
+            AiResult aiResult = future.get(timeoutSeconds, TimeUnit.SECONDS);
 
             long endTime = System.currentTimeMillis();
             long durationMs = endTime - startTime;
 
+            runtimeTracker.updateStage(runId, "SAVING_RESULT", "保存摘要结果中", "AI 已返回结果，正在写入数据库");
             // 在新事务中保存结果和审计日志（Worker 线程可以使用 Panache 阻塞 API）
             saveAiSummaryAndAuditLog(task.postId(), aiResult, durationMs, task.performedBy());
+            runtimeTracker.finishSummary(runId, "SUCCESS", "AI 摘要生成完成", durationMs, null);
             log.info("{} AI 处理成功，postId={}，耗时={}ms", MQ_TAG, task.postId(), durationMs);
             return safeAck(message);
 
         } catch (Exception ex) {
-            log.error("{} AI 处理失败，postId={}, error={}", MQ_TAG, task.postId(),
-                    SensitiveMessageSanitizer.sanitize(ex.getMessage()));
+            long durationMs = System.currentTimeMillis() - startTime;
+            String safeError = SensitiveMessageSanitizer.sanitize(ex.getMessage());
+            runtimeTracker.finishSummary(runId,
+                    currentRetryCount < allowedMaxRetries ? "RETRYING" : "FAILED",
+                    currentRetryCount < allowedMaxRetries ? "AI 摘要失败，准备重试" : "AI 摘要失败，进入死信",
+                    durationMs, safeError);
+            log.error("{} AI 处理失败，postId={}, error={}", MQ_TAG, task.postId(), safeError);
             return handleRetryOrDeadLetter(message, task, currentRetryCount, allowedMaxRetries, ex);
         }
     }
@@ -149,30 +164,76 @@ public class AiTaskConsumer {
             return safeAck(message);
         }
 
+        if (!isCommentStillReviewing(task.commentId())) {
+            log.info("{} 评论已不在审核中（可能已被中断或人工处理），跳过消息，commentId={}", MQ_TAG, task.commentId());
+            return safeAck(message);
+        }
+
         int currentRetryCount = getAuditRetryCount(message, task);
         int allowedMaxRetries = getMaxRetries();
         log.info("{} 处理审核任务，commentId={}, retry={}/{}", MQ_TAG,
                 task.commentId(), currentRetryCount, allowedMaxRetries);
 
+        String runId = runtimeTracker.startAudit(task.commentId(), currentRetryCount, allowedMaxRetries, Thread.currentThread());
         long startTime = System.currentTimeMillis();
         try {
+            long timeoutSeconds = taskTimeoutSeconds();
+            String attemptDesc = currentRetryCount > 0
+                    ? String.format("正在调用 AI 模型审核评论（第 %d/%d 次重试，超时上限 %ds）",
+                    currentRetryCount, allowedMaxRetries, timeoutSeconds)
+                    : String.format("正在调用 AI 模型审核评论（超时上限 %ds）", timeoutSeconds);
+            runtimeTracker.updateStage(runId, "CALLING_AI", "AI 模型调用中", attemptDesc);
+
             // 阻塞等待 AI 结果
-            AiResult aiResult = aiManager.moderate(task.content())
-                    .toCompletableFuture()
-                    .get(taskTimeoutSeconds(), TimeUnit.SECONDS);
+            java.util.concurrent.CompletableFuture<AiResult> future = aiManager.moderate(task.content())
+                    .toCompletableFuture();
+            runtimeTracker.attachFuture(runId, future);
+            AiResult aiResult = future.get(timeoutSeconds, TimeUnit.SECONDS);
 
             long endTime = System.currentTimeMillis();
             long durationMs = endTime - startTime;
 
+            if (runtimeTracker.isAborted(runId) || !isCommentStillReviewing(task.commentId())) {
+                runtimeTracker.finishAudit(runId, "ABORTED", "审核任务已被管理员中断，丢弃 AI 结果", durationMs, null);
+                log.info("{} AI 审核结果到达前任务已被中断，忽略结果，commentId={}", MQ_TAG, task.commentId());
+                return safeAck(message);
+            }
+
+            runtimeTracker.updateStage(runId, "SAVING_RESULT", "保存审核结果中", "AI 已返回结果，正在写入评论状态");
             saveAiAuditResult(task.commentId(), aiResult, durationMs);
+            runtimeTracker.finishAudit(runId, "SUCCESS",
+                    Boolean.TRUE.equals(aiResult.isSafe) ? "AI 审核完成：建议通过" : "AI 审核完成：建议驳回",
+                    durationMs, null);
             log.info("{} AI 审核成功，commentId={}，耗时={}ms", MQ_TAG, task.commentId(), durationMs);
             return safeAck(message);
 
         } catch (Exception ex) {
-            log.error("{} AI 审核失败，commentId={}, error={}", MQ_TAG, task.commentId(),
-                    SensitiveMessageSanitizer.sanitize(ex.getMessage()));
+            long durationMs = System.currentTimeMillis() - startTime;
+            if (ex instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            if (runtimeTracker.isAborted(runId) || !isCommentStillReviewing(task.commentId())) {
+                // Clear interrupt flag on worker thread so pooled thread stays clean
+                Thread.interrupted();
+                runtimeTracker.finishAudit(runId, "ABORTED", "已被管理员强制中断 AI 审核", durationMs, null);
+                log.info("{} AI 审核任务已被强制中断，直接 ACK，commentId={}", MQ_TAG, task.commentId());
+                return safeAck(message);
+            }
+            String safeError = SensitiveMessageSanitizer.sanitize(ex.getMessage());
+            runtimeTracker.finishAudit(runId,
+                    currentRetryCount < allowedMaxRetries ? "RETRYING" : "FAILED",
+                    currentRetryCount < allowedMaxRetries ? "AI 审核失败，等待重试" : "AI 审核失败，进入死信",
+                    durationMs, safeError);
+            log.error("{} AI 审核失败，commentId={}, error={}", MQ_TAG, task.commentId(), safeError);
             return handleRetryOrDeadLetterAudit(message, task, currentRetryCount, allowedMaxRetries, ex);
         }
+    }
+
+    private boolean isCommentStillReviewing(Long commentId) {
+        return io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() -> {
+            com.biliwind.blog.model.Comment comment = com.biliwind.blog.model.Comment.findById(commentId);
+            return comment != null && comment.deletedAt == null && comment.isReviewing;
+        });
     }
 
     private int getAuditRetryCount(Message<JsonObject> message, AiAuditTask task) {
@@ -384,8 +445,12 @@ public class AiTaskConsumer {
             @Override
             public void run() {
                 com.biliwind.blog.model.Comment comment = com.biliwind.blog.model.Comment.findById(commentId);
-                if (comment == null) {
-                    log.warn("{} 评论不存在，跳过，commentId={}", MQ_TAG, commentId);
+                if (comment == null || comment.deletedAt != null) {
+                    log.warn("{} 评论不存在或已删除，跳过，commentId={}", MQ_TAG, commentId);
+                    return;
+                }
+                if (!comment.isReviewing) {
+                    log.info("{} 评论审核已结束或被中断，跳过覆盖，commentId={}", MQ_TAG, commentId);
                     return;
                 }
 
