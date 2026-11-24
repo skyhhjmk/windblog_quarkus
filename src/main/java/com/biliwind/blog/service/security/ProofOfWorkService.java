@@ -302,6 +302,7 @@ public class ProofOfWorkService {
             case LOGIN -> count > 20 ? 6 : (count > 10 ? 4 : (count > 5 ? 2 : 0));
             case COMMENT -> count > 25 ? 6 : (count > 12 ? 4 : (count > 5 ? 2 : 0));
             case REACTION -> count > 80 ? 6 : (count > 40 ? 4 : (count > 20 ? 2 : 0));
+            case CHECK_IN -> count > 20 ? 6 : (count > 10 ? 4 : (count > 4 ? 2 : 0));
             case GENERAL -> count > 25 ? 6 : (count > 12 ? 4 : (count > 5 ? 2 : 0));
         };
     }
@@ -312,6 +313,7 @@ public class ProofOfWorkService {
             case LOGIN -> count > 25 ? 4 : (count > 10 ? 2 : 0);
             case COMMENT -> count > 20 ? 4 : (count > 8 ? 2 : 0);
             case REACTION -> count > 80 ? 4 : (count > 40 ? 2 : 0);
+            case CHECK_IN -> count > 20 ? 4 : (count > 8 ? 2 : 0);
             case GENERAL -> count > 20 ? 4 : (count > 8 ? 2 : 0);
         };
     }
@@ -322,6 +324,7 @@ public class ProofOfWorkService {
             case LOGIN -> count > 16 ? 4 : (count > 8 ? 2 : 0);
             case COMMENT -> count > 12 ? 4 : (count > 6 ? 2 : 0);
             case REACTION -> count > 60 ? 4 : (count > 30 ? 2 : 0);
+            case CHECK_IN -> count > 10 ? 4 : (count > 5 ? 2 : 0);
             case GENERAL -> count > 15 ? 4 : (count > 7 ? 2 : 0);
         };
     }
@@ -662,14 +665,27 @@ public class ProofOfWorkService {
         return new RawString(buildSubmitButtonHtml(id, label, cssClass, seerayGoal, extraAttrs));
     }
 
+    /**
+     * Generates a Qute-ready visual PoW action button ({@code type="button"}) for non-form actions such as check-in.
+     */
+    @TemplateExtension(namespace = "pow")
+    public static RawString actionButton(String id, String label, String cssClass) {
+        return new RawString(buildButtonHtml("button", id, label, cssClass, null, null));
+    }
+
     public static String buildSubmitButtonHtml(String id, String label, String cssClass, String seerayGoal, String extraAttrs) {
+        return buildButtonHtml("submit", id, label, cssClass, seerayGoal, extraAttrs);
+    }
+
+    public static String buildButtonHtml(String buttonType, String id, String label, String cssClass, String seerayGoal, String extraAttrs) {
+        String safeType = hasText(buttonType) ? escapeHtml(buttonType.trim()) : "submit";
         String safeLabel = escapeHtml(hasText(label) ? label : "提交");
         String combinedClass = hasText(cssClass)
                 ? "pow-submit-btn " + cssClass.trim()
                 : "pow-submit-btn";
 
         StringBuilder html = new StringBuilder(256);
-        html.append("<button type=\"submit\"");
+        html.append("<button type=\"").append(safeType).append("\"");
         if (hasText(id)) {
             html.append(" id=\"").append(escapeHtml(id.trim())).append("\"");
         }
@@ -736,6 +752,7 @@ public class ProofOfWorkService {
         LOGIN("login", 14, Duration.ofMinutes(15)),
         COMMENT("comment", 16, Duration.ofMinutes(10)),
         REACTION("reaction", 12, Duration.ofMinutes(5)),
+        CHECK_IN("check_in", 16, Duration.ofMinutes(15)),
         GENERAL("general", 16, Duration.ofMinutes(10));
 
         private final String scope;

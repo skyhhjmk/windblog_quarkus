@@ -6,7 +6,13 @@ import com.biliwind.blog.model.UserWallet;
 import com.biliwind.blog.model.WalletTransaction;
 import com.biliwind.blog.service.CheckInService;
 import com.biliwind.blog.service.WalletService;
+import com.biliwind.blog.service.security.ClientIpResolver;
+import com.biliwind.blog.service.security.ProofOfWorkService;
+import com.biliwind.blog.service.security.ProofOfWorkService.PowScene;
+import com.biliwind.blog.service.security.SecurityRateLimitService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.runtime.annotations.RegisterForReflection;
+import io.vertx.ext.web.RoutingContext;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
@@ -16,6 +22,7 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +46,18 @@ public class UserWalletApiController {
 
     @Inject
     com.biliwind.blog.common.security.UserTokenVerifier tokenVerifier;
+
+    @Inject
+    ProofOfWorkService proofOfWorkService;
+
+    @Inject
+    SecurityRateLimitService securityRateLimitService;
+
+    @Inject
+    ClientIpResolver clientIpResolver;
+
+    @Inject
+    RoutingContext routingContext;
 
     /**
      * 获取钱包基本信息与今日签到状态
@@ -70,15 +89,52 @@ public class UserWalletApiController {
     }
 
     /**
+     * 获取每日签到工作量证明挑战
+     */
+    @GET
+    @Path("/check-in/challenge")
+    @Operation(summary = "获取每日签到 PoW 挑战")
+    public Response checkInChallenge(@Context HttpHeaders headers) {
+        Long userId = resolveUserId(headers);
+        if (userId == null) {
+            return unauthorized();
+        }
+
+        String clientIp = clientIpResolver.resolve(routingContext).clientIp();
+        if (!securityRateLimitService.tryAcquire("wallet-checkin-pow-challenge:" + clientIp, 30, Duration.ofMinutes(1))) {
+            return Response.status(Response.Status.TOO_MANY_REQUESTS)
+                    .header("Retry-After", 60)
+                    .entity(Map.of("success", false, "message", "安全校验请求过于频繁，请稍后重试"))
+                    .build();
+        }
+
+        ProofOfWorkService.Challenge challenge = proofOfWorkService.issueForRequest(PowScene.CHECK_IN, routingContext);
+        return Response.ok(Map.of("success", true, "data", challenge))
+                .header("Cache-Control", "no-store")
+                .build();
+    }
+
+    /**
      * 每日签到
      */
     @POST
     @Path("/check-in")
     @Operation(summary = "每日签到")
-    public Response checkIn(@Context HttpHeaders headers) {
+    public Response checkIn(@Context HttpHeaders headers, CheckInRequest request) {
         Long userId = resolveUserId(headers);
         if (userId == null) {
             return unauthorized();
+        }
+
+        try {
+            String challengeId = request == null ? null : request.challengeId();
+            String powNonce = request == null ? null : request.powNonce();
+            proofOfWorkService.verifyForRequest(challengeId, powNonce, PowScene.CHECK_IN, routingContext);
+        } catch (BadRequestException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("success", false,
+                            "message", SensitiveMessageSanitizer.sanitize(e.getMessage())))
+                    .build();
         }
 
         try {
@@ -100,6 +156,10 @@ public class UserWalletApiController {
                     .entity(Map.of("success", false, "message", "系统繁忙，请稍后重试"))
                     .build();
         }
+    }
+
+    @RegisterForReflection
+    public record CheckInRequest(String challengeId, String powNonce) {
     }
 
     /**

@@ -135,6 +135,34 @@ class ProofOfWorkServiceTest {
         assertTrue(html.contains("disabled>"));
     }
 
+    @Test
+    void shouldIssueAndVerifyCheckInScopedChallenge() {
+        ProofOfWorkService service = createService();
+        Challenge challenge = service.issue(PowScene.CHECK_IN, 12);
+        assertTrue(challenge.id().startsWith("v2.check_in."));
+
+        String proof = solve(challenge.id(), challenge.difficulty());
+        assertDoesNotThrow(() -> service.verify(challenge.id(), proof, PowScene.CHECK_IN));
+        assertThrows(BadRequestException.class,
+                () -> service.verify(challenge.id(), proof, PowScene.LOGIN));
+    }
+
+    @Test
+    void actionButtonTemplateUsesButtonTypeAndVisualMarkup() {
+        String html = ProofOfWorkService.actionButton(
+                "checkInBtn",
+                "✦ 立即签到",
+                "rounded-lg"
+        ).getValue();
+
+        assertTrue(html.startsWith("<button type=\"button\""));
+        assertTrue(html.contains("id=\"checkInBtn\""));
+        assertTrue(html.contains("class=\"pow-submit-btn rounded-lg\""));
+        assertTrue(html.contains("data-pow-visual-button=\"true\""));
+        assertTrue(html.contains("<span class=\"btn-text\">✦ 立即签到</span>"));
+        assertTrue(html.contains("disabled>"));
+    }
+
     private static ProofOfWorkService createService() {
         ProofOfWorkService service = new ProofOfWorkService();
         setField(service, "powSecret", Optional.of(SECRET));

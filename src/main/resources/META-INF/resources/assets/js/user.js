@@ -1230,42 +1230,98 @@
         var showHistoryBtn = document.getElementById('showHistoryBtn');
         var historyModal = document.getElementById('historyModal');
 
-        if (checkInBtn) {
+        if (checkInBtn && checkInBtn.dataset.bound !== 'true') {
+            checkInBtn.dataset.bound = 'true';
+            var checkInStatusEl = document.getElementById('checkInPowStatus');
+            var checkInPowManager = (window.WindBlogPow && typeof window.WindBlogPow.createChallengeManager === 'function')
+                ? window.WindBlogPow.createChallengeManager({
+                    challengeUrl: '/api/user/wallet/check-in/challenge',
+                    button: checkInBtn,
+                    onStatus: function (state) {
+                        if (!checkInStatusEl) return;
+                        if (state === 'preparing') {
+                            checkInStatusEl.textContent = window.wbT
+                                ? window.wbT('js.pow_preparing', '正在准备安全校验...')
+                                : '正在准备安全校验...';
+                        } else if (state === 'ready') {
+                            checkInStatusEl.textContent = window.wbT
+                                ? window.wbT('js.pow_ready', '安全校验已就绪')
+                                : '安全校验已就绪';
+                        } else if (state === 'error') {
+                            checkInStatusEl.textContent = window.wbT
+                                ? window.wbT('js.pow_failed', '安全校验准备失败，点击按钮重试')
+                                : '安全校验准备失败，点击按钮重试';
+                        }
+                    }
+                })
+                : null;
+
+            if (checkInPowManager) {
+                checkInPowManager.ensure().catch(function () {});
+            }
+
             checkInBtn.onclick = async function () {
                 if (checkInBtn.disabled) return;
-                checkInBtn.disabled = true;
-                var originalHtml = checkInBtn.innerHTML;
-                checkInBtn.innerHTML = '<span class="spinner mr-2"></span>签到中...';
+                if (checkInPowManager) {
+                    var ctrl = checkInPowManager.getButtonController();
+                    if (ctrl && ctrl.getState() === 'error') {
+                        return;
+                    }
+                }
+
+                window.setLoading(checkInBtn, true, {text: '签到中...'});
+                var checkedIn = false;
 
                 try {
+                    var payload = {};
+                    if (checkInPowManager) {
+                        var proof = await checkInPowManager.acquire();
+                        payload.challengeId = proof.challengeId;
+                        payload.powNonce = proof.powNonce;
+                    }
+
                     var response = await fetch('/api/user/wallet/check-in', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'X-XSRF-TOKEN': window.getCsrfToken()
-                        }
+                        },
+                        body: JSON.stringify(payload)
                     });
                     var result = await response.json();
 
-                    if (result.success) {
+                    if (response.ok && result.success) {
+                        checkedIn = true;
+                        if (checkInPowManager) {
+                            var btnCtrl = checkInPowManager.getButtonController();
+                            if (btnCtrl) btnCtrl.destroy();
+                        }
                         window.showToast('签到成功！获得积分奖励', 'success');
                         var balanceEl = document.getElementById('userPointsBalance');
                         if (balanceEl && result.newBalance !== undefined) {
                             balanceEl.textContent = result.newBalance;
                         }
+                        delete checkInBtn.dataset.powVisualButton;
+                        delete checkInBtn.dataset.powState;
+                        checkInBtn.className = 'inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-gray-500/30 bg-gray-500/20 px-5 py-2.5 text-sm text-gray-500';
+                        checkInBtn.innerHTML = '✓ 今日已签到';
                         checkInBtn.disabled = true;
-                        checkInBtn.className = "px-8 py-3 bg-gray-500/20 text-gray-500 border border-gray-500/30 rounded cursor-not-allowed flex items-center gap-2";
-                        checkInBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>今日已签到';
                     } else {
                         window.showToast(result.message || '签到失败', 'error', 8000,
                             result.errorCode || 'WB-UI-USER-CHECKIN-001');
-                        checkInBtn.disabled = false;
-                        checkInBtn.innerHTML = originalHtml;
                     }
                 } catch (e) {
-                    window.showToast('签到请求失败，网络连接异常', 'error', 8000, 'WB-UI-USER-CHECKIN-002');
-                    checkInBtn.disabled = false;
-                    checkInBtn.innerHTML = originalHtml;
+                    var message = (e && e.message && e.message !== 'Failed to fetch')
+                        ? e.message
+                        : '签到请求失败，网络连接异常';
+                    window.showToast(message, 'error', 8000, 'WB-UI-USER-CHECKIN-002');
+                } finally {
+                    if (!checkedIn) {
+                        window.setLoading(checkInBtn, false);
+                        if (checkInPowManager) {
+                            checkInPowManager.refresh().catch(function () {});
+                        }
+                    }
                 }
             };
         }
