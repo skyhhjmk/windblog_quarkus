@@ -591,20 +591,46 @@
         '#pjax-content-root #toolsIndexGrid [data-tool-card="true"]'
     ].join(', ');
 
-    function collectArticleBodyBlocks(root) {
+    function isHighTierForSwarm() {
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            return false;
+        }
+        const currentTier = getCurrentTier();
+        if (currentTier === 'high') return true;
+        if (window.WindBlogPerf && typeof window.WindBlogPerf.getTargetTier === 'function') {
+            return window.WindBlogPerf.getTargetTier() === 'high';
+        }
+        return false;
+    }
+
+    function revealPreblockedItems() {
+        document.documentElement.classList.remove('wb-swarm-preblock');
+        const scope = document.getElementById('pjax-content-root') || document;
+        if (scope && typeof scope.querySelectorAll === 'function') {
+            scope.querySelectorAll('.wb-swarm-item-pending, .wb-swarm-block-pending').forEach((el) => {
+                el.classList.remove('wb-swarm-item-pending', 'wb-swarm-block-pending');
+            });
+        }
+    }
+
+    function collectArticleBodyBlocks(root, options) {
         const scope = root || document.getElementById('pjax-content-root') || document;
         if (!scope || typeof scope.querySelector !== 'function') return [];
         const bodyRoot = scope.querySelector('#post-body-content, #vditor-preview');
         if (!bodyRoot) return [];
 
+        const includeZeroRect = Boolean(options && options.includeZeroRect);
         const rawChildren = Array.from(bodyRoot.children || []);
         const blocks = [];
         for (let i = 0; i < rawChildren.length; i++) {
             const el = rawChildren[i];
             if (!el || el.hidden || el.classList.contains('hidden')) continue;
             if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'TEMPLATE') continue;
-            const r = el.getBoundingClientRect();
-            if (r.width <= 0 && r.height <= 0) continue;
+            el.dataset.wbBlockKey = 'blk:' + i + ':' + el.tagName.toLowerCase();
+            if (!includeZeroRect) {
+                const r = el.getBoundingClientRect();
+                if (r.width <= 0 && r.height <= 0) continue;
+            }
             blocks.push(el);
         }
         return blocks;
@@ -862,10 +888,19 @@
 
     function startSwarmRebuildForPage(options) {
         const forceDebug = Boolean(options && options.debugForce);
-        if (isBfCacheRestore && !forceDebug) return;
-        const tier = getCurrentTier();
-        if (tier !== 'high' && !forceDebug) return;
-        if (!forceDebug && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const isPjax = Boolean(options && options.isPjax);
+        if (isBfCacheRestore && !forceDebug && !isPjax) {
+            revealPreblockedItems();
+            return;
+        }
+        if (!forceDebug && !isHighTierForSwarm()) {
+            revealPreblockedItems();
+            return;
+        }
+        if (!forceDebug && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            revealPreblockedItems();
+            return;
+        }
 
         if (activeSwarmSession) {
             activeSwarmSession.abortImmediately();
@@ -876,7 +911,7 @@
         const isArticlePage = articleBlocks.length > 0;
         const items = isArticlePage ? articleBlocks : collectListItems();
         if (items.length === 0) {
-            document.documentElement.classList.remove('wb-swarm-preblock');
+            revealPreblockedItems();
             return;
         }
 
@@ -909,14 +944,16 @@
         const stageHInit = window.innerHeight || 800;
         const cardJobs = items.map((cardEl, idx) => {
             if (isArticlePage) {
-                const blockKey = 'blk:' + idx + ':' + cardEl.tagName.toLowerCase();
+                const blockKey = cardEl.dataset.wbBlockKey || ('blk:' + idx + ':' + cardEl.tagName.toLowerCase());
                 const rect = cardEl.getBoundingClientRect();
                 const isInViewport = rect.height > 0 && rect.bottom > -20 && rect.top < stageHInit + 20;
                 const alreadyCompleted = Boolean(cachedPage.completed && cachedPage.completed[blockKey]);
                 const typable = !alreadyCompleted && isPlainTypableParagraph(cardEl);
                 const blockTyping = typable ? prepareZeroClsTypingTarget(cardEl) : null;
 
-                if (!alreadyCompleted) {
+                if (alreadyCompleted) {
+                    cardEl.classList.remove('wb-swarm-block-pending');
+                } else {
                     cardEl.classList.add('wb-swarm-block-pending');
                 }
                 cardEl.dataset.wbSwarmIndex = String(idx);
@@ -974,8 +1011,16 @@
                 return r.width > 0 && r.height > 0;
             });
 
-            // Inherit cached progress when returning via FLIP / PJAX
-            const alreadyCompleted = Boolean(cachedPage.completed && cachedPage.completed[cardKey]);
+            // Inherit cached progress when returning via FLIP / PJAX, and never hijack
+            // a card that FLIP is actively morphing into.
+            const isFlipTargetCard = cardEl.classList.contains('pjax-article-transition-target-card');
+            const alreadyCompleted = isFlipTargetCard || Boolean(cachedPage.completed && cachedPage.completed[cardKey]);
+            if (isFlipTargetCard) {
+                cardEl.classList.remove('wb-swarm-item-pending', 'wb-swarm-item-building');
+                cachedPage.completed[cardKey] = true;
+                delete cachedPage.partial[cardKey];
+                persistPageProgress(pageKey, cachedPage);
+            }
             const savedPartial = (!alreadyCompleted && cachedPage.partial && cachedPage.partial[cardKey])
                 ? cachedPage.partial[cardKey]
                 : null;
@@ -997,7 +1042,9 @@
             let titleTyping = null;
             let summaryTyping = null;
 
-            if (!alreadyCompleted) {
+            if (alreadyCompleted) {
+                cardEl.classList.remove('wb-swarm-item-pending');
+            } else {
                 if (rect.height > 0) {
                     cardEl.style.minHeight = rect.height.toFixed(1) + 'px';
                 }
@@ -1008,6 +1055,7 @@
                     summaryTyping = prepareZeroClsTypingTarget(summaryTextEl);
                 }
                 if (builtParts.frameBuilt) {
+                    cardEl.classList.remove('wb-swarm-item-pending');
                     cardEl.classList.add('wb-swarm-item-building');
                     if (builtParts.hasMeta) cardEl.classList.add('wb-has-meta');
                     if (builtParts.hasCover) cardEl.classList.add('wb-has-cover');
@@ -1397,9 +1445,11 @@
 
         let detached = false;
         let scrollObserver = null;
+        let resizeObserver = null;
 
         function wakeUpSwarmForNewTasks(anchorRect) {
             if (detached) return;
+            if (!taskQueue.some((t) => t.status === 'queued')) return;
             const now = simNow;
             // Respawn hidden agents cleanly near the newly scrolled-in card;
             // if agents were mid-scatter (startled / approach-gap / gap-sprint), smoothly pivot
@@ -1504,12 +1554,36 @@
                 if (addedAny) {
                     wakeUpSwarmForNewTasks(firstRect);
                 }
-            }, { threshold: 0.04, rootMargin: '24px 0px' });
+            }, { threshold: 0, rootMargin: '40px 0px' });
 
             cardJobs.forEach((job) => {
                 if (!job.tasksEnqueued && job.state !== 'completed') {
                     scrollObserver.observe(job.cardEl);
                 }
+            });
+        }
+
+        if (typeof ResizeObserver === 'function') {
+            const contentRoot = document.getElementById('pjax-content-root');
+            if (contentRoot) {
+                resizeObserver = new ResizeObserver(() => {
+                    onWindowScrollCheck();
+                });
+                resizeObserver.observe(contentRoot);
+            }
+        }
+
+        // Fallback viewport settle checks in case scroll/Tailwind/image layout finishes after first frame
+        if (hasUnbuiltOffscreen) {
+            [80, 220, 480, 900].forEach((delayMs) => {
+                const timerId = window.setTimeout(() => {
+                    if (detached) return;
+                    checkAndEnqueueVisibleOffscreenCards();
+                    if (!cardJobs.some((j) => !j.tasksEnqueued && j.state !== 'completed' && j.state !== 'frozen')) {
+                        clearSettleTimers();
+                    }
+                }, delayMs);
+                settleTimers.push(timerId);
             });
         }
 
@@ -1522,17 +1596,6 @@
         } else {
             phase = 'idle-waiting';
             if (stageCanvas) stageCanvas.style.display = 'none';
-            // Fallback viewport settle checks in case scroll/layout finishes after first frame
-            [60, 180, 380, 680].forEach((delayMs) => {
-                const timerId = window.setTimeout(() => {
-                    if (detached || phase !== 'idle-waiting') return;
-                    checkAndEnqueueVisibleOffscreenCards();
-                    if (phase !== 'idle-waiting') {
-                        clearSettleTimers();
-                    }
-                }, delayMs);
-                settleTimers.push(timerId);
-            });
         }
 
         // Solidify a half-built card and create a visual clone to be dragged & thrown by the last leaving cursor
@@ -1681,10 +1744,30 @@
                     solidifyAndSpawnHalfBuiltProjectile(singleThrowTarget, lastCarrierAgent, mouseX, mouseY);
                 }
 
-                // Ensure clicked card is 100% restored for FLIP capture right before `click` fires
+                // Ensure clicked card is 100% restored & marked completed in cache for FLIP capture right before `click` fires
                 if (clickedJob && clickedJob.state !== 'completed') {
+                    clickedJob.state = 'pending';
+                    clickedJob.remainingTasks = 0;
+                    for (let i = 0; i < taskQueue.length; i++) {
+                        if (taskQueue[i].job === clickedJob) {
+                            taskQueue[i].status = 'done';
+                        }
+                    }
                     completeJobNormally(clickedJob);
                     saveJobProgressToCache(clickedJob);
+                }
+            }
+
+            // Re-queue any in-flight tasks belonging to non-frozen cards so if navigation does not occur,
+            // remaining cards can resume building instead of stalling permanently in 'active' status.
+            for (let i = 0; i < taskQueue.length; i++) {
+                const t = taskQueue[i];
+                if (t.status === 'active') {
+                    if (t.job && t.job.state === 'frozen') {
+                        t.status = 'done';
+                    } else {
+                        t.status = 'queued';
+                    }
                 }
             }
 
@@ -1710,6 +1793,7 @@
         // executes simultaneously alongside the startled scatter & half-built throw!
         function onDocumentPointerDown(e) {
             if (phase !== 'building') return;
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
             const target = e.target instanceof Element ? e.target : null;
             if (!target) return;
             const clickedCard = target.closest(LIST_ITEM_SELECTOR);
@@ -2243,13 +2327,23 @@
                 const activeProjectiles = stepProjectiles(dtFactor);
 
                 if (activeAgents === 0 && activeProjectiles === 0) {
-                    const moreOffscreen = !detached && cardJobs.some((j) => !j.tasksEnqueued && j.state !== 'completed');
-                    if (moreOffscreen) {
-                        // Sleep with 0 CPU until IntersectionObserver sees off-screen cards scroll into view
-                        phase = 'idle-waiting';
-                        rafId = 0;
-                        if (stageCanvas) stageCanvas.style.display = 'none';
-                        return;
+                    if (!detached) {
+                        checkAndEnqueueVisibleOffscreenCards();
+                        const hasQueuedTasks = taskQueue.some((t) => t.status === 'queued');
+                        if (hasQueuedTasks) {
+                            rafId = 0;
+                            wakeUpSwarmForNewTasks(null);
+                            return;
+                        }
+                        const moreOffscreen = cardJobs.some((j) => !j.tasksEnqueued && j.state !== 'completed' && j.state !== 'frozen');
+                        if (moreOffscreen) {
+                            // Sleep with 0 CPU until IntersectionObserver / ResizeObserver sees off-screen cards scroll into view
+                            phase = 'idle-waiting';
+                            rafId = 0;
+                            if (stageCanvas) stageCanvas.style.display = 'none';
+                            onWindowScrollCheck();
+                            return;
+                        }
                     }
                     phase = 'done';
                     cleanupSession();
@@ -2267,6 +2361,10 @@
             if (scrollObserver) {
                 scrollObserver.disconnect();
                 scrollObserver = null;
+            }
+            if (resizeObserver) {
+                resizeObserver.disconnect();
+                resizeObserver = null;
             }
             window.removeEventListener('scroll', onWindowScrollCheck);
             window.removeEventListener('scrollend', onWindowScrollCheck);
@@ -2329,6 +2427,14 @@
     // =========================================================================
     // 5. Lifecycle Integration (Initial Load, Progressive Upgrade, PJAX, BFCache)
     // =========================================================================
+    let initialRevealTimer = 0;
+    function cancelInitialRevealTimer() {
+        if (initialRevealTimer) {
+            window.clearTimeout(initialRevealTimer);
+            initialRevealTimer = 0;
+        }
+    }
+
     function initInitialOverlayAndScheduleDismiss() {
         if (isBfCacheRestore) {
             dismissInlineOverlay(true);
@@ -2344,9 +2450,12 @@
             }
             const tier = getCurrentTier();
             const holdMs = tier === 'high' ? 520 : (tier === 'medium' ? 420 : (tier === 'low' ? 240 : 0));
-            window.setTimeout(() => {
+            const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            cancelInitialRevealTimer();
+            initialRevealTimer = window.setTimeout(() => {
+                initialRevealTimer = 0;
                 const finalTier = getCurrentTier();
-                const effectiveHigh = finalTier === 'high' || window.__wbInitialTargetTier === 'high';
+                const effectiveHigh = !reducedMotion && (isHighTierForSwarm() || window.__wbInitialTargetTier === 'high');
                 // If high tier, block list items & start Swarm Rebuild right as the overlay dismisses
                 if (effectiveHigh && !isBfCacheRestore) {
                     if (finalTier !== 'high') {
@@ -2354,7 +2463,7 @@
                     }
                     startSwarmRebuildForPage({ fromOverlay: true });
                 } else {
-                    document.documentElement.classList.remove('wb-swarm-preblock');
+                    revealPreblockedItems();
                 }
                 dismissInlineOverlay(finalTier === 'minimal');
             }, holdMs);
@@ -2390,10 +2499,10 @@
     function preblockUncachedItemsSynchronously() {
         const pageKey = getPageCacheKey();
         const cachedPage = readPageProgress(pageKey);
-        const articleBlocks = collectArticleBodyBlocks();
+        const articleBlocks = collectArticleBodyBlocks(null, { includeZeroRect: true });
         if (articleBlocks.length > 0) {
             articleBlocks.forEach((el, idx) => {
-                const blockKey = 'blk:' + idx + ':' + el.tagName.toLowerCase();
+                const blockKey = el.dataset.wbBlockKey || ('blk:' + idx + ':' + el.tagName.toLowerCase());
                 if (!(cachedPage.completed && cachedPage.completed[blockKey])) {
                     el.classList.add('wb-swarm-block-pending');
                 }
@@ -2414,7 +2523,77 @@
     }
 
     // Register with PJAX Lifecycle so navigating to any list/article page runs Swarm Rebuild
-    let pjaxStartRafId = 0;
+    let cancelPendingPjaxStart = null;
+    function clearPendingPjaxStart() {
+        if (cancelPendingPjaxStart) {
+            cancelPendingPjaxStart();
+            cancelPendingPjaxStart = null;
+        }
+    }
+
+    function scheduleAfterLayoutSettle(fn, maxWaitMs) {
+        const deadline = performance.now() + (maxWaitMs || 140);
+        let rafId = 0;
+        let timerId = 0;
+        let cancelled = false;
+        let lastSig = '';
+        let stableCount = 0;
+
+        const getLayoutSig = () => {
+            const items = collectListItems().slice(0, 3);
+            const blocks = items.length === 0 ? collectArticleBodyBlocks().slice(0, 3) : [];
+            const targets = items.length > 0 ? items : blocks;
+            if (targets.length === 0) return null;
+            const sy = Math.round(window.scrollY || window.pageYOffset || 0);
+            const parts = [String(sy)];
+            let allNonZero = true;
+            for (let i = 0; i < targets.length; i++) {
+                const r = targets[i].getBoundingClientRect();
+                if (r.height <= 0) allNonZero = false;
+                parts.push(r.top.toFixed(1) + ':' + r.height.toFixed(1));
+            }
+            return { sig: parts.join('|'), allNonZero };
+        };
+
+        const finish = () => {
+            if (cancelled) return;
+            cancelled = true;
+            if (rafId) window.cancelAnimationFrame(rafId);
+            if (timerId) window.clearTimeout(timerId);
+            cancelPendingPjaxStart = null;
+            fn();
+        };
+
+        const step = () => {
+            if (cancelled) return;
+            const info = getLayoutSig();
+            if (!info || performance.now() >= deadline) {
+                finish();
+                return;
+            }
+            if (info.allNonZero && info.sig === lastSig) {
+                stableCount++;
+                if (stableCount >= 1) {
+                    finish();
+                    return;
+                }
+            } else {
+                lastSig = info.sig;
+                stableCount = 0;
+            }
+            rafId = window.requestAnimationFrame(step);
+        };
+
+        rafId = window.requestAnimationFrame(step);
+        timerId = window.setTimeout(finish, (maxWaitMs || 140) + 40);
+
+        return () => {
+            cancelled = true;
+            if (rafId) window.cancelAnimationFrame(rafId);
+            if (timerId) window.clearTimeout(timerId);
+        };
+    }
+
     function registerWithPjaxLifecycle() {
         if (!window.WindBlogLifecycle || typeof window.WindBlogLifecycle.register !== 'function') {
             return false;
@@ -2423,10 +2602,8 @@
             persistent: true,
             mount() {},
             unmount() {
-                if (pjaxStartRafId) {
-                    window.cancelAnimationFrame(pjaxStartRafId);
-                    pjaxStartRafId = 0;
-                }
+                cancelInitialRevealTimer();
+                clearPendingPjaxStart();
                 if (activeSwarmSession) {
                     if (typeof activeSwarmSession.isScattering === 'function' && activeSwarmSession.isScattering()) {
                         // Let the startled cursors + 1 thrown half-built card finish animating
@@ -2440,18 +2617,65 @@
             },
             onPage(context) {
                 if (!context || context.initial) return;
-                if (isBfCacheRestore) return;
-                if (getCurrentTier() === 'high') {
-                    // Synchronously pre-block uncached items before first paint (zero flash!)
-                    preblockUncachedItemsSynchronously();
-                    if (pjaxStartRafId) {
-                        window.cancelAnimationFrame(pjaxStartRafId);
-                    }
-                    // Wait 1 frame so rapid PJAX enter/back navigation settles scroll & Tailwind layout first
-                    pjaxStartRafId = window.requestAnimationFrame(() => {
-                        pjaxStartRafId = 0;
-                        startSwarmRebuildForPage({ fromOverlay: false });
-                    });
+                clearPendingPjaxStart();
+                cancelInitialRevealTimer();
+                if (!overlayDismissed) {
+                    dismissInlineOverlay(true);
+                }
+                // Live PJAX navigation must never remain blocked by an earlier BFCache restore
+                isBfCacheRestore = false;
+                window.__wbBfCachePersisted = false;
+
+                if (!isHighTierForSwarm()) {
+                    revealPreblockedItems();
+                    return;
+                }
+
+                // Synchronously pre-block uncached items before first paint (zero flash!)
+                preblockUncachedItemsSynchronously();
+
+                const pjaxContainer = document.getElementById('pjax-container');
+                const isFlipSettling = Boolean(
+                    pjaxContainer &&
+                    pjaxContainer.dataset &&
+                    pjaxContainer.dataset.pjaxFlipSettling === 'true'
+                );
+
+                if (isFlipSettling) {
+                    let done = false;
+                    let timeoutId = 0;
+                    let rafAfterSettle = 0;
+                    const cleanup = () => {
+                        done = true;
+                        window.removeEventListener('windblog:pjax-transition-settled', onSettled);
+                        if (timeoutId) window.clearTimeout(timeoutId);
+                        if (rafAfterSettle) window.cancelAnimationFrame(rafAfterSettle);
+                    };
+                    const startAfterSettle = () => {
+                        if (done) return;
+                        cleanup();
+                        rafAfterSettle = window.requestAnimationFrame(() => {
+                            rafAfterSettle = 0;
+                            cancelPendingPjaxStart = null;
+                            startSwarmRebuildForPage({ fromOverlay: false, isPjax: true });
+                        });
+                        cancelPendingPjaxStart = () => {
+                            if (rafAfterSettle) {
+                                window.cancelAnimationFrame(rafAfterSettle);
+                                rafAfterSettle = 0;
+                            }
+                        };
+                    };
+                    const onSettled = () => {
+                        startAfterSettle();
+                    };
+                    window.addEventListener('windblog:pjax-transition-settled', onSettled, { once: true });
+                    timeoutId = window.setTimeout(startAfterSettle, 260);
+                    cancelPendingPjaxStart = cleanup;
+                } else {
+                    cancelPendingPjaxStart = scheduleAfterLayoutSettle(() => {
+                        startSwarmRebuildForPage({ fromOverlay: false, isPjax: true });
+                    }, 140);
                 }
             }
         });

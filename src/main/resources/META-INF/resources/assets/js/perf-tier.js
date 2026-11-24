@@ -123,6 +123,9 @@
             return 'low';
         }
         const isStrongHardware = hw.cores !== null && hw.cores >= 8 && (hw.memoryGB === null || hw.memoryGB >= 8);
+        const idleMs = (bench && typeof bench.idleRafAvgMs === 'number' && bench.idleRafAvgMs > 0)
+            ? bench.idleRafAvgMs
+            : 16.67;
         if (
             bench.jsCpuMs > 85 ||
             (!isStrongHardware && (bench.compositeAnim.jankFrames >= 7 || bench.compositeAnim.p95Ms > 55))
@@ -137,14 +140,22 @@
         }
         const coresOk = hw.cores === null ? bench.jsCpuMs <= 18 : hw.cores >= 6;
         const memOk = hw.memoryGB === null || hw.memoryGB >= 8;
-        if (
-            coresOk &&
-            memOk &&
-            bench.jsCpuMs <= 24 &&
-            bench.compositeAnim.jankFrames <= 2 &&
-            bench.compositeAnim.p95Ms <= 26
-        ) {
-            return 'high';
+        if (coresOk && memOk) {
+            if (isStrongHardware) {
+                if (
+                    bench.jsCpuMs <= 40 &&
+                    bench.compositeAnim.jankFrames < 4 &&
+                    bench.compositeAnim.p95Ms <= Math.max(38, idleMs * 2.4)
+                ) {
+                    return 'high';
+                }
+            } else if (
+                bench.jsCpuMs <= 28 &&
+                bench.compositeAnim.jankFrames <= 3 &&
+                bench.compositeAnim.p95Ms <= Math.max(28, idleMs * 1.9)
+            ) {
+                return 'high';
+            }
         }
         return 'medium';
     }
@@ -170,6 +181,10 @@
     }
 
     async function runMicroBenchmark() {
+        const startHref = window.location.href;
+        const isInterrupted = () => document.hidden || isPageAnimationBusy() || window.location.href !== startHref;
+        if (isInterrupted()) return null;
+
         const t0 = performance.now();
         let acc = 0;
         for (let i = 1; i <= 150000; i++) {
@@ -179,6 +194,7 @@
         if (acc === Number.NEGATIVE_INFINITY) return null;
 
         const idleDeltas = await measureRaf(10);
+        if (isInterrupted()) return null;
         const avgIdle = idleDeltas.reduce((s, v) => s + v, 0) / Math.max(1, idleDeltas.length);
 
         const host = document.createElement('div');
@@ -205,12 +221,16 @@
                     items[i].style.transform = `translate3d(0, ${y}px, 0) scaleX(${s})`;
                 }
             });
+            if (isInterrupted()) return null;
             const sortedAnim = [...animDeltas].sort((a, b) => a - b);
             const avgAnim = animDeltas.reduce((s, v) => s + v, 0) / Math.max(1, animDeltas.length);
             const jankFrames = animDeltas.filter((d) => d > avgIdle * 1.5 + 4).length;
+            const p95Idx = sortedAnim.length >= 10
+                ? sortedAnim.length - 2
+                : Math.floor(sortedAnim.length * 0.95);
             compositeAnim = {
                 avgMs: Number(avgAnim.toFixed(2)),
-                p95Ms: Number(sortedAnim[Math.floor(sortedAnim.length * 0.95)].toFixed(2)),
+                p95Ms: Number(sortedAnim[Math.max(0, Math.min(sortedAnim.length - 1, p95Idx))].toFixed(2)),
                 jankFrames
             };
         } finally {
@@ -225,6 +245,7 @@
     }
 
     let currentReport = null;
+    let pendingTargetTier = null;
 
     let progressiveUpgradeTimers = [];
 
@@ -239,6 +260,9 @@
         const prevTier = htmlEl.dataset.perfTier || null;
         htmlEl.dataset.perfTier = tier;
         htmlEl.dataset.deviceClass = isMobileDevice() ? 'mobile' : 'desktop';
+        if (source !== 'progressive-step') {
+            pendingTargetTier = tier;
+        }
         currentReport = {
             tier,
             source,
@@ -257,6 +281,7 @@
     // so the inline loader and UI transition progressively without skipping visual stages.
     function applyTier(targetTier, source, bench) {
         clearProgressiveTimers();
+        pendingTargetTier = targetTier;
         const htmlEl = document.documentElement;
         const currentTier = htmlEl.dataset.perfTier || 'minimal';
         const currentRank = typeof TIER_RANK[currentTier] === 'number' ? TIER_RANK[currentTier] : 0;
@@ -294,9 +319,11 @@
     }
 
     let benchScheduleTimer = 0;
+    let recoveryTimer = 0;
 
     function init() {
         window.clearTimeout(benchScheduleTimer);
+        window.clearTimeout(recoveryTimer);
         const override = readOverride();
         if (override) {
             applyTier(override, 'override', null);
@@ -336,11 +363,30 @@
                 return;
             }
             runMicroBenchmark().then((bench) => {
-                if (!bench || readOverride()) return;
+                if (readOverride()) return;
+                if (!bench) {
+                    if (waitRetries < 12) {
+                        waitRetries++;
+                        benchScheduleTimer = window.setTimeout(scheduleBench, 900);
+                    }
+                    return;
+                }
                 const freshHw = getHardwareSnapshot();
                 const finalTier = classifyWithBench(freshHw, bench);
                 applyTier(finalTier, 'benchmark', bench);
                 writeSessionCache(currentReport);
+                const staticAfter = classifyStatic(freshHw);
+                if (
+                    !freshHw.reducedMotion &&
+                    !freshHw.saveData &&
+                    !freshHw.gpu.isSoftware &&
+                    (TIER_RANK[finalTier] || 0) < (TIER_RANK[staticAfter] || 0)
+                ) {
+                    window.clearTimeout(recoveryTimer);
+                    recoveryTimer = window.setTimeout(() => {
+                        if (!readOverride()) init();
+                    }, DOWNGRADE_CACHE_TTL_MS + 1000);
+                }
             }).catch(() => {});
         };
 
@@ -382,6 +428,9 @@
         getTier() {
             return document.documentElement.dataset.perfTier || (currentReport ? currentReport.tier : 'minimal');
         },
+        getTargetTier() {
+            return pendingTargetTier || this.getTier();
+        },
         getTierRank(tier) {
             const t = tier || this.getTier();
             return typeof TIER_RANK[t] === 'number' ? TIER_RANK[t] : 0;
@@ -413,6 +462,7 @@
         },
         setTierOverride(tier) {
             try {
+                window.clearTimeout(recoveryTimer);
                 if (tier && VALID_TIERS.has(tier)) {
                     localStorage.setItem(OVERRIDE_KEY, tier);
                     applyTier(tier, 'override', currentReport ? currentReport.bench : null);

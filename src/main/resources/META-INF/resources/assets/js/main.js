@@ -489,11 +489,30 @@
             // An explicit instant behavior cancels any pending smooth scroll before
             // the target title is measured for the shared-element transition.
             const scrollPosition = normalizeScrollPosition(position);
-            window.scrollTo({
-                left: scrollPosition.left,
-                top: scrollPosition.top,
-                behavior: 'instant'
-            });
+            const rootStyle = document.documentElement ? document.documentElement.style : null;
+            const bodyStyle = document.body ? document.body.style : null;
+            const prevRootBehavior = rootStyle ? rootStyle.scrollBehavior : '';
+            const prevBodyBehavior = bodyStyle ? bodyStyle.scrollBehavior : '';
+            if (rootStyle) rootStyle.scrollBehavior = 'auto';
+            if (bodyStyle) bodyStyle.scrollBehavior = 'auto';
+            try {
+                window.scrollTo({
+                    left: scrollPosition.left,
+                    top: scrollPosition.top,
+                    behavior: 'instant'
+                });
+            } catch (_) {
+                window.scrollTo(scrollPosition.left, scrollPosition.top);
+            } finally {
+                if (rootStyle) {
+                    if (prevRootBehavior) rootStyle.scrollBehavior = prevRootBehavior;
+                    else rootStyle.removeProperty('scroll-behavior');
+                }
+                if (bodyStyle) {
+                    if (prevBodyBehavior) bodyStyle.scrollBehavior = prevBodyBehavior;
+                    else bodyStyle.removeProperty('scroll-behavior');
+                }
+            }
         }
 
         function scrollToTopInstantly() {
@@ -2000,6 +2019,9 @@
             activeTransitionItems = [];
             container.getAnimations?.().forEach(animation => animation.cancel());
             container.style.opacity = '';
+            if (container.dataset) {
+                delete container.dataset.pjaxFlipSettling;
+            }
             const requestController = new AbortController();
             activePjaxController = requestController;
             showProgress();
@@ -2073,6 +2095,16 @@
                 const isCurrentNavigation = function () {
                     return activePjaxController === requestController && !requestController.signal.aborted;
                 };
+                const clearFlipSettlingAndNotify = function () {
+                    if (container.dataset) {
+                        delete container.dataset.pjaxFlipSettling;
+                    }
+                    if (isCurrentNavigation() && typeof window.dispatchEvent === 'function') {
+                        window.dispatchEvent(new CustomEvent('windblog:pjax-transition-settled', {
+                            detail: { url: url }
+                        }));
+                    }
+                };
                 try {
                     if (hasArticleTransitionSourceOnCurrentPage) {
                         const preparedItems = prepareArticleTransitionTargets(transitionSlug, capturedItems);
@@ -2086,6 +2118,9 @@
                                 // parked clones and card backdrop until the synchronized
                                 // morph and fade-in start together.
                                 container.style.opacity = '0';
+                                if (container.dataset) {
+                                    container.dataset.pjaxFlipSettling = 'true';
+                                }
                             }
                             // Page-level init (ad slots, comments, ...) may insert
                             // content above the title. Complete it before pinning
@@ -2095,10 +2130,14 @@
                             if (reducedMotion) {
                                 container.style.opacity = '';
                                 cleanupArticleTransitionItems(preparedItems);
+                                clearFlipSettlingAndNotify();
                             } else {
                                 await settleArticleTransitionTargets(preparedItems, container);
                                 if (!isCurrentNavigation()) {
                                     container.style.opacity = '';
+                                    if (container.dataset) {
+                                        delete container.dataset.pjaxFlipSettling;
+                                    }
                                     cleanupArticleTransitionItems(preparedItems);
                                     return;
                                 }
@@ -2113,6 +2152,7 @@
                                     fill: 'forwards'
                                 }) : null;
                                 container.style.opacity = '';
+                                clearFlipSettlingAndNotify();
                                 await animateArticleTransitionItems(measuredItems, container);
                                 if (containerAnim) {
                                     container.style.opacity = '1';
@@ -2134,11 +2174,15 @@
                     }
                 } catch (animationError) {
                     container.style.opacity = '';
+                    clearFlipSettlingAndNotify();
                     if (isCurrentNavigation()) cleanupArticleTransitionItems(activeTransitionItems);
                 }
                 if (isCurrentNavigation()) finalizeNavigation();
             } catch (error) {
                 container.style.opacity = '';
+                if (container.dataset) {
+                    delete container.dataset.pjaxFlipSettling;
+                }
                 if (activePjaxController !== requestController || requestController.signal.aborted) {
                     return;
                 }
