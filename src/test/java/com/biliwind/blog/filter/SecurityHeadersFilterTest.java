@@ -7,10 +7,16 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,7 +34,7 @@ class SecurityHeadersFilterTest {
         filter.cspNonceContext = new CspNonceContext();
         MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
         ContainerRequestContext request = requestForPath("user/login");
-        ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
+        ContainerResponseContext response = responseContext(headers);
 
         filter.filter(request, response);
 
@@ -40,7 +46,8 @@ class SecurityHeadersFilterTest {
         assertTrue(csp.contains("img-src 'self' data: blob:"));
         assertTrue(csp.contains("style-src-attr 'unsafe-inline'"));
         assertFalse(csp.contains("pagead2.googlesyndication.com"));
-        assertFalse(csp.contains("unsafe-eval"));
+        assertTrue(csp.contains("'wasm-unsafe-eval'"));
+        assertFalse(csp.contains("'unsafe-eval'"));
 
         assertEquals("DENY", headers.getFirst("X-Frame-Options"));
         assertEquals("nosniff", headers.getFirst("X-Content-Type-Options"));
@@ -64,7 +71,7 @@ class SecurityHeadersFilterTest {
         SecurityHeadersFilter filter = filterWith(SecurityHttpSettings.fromNode(node));
         MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
         ContainerRequestContext request = requestForPath("posts/hello");
-        ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
+        ContainerResponseContext response = responseContext(headers);
 
         filter.filter(request, response);
 
@@ -91,7 +98,7 @@ class SecurityHeadersFilterTest {
         SecurityHeadersFilter filter = filterWith(SecurityHttpSettings.fromNode(node));
         MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
         ContainerRequestContext request = requestForPath("tag");
-        ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
+        ContainerResponseContext response = responseContext(headers);
 
         filter.filter(request, response);
 
@@ -113,7 +120,7 @@ class SecurityHeadersFilterTest {
         SecurityHeadersFilter filter = filterWith(SecurityHttpSettings.fromNode(node));
         MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
         ContainerRequestContext request = requestForPath("amp/posts/hello");
-        ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
+        ContainerResponseContext response = responseContext(headers);
 
         filter.filter(request, response);
 
@@ -122,6 +129,35 @@ class SecurityHeadersFilterTest {
         assertTrue(csp.contains("https://cdn.ampproject.org"));
         assertEquals("DENY", headers.getFirst("X-Frame-Options"));
         assertEquals("nosniff", headers.getFirst("X-Content-Type-Options"));
+    }
+
+    @Test
+    void omitsCspHeaderOnNotModifiedResponsesToPreserveCachedNonce() {
+        SecurityHeadersFilter filter = new SecurityHeadersFilter();
+        filter.cspNonceContext = new CspNonceContext();
+        MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
+        ContainerRequestContext request = requestForPath("posts/hello");
+        ContainerResponseContext response = responseContext(headers, Response.Status.NOT_MODIFIED.getStatusCode());
+
+        filter.filter(request, response);
+
+        assertNull(headers.getFirst("Content-Security-Policy"));
+        assertNull(headers.getFirst("Content-Security-Policy-Report-Only"));
+        assertEquals("DENY", headers.getFirst("X-Frame-Options"));
+        assertEquals("nosniff", headers.getFirst("X-Content-Type-Options"));
+    }
+
+    @Test
+    void baseTemplateInlineStyleTagsIncludeCspNonce() throws IOException {
+        String html = Files.readString(Path.of("src/main/resources/templates/base.html"));
+        Matcher matcher = Pattern.compile("<style\\b[^>]*>").matcher(html);
+        int count = 0;
+        while (matcher.find()) {
+            count++;
+            assertTrue(matcher.group().contains("nonce=\"{cspNonce}\""),
+                    "Inline style tag missing CSP nonce: " + matcher.group());
+        }
+        assertTrue(count >= 2, "Expected at least 2 inline style blocks in base.html");
     }
 
     private static SecurityHeadersFilter filterWith(SecurityHttpSettings.Snapshot snapshot) {
@@ -139,6 +175,21 @@ class SecurityHeadersFilterTest {
     private static ContainerRequestContext requestForPath(String path) {
         UriInfo uri = stub(UriInfo.class, "getPath", path);
         return stub(ContainerRequestContext.class, "getUriInfo", uri);
+    }
+
+    private static ContainerResponseContext responseContext(MultivaluedHashMap<String, Object> headers) {
+        return responseContext(headers, Response.Status.OK.getStatusCode());
+    }
+
+    private static ContainerResponseContext responseContext(MultivaluedHashMap<String, Object> headers, int status) {
+        return (ContainerResponseContext) Proxy.newProxyInstance(
+                ContainerResponseContext.class.getClassLoader(),
+                new Class<?>[]{ContainerResponseContext.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "getHeaders" -> headers;
+                    case "getStatus" -> status;
+                    default -> throw new UnsupportedOperationException(method.getName());
+                });
     }
 
     private static <T> T stub(Class<T> type, String expectedMethod, Object result) {

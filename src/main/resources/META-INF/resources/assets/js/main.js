@@ -2,6 +2,23 @@
 (function () {
     'use strict';
 
+    if (typeof window.wbT !== 'function') {
+        window.wbT = function (key, fallback) {
+            var value = window.i18n && window.i18n[key];
+            if ((value === undefined || value === null) && typeof key === 'string' && key.indexOf('js.') === 0) {
+                value = window.i18n && window.i18n[key.substring(3)];
+            }
+            return value === undefined || value === null
+                ? (fallback === undefined ? key : fallback)
+                : value;
+        };
+    }
+    if (typeof window.wbTf !== 'function') {
+        window.wbTf = function (key, value, fallback) {
+            return window.wbT(key, fallback).replace('%s', value);
+        };
+    }
+
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
         navigator.serviceWorker.getRegistrations()
             .then(registrations => Promise.all(registrations.map(reg => reg.unregister().catch(() => false))))

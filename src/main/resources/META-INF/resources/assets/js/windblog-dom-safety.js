@@ -16,6 +16,16 @@
             }
             return element;
         };
+        if (typeof document.createElementNS === 'function') {
+            var nativeCreateElementNS = document.createElementNS.bind(document);
+            document.createElementNS = function (namespaceURI, qualifiedName, options) {
+                var element = nativeCreateElementNS(namespaceURI, qualifiedName, options);
+                if (String(qualifiedName).toLowerCase() === 'style') {
+                    element.setAttribute('nonce', policyNonce);
+                }
+                return element;
+            };
+        }
     }
 
     var allowedElements = new Set([
@@ -128,6 +138,15 @@
         if (url.origin === 'https://pagead2.googlesyndication.com'
             && url.pathname === '/pagead/js/adsbygoogle.js') {
             return url.href;
+        }
+        var analyticsScript = document.querySelector('script[data-site-id][src]');
+        if (analyticsScript && analyticsScript.src) {
+            try {
+                var analyticsOrigin = new URL(analyticsScript.src, window.location.href).origin;
+                if (url.origin === analyticsOrigin) {
+                    return url.href;
+                }
+            } catch (ignored) {}
         }
         throw new TypeError('Only same-origin or allowlisted dynamic script URLs are allowed');
     }

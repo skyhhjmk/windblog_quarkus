@@ -13,6 +13,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
 /**
@@ -49,6 +50,9 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
         if (!policy.cspEnabled()) {
             return;
         }
+        if (responseContext.getStatus() == Response.Status.NOT_MODIFIED.getStatusCode()) {
+            return;
+        }
 
         String cspHeader = policy.cspEnforce() ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only";
         String frameAncestors = policy.frameAncestorsDirective();
@@ -67,8 +71,9 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
         AnalyticsTrackingSettings.Settings tracking = analyticsTracking == null
                 ? AnalyticsTrackingSettings.Settings.disabled()
                 : analyticsTracking.current();
-        String scriptSources = tracking.enabled() ? "'self' 'nonce-" + nonce + "' " + tracking.origin()
-                : "'self' 'nonce-" + nonce + "'";
+        String scriptSources = tracking.enabled()
+                ? "'self' 'nonce-" + nonce + "' 'wasm-unsafe-eval' " + tracking.origin()
+                : "'self' 'nonce-" + nonce + "' 'wasm-unsafe-eval'";
         String frameSources = "'self'" + (tracking.enabled() ? " " + tracking.origin() : "");
         if (tracking.enabled()) {
             connectSources = connectSources + " " + tracking.origin();
