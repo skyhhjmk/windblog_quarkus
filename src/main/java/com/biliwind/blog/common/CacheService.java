@@ -481,5 +481,11 @@ public class CacheService {
         public static String publicLinks(String region) {
             return PUBLIC_LINKS_PREFIX + region;
         }
+
+        public static final String IP_LOCATION_PREFIX = "ip:location:v1:";
+
+        public static String ipLocation(String ip) {
+            return IP_LOCATION_PREFIX + ip;
+        }
     }
 }

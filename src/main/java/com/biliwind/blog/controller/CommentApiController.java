@@ -62,6 +62,9 @@ public class CommentApiController {
     com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
 
     @Inject
+    com.biliwind.blog.service.IpLocationService ipLocationService;
+
+    @Inject
     com.biliwind.blog.service.AdminNotificationEmailService adminNotificationEmailService;
 
     private void checkRate(io.vertx.ext.web.RoutingContext context, String action, int limit) {
@@ -198,6 +201,8 @@ public class CommentApiController {
         final String quoteType = normalizeQuoteType(request.quoteType());
         final String quoteText = quoteType != null ? normalizeQuoteText(request.quoteText()) : null;
         final Object anchorData = quoteType != null ? parseAnchorData(request.anchorDataJson()) : null;
+        final String clientIp = ipLocationService.normalizeIp(clientIpResolver.resolve(context).clientIp());
+        final String ipLocation = clientIp == null ? null : ipLocationService.resolveLocationText(clientIp);
 
         final Comment comment = new Comment();
         // 用于在事务外携带数据
@@ -217,6 +222,8 @@ public class CommentApiController {
             comment.guestWebsite = guestWebsite;
             comment.clientOs = clientOs;
             comment.clientBrowser = clientBrowser;
+            comment.clientIp = clientIp;
+            comment.ipLocation = ipLocation;
             comment.content = content;
             comment.status = STATUS_PENDING;
 

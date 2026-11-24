@@ -57,6 +57,9 @@ public class AdminAuthApiController {
     com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
 
     @Inject
+    com.biliwind.blog.service.IpLocationService ipLocationService;
+
+    @Inject
     com.biliwind.blog.service.security.SecurityRateLimitService securityRateLimitService;
 
     @Inject
@@ -111,6 +114,10 @@ public class AdminAuthApiController {
 
         securityRateLimitService.clear(accountLimitKey);
         securityRateLimitService.clear(ipLimitKey);
+        String normalizedIp = ipLocationService.normalizeIp(clientIp);
+        user.lastLoginIp = normalizedIp;
+        user.lastLoginLocation = normalizedIp == null ? null : ipLocationService.resolveLocationText(normalizedIp);
+        user.lastLoginAt = java.time.OffsetDateTime.now();
 
         String roleName = user.roleName;
         if (roleName == null || roleName.isBlank()) {

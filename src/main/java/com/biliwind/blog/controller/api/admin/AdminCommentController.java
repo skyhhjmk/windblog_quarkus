@@ -117,7 +117,7 @@ public class AdminCommentController {
         }
 
         if (keyword != null && !keyword.isBlank()) {
-            where.append(" and (lower(c.content) like :keyword or lower(coalesce(c.guestName, '')) like :keyword or lower(coalesce(u.username, '')) like :keyword)");
+            where.append(" and (lower(c.content) like :keyword or lower(coalesce(c.guestName, '')) like :keyword or lower(coalesce(u.username, '')) like :keyword or lower(coalesce(c.clientIp, '')) like :keyword or lower(coalesce(c.ipLocation, '')) like :keyword)");
             params.put("keyword", "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%");
         }
 
@@ -787,7 +787,9 @@ public class AdminCommentController {
                 quote != null ? quote.quoteType : null,
                 quote != null ? quote.quoteText : null,
                 quote != null ? quote.anchorData : null,
-                quote != null ? quote.status : null);
+                quote != null ? quote.status : null,
+                comment.clientIp,
+                comment.ipLocation);
     }
 
     private String resolveLocalizedTitle(Map<String, String> titles) {

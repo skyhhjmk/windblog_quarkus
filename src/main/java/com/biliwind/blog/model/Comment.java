@@ -55,6 +55,14 @@ public class Comment extends PanacheEntityBase {
     @Column(name = "client_browser", length = 32)
     public String clientBrowser;
 
+    /** 评论来源 IP */
+    @Column(name = "client_ip", length = 64)
+    public String clientIp;
+
+    /** 评论来源地理位置 */
+    @Column(name = "ip_location", length = 255)
+    public String ipLocation;
+
     /** 评论内容 */
     @Column(nullable = false, columnDefinition = "text")
     public String content;

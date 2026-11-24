@@ -42,7 +42,9 @@ public class AdminCommentDtos {
             String quoteType,
             String quoteText,
             Object quoteAnchorData,
-            Short quoteStatus) {
+            Short quoteStatus,
+            String clientIp,
+            String ipLocation) {
     }
 
     @RegisterForReflection

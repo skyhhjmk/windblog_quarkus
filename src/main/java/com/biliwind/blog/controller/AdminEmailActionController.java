@@ -15,6 +15,7 @@ import com.biliwind.blog.service.AdminEmailActionTokenService.VerifiedAction;
 import com.biliwind.blog.service.AuditService;
 import com.biliwind.blog.service.CommentEmailNotificationService;
 import com.biliwind.blog.service.EmailTemplateRenderer;
+import com.biliwind.blog.service.IpLocationService;
 import com.biliwind.blog.service.PublicUrlService;
 import com.biliwind.blog.service.UserNotificationService;
 import com.biliwind.blog.service.UserProfileReviewService;
@@ -22,8 +23,10 @@ import com.biliwind.blog.service.edge.DataSyncEvent;
 import com.biliwind.blog.service.edge.PostSyncedEvent;
 import com.biliwind.blog.service.link.LinkMonitorPolicy;
 import com.biliwind.blog.service.link.LinkMonitorService;
+import com.biliwind.blog.service.security.ClientIpResolver;
 import com.biliwind.blog.service.settings.SettingKey;
 import com.biliwind.blog.service.settings.SettingsReader;
+import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -68,6 +71,12 @@ public class AdminEmailActionController {
     Event<PostSyncedEvent> postSyncedEvent;
     @Inject
     Event<DataSyncEvent> dataSyncEvent;
+    @Inject
+    ClientIpResolver clientIpResolver;
+    @Inject
+    IpLocationService ipLocationService;
+    @Inject
+    RoutingContext routingContext;
 
     @GET
     @Transactional
@@ -192,6 +201,13 @@ public class AdminEmailActionController {
             post.status = PostStatus.PUBLISHED;
             if (post.publishedAt == null) {
                 post.publishedAt = now;
+            }
+            if (clientIpResolver != null && ipLocationService != null && routingContext != null) {
+                String normalizedIp = ipLocationService.normalizeIp(clientIpResolver.resolve(routingContext).clientIp());
+                if (normalizedIp != null) {
+                    post.publishIp = normalizedIp;
+                    post.publishLocation = ipLocationService.resolveLocationText(normalizedIp);
+                }
             }
             post.reviewedAt = now;
             post.reviewedBy = admin;

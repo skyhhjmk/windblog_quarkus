@@ -138,7 +138,9 @@ public final class AdminPostDtos {
                         OffsetDateTime createdAt,
                         OffsetDateTime updatedAt,
                         Short articleMode,
-                        Boolean allowComment) {
+                        Boolean allowComment,
+                        String publishIp,
+                        String publishLocation) {
         }
 
         public record PostQuickEditRequest(
@@ -247,7 +249,9 @@ public final class AdminPostDtos {
                         Short articleMode,
                         com.biliwind.blog.model.TutorialMeta tutorialMeta,
                         com.biliwind.blog.model.ResourceMeta resourceMeta,
-                        Boolean allowComment) {
+                        Boolean allowComment,
+                        String publishIp,
+                        String publishLocation) {
         }
 
     public record PostRevisionItem(

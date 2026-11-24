@@ -1,9 +1,12 @@
 package com.biliwind.blog.controller.api.admin.dto;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
 import java.time.OffsetDateTime;
 
 public class AdminUserDtos {
 
+    @RegisterForReflection
     public record AdminUserItem(
             Long id,
             String username,
@@ -13,7 +16,10 @@ public class AdminUserDtos {
             String roleName,
             short status,
             OffsetDateTime createdAt,
-            OffsetDateTime updatedAt) {
+            OffsetDateTime updatedAt,
+            String lastLoginIp,
+            String lastLoginLocation,
+            OffsetDateTime lastLoginAt) {
     }
 
     public record UserUpdateRequest(

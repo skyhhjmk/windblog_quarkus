@@ -133,6 +133,18 @@ public class User extends PanacheEntityBase {
     @Column(name = "repost_banned_at")
     public OffsetDateTime repostBannedAt;
 
+    /** 最后登录 IP */
+    @Column(name = "last_login_ip", length = 64)
+    public String lastLoginIp;
+
+    /** 最后登录地理位置 */
+    @Column(name = "last_login_location", length = 255)
+    public String lastLoginLocation;
+
+    /** 最后登录时间 */
+    @Column(name = "last_login_at")
+    public OffsetDateTime lastLoginAt;
+
     /** 创建时间 */
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp

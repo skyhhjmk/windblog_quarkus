@@ -224,6 +224,14 @@ public class Post extends PanacheEntityBase {
     @Column(name = "repost_policy_code", length = 64)
     public String repostPolicyCode;
 
+    /** 文章发布 IP */
+    @Column(name = "publish_ip", length = 64)
+    public String publishIp;
+
+    /** 文章发布地理位置 */
+    @Column(name = "publish_location", length = 255)
+    public String publishLocation;
+
     /** 乐观锁版本号 */
     @Version
     @Column(nullable = false)

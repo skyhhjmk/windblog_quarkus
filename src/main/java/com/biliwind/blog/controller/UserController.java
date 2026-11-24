@@ -92,6 +92,9 @@ public class UserController {
     ClientIpResolver clientIpResolver;
 
     @Inject
+    com.biliwind.blog.service.IpLocationService ipLocationService;
+
+    @Inject
     SecurityRateLimitService securityRateLimitService;
 
     @Inject
@@ -321,6 +324,7 @@ public class UserController {
         user.roleName = RoleConstant.USER;
         user.subscribeArticleUpdates = "on".equals(subscribeArticleUpdates);
         user.subscribePromotions = "on".equals(subscribePromotions);
+        recordLastLogin(user, clientIp);
         user.persist();
         emailVerificationService.sendVerification(user);
         dataSyncEvent.fire(new com.biliwind.blog.service.edge.DataSyncEvent("USER", user.id, "UPSERT"));
@@ -400,6 +404,7 @@ public class UserController {
 
         securityRateLimitService.clear(accountLimitKey);
         securityRateLimitService.clear(ipLimitKey);
+        recordLastLogin(user, clientIp);
 
         // 生成JWT Token
         String token = generateUserToken(user);
@@ -417,6 +422,13 @@ public class UserController {
                 ))
                 .cookie(cookie)
                 .build();
+    }
+
+    private void recordLastLogin(User user, String rawIp) {
+        String normalizedIp = ipLocationService.normalizeIp(rawIp);
+        user.lastLoginIp = normalizedIp;
+        user.lastLoginLocation = normalizedIp == null ? null : ipLocationService.resolveLocationText(normalizedIp);
+        user.lastLoginAt = java.time.OffsetDateTime.now();
     }
 
     /**

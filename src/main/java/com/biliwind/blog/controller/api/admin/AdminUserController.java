@@ -143,6 +143,9 @@ public class AdminUserController {
                 user.roleName,
                 user.status,
                 user.createdAt,
-                user.updatedAt);
+                user.updatedAt,
+                user.lastLoginIp,
+                user.lastLoginLocation,
+                user.lastLoginAt);
     }
 }

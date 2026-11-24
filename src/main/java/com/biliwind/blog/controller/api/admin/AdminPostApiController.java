@@ -99,6 +99,15 @@ public class AdminPostApiController {
     @Inject
     com.biliwind.blog.service.PostPreviewService postPreviewService;
 
+    @Inject
+    com.biliwind.blog.service.security.ClientIpResolver clientIpResolver;
+
+    @Inject
+    com.biliwind.blog.service.IpLocationService ipLocationService;
+
+    @Inject
+    io.vertx.ext.web.RoutingContext routingContext;
+
     @GET
     @Path("/{id}/events")
     @Produces(MediaType.SERVER_SENT_EVENTS)
@@ -912,7 +921,9 @@ public class AdminPostApiController {
                 post.createdAt,
                 post.updatedAt,
                 post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
-                post.allowComment == null ? true : post.allowComment);
+                post.allowComment == null ? true : post.allowComment,
+                post.publishIp,
+                post.publishLocation);
     }
 
     private AdminPostDetail toDetail(Post post) {
@@ -960,7 +971,9 @@ public class AdminPostApiController {
                 post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
                 post.tutorialMeta,
                 post.resourceMeta,
-                post.allowComment == null ? true : post.allowComment);
+                post.allowComment == null ? true : post.allowComment,
+                post.publishIp,
+                post.publishLocation);
     }
 
 
@@ -1457,7 +1470,9 @@ public class AdminPostApiController {
                 post.articleMode == null ? ArticleMode.STANDARD.code() : post.articleMode.code(),
                 post.tutorialMeta,
                 post.resourceMeta,
-                post.allowComment == null ? true : post.allowComment);
+                post.allowComment == null ? true : post.allowComment,
+                post.publishIp,
+                post.publishLocation);
     }
 
     @POST
@@ -1526,7 +1541,20 @@ public class AdminPostApiController {
         if (post.publishedAt == null) {
             post.publishedAt = now;
         }
+        recordPublishIp(post);
         post.updatedAt = now;
+    }
+
+    private void recordPublishIp(Post post) {
+        if (post == null || clientIpResolver == null || ipLocationService == null || routingContext == null) {
+            return;
+        }
+        String rawIp = clientIpResolver.resolve(routingContext).clientIp();
+        String normalizedIp = ipLocationService.normalizeIp(rawIp);
+        if (normalizedIp != null) {
+            post.publishIp = normalizedIp;
+            post.publishLocation = ipLocationService.resolveLocationText(normalizedIp);
+        }
     }
 
     private boolean sameRevision(PostRevision leftRevision, PostRevision rightRevision) {
