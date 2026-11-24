@@ -1,41 +1,34 @@
 package com.biliwind.blog.filter;
 
+import com.biliwind.blog.context.CspNonceContext;
+import com.biliwind.blog.service.AnalyticsTrackingSettings;
+import com.biliwind.blog.service.security.SecurityHttpSettings;
+import com.biliwind.blog.service.settings.SettingKey;
+import com.biliwind.blog.service.settings.SettingsReader;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
+import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.Provider;
-import jakarta.inject.Inject;
-import com.biliwind.blog.service.AnalyticsTrackingSettings;
-import com.biliwind.blog.service.settings.SettingKey;
-import com.biliwind.blog.service.settings.SettingsReader;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-/** Emits HSTS (when enabled) and CSP (Report-Only by default, or enforced when configured). */
+/**
+ * Emits database-managed HTTP security headers: CSP (enforced or Report-Only),
+ * HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Permissions-Policy.
+ */
 @Provider
 @Priority(Priorities.HEADER_DECORATOR)
 @ApplicationScoped
 public class SecurityHeadersFilter implements ContainerResponseFilter {
 
-    @ConfigProperty(name = "security.headers.hsts.enabled", defaultValue = "false")
-    boolean hstsEnabled;
-
-    @ConfigProperty(name = "security.headers.csp.enforce", defaultValue = "false")
-    boolean cspEnforce;
-
-    @ConfigProperty(name = "security.headers.csp.img-sources", defaultValue = "none")
-    String cspImageSources;
-
-    @ConfigProperty(name = "security.headers.csp.connect-sources", defaultValue = "none")
-    String cspConnectSources;
-
-    @ConfigProperty(name = "security.headers.csp.trusted-types.enabled", defaultValue = "false")
-    boolean trustedTypesEnabled;
+    @Inject
+    SecurityHttpSettings securityHttpSettings;
 
     @Inject
-    com.biliwind.blog.context.CspNonceContext cspNonceContext;
+    CspNonceContext cspNonceContext;
 
     // Qute accesses this bean through Arc at runtime; retain it during Quarkus unused-bean removal.
     @Inject
@@ -46,21 +39,31 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
-        String cspHeader = cspEnforce ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only";
+        SecurityHttpSettings.Snapshot policy = securityHttpSettings == null
+                ? SecurityHttpSettings.defaults()
+                : securityHttpSettings.current();
+        MultivaluedMap<String, Object> headers = responseContext.getHeaders();
+
+        applyBaselineHeaders(headers, policy);
+
+        if (!policy.cspEnabled()) {
+            return;
+        }
+
+        String cspHeader = policy.cspEnforce() ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only";
+        String frameAncestors = policy.frameAncestorsDirective();
+
         if (isAmpRequest(requestContext)) {
-            responseContext.getHeaders().putSingle(cspHeader,
-                    "default-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
+            headers.putSingle(cspHeader,
+                    "default-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors " + frameAncestors + "; "
                             + "script-src https://cdn.ampproject.org; style-src 'unsafe-inline'; "
                             + "img-src 'self' https:; connect-src 'self'; font-src 'self' https:");
-            if (hstsEnabled) {
-                responseContext.getHeaders().putSingle("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-            }
             return;
         }
 
         String nonce = cspNonceContext.getNonce();
-        String imageSources = appendConfiguredSources("'self' data: blob:", cspImageSources);
-        String connectSources = appendConfiguredSources("'self'", cspConnectSources);
+        String imageSources = appendConfiguredSources("'self' data: blob:", policy.cspImgSources());
+        String connectSources = appendConfiguredSources("'self'", policy.cspConnectSources());
         AnalyticsTrackingSettings.Settings tracking = analyticsTracking == null
                 ? AnalyticsTrackingSettings.Settings.disabled()
                 : analyticsTracking.current();
@@ -82,17 +85,32 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
                     + " https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net"
                     + " https://tpc.googlesyndication.com";
         }
-        String csp = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
+        String csp = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors "
+                + frameAncestors + "; "
                 + "img-src " + imageSources + "; style-src 'self' 'nonce-" + nonce + "'; style-src-attr 'unsafe-inline'; "
                 + "script-src " + scriptSources + "; connect-src " + connectSources + "; font-src 'self'; "
                 + "frame-src " + frameSources;
-        if (trustedTypesEnabled) {
+        if (policy.cspTrustedTypesEnabled()) {
             csp = csp + "; require-trusted-types-for 'script'; trusted-types default windblog-raw-html";
         }
-        responseContext.getHeaders().putSingle(cspHeader, csp);
+        headers.putSingle(cspHeader, csp);
+    }
 
-        if (hstsEnabled) {
-            responseContext.getHeaders().putSingle("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    private void applyBaselineHeaders(MultivaluedMap<String, Object> headers, SecurityHttpSettings.Snapshot policy) {
+        if (policy.hstsEnabled()) {
+            headers.putSingle("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        }
+        if (!SecurityHttpSettings.DISABLED.equals(policy.xFrameOptions())) {
+            headers.putSingle("X-Frame-Options", policy.xFrameOptions());
+        }
+        if (policy.xContentTypeOptionsNosniff()) {
+            headers.putSingle("X-Content-Type-Options", "nosniff");
+        }
+        if (!SecurityHttpSettings.DISABLED.equals(policy.referrerPolicy())) {
+            headers.putSingle("Referrer-Policy", policy.referrerPolicy());
+        }
+        if (policy.permissionsPolicy() != null && !policy.permissionsPolicy().isBlank()) {
+            headers.putSingle("Permissions-Policy", policy.permissionsPolicy());
         }
     }
 

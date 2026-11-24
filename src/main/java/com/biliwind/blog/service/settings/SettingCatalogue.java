@@ -112,6 +112,7 @@ public final class SettingCatalogue {
         add(definitions, aiTopicMcp());
         add(definitions, elasticsearch());
         add(definitions, securityNetwork());
+        add(definitions, securityHttp());
         add(definitions, commentSecurity());
         add(definitions, seo());
         add(definitions, legalTerms());
@@ -570,6 +571,120 @@ public final class SettingCatalogue {
         value.put("client_ip_source", "auto");
         return definition(SettingKey.SECURITY_NETWORK, value, "安全设置", schema,
                 "可信代理与客户端 IP 解析设置", SettingLevel.CRITICAL);
+    }
+
+    private static SettingDefinition securityHttp() {
+        ObjectNode schema = objectSchema();
+        ArrayNode fields = schema.putArray("fields");
+        fields.addObject()
+                .put("key", "hsts_enabled")
+                .put("label", "启用 HSTS (Strict-Transport-Security)")
+                .put("widget", "switch")
+                .put("section", "安全响应头")
+                .put("hint", "仅在全站 HTTPS 环境下开启，指示浏览器强制通过 HTTPS 访问。");
+        fields.addObject()
+                .put("key", "csp_enabled")
+                .put("label", "启用 Content-Security-Policy (CSP)")
+                .put("widget", "switch")
+                .put("section", "安全响应头")
+                .put("hint", "结合页面一次性 nonce 与 frame-ancestors 'none' 防止 XSS 与点击劫持。");
+        fields.addObject()
+                .put("key", "csp_enforce")
+                .put("label", "强制执行 CSP 策略")
+                .put("widget", "switch")
+                .put("section", "安全响应头")
+                .put("hint", "开启时发送 Content-Security-Policy 强制拦截；关闭时降级为 Content-Security-Policy-Report-Only 仅观察。");
+        fields.addObject()
+                .put("key", "csp_trusted_types_enabled")
+                .put("label", "启用 Trusted Types")
+                .put("widget", "switch")
+                .put("section", "安全响应头")
+                .put("hint", "在 CSP 中附加 require-trusted-types-for 'script'，进一步防御 DOM XSS。");
+        fields.addObject()
+                .put("key", "csp_img_sources")
+                .put("label", "CSP 额外图片来源 (img-src)")
+                .put("widget", "input")
+                .put("section", "安全响应头")
+                .put("hint", "多个来源用英文逗号分隔，仅支持 https:// 或本地开发地址，例如 https://cdn.example.com；留空表示仅允许本站、data: 与 blob:。");
+        fields.addObject()
+                .put("key", "csp_connect_sources")
+                .put("label", "CSP 额外连接来源 (connect-src)")
+                .put("widget", "input")
+                .put("section", "安全响应头")
+                .put("hint", "多个来源用英文逗号分隔，仅支持 https:// 或本地开发地址；留空表示仅允许本站及已启用的分析/广告源。");
+        ObjectNode xfoField = fields.addObject();
+        xfoField.put("key", "x_frame_options")
+                .put("label", "点击劫持防护 (X-Frame-Options)")
+                .put("widget", "select")
+                .put("section", "安全响应头")
+                .put("hint", "控制页面是否允许被 iframe 嵌入，与 CSP frame-ancestors 配合生效。");
+        ArrayNode xfoOptions = xfoField.putArray("options");
+        xfoOptions.addObject().put("label", "DENY（禁止所有嵌入，推荐）").put("value", "DENY");
+        xfoOptions.addObject().put("label", "SAMEORIGIN（仅允许同源嵌入）").put("value", "SAMEORIGIN");
+        xfoOptions.addObject().put("label", "关闭（不发送）").put("value", "DISABLED");
+        fields.addObject()
+                .put("key", "x_content_type_options_nosniff")
+                .put("label", "禁止 MIME 嗅探 (X-Content-Type-Options: nosniff)")
+                .put("widget", "switch")
+                .put("section", "安全响应头");
+        ObjectNode referrerField = fields.addObject();
+        referrerField.put("key", "referrer_policy")
+                .put("label", "引用来源策略 (Referrer-Policy)")
+                .put("widget", "select")
+                .put("section", "安全响应头");
+        ArrayNode referrerOptions = referrerField.putArray("options");
+        referrerOptions.addObject().put("label", "strict-origin-when-cross-origin（推荐）").put("value", "strict-origin-when-cross-origin");
+        referrerOptions.addObject().put("label", "no-referrer（完全不发送）").put("value", "no-referrer");
+        referrerOptions.addObject().put("label", "same-origin（仅同源发送）").put("value", "same-origin");
+        referrerOptions.addObject().put("label", "strict-origin（仅发送源站）").put("value", "strict-origin");
+        referrerOptions.addObject().put("label", "关闭（不发送）").put("value", "DISABLED");
+        fields.addObject()
+                .put("key", "permissions_policy")
+                .put("label", "浏览器权限策略 (Permissions-Policy)")
+                .put("widget", "input")
+                .put("section", "安全响应头")
+                .put("hint", "限制浏览器敏感硬件/API 权限；留空则不发送该响应头。");
+        ObjectNode healthModeField = fields.addObject();
+        healthModeField.put("key", "health_public_mode")
+                .put("label", "公网 /q/health* 访问模式")
+                .put("widget", "select")
+                .put("section", "健康检查端点")
+                .put("hint", "控制非内网客户端访问 /q/health、/q/health/ready、/q/health/live 等管理端点时的返回内容。");
+        ArrayNode healthModeOptions = healthModeField.putArray("options");
+        healthModeOptions.addObject().put("label", "仅返回汇总状态 {\"status\":\"UP\"}（推荐）").put("value", "summary");
+        healthModeOptions.addObject().put("label", "仅允许内网/本机访问（公网返回 404）").put("value", "private_only");
+        healthModeOptions.addObject().put("label", "返回完整健康详情（仅排障临时开启）").put("value", "detailed");
+        fields.addObject()
+                .put("key", "health_detailed_cidrs")
+                .put("label", "允许查看完整健康详情的网段 (CIDR)")
+                .put("widget", "textarea")
+                .put("section", "健康检查端点")
+                .put("hint", "逗号或换行分隔；匹配网段内的本机/内网探针可直接获取完整 checks 详情，经反向代理透传的公网请求将按上方公网模式处理。");
+
+        String initialImgSources = staticString("security.headers.csp.img-sources", "");
+        if ("none".equalsIgnoreCase(initialImgSources.trim())) {
+            initialImgSources = "";
+        }
+        String initialConnectSources = staticString("security.headers.csp.connect-sources", "");
+        if ("none".equalsIgnoreCase(initialConnectSources.trim())) {
+            initialConnectSources = "";
+        }
+        ObjectNode value = MAPPER.createObjectNode();
+        value.put("hsts_enabled", staticBoolean("security.headers.hsts.enabled", false));
+        value.put("csp_enabled", true);
+        value.put("csp_enforce", staticBoolean("security.headers.csp.enforce", true));
+        value.put("csp_trusted_types_enabled", staticBoolean("security.headers.csp.trusted-types.enabled", false));
+        value.put("csp_img_sources", initialImgSources);
+        value.put("csp_connect_sources", initialConnectSources);
+        value.put("x_frame_options", "DENY");
+        value.put("x_content_type_options_nosniff", true);
+        value.put("referrer_policy", "strict-origin-when-cross-origin");
+        value.put("permissions_policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+        value.put("health_public_mode", "summary");
+        value.put("health_detailed_cidrs", "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16");
+        return definition(SettingKey.SECURITY_HTTP, value, "安全设置", schema,
+                "HTTP 安全响应头（CSP、点击劫持、HSTS 等）与 /q/health 健康检查暴露控制，修改后立即生效。",
+                SettingLevel.CRITICAL);
     }
 
     private static SettingDefinition commentSecurity() {

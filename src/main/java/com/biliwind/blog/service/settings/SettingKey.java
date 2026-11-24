@@ -21,6 +21,7 @@ public enum SettingKey {
     AI_TOPIC_MCP("ai_topic_mcp"),
     ELASTICSEARCH("elasticsearch"),
     SECURITY_NETWORK("security_network"),
+    SECURITY_HTTP("security_http"),
     COMMENT_SECURITY("comment_security"),
     SEO("seo"),
     LEGAL_TERMS("legal_terms"),

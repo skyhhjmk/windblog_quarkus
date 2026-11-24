@@ -38,6 +38,7 @@ class SettingCatalogueTest {
     void criticalAndSecretFlagsComeFromTheDeclaration() {
         assertTrue(SettingCatalogue.find(SettingKey.ELASTICSEARCH).requiresVerification());
         assertTrue(SettingCatalogue.find(SettingKey.SECURITY_NETWORK).requiresVerification());
+        assertTrue(SettingCatalogue.find(SettingKey.SECURITY_HTTP).requiresVerification());
         assertTrue(SettingCatalogue.find(SettingKey.COMMENT_SECURITY).requiresVerification());
         assertFalse(SettingCatalogue.find(SettingKey.SITE_INFO).requiresVerification());
         assertTrue(SettingCatalogue.find(SettingKey.ELASTICSEARCH).secretFields().contains("password"));

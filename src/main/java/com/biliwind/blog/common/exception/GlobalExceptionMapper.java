@@ -8,6 +8,10 @@ import io.quarkus.qute.Template;
 import io.quarkus.qute.TemplateInstance;
 import io.vertx.core.http.HttpServerRequest;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.NotAcceptableException;
+import jakarta.ws.rs.NotAllowedException;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.NotSupportedException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -72,14 +76,14 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         } else if (exception instanceof WebApplicationException) {
             WebApplicationException webEx = (WebApplicationException) exception;
             Response webExResponse = webEx.getResponse();
-            status = Response.Status.fromStatusCode(webExResponse.getStatus());
-            message = SensitiveMessageSanitizer.sanitize(exception.getMessage());
-            if (message == null) {
-                message = "请求处理失败";
-            } else if (message.isEmpty()) {
-                message = "请求处理失败";
-            }
+            Response.Status resolvedStatus = webExResponse == null
+                    ? Response.Status.INTERNAL_SERVER_ERROR
+                    : Response.Status.fromStatusCode(webExResponse.getStatus());
+            status = resolvedStatus != null ? resolvedStatus : Response.Status.BAD_REQUEST;
+            message = resolveSafeWebExceptionMessage(webEx, status);
             errorType = "WebException";
+            LOGGER.debug("WebApplicationException: path={}, status={}, rawMessage={}",
+                    request == null ? null : request.path(), status.getStatusCode(), exception.getMessage());
         } else {
             LOGGER.error("未捕获的全局异常: ", exception);
         }
@@ -181,5 +185,61 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
         String trackingData = sb.toString();
         // 使用 RsaHelper 的混合加密 (RSA + AES)
         return rsaHelper.encrypt(trackingData);
+    }
+
+    static String resolveSafeWebExceptionMessage(WebApplicationException exception, Response.Status status) {
+        if (exception instanceof NotSupportedException) {
+            return "不支持的请求内容类型";
+        }
+        if (exception instanceof NotAllowedException) {
+            return "不支持的请求方法";
+        }
+        if (exception instanceof NotAcceptableException) {
+            return "不支持的响应内容类型";
+        }
+        String raw = exception.getMessage();
+        if (raw == null || raw.isBlank() || isFrameworkInternalMessage(raw)) {
+            return genericMessageForStatus(status, exception instanceof NotFoundException);
+        }
+        return SensitiveMessageSanitizer.sanitize(raw);
+    }
+
+    static boolean isFrameworkInternalMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return true;
+        }
+        String lower = message.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("@consumes")
+                || lower.contains("@produces")
+                || lower.contains("unable to find matching target resource")
+                || lower.contains("resteasy")
+                || lower.contains("jakarta.ws.rs.")
+                || lower.contains("org.jboss.")
+                || lower.contains("io.quarkus.")
+                || lower.contains("com.fasterxml.jackson.")
+                || lower.startsWith("http 4")
+                || lower.startsWith("http 5");
+    }
+
+    private static String genericMessageForStatus(Response.Status status, boolean notFound) {
+        if (notFound || status == Response.Status.NOT_FOUND) {
+            return "请求的资源不存在";
+        }
+        if (status == null) {
+            return "请求处理失败";
+        }
+        return switch (status) {
+            case BAD_REQUEST -> "请求参数无效";
+            case UNAUTHORIZED -> "未授权访问";
+            case FORBIDDEN -> "无权访问该资源";
+            case METHOD_NOT_ALLOWED -> "不支持的请求方法";
+            case NOT_ACCEPTABLE -> "不支持的响应内容类型";
+            case CONFLICT -> "请求存在冲突";
+            case UNSUPPORTED_MEDIA_TYPE -> "不支持的请求内容类型";
+            case TOO_MANY_REQUESTS -> "请求过于频繁，请稍后再试";
+            default -> status.getFamily() == Response.Status.Family.SERVER_ERROR
+                    ? "服务器内部错误，请联系管理员"
+                    : "请求处理失败";
+        };
     }
 }

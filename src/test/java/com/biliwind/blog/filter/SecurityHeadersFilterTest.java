@@ -1,6 +1,9 @@
 package com.biliwind.blog.filter;
 
 import com.biliwind.blog.context.CspNonceContext;
+import com.biliwind.blog.service.security.SecurityHttpSettings;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.core.MultivaluedHashMap;
@@ -17,12 +20,48 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityHeadersFilterTest {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @Test
-    void emitsReportOnlyCspWithTrustedTypesByDefault() {
+    void emitsEnforcedCspAndBaselineSecurityHeadersByDefault() {
         SecurityHeadersFilter filter = new SecurityHeadersFilter();
-        filter.cspEnforce = false;
-        filter.trustedTypesEnabled = true;
         filter.cspNonceContext = new CspNonceContext();
+        MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
+        ContainerRequestContext request = requestForPath("user/login");
+        ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
+
+        filter.filter(request, response);
+
+        assertNull(headers.getFirst("Content-Security-Policy-Report-Only"));
+        Object enforced = headers.getFirst("Content-Security-Policy");
+        assertNotNull(enforced);
+        String csp = enforced.toString();
+        assertTrue(csp.contains("frame-ancestors 'none'"));
+        assertTrue(csp.contains("img-src 'self' data: blob:"));
+        assertTrue(csp.contains("style-src-attr 'unsafe-inline'"));
+        assertFalse(csp.contains("pagead2.googlesyndication.com"));
+        assertFalse(csp.contains("unsafe-eval"));
+
+        assertEquals("DENY", headers.getFirst("X-Frame-Options"));
+        assertEquals("nosniff", headers.getFirst("X-Content-Type-Options"));
+        assertEquals("strict-origin-when-cross-origin", headers.getFirst("Referrer-Policy"));
+        assertNotNull(headers.getFirst("Permissions-Policy"));
+        assertTrue(headers.getFirst("Permissions-Policy").toString().contains("camera=()"));
+    }
+
+    @Test
+    void emitsReportOnlyCspWhenConfiguredInDatabase() {
+        ObjectNode node = MAPPER.createObjectNode()
+                .put("csp_enabled", true)
+                .put("csp_enforce", false)
+                .put("csp_trusted_types_enabled", true)
+                .put("hsts_enabled", false)
+                .put("x_frame_options", "SAMEORIGIN")
+                .put("x_content_type_options_nosniff", true)
+                .put("referrer_policy", "no-referrer")
+                .put("permissions_policy", "geolocation=()");
+
+        SecurityHeadersFilter filter = filterWith(SecurityHttpSettings.fromNode(node));
         MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
         ContainerRequestContext request = requestForPath("posts/hello");
         ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
@@ -30,26 +69,26 @@ class SecurityHeadersFilterTest {
         filter.filter(request, response);
 
         assertNull(headers.getFirst("Content-Security-Policy"));
-        Object reportOnly = headers.getFirst("Content-Security-Policy-Report-Only");
-        assertNotNull(reportOnly);
-        String csp = reportOnly.toString();
-        assertTrue(csp.contains("img-src 'self' data: blob:"));
-        assertTrue(csp.contains("style-src-attr 'unsafe-inline'"));
+        String csp = headers.getFirst("Content-Security-Policy-Report-Only").toString();
+        assertTrue(csp.contains("frame-ancestors 'self'"));
         assertTrue(csp.contains("require-trusted-types-for 'script'"));
         assertTrue(csp.contains("trusted-types default windblog-raw-html"));
-        assertFalse(csp.contains("pagead2.googlesyndication.com"));
-        assertFalse(csp.contains("allow-duplicates"));
-        assertFalse(csp.contains("unsafe-eval"));
         assertNull(headers.getFirst("Strict-Transport-Security"));
+        assertEquals("SAMEORIGIN", headers.getFirst("X-Frame-Options"));
+        assertEquals("nosniff", headers.getFirst("X-Content-Type-Options"));
+        assertEquals("no-referrer", headers.getFirst("Referrer-Policy"));
+        assertEquals("geolocation=()", headers.getFirst("Permissions-Policy"));
     }
 
     @Test
     void emitsEnforcedCspAndHstsWhenEnabled() {
-        SecurityHeadersFilter filter = new SecurityHeadersFilter();
-        filter.hstsEnabled = true;
-        filter.cspEnforce = true;
-        filter.trustedTypesEnabled = true;
-        filter.cspNonceContext = new CspNonceContext();
+        ObjectNode node = MAPPER.createObjectNode()
+                .put("hsts_enabled", true)
+                .put("csp_enabled", true)
+                .put("csp_enforce", true)
+                .put("csp_trusted_types_enabled", true);
+
+        SecurityHeadersFilter filter = filterWith(SecurityHttpSettings.fromNode(node));
         MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
         ContainerRequestContext request = requestForPath("tag");
         ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
@@ -64,10 +103,14 @@ class SecurityHeadersFilterTest {
     }
 
     @Test
-    void emitsReportOnlyCspForAmpWhenNotEnforced() {
-        SecurityHeadersFilter filter = new SecurityHeadersFilter();
-        filter.cspEnforce = false;
-        filter.cspNonceContext = new CspNonceContext();
+    void emitsBaselineHeadersAndAmpCspForAmpRequests() {
+        ObjectNode node = MAPPER.createObjectNode()
+                .put("csp_enabled", true)
+                .put("csp_enforce", false)
+                .put("x_frame_options", "DENY")
+                .put("x_content_type_options_nosniff", true);
+
+        SecurityHeadersFilter filter = filterWith(SecurityHttpSettings.fromNode(node));
         MultivaluedHashMap<String, Object> headers = new MultivaluedHashMap<>();
         ContainerRequestContext request = requestForPath("amp/posts/hello");
         ContainerResponseContext response = stub(ContainerResponseContext.class, "getHeaders", headers);
@@ -77,6 +120,20 @@ class SecurityHeadersFilterTest {
         assertNull(headers.getFirst("Content-Security-Policy"));
         String csp = headers.getFirst("Content-Security-Policy-Report-Only").toString();
         assertTrue(csp.contains("https://cdn.ampproject.org"));
+        assertEquals("DENY", headers.getFirst("X-Frame-Options"));
+        assertEquals("nosniff", headers.getFirst("X-Content-Type-Options"));
+    }
+
+    private static SecurityHeadersFilter filterWith(SecurityHttpSettings.Snapshot snapshot) {
+        SecurityHeadersFilter filter = new SecurityHeadersFilter();
+        filter.cspNonceContext = new CspNonceContext();
+        filter.securityHttpSettings = new SecurityHttpSettings() {
+            @Override
+            public Snapshot current() {
+                return snapshot;
+            }
+        };
+        return filter;
     }
 
     private static ContainerRequestContext requestForPath(String path) {
