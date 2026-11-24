@@ -249,11 +249,10 @@ public class CdnCacheDiagnosticsService {
             }
         } else if (path.equals("/")) {
             if (lowerCc.contains("no-store")) {
-                isSafe = false;
-                level = "WARNING";
-                summary = "提示：首页返回了 no-store (" + cc + ")，CDN 无法缓存首页 HTML。";
+                summary = "良好：首页 HTML 已禁止前置 CDN/浏览器共享缓存 (" + cc + ")，确保每次请求与 CSP nonce 一致（由源站静态缓存加速）。";
             } else if (lowerCc.contains("public") || lowerCc.contains("max-age") || lowerCc.contains("s-maxage")) {
-                summary = "良好：首页已启用匿名公共缓存 (" + cc + ")，可被 CDN 与全站静态缓存命中。";
+                level = "WARNING";
+                summary = "提示：首页启用了共享缓存 (" + cc + ")，前置 CDN 304 协商可能导致 HTML 与 CSP nonce 错配。";
             } else {
                 summary = "正常：首页缓存标头为 " + (cc.isBlank() ? "默认" : cc);
             }

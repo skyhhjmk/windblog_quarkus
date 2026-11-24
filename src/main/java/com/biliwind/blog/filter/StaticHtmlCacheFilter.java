@@ -17,7 +17,6 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.core.Cookie;
-import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -98,36 +97,16 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
         StaticHtmlCacheService.CachedDocument cached = staticHtmlCacheService.getIfPresent(cacheKey);
         if (cached != null) {
             requestContext.setProperty(PROP_HIT, Boolean.TRUE);
-            if (!isPjax) {
-                String ifNoneMatch = requestContext.getHeaderString(HttpHeaders.IF_NONE_MATCH);
-                if (ifNoneMatch != null && !ifNoneMatch.isBlank() && etagMatches(ifNoneMatch, cached.etag())) {
-                    requestContext.abortWith(Response.notModified(cached.etag())
-                            .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, s-maxage=300")
-                            .header(HttpHeaders.VARY, PageCachePolicy.PUBLIC_VARY)
-                            .header("X-WindBlog-Static-Cache", "HIT")
-                            .header("X-WindBlog-Static-Variant", variant)
-                            .build());
-                    return;
-                }
-            }
-
             String cachedHtml = new String(cached.html(), StandardCharsets.UTF_8);
             String responseHtml = applyNonceToCachedHtml(cachedHtml, resolveCspNonce());
             Response.ResponseBuilder builder = Response.ok(responseHtml)
                     .type(MediaType.TEXT_HTML_TYPE.withCharset("UTF-8"))
                     .header(HttpHeaders.VARY, PageCachePolicy.PUBLIC_VARY)
+                    .header(HttpHeaders.CACHE_CONTROL, PageCachePolicy.HTML_NO_STORE)
+                    .header("Pragma", "no-cache")
+                    .header("Expires", "0")
                     .header("X-WindBlog-Static-Cache", "HIT")
                     .header("X-WindBlog-Static-Variant", variant);
-
-            if (isPjax) {
-                // Keep PJAX fragments out of shared CDN/browser caches at the same URL
-                builder.header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
-                        .header("Pragma", "no-cache")
-                        .header("Expires", "0");
-            } else {
-                builder.header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, s-maxage=300")
-                        .header(HttpHeaders.ETAG, cached.etag());
-            }
             requestContext.abortWith(builder.build());
             return;
         }
@@ -185,10 +164,10 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
             String cacheableHtml = stripNonceForCache(html, resolveCspNonce());
             staticHtmlCacheService.put(key, path, lang, region, variant, cacheableHtml, existingEtag);
 
+            responseContext.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, PageCachePolicy.HTML_NO_STORE);
+            responseContext.getHeaders().putSingle("Pragma", "no-cache");
+            responseContext.getHeaders().putSingle("Expires", "0");
             if (!isPjax) {
-                if (responseContext.getHeaderString(HttpHeaders.CACHE_CONTROL) == null) {
-                    responseContext.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, "public, max-age=60, s-maxage=300");
-                }
                 responseContext.getHeaders().putSingle(HttpHeaders.VARY, PageCachePolicy.PUBLIC_VARY);
             }
             responseContext.getHeaders().putSingle("X-WindBlog-Static-Cache", "MISS");
@@ -284,7 +263,7 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
             String cc = responseContext.getHeaderString(HttpHeaders.CACHE_CONTROL);
             if (cc != null) {
                 String lower = cc.toLowerCase(Locale.ROOT);
-                if (lower.contains("no-store") || lower.contains("private")) {
+                if (lower.contains("private")) {
                     return true;
                 }
             }
@@ -298,27 +277,6 @@ public class StaticHtmlCacheFilter implements ContainerRequestFilter {
                     return true;
                 }
             }
-        }
-        return false;
-    }
-
-    private static boolean etagMatches(String ifNoneMatch, String storedEtag) {
-        if (storedEtag == null || storedEtag.isBlank()) {
-            return false;
-        }
-        try {
-            EntityTag stored = EntityTag.valueOf(storedEtag);
-            for (String candidate : ifNoneMatch.split(",")) {
-                String trimmed = candidate.trim();
-                if ("*".equals(trimmed)) {
-                    return true;
-                }
-                if (EntityTag.valueOf(trimmed).equals(stored)) {
-                    return true;
-                }
-            }
-        } catch (IllegalArgumentException ignored) {
-            return ifNoneMatch.trim().equals(storedEtag.trim());
         }
         return false;
     }

@@ -1,5 +1,9 @@
 package com.biliwind.blog.filter;
 
+import com.biliwind.blog.service.PageCachePolicy;
+import jakarta.ws.rs.core.EntityTag;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,5 +34,15 @@ class StaticHtmlCacheFilterNonceTest {
         assertTrue(served.contains("<script type=\"application/ld+json\" nonce=\"freshNonce456\">"));
         assertTrue(served.contains("<style nonce=\"freshNonce456\">"));
         assertTrue(served.contains("data-text=\"nonce=&quot;keep&quot;\""));
+    }
+
+    @Test
+    void publicDocumentPolicyDisablesSharedCdnCaching() {
+        Response response = PageCachePolicy.publicDocument(
+                Response.ok("<html></html>"), new EntityTag("v1", true)).build();
+        assertEquals(PageCachePolicy.HTML_NO_STORE, response.getHeaderString(HttpHeaders.CACHE_CONTROL));
+        assertEquals("no-cache", response.getHeaderString("Pragma"));
+        assertEquals("0", response.getHeaderString("Expires"));
+        assertEquals(PageCachePolicy.PUBLIC_VARY, response.getHeaderString(HttpHeaders.VARY));
     }
 }
