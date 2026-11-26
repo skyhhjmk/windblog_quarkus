@@ -791,3 +791,66 @@ test('perf-tier.js discards benchmark sample interrupted by PJAX URL change and 
     assert.equal(h.window.WindBlogPerf.getTier(), 'high');
     assert.equal(h.window.WindBlogPerf.getReport().source, 'benchmark');
 });
+
+test('back_forward initial load with wb-swarm-preblock clears preblock so cards never stay invisible', () => {
+    const h = createHarness({ navType: 'back_forward', dismissedInitialLoader: false });
+    h.documentElement.classList.add('wb-swarm-preblock');
+    const card = h.addArticleCard('bf-card-1', { left: 20, top: 80, width: 600, height: 160 });
+
+    h.loadScripts(false);
+    h.advanceTime(600);
+
+    assert.equal(h.documentElement.classList.contains('wb-swarm-preblock'), false);
+    assert.equal(card.classList.contains('wb-swarm-item-pending'), false);
+});
+
+test('initial load while document.hidden waits for visibilitychange before starting Swarm Rebuild', () => {
+    const h = createHarness({ dismissedInitialLoader: false });
+    h.context.document.hidden = true;
+    h.documentElement.classList.add('wb-swarm-preblock');
+    const card = h.addArticleCard('hidden-card-1', { left: 20, top: 80, width: 600, height: 160 });
+
+    h.loadScripts(false);
+    h.advanceTime(700);
+
+    // While hidden, overlay/preblock holds without starting a broken offscreen session
+    assert.equal(h.window.WindBlogInlineLoader.isBusy(), true);
+
+    // Wake / switch to tab: Swarm Rebuild launches and completes building the card
+    h.context.document.hidden = false;
+    h.dispatchDoc({ type: 'visibilitychange' });
+    assert.equal(h.documentElement.classList.contains('wb-swarm-preblock'), false);
+    assert.equal(card.classList.contains('wb-swarm-item-pending'), true);
+
+    for (let i = 0; i < 120; i++) {
+        h.stepRaf(1, 20);
+    }
+    assert.equal(card.classList.contains('wb-swarm-item-pending'), false);
+    assert.equal(card.classList.contains('wb-swarm-item-building'), false);
+    assert.equal(h.window.WindBlogInlineLoader.isBusy(), false);
+});
+
+test('session in idle-waiting wakes up on visibilitychange/focus when cards become visible without scroll', () => {
+    const h = createHarness();
+    h.loadScripts(false);
+    h.advanceTime(600);
+
+    let card;
+    h.navigatePjax('/category/test', '', () => {
+        // Initially zero height (e.g. background/suspended layout) so session enters idle-waiting
+        card = h.addArticleCard('wake-card-1', { left: 20, top: 80, width: 600, height: 0 });
+    });
+    h.advanceTime(1100);
+    assert.equal(card.classList.contains('wb-swarm-item-pending'), true);
+
+    // After wake / tab focus, layout is ready; visibilitychange/focus wakes up the swarm without scroll
+    card._rect = { left: 20, top: 80, width: 600, height: 160, right: 620, bottom: 240 };
+    h.window.dispatchEvent({ type: 'focus' });
+
+    for (let i = 0; i < 120; i++) {
+        h.stepRaf(1, 20);
+    }
+    assert.equal(card.classList.contains('wb-swarm-item-pending'), false);
+    assert.equal(card.classList.contains('wb-swarm-item-building'), false);
+    assert.equal(h.window.WindBlogInlineLoader.isBusy(), false);
+});

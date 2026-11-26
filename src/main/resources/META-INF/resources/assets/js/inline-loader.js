@@ -845,6 +845,8 @@
     }
 
     function abortAndRevealAllImmediately() {
+        cancelInitialRevealTimer();
+        clearPendingPjaxStart();
         dismissInlineOverlay(true);
         if (activeSwarmSession) {
             activeSwarmSession.abortImmediately();
@@ -1278,6 +1280,11 @@
         stageCanvas.setAttribute('aria-hidden', 'true');
         document.body.appendChild(stageCanvas);
         const ctx = stageCanvas.getContext('2d');
+        if (!ctx) {
+            stageCanvas.remove();
+            revealPreblockedItems();
+            return;
+        }
 
         let stageW = window.innerWidth || 1280;
         let stageH = window.innerHeight || 800;
@@ -1532,6 +1539,18 @@
         }
         window.addEventListener('scroll', onWindowScrollCheck, { passive: true });
         window.addEventListener('scrollend', onWindowScrollCheck, { passive: true });
+
+        function onVisibilityOrFocusResume() {
+            if (detached || document.hidden) return;
+            checkAndEnqueueVisibleOffscreenCards();
+            if ((phase === 'building' || phase === 'scattering') && !rafId) {
+                lastRealNow = performance.now();
+                rafId = window.requestAnimationFrame(tickSwarm);
+            }
+        }
+        document.addEventListener('visibilitychange', onVisibilityOrFocusResume);
+        window.addEventListener('focus', onVisibilityOrFocusResume);
+        window.addEventListener('pageshow', onVisibilityOrFocusResume);
 
         if (typeof IntersectionObserver === 'function') {
             scrollObserver = new IntersectionObserver((entries) => {
@@ -2368,6 +2387,9 @@
             }
             window.removeEventListener('scroll', onWindowScrollCheck);
             window.removeEventListener('scrollend', onWindowScrollCheck);
+            document.removeEventListener('visibilitychange', onVisibilityOrFocusResume);
+            window.removeEventListener('focus', onVisibilityOrFocusResume);
+            window.removeEventListener('pageshow', onVisibilityOrFocusResume);
             document.removeEventListener('pointerdown', onDocumentPointerDown, { capture: true });
         }
 
@@ -2378,7 +2400,7 @@
                 window.cancelAnimationFrame(rafId);
                 rafId = 0;
             }
-            window.removeEventListener('resize', syncStageSize);
+            window.removeEventListener('resize', onWindowResize);
             thrownClones.forEach((p) => {
                 if (p.el) p.el.remove();
             });
@@ -2409,7 +2431,11 @@
             }
         }
 
-        window.addEventListener('resize', syncStageSize, { passive: true });
+        function onWindowResize() {
+            syncStageSize();
+            onWindowScrollCheck();
+        }
+        window.addEventListener('resize', onWindowResize, { passive: true });
         if (phase === 'building') {
             rafId = window.requestAnimationFrame(tickSwarm);
         }
@@ -2428,16 +2454,48 @@
     // 5. Lifecycle Integration (Initial Load, Progressive Upgrade, PJAX, BFCache)
     // =========================================================================
     let initialRevealTimer = 0;
+    let cancelPendingVisibilityStart = null;
+    function clearPendingVisibilityStart() {
+        if (cancelPendingVisibilityStart) {
+            cancelPendingVisibilityStart();
+            cancelPendingVisibilityStart = null;
+        }
+    }
     function cancelInitialRevealTimer() {
         if (initialRevealTimer) {
             window.clearTimeout(initialRevealTimer);
             initialRevealTimer = 0;
         }
+        clearPendingVisibilityStart();
+    }
+
+    function runWhenDocumentVisible(fn) {
+        if (!document.hidden) {
+            fn();
+            return () => {};
+        }
+        let done = false;
+        const cleanup = () => {
+            if (done) return;
+            done = true;
+            document.removeEventListener('visibilitychange', onVisible);
+            window.removeEventListener('focus', onVisible);
+            window.removeEventListener('pageshow', onVisible);
+        };
+        const onVisible = () => {
+            if (done || document.hidden) return;
+            cleanup();
+            fn();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', onVisible);
+        window.addEventListener('pageshow', onVisible);
+        return cleanup;
     }
 
     function initInitialOverlayAndScheduleDismiss() {
         if (isBfCacheRestore) {
-            dismissInlineOverlay(true);
+            abortAndRevealAllImmediately();
             return;
         }
         const initialTier = getCurrentTier();
@@ -2454,18 +2512,30 @@
             cancelInitialRevealTimer();
             initialRevealTimer = window.setTimeout(() => {
                 initialRevealTimer = 0;
-                const finalTier = getCurrentTier();
-                const effectiveHigh = !reducedMotion && (isHighTierForSwarm() || window.__wbInitialTargetTier === 'high');
-                // If high tier, block list items & start Swarm Rebuild right as the overlay dismisses
-                if (effectiveHigh && !isBfCacheRestore) {
-                    if (finalTier !== 'high') {
-                        document.documentElement.dataset.perfTier = 'high';
+                const startOrReveal = () => {
+                    cancelPendingVisibilityStart = null;
+                    if (isBfCacheRestore) {
+                        abortAndRevealAllImmediately();
+                        return;
                     }
-                    startSwarmRebuildForPage({ fromOverlay: true });
+                    const finalTier = getCurrentTier();
+                    const effectiveHigh = !reducedMotion && (isHighTierForSwarm() || window.__wbInitialTargetTier === 'high');
+                    // If high tier, block list items & start Swarm Rebuild right as the overlay dismisses
+                    if (effectiveHigh && !isBfCacheRestore) {
+                        if (finalTier !== 'high') {
+                            document.documentElement.dataset.perfTier = 'high';
+                        }
+                        startSwarmRebuildForPage({ fromOverlay: true });
+                    } else {
+                        revealPreblockedItems();
+                    }
+                    dismissInlineOverlay(finalTier === 'minimal');
+                };
+                if (document.hidden) {
+                    cancelPendingVisibilityStart = runWhenDocumentVisible(startOrReveal);
                 } else {
-                    revealPreblockedItems();
+                    startOrReveal();
                 }
-                dismissInlineOverlay(finalTier === 'minimal');
             }, holdMs);
         };
 
@@ -2654,10 +2724,17 @@
                     const startAfterSettle = () => {
                         if (done) return;
                         cleanup();
-                        rafAfterSettle = window.requestAnimationFrame(() => {
-                            rafAfterSettle = 0;
+                        const launch = () => {
                             cancelPendingPjaxStart = null;
                             startSwarmRebuildForPage({ fromOverlay: false, isPjax: true });
+                        };
+                        if (document.hidden) {
+                            cancelPendingPjaxStart = runWhenDocumentVisible(launch);
+                            return;
+                        }
+                        rafAfterSettle = window.requestAnimationFrame(() => {
+                            rafAfterSettle = 0;
+                            launch();
                         });
                         cancelPendingPjaxStart = () => {
                             if (rafAfterSettle) {
@@ -2674,6 +2751,13 @@
                     cancelPendingPjaxStart = cleanup;
                 } else {
                     cancelPendingPjaxStart = scheduleAfterLayoutSettle(() => {
+                        if (document.hidden) {
+                            cancelPendingPjaxStart = runWhenDocumentVisible(() => {
+                                cancelPendingPjaxStart = null;
+                                startSwarmRebuildForPage({ fromOverlay: false, isPjax: true });
+                            });
+                            return;
+                        }
                         startSwarmRebuildForPage({ fromOverlay: false, isPjax: true });
                     }, 140);
                 }
