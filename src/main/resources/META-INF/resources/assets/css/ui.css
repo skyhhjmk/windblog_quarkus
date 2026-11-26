@@ -368,8 +368,13 @@ body.drawer-open {
 }
 
 #githubSearchModal.is-open #githubSearchPalette {
-    opacity: 1 !important;
-    transform: scale(1) translateY(0) !important;
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+#githubSearchModal.is-flipping #githubSearchPalette {
+    transition: none !important;
+    will-change: transform, opacity;
 }
 
 .search-filter-chip {

@@ -3084,16 +3084,16 @@
 
                 searchInput.addEventListener('click', (e) => {
                     e.preventDefault();
-                    openGithubSearchModal(searchInput.value);
+                    openGithubSearchModal(searchInput.value, searchInput);
                 });
                 searchInput.addEventListener('focus', () => {
                     if (typeof isGithubSearchOpen === 'function' && !isGithubSearchOpen()) {
-                        openGithubSearchModal(searchInput.value);
+                        openGithubSearchModal(searchInput.value, searchInput);
                     }
                 });
                 form.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    openGithubSearchModal(searchInput.value);
+                    openGithubSearchModal(searchInput.value, searchInput);
                 });
 
                 const suggestWrap = document.createElement('div');
@@ -3258,36 +3258,129 @@
         let searchSuggestRequestId = 0;
         let paletteActiveItemIndex = 0;
         let isSearchBackdropMouseDown = false;
+        let activeSearchSourceElement = null;
+        let githubSearchFlipAnimation = null;
+        let githubSearchCloseTimer = null;
 
         function isGithubSearchOpen() {
             return Boolean(githubSearchModal && githubSearchModal.classList.contains('is-open'));
         }
 
-        function openGithubSearchModal(initialQuery = '') {
+        function resolveSearchSourceElement(sourceElement) {
+            if (sourceElement && document.contains(sourceElement) && isVisible(sourceElement)) {
+                return sourceElement;
+            }
+            return Array.from(document.querySelectorAll('[data-shortcut-target="search"]'))
+                .find(isVisible) || null;
+        }
+
+        function cancelGithubSearchFlip() {
+            if (githubSearchCloseTimer) {
+                clearTimeout(githubSearchCloseTimer);
+                githubSearchCloseTimer = null;
+            }
+            if (githubSearchFlipAnimation) {
+                try {
+                    githubSearchFlipAnimation.cancel();
+                } catch (_) {
+                    // Ignore already-finished animation cancellation errors
+                }
+                githubSearchFlipAnimation = null;
+            }
+            if (githubSearchModal) {
+                githubSearchModal.classList.remove('is-flipping');
+            }
+            if (githubSearchPalette) {
+                githubSearchPalette.style.transformOrigin = '';
+            }
+        }
+
+        function computeFlipTransform(fromRect, toRect) {
+            if (!fromRect || !toRect || fromRect.width <= 0 || fromRect.height <= 0 || toRect.width <= 0 || toRect.height <= 0) {
+                return null;
+            }
+            const dx = fromRect.left - toRect.left;
+            const dy = fromRect.top - toRect.top;
+            const sx = fromRect.width / toRect.width;
+            const sy = fromRect.height / toRect.height;
+            return `translate3d(${dx}px, ${dy}px, 0) scale(${sx}, ${sy})`;
+        }
+
+        function openGithubSearchModal(initialQuery = '', sourceElement = null) {
             if (!githubSearchModal || !githubSearchBackdrop) return false;
+
+            const alreadyOpen = isGithubSearchOpen();
+            cancelGithubSearchFlip();
+
+            const resolvedSource = resolveSearchSourceElement(sourceElement);
+            activeSearchSourceElement = resolvedSource;
+            const reducedMotion = Boolean(
+                window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            );
+            const sourceRect = (!alreadyOpen && !reducedMotion && resolvedSource)
+                ? resolvedSource.getBoundingClientRect()
+                : null;
 
             const hasArticle = Boolean(document.querySelector('.prose, #post-content-section, article.post-article'));
             if (chipInArticle) {
                 chipInArticle.classList.toggle('hidden', !hasArticle);
             }
 
-            githubSearchBackdrop.classList.remove('hidden');
-            githubSearchModal.classList.remove('hidden');
-            void githubSearchModal.offsetWidth;
-            githubSearchBackdrop.classList.add('is-open');
-            githubSearchModal.classList.add('is-open');
-
-            document.body.style.overflow = 'hidden';
-
             if (typeof initialQuery === 'string' && initialQuery.length > 0 && githubSearchInput) {
                 githubSearchInput.value = initialQuery;
             }
 
-            setSearchFilterMode('all');
+            const canFlip = Boolean(
+                sourceRect && sourceRect.width > 0 && sourceRect.height > 0 &&
+                githubSearchPalette && typeof githubSearchPalette.animate === 'function'
+            );
+
+            githubSearchBackdrop.classList.remove('hidden');
+            githubSearchModal.classList.remove('hidden');
+
+            if (canFlip) {
+                githubSearchModal.classList.add('is-flipping');
+                githubSearchBackdrop.classList.add('is-open');
+                githubSearchModal.classList.add('is-open');
+                setSearchFilterMode('all');
+
+                const targetRect = githubSearchPalette.getBoundingClientRect();
+                const invertTransform = computeFlipTransform(sourceRect, targetRect);
+
+                if (invertTransform) {
+                    githubSearchPalette.style.transformOrigin = 'top left';
+                    const anim = githubSearchPalette.animate([
+                        {transform: invertTransform, opacity: 0.25},
+                        {transform: 'translate3d(0, 0, 0) scale(1, 1)', opacity: 1}
+                    ], {
+                        duration: 300,
+                        easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+                    });
+                    githubSearchFlipAnimation = anim;
+                    const cleanupOpenFlip = () => {
+                        if (githubSearchFlipAnimation === anim) {
+                            githubSearchFlipAnimation = null;
+                        }
+                        githubSearchModal.classList.remove('is-flipping');
+                        githubSearchPalette.style.transformOrigin = '';
+                    };
+                    anim.onfinish = cleanupOpenFlip;
+                    anim.oncancel = cleanupOpenFlip;
+                } else {
+                    githubSearchModal.classList.remove('is-flipping');
+                }
+            } else {
+                void githubSearchModal.offsetWidth;
+                githubSearchBackdrop.classList.add('is-open');
+                githubSearchModal.classList.add('is-open');
+                setSearchFilterMode('all');
+            }
+
+            document.body.style.overflow = 'hidden';
 
             requestAnimationFrame(() => {
                 if (githubSearchInput) {
-                    githubSearchInput.focus();
+                    githubSearchInput.focus({preventScroll: true});
                     if (githubSearchInput.value) {
                         githubSearchInput.select();
                     }
@@ -3302,17 +3395,64 @@
             if (!githubSearchModal || !githubSearchBackdrop) return;
             isSearchBackdropMouseDown = false;
             clearTimeout(searchSuggestTimer);
-            githubSearchBackdrop.classList.remove('is-open');
-            githubSearchModal.classList.remove('is-open');
-            setTimeout(() => {
+            cancelGithubSearchFlip();
+
+            const finalizeClose = () => {
+                githubSearchCloseTimer = null;
+                githubSearchFlipAnimation = null;
+                githubSearchBackdrop.classList.remove('is-open');
+                githubSearchModal.classList.remove('is-open', 'is-flipping');
                 githubSearchBackdrop.classList.add('hidden');
                 githubSearchModal.classList.add('hidden');
-            }, 200);
+                if (githubSearchPalette) {
+                    githubSearchPalette.style.transformOrigin = '';
+                }
+            };
 
             document.body.style.overflow = '';
             if (currentSearchMode !== 'in-page') {
                 clearInPageHighlights();
             }
+
+            const reducedMotion = Boolean(
+                window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            );
+            const sourceEl = resolveSearchSourceElement(activeSearchSourceElement);
+            activeSearchSourceElement = null;
+
+            if (!reducedMotion && sourceEl && githubSearchPalette && typeof githubSearchPalette.animate === 'function') {
+                const currentRect = githubSearchPalette.getBoundingClientRect();
+                const sourceRect = sourceEl.getBoundingClientRect();
+                const targetTransform = computeFlipTransform(sourceRect, currentRect);
+
+                if (targetTransform) {
+                    githubSearchBackdrop.classList.remove('is-open');
+                    githubSearchModal.classList.add('is-flipping');
+                    githubSearchPalette.style.transformOrigin = 'top left';
+                    const anim = githubSearchPalette.animate([
+                        {transform: 'translate3d(0, 0, 0) scale(1, 1)', opacity: 1},
+                        {transform: targetTransform, opacity: 0}
+                    ], {
+                        duration: 240,
+                        easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+                        fill: 'forwards'
+                    });
+                    githubSearchFlipAnimation = anim;
+                    anim.onfinish = () => {
+                        try {
+                            anim.cancel();
+                        } catch (_) {
+                            // Ignore
+                        }
+                        finalizeClose();
+                    };
+                    return;
+                }
+            }
+
+            githubSearchBackdrop.classList.remove('is-open');
+            githubSearchModal.classList.remove('is-open');
+            githubSearchCloseTimer = setTimeout(finalizeClose, reducedMotion ? 0 : 200);
         }
 
         function updateClearButtonVisibility() {
