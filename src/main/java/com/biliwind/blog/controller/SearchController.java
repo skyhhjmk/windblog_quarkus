@@ -71,10 +71,6 @@ public class SearchController {
     @Inject
     CacheService cacheService;
 
-    @QueryParam("use-es")
-    @DefaultValue("true")
-    boolean useElasticsearch;
-
     @GET
     @Produces(MediaType.TEXT_HTML)
     @Transactional
@@ -89,7 +85,7 @@ public class SearchController {
         String lang = languageContext.getLang();
         PostSearchQuery query = PostSearchQuery.of(
                 keyword, type, sort, date, lang, regionContext.getCurrentRegion(),
-                currentPage, PAGE_SIZE, useElasticsearch);
+                currentPage, PAGE_SIZE, true);
 
         String searchKeyword = query.rawKeyword();
         String searchType = query.type();
@@ -112,7 +108,7 @@ public class SearchController {
                     : "global";
             String querySignature = String.join(":",
                     searchKeyword, searchType, searchSort, searchDate, lang, String.valueOf(currentPage),
-                    String.valueOf(edgeNode), String.valueOf(deepSearchRequested), String.valueOf(useElasticsearch), region);
+                    String.valueOf(edgeNode), String.valueOf(deepSearchRequested), region);
             cacheKey = CacheService.Keys.searchResults(Integer.toHexString(querySignature.hashCode()));
             java.util.Optional<SearchCacheResult> cachedResult = cacheService.get(cacheKey, SearchCacheResult.class);
             if (cachedResult.isPresent()) {

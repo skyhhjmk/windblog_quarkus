@@ -108,4 +108,16 @@ class PostSearchRequestBodyTest {
         assertTrue(must.contains("match_all"), must);
         assertFalse(body.has("highlight"));
     }
+
+    @Test
+    void freeTextUsesControlledFuzzyMatchingAndPhraseBoost() throws Exception {
+        JsonNode body = OBJECT_MAPPER.readTree(PostSearchRequestBody.build(
+                request("", null, "我的世界", null, null, null, 0), "<em>", "</em>").toString());
+
+        JsonNode should = body.path("query").path("bool").path("must").get(0).path("bool").path("should");
+        JsonNode multiMatch = should.get(0).path("multi_match");
+        assertEquals("2<-1 5<75%", multiMatch.path("minimum_should_match").asText());
+        assertEquals("AUTO", multiMatch.path("fuzziness").asText());
+        assertTrue(should.toString().contains("match_phrase"), should.toString());
+    }
 }

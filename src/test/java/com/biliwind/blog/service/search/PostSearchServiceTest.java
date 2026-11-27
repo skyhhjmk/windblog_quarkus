@@ -120,7 +120,7 @@ class PostSearchServiceTest {
         Seed seed = QuarkusTransaction.requiringNew().call(() -> seed(3));
 
         given()
-                .when().get("/search?q=" + seed.token() + "&type=post&sort=latest&use-es=false")
+                .when().get("/search?q=" + seed.token() + "&type=post&sort=latest")
                 .then()
                 .statusCode(200)
                 .body(containsString(seed.slugs().get(0)))
@@ -128,7 +128,7 @@ class PostSearchServiceTest {
 
         given()
                 .header("X-PJAX", "true")
-                .when().get("/search?q=" + seed.token() + "&type=post&sort=latest&use-es=false")
+                .when().get("/search?q=" + seed.token() + "&type=post&sort=latest")
                 .then()
                 .statusCode(200)
                 .body(containsString("pjax-head-metadata"))

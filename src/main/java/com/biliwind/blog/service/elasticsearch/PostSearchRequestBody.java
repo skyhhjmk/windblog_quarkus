@@ -86,12 +86,24 @@ final class PostSearchRequestBody {
         ObjectNode multiMatch = should.addObject().putObject("multi_match");
         multiMatch.put("query", value);
         multiMatch.put("type", "best_fields");
+        multiMatch.put("minimum_should_match", "2<-1 5<75%");
+        multiMatch.put("fuzziness", "AUTO");
         ArrayNode fields = multiMatch.putArray("fields");
         SEARCH_DOCUMENT_FIELDS.forEach(fields::add);
+        addPhraseBoost(should, "title", value, 6.0);
+        addPhraseBoost(should, "summary", value, 2.0);
+        addPhraseBoost(should, "content", value, 1.5);
         ObjectNode slug = should.addObject().putObject("wildcard").putObject("slug");
         slug.put("value", "*" + value.toLowerCase(Locale.ROOT) + "*");
         slug.put("case_insensitive", true);
         clause.put("minimum_should_match", 1);
+    }
+
+    private static void addPhraseBoost(ArrayNode should, String field, String value, double boost) {
+        ObjectNode phrase = should.addObject().putObject("match_phrase").putObject(field);
+        phrase.put("query", value);
+        phrase.put("slop", 1);
+        phrase.put("boost", boost);
     }
 
     private static void addAuthorFilter(ArrayNode must, String value) {
