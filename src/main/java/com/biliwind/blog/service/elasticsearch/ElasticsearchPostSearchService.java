@@ -60,7 +60,7 @@ public class ElasticsearchPostSearchService {
      * The scheduled feedback service rebuilds the alias target when the stored
      * marker does not match, because this index is a disposable search cache.
      */
-    public static final int POST_INDEX_VERSION = 5;
+    public static final int POST_INDEX_VERSION = 6;
     @Inject
     ElasticsearchConnectionManager connectionManager;
     @Inject
@@ -228,22 +228,32 @@ public class ElasticsearchPostSearchService {
             searchTokenizer = "ik_smart";
         }
 
-        String indexAnalyzerFiltersJson = "[\"lowercase\"]";
-        String searchAnalyzerFiltersJson = "[\"lowercase\"]";
-        String synonymFilterJson = "";
-        if (!settings.synonyms().isEmpty()) {
-            searchAnalyzerFiltersJson = "[\"lowercase\", \"windblog_synonyms\"]";
-            synonymFilterJson = """
-                    ,
-                    "filter": {
-                      "windblog_synonyms": {
-                        "type": "synonym_graph",
-                        "lenient": true,
-                        "synonyms": %s
-                      }
-                    }
-                    """.formatted(objectMapper.writeValueAsString(settings.synonyms()));
+        List<String> mergedSynonyms = new ArrayList<>(com.biliwind.blog.common.helper.SearchDictionaryCatalog.defaultSynonyms());
+        for (String customSynonym : settings.synonyms()) {
+            if (customSynonym != null && !customSynonym.isBlank() && !mergedSynonyms.contains(customSynonym)) {
+                mergedSynonyms.add(customSynonym);
+            }
         }
+
+        String indexAnalyzerFiltersJson = "[\"lowercase\", \"windblog_stopwords\"]";
+        String searchAnalyzerFiltersJson = "[\"lowercase\", \"windblog_stopwords\", \"windblog_synonyms\"]";
+        String exactAnalyzerFiltersJson = "[\"lowercase\"]";
+        String filterJson = """
+                ,
+                "filter": {
+                  "windblog_stopwords": {
+                    "type": "stop",
+                    "stopwords": %s
+                  },
+                  "windblog_synonyms": {
+                    "type": "synonym_graph",
+                    "lenient": true,
+                    "synonyms": %s
+                  }
+                }
+                """.formatted(
+                objectMapper.writeValueAsString(com.biliwind.blog.common.helper.SearchDictionaryCatalog.allStopwords()),
+                objectMapper.writeValueAsString(mergedSynonyms));
 
         String templateJson = """
             {
@@ -266,7 +276,12 @@ public class ElasticsearchPostSearchService {
                             "type": "custom",
                             "tokenizer": "%s",
                             "filter": %s
-                      }
+                          },
+                          "windblog_exact_analyzer": {
+                            "type": "custom",
+                            "tokenizer": "%s",
+                            "filter": %s
+                          }
                     }%s
                   }
                 },
@@ -277,12 +292,18 @@ public class ElasticsearchPostSearchService {
                       "type": "text",
                           "analyzer": "windblog_index_analyzer",
                           "search_analyzer": "windblog_search_analyzer",
-                          "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } }
+                          "fields": {
+                            "keyword": { "type": "keyword", "ignore_above": 256 },
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
                     },
                     "content": {
                       "type": "text",
                           "analyzer": "windblog_index_analyzer",
-                          "search_analyzer": "windblog_search_analyzer"
+                          "search_analyzer": "windblog_search_analyzer",
+                          "fields": {
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
                     },
                     "contentHtml": {
                       "type": "text",
@@ -292,17 +313,26 @@ public class ElasticsearchPostSearchService {
                     "summary": {
                       "type": "text",
                           "analyzer": "windblog_index_analyzer",
-                          "search_analyzer": "windblog_search_analyzer"
+                          "search_analyzer": "windblog_search_analyzer",
+                          "fields": {
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
                     },
                     "translations": {
                       "type": "text",
                           "analyzer": "windblog_index_analyzer",
-                          "search_analyzer": "windblog_search_analyzer"
+                          "search_analyzer": "windblog_search_analyzer",
+                          "fields": {
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
                     },
                         "aiSummary": {
                           "type": "text",
                               "analyzer": "windblog_index_analyzer",
-                              "search_analyzer": "windblog_search_analyzer"
+                              "search_analyzer": "windblog_search_analyzer",
+                              "fields": {
+                                "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                              }
                         },
                         "slug": { "type": "keyword" },
                         "status": { "type": "keyword" },
@@ -319,20 +349,38 @@ public class ElasticsearchPostSearchService {
                             "slug": { "type": "keyword" }
                           }
                         },
-                        "tags": { "type": "keyword" },
+                        "tags": {
+                          "type": "keyword",
+                          "fields": {
+                            "text": { "type": "text", "analyzer": "windblog_index_analyzer", "search_analyzer": "windblog_search_analyzer" },
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
+                        },
                         "viewCount": { "type": "long" },
                         "featured": { "type": "boolean" },
                         "allowComment": { "type": "boolean" },
                     "seoTitle": {
                       "type": "text",
                           "analyzer": "windblog_index_analyzer",
-                          "search_analyzer": "windblog_search_analyzer"
+                          "search_analyzer": "windblog_search_analyzer",
+                          "fields": {
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
                     },
-                        "seoKeywords": { "type": "keyword" },
+                        "seoKeywords": {
+                          "type": "keyword",
+                          "fields": {
+                            "text": { "type": "text", "analyzer": "windblog_index_analyzer", "search_analyzer": "windblog_search_analyzer" },
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
+                        },
                     "seoDescription": {
                       "type": "text",
                           "analyzer": "windblog_index_analyzer",
-                          "search_analyzer": "windblog_search_analyzer"
+                          "search_analyzer": "windblog_search_analyzer",
+                          "fields": {
+                            "exact": { "type": "text", "analyzer": "windblog_exact_analyzer", "search_analyzer": "windblog_exact_analyzer" }
+                          }
                     },
                         "publishedAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
                         "createdAt": { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
@@ -361,7 +409,9 @@ public class ElasticsearchPostSearchService {
                 indexAnalyzerFiltersJson,
                 searchTokenizer,
                 searchAnalyzerFiltersJson,
-                synonymFilterJson,
+                searchTokenizer,
+                exactAnalyzerFiltersJson,
+                filterJson,
                 POST_INDEX_VERSION
         );
 

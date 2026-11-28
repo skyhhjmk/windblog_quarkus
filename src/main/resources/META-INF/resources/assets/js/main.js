@@ -2718,6 +2718,12 @@
         }
 
         function focusSearchInput() {
+            const inlineSearchInput = document.getElementById('inlineSearchInput');
+            if (inlineSearchInput && isVisible(inlineSearchInput)) {
+                inlineSearchInput.focus();
+                inlineSearchInput.select();
+                return true;
+            }
             if (typeof openGithubSearchModal === 'function' && openGithubSearchModal()) return true;
             const searchInput = Array.from(document.querySelectorAll('[data-shortcut-target="search"]'))
                 .find(isVisible);
@@ -3068,7 +3074,7 @@
         // Search Suggestions logic
         let searchSuggestionCounter = 0;
         function bindSearchForms() {
-            const searchForms = document.querySelectorAll('form[data-shortcut-form="search"], form[action$="/search"]');
+            const searchForms = document.querySelectorAll('form[data-shortcut-form="search"], form[action$="/search"]:not([data-inline-search-form])');
             searchForms.forEach((form) => {
                 if (form.dataset.searchBound === 'true') return;
                 form.dataset.searchBound = 'true';
@@ -4059,6 +4065,339 @@
             }
         });
 
+        function initInlineSearchPalette() {
+            const palette = document.getElementById('inlineSearchPalette');
+            if (!palette || palette.dataset.inlinePaletteBound === 'true') return;
+            palette.dataset.inlinePaletteBound = 'true';
+
+            const form = document.getElementById('inlineSearchForm');
+            const input = document.getElementById('inlineSearchInput');
+            const clearBtn = document.getElementById('inlineSearchClearBtn');
+            const activeFilters = document.getElementById('inlineSearchActiveFilters');
+            const inPageToolbar = document.getElementById('inlineSearchInPageToolbar');
+            const inPageCount = document.getElementById('inlineSearchInPageCount');
+            const inPagePrev = document.getElementById('inlineSearchInPagePrev');
+            const inPageNext = document.getElementById('inlineSearchInPageNext');
+            const resultsList = document.getElementById('inlineSearchResultsList');
+            if (!input || !resultsList) return;
+
+            let inlineMode = 'all';
+            let inlineSuggestTimer = null;
+            let inlineSuggestRequestId = 0;
+            let inlineActiveIndex = 0;
+            let inlineMatches = [];
+            let inlineMatchIndex = -1;
+
+            const clearInlineInPage = () => {
+                document.querySelectorAll('.github-search-inpage-highlight').forEach(m => {
+                    const p = m.parentNode;
+                    if (p) {
+                        p.replaceChild(document.createTextNode(m.textContent), m);
+                        p.normalize();
+                    }
+                });
+                inlineMatches = [];
+                inlineMatchIndex = -1;
+                if (inPageToolbar) inPageToolbar.classList.add('hidden');
+                if (inPageCount) inPageCount.textContent = '0 处匹配';
+            };
+
+            const runInlineInPage = (term) => {
+                clearInlineInPage();
+                if (!term) return;
+                const root = document.getElementById('pjax-container') || document.body;
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                    acceptNode(node) {
+                        const parent = node.parentElement;
+                        if (!parent) return NodeFilter.FILTER_REJECT;
+                        if (parent.closest('#inlineSearchPalette, script, style, noscript, textarea, input')) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        return node.textContent.toLowerCase().includes(term.toLowerCase())
+                            ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+                    }
+                });
+                const nodes = [];
+                let n;
+                while ((n = walker.nextNode())) nodes.push(n);
+                nodes.forEach(textNode => {
+                    const text = textNode.textContent;
+                    const lowerText = text.toLowerCase();
+                    const lowerTerm = term.toLowerCase();
+                    const frag = document.createDocumentFragment();
+                    let lastIdx = 0;
+                    let idx;
+                    while ((idx = lowerText.indexOf(lowerTerm, lastIdx)) !== -1) {
+                        if (idx > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, idx)));
+                        const mark = document.createElement('mark');
+                        mark.className = 'github-search-inpage-highlight';
+                        mark.textContent = text.slice(idx, idx + term.length);
+                        frag.appendChild(mark);
+                        inlineMatches.push(mark);
+                        lastIdx = idx + term.length;
+                    }
+                    if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+                    textNode.parentNode?.replaceChild(frag, textNode);
+                });
+                if (inPageToolbar) inPageToolbar.classList.remove('hidden');
+                if (inPageCount) inPageCount.textContent = `${inlineMatches.length} 处匹配`;
+                if (inlineMatches.length > 0) jumpInlineMatch(0);
+            };
+
+            const jumpInlineMatch = (index) => {
+                if (inlineMatches.length === 0) return;
+                inlineMatches.forEach(m => m.classList.remove('is-current'));
+                inlineMatchIndex = (index + inlineMatches.length) % inlineMatches.length;
+                const target = inlineMatches[inlineMatchIndex];
+                if (target) {
+                    target.classList.add('is-current');
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                if (inPageCount) inPageCount.textContent = `${inlineMatchIndex + 1} / ${inlineMatches.length} 处匹配`;
+            };
+
+            const renderInlineFilters = (parsed) => {
+                if (!activeFilters) return;
+                const tags = [];
+                if (parsed.title) tags.push({ label: '标题', val: parsed.title, prefix: 'title:' });
+                if (parsed.author) tags.push({ label: '作者', val: parsed.author, prefix: 'author:' });
+                if (parsed.content) tags.push({ label: '正文', val: parsed.content, prefix: 'content:' });
+                if (parsed.user) tags.push({ label: '用户', val: parsed.user, prefix: 'user:' });
+                if (tags.length === 0) {
+                    activeFilters.classList.add('hidden');
+                    activeFilters.replaceChildren();
+                    return;
+                }
+                activeFilters.classList.remove('hidden');
+                activeFilters.replaceChildren();
+                const prefixSpan = document.createElement('span');
+                prefixSpan.className = 'text-meta text-[11px] self-center mr-1 select-none';
+                prefixSpan.textContent = '过滤条件:';
+                activeFilters.appendChild(prefixSpan);
+                tags.forEach(tag => {
+                    const badge = document.createElement('span');
+                    badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/30 text-xs';
+                    badge.innerHTML = `<span>${tag.label}: <strong class="font-semibold">${escapeHtml(tag.val)}</strong></span>`;
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'hover:text-red-400 p-0.5 rounded transition-colors ml-0.5 font-bold';
+                    removeBtn.textContent = '×';
+                    removeBtn.addEventListener('click', () => {
+                        const re = new RegExp(`\\b${tag.prefix}(?:"[^"]*"|'[^']*'|[^\\s]+)\\s*`, 'i');
+                        input.value = input.value.replace(re, '').trim();
+                        refreshInlinePalette();
+                        input.focus();
+                    });
+                    badge.appendChild(removeBtn);
+                    activeFilters.appendChild(badge);
+                });
+            };
+
+            const renderInlineList = (raw, parsed, suggestions = []) => {
+                resultsList.replaceChildren();
+                const rawQuery = (raw || '').trim();
+                const searchTerm = parsed.freeText || rawQuery;
+
+                if (inlineMode === 'in-page') {
+                    runInlineInPage(searchTerm);
+                    const info = document.createElement('div');
+                    info.className = 'github-search-item is-selected';
+                    info.innerHTML = `
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-accent">📄</span>
+                            <span class="font-medium text-main">页面内匹配 (${inlineMatches.length} 处)</span>
+                        </div>
+                        <span class="text-xs text-meta">按 Enter 键跳转下一处</span>
+                    `;
+                    resultsList.appendChild(info);
+                    return;
+                }
+
+                const globalItem = document.createElement('div');
+                globalItem.className = 'github-search-item';
+                globalItem.dataset.actionType = 'site-search';
+                globalItem.innerHTML = `
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="text-accent text-base">🌐</span>
+                        <div class="min-w-0">
+                            <div class="font-semibold text-main text-xs sm:text-sm truncate">全站搜索: <span class="text-accent font-mono">${escapeHtml(rawQuery || '*')}</span></div>
+                            <div class="text-[11px] text-meta">支持 title: / author: / content: 结构化过滤与高亮检索</div>
+                        </div>
+                    </div>
+                    <kbd class="hidden sm:inline-block px-1.5 py-0.5 rounded bg-card border border-border text-[10px] text-meta font-mono shrink-0">Enter ↵</kbd>
+                `;
+                globalItem.addEventListener('click', () => executeSiteSearch(input.value));
+                resultsList.appendChild(globalItem);
+
+                if (rawQuery) {
+                    const inPageItem = document.createElement('div');
+                    inPageItem.className = 'github-search-item';
+                    inPageItem.dataset.actionType = 'in-page';
+                    inPageItem.innerHTML = `
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="text-accent text-base">📄</span>
+                            <div class="min-w-0">
+                                <div class="font-medium text-main text-xs sm:text-sm truncate">在当前结果页高亮查找: <span class="text-accent font-mono">${escapeHtml(searchTerm)}</span></div>
+                                <div class="text-[11px] text-meta">在当前页面 DOM 中定位并跳转匹配项</div>
+                            </div>
+                        </div>
+                        <span class="text-xs text-meta shrink-0">切换模式 →</span>
+                    `;
+                    inPageItem.addEventListener('click', () => setInlineMode('in-page'));
+                    resultsList.appendChild(inPageItem);
+                }
+
+                if (suggestions && suggestions.length > 0) {
+                    const header = document.createElement('div');
+                    header.className = 'px-3 pt-2 pb-1 text-[11px] font-mono uppercase text-meta tracking-wider';
+                    header.textContent = '推荐建议';
+                    resultsList.appendChild(header);
+
+                    suggestions.forEach(s => {
+                        const sugItem = document.createElement('div');
+                        sugItem.className = 'github-search-item';
+                        sugItem.dataset.actionType = 'suggestion';
+                        sugItem.dataset.suggestValue = String(s);
+                        sugItem.innerHTML = `
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <span class="text-meta">💡</span>
+                                <span class="text-xs sm:text-sm text-body hover:text-main truncate">${escapeHtml(String(s))}</span>
+                            </div>
+                            <kbd class="hidden sm:inline-block px-1.5 py-0.5 rounded bg-card border border-border text-[10px] text-meta font-mono shrink-0">Tab 补全</kbd>
+                        `;
+                        sugItem.addEventListener('click', () => {
+                            input.value = String(s);
+                            executeSiteSearch(input.value);
+                        });
+                        resultsList.appendChild(sugItem);
+                    });
+                }
+
+                const items = Array.from(resultsList.querySelectorAll('.github-search-item'));
+                if (items.length > 0) {
+                    if (inlineActiveIndex >= items.length) inlineActiveIndex = 0;
+                    items.forEach((item, idx) => {
+                        item.classList.toggle('is-selected', idx === inlineActiveIndex);
+                        item.addEventListener('mouseenter', () => {
+                            inlineActiveIndex = idx;
+                            items.forEach((it, i) => it.classList.toggle('is-selected', i === inlineActiveIndex));
+                        });
+                    });
+                }
+            };
+
+            const setInlineMode = (mode) => {
+                inlineMode = mode;
+                palette.querySelectorAll('.search-filter-chip[data-inline-filter-mode]').forEach(chip => {
+                    chip.classList.toggle('active', chip.dataset.inlineFilterMode === mode);
+                });
+                if (mode !== 'in-page') clearInlineInPage();
+                refreshInlinePalette();
+            };
+
+            const refreshInlinePalette = () => {
+                if (clearBtn) clearBtn.classList.toggle('hidden', !input.value);
+                const raw = input.value;
+                const parsed = parseSearchSyntax(raw);
+                renderInlineFilters(parsed);
+                renderInlineList(raw, parsed, []);
+
+                const q = (parsed.freeText || raw).trim();
+                clearTimeout(inlineSuggestTimer);
+                if (inlineMode !== 'all' || q.length < 2) return;
+
+                const reqId = ++inlineSuggestRequestId;
+                inlineSuggestTimer = setTimeout(async () => {
+                    try {
+                        const res = await fetch(`/search/suggest?q=${encodeURIComponent(q)}`);
+                        if (!res.ok) return;
+                        const suggestions = await res.json();
+                        if (reqId !== inlineSuggestRequestId || input.value !== raw) return;
+                        renderInlineList(raw, parsed, suggestions || []);
+                    } catch {
+                        // Ignore suggest errors
+                    }
+                }, 220);
+            };
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    input.value = '';
+                    refreshInlinePalette();
+                    input.focus();
+                });
+            }
+            if (inPagePrev) inPagePrev.addEventListener('click', () => jumpInlineMatch(inlineMatchIndex - 1));
+            if (inPageNext) inPageNext.addEventListener('click', () => jumpInlineMatch(inlineMatchIndex + 1));
+
+            palette.querySelectorAll('.search-filter-chip[data-inline-filter-mode]').forEach(btn => {
+                btn.addEventListener('click', () => setInlineMode(btn.dataset.inlineFilterMode));
+            });
+            palette.querySelectorAll('.search-filter-chip[data-inline-syntax]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    let current = input.value.trim();
+                    if (current && !current.endsWith(' ')) current += ' ';
+                    input.value = current + btn.dataset.inlineSyntax;
+                    input.focus();
+                    const len = input.value.length;
+                    input.setSelectionRange(len, len);
+                    refreshInlinePalette();
+                });
+            });
+
+            input.addEventListener('input', () => {
+                inlineActiveIndex = 0;
+                refreshInlinePalette();
+            });
+
+            input.addEventListener('keydown', (event) => {
+                const items = Array.from(resultsList.querySelectorAll('.github-search-item'));
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    if (items.length > 0) {
+                        inlineActiveIndex = (inlineActiveIndex + 1) % items.length;
+                        items.forEach((it, i) => it.classList.toggle('is-selected', i === inlineActiveIndex));
+                    }
+                } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    if (items.length > 0) {
+                        inlineActiveIndex = (inlineActiveIndex - 1 + items.length) % items.length;
+                        items.forEach((it, i) => it.classList.toggle('is-selected', i === inlineActiveIndex));
+                    }
+                } else if (event.key === 'Tab') {
+                    const selected = items[inlineActiveIndex];
+                    if (selected && selected.dataset.suggestValue) {
+                        event.preventDefault();
+                        input.value = selected.dataset.suggestValue;
+                        refreshInlinePalette();
+                    }
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (inlineMode === 'in-page') {
+                        jumpInlineMatch(event.shiftKey ? inlineMatchIndex - 1 : inlineMatchIndex + 1);
+                        return;
+                    }
+                    const selected = items[inlineActiveIndex] || items[0];
+                    if (selected && selected.dataset.actionType === 'in-page') {
+                        setInlineMode('in-page');
+                    } else if (selected && selected.dataset.actionType === 'suggestion' && selected.dataset.suggestValue) {
+                        executeSiteSearch(selected.dataset.suggestValue);
+                    } else {
+                        executeSiteSearch(input.value);
+                    }
+                }
+            });
+
+            if (form) {
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    executeSiteSearch(input.value);
+                });
+            }
+
+            refreshInlinePalette();
+        }
+
         // ==========================================
         // TOC & Mobile Floating Controls (Scrollspy, Mobile Drawer, Back to Top)
         // ==========================================
@@ -4777,6 +5116,9 @@
         });
         WindBlogLifecycle.register('search-forms', {
             mount: bindSearchForms
+        });
+        WindBlogLifecycle.register('inline-search-palette', {
+            mount: initInlineSearchPalette
         });
     });
 })();

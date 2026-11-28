@@ -195,4 +195,21 @@ class SearchWeightHelperTest {
         // 总权重 = 645 + 14 = 659
         org.junit.jupiter.api.Assertions.assertTrue(weight >= 645, "Weight with current lang match should be >= 645");
     }
+
+    @Test
+    @DisplayName("完整输入完美匹配标题或正文时，获得显著更高的精准匹配权重加成")
+    void shouldBoostPerfectExactMatch() {
+        java.util.Map<String, String> exactTitle = java.util.Map.of("zh-CN", "我的世界");
+        java.util.Map<String, String> exactContent = java.util.Map.of("zh-CN", "关于我的世界的入门介绍");
+
+        java.util.Map<String, String> partialTitle = java.util.Map.of("zh-CN", "我的世界红石电路教程");
+        java.util.Map<String, String> partialContent = java.util.Map.of("zh-CN", "这里介绍红石与世界观");
+
+        int exactBonus = SearchWeightHelper.calculateExactMatchBonus(exactTitle, exactContent, "我的世界", "zh-CN");
+        int partialBonus = SearchWeightHelper.calculateExactMatchBonus(partialTitle, partialContent, "我的世界", "zh-CN");
+
+        org.junit.jupiter.api.Assertions.assertTrue(exactBonus > partialBonus,
+                "Exact full-title match bonus (" + exactBonus + ") must exceed partial substring match (" + partialBonus + ")");
+        assertEquals(SearchWeightHelper.EXACT_TITLE_EQUAL_BOOST + SearchWeightHelper.EXACT_CONTENT_PHRASE_BOOST, exactBonus);
+    }
 }

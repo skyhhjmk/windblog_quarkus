@@ -113,7 +113,8 @@ public class SearchHitMapper {
 
         Map<String, String> titles = post.title != null ? post.title : Map.of();
         Map<String, String> contentsMap = contentsMap(post);
-        int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contentsMap, keyword, lang);
+        int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contentsMap, keyword, lang)
+                + SearchWeightHelper.calculateExactMatchBonus(titles, contentsMap, keyword, lang);
         return new SearchHit(
                 "post",
                 "Post",
@@ -204,7 +205,8 @@ public class SearchHitMapper {
             summarySegments = fallbackHighlight(displaySummary, keyword);
         }
 
-        int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contents, keyword, lang);
+        int weight = SearchWeightHelper.calculateMultilingualWeight(titles, contents, keyword, lang)
+                + SearchWeightHelper.calculateExactMatchBonus(titles, contents, keyword, lang);
 
         return new SearchHit(
                 "post",

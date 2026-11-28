@@ -4,10 +4,12 @@ import com.biliwind.blog.common.CacheService;
 import com.biliwind.blog.common.dto.PaginationPage;
 import com.biliwind.blog.common.dto.SearchHighlightSegment;
 import com.biliwind.blog.common.helper.PjaxHelper;
+import com.biliwind.blog.common.helper.RegionVisibility;
 import com.biliwind.blog.common.helper.SearchQueryParser;
 import com.biliwind.blog.common.security.SensitiveMessageSanitizer;
 import com.biliwind.blog.context.LanguageContext;
 import com.biliwind.blog.context.RegionContext;
+import com.biliwind.blog.model.Post;
 import com.biliwind.blog.service.PageRenderModel;
 import com.biliwind.blog.service.PageRenderer;
 import com.biliwind.blog.service.PageView;
@@ -19,12 +21,15 @@ import com.biliwind.blog.service.search.PostSearchQuery;
 import com.biliwind.blog.service.search.PostSearchResult;
 import com.biliwind.blog.service.search.PostSearchService;
 import com.biliwind.blog.service.search.SearchHit;
+import com.biliwind.blog.service.search.SearchHitMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.qute.TemplateData;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
@@ -70,6 +75,10 @@ public class SearchController {
     RegionContext regionContext;
     @Inject
     CacheService cacheService;
+    @Inject
+    SearchHitMapper hitMapper;
+    @PersistenceContext
+    EntityManager entityManager;
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -181,6 +190,11 @@ public class SearchController {
             pageItems = searchHits.subList(fromIndex, toIndex);
         }
 
+        List<SearchHit> recommendedHits = (!searchKeyword.isBlank() && totalCount < 3)
+                ? loadRecommendedHits(lang, searchHits)
+                : List.of();
+        boolean lowMatchRecommendations = !searchKeyword.isBlank() && totalCount < 3 && !recommendedHits.isEmpty();
+
         return pageRenderer.render(PageView.SEARCH, httpHeaders, new PageRenderModel()
                 .put("language", lang)
                 .put("pjaxRequest", PjaxHelper.isPjaxRequest(httpHeaders))
@@ -208,6 +222,8 @@ public class SearchController {
                 .put("sortLinks", buildSortLinks(searchKeyword, searchType, searchSort, searchDate))
                 .put("dateLinks", buildDateLinks(searchKeyword, searchType, searchSort, searchDate))
                 .put("hits", pageItems)
+                .put("lowMatchRecommendations", lowMatchRecommendations)
+                .put("recommendedHits", recommendedHits)
                 .put("usedElasticsearch", usedElasticsearch)
                 .put("esDegraded", esDegraded)
                 .put("edgeNode", edgeNode)
@@ -471,6 +487,49 @@ public class SearchController {
             suggestions.add(hit.title());
         }
         return suggestions;
+    }
+
+    private List<SearchHit> loadRecommendedHits(String lang, List<SearchHit> existingHits) {
+        try {
+            var regionFilter = RegionVisibility.nativeSqlFilter(
+                    "p.visibility_regions", regionContext != null ? regionContext.getCurrentRegion() : null);
+            List<String> excludedSlugs = existingHits == null ? List.of() : existingHits.stream()
+                    .filter(hit -> "post".equals(hit.type()) && hit.slug() != null && !hit.slug().isBlank())
+                    .map(SearchHit::slug)
+                    .distinct()
+                    .toList();
+
+            StringBuilder sql = new StringBuilder(
+                    "select p.* from posts p where p.status = 1 and p.deleted_at is null "
+                            + "and p.visibility = 0 and p.published_revision_id is not null and "
+                            + regionFilter.fragment());
+            if (!excludedSlugs.isEmpty()) {
+                sql.append(" and p.slug not in (:excludedSlugs)");
+            }
+            sql.append(" order by p.view_count DESC NULLS LAST, p.published_at DESC NULLS LAST, p.id DESC");
+
+            jakarta.persistence.Query query = entityManager.createNativeQuery(sql.toString(), Post.class);
+            regionFilter.parameters().forEach(query::setParameter);
+            if (!excludedSlugs.isEmpty()) {
+                query.setParameter("excludedSlugs", excludedSlugs);
+            }
+            query.setMaxResults(4);
+
+            @SuppressWarnings("unchecked")
+            List<Post> posts = query.getResultList();
+            if (posts.isEmpty()) {
+                return List.of();
+            }
+            var tagsByPost = hitMapper.loadTags(posts, lang);
+            List<SearchHit> recommended = new ArrayList<>(posts.size());
+            for (Post post : posts) {
+                recommended.add(hitMapper.postHit(post, lang, tagsByPost, ""));
+            }
+            return recommended;
+        } catch (Exception exception) {
+            log.debugf("加载低匹配推荐文章失败: %s", SensitiveMessageSanitizer.sanitize(exception.getMessage()));
+            return List.of();
+        }
     }
 
     private String buildPageTitle(String keyword) {

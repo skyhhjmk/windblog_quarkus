@@ -591,7 +591,15 @@
         '#pjax-content-root #toolsIndexGrid [data-tool-card="true"]'
     ].join(', ');
 
+    function isSearchResultsPage() {
+        const path = (window.location.pathname || '').toLowerCase();
+        return path === '/search' || path.endsWith('/search');
+    }
+
     function isHighTierForSwarm() {
+        if (isSearchResultsPage()) {
+            return false;
+        }
         if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             return false;
         }
@@ -745,6 +753,9 @@
     // Tailwind `after:inset-0`, otherwise the stretched-link hit area collapses and breaks FLIP PJAX!
     function prepareZeroClsTypingTarget(el) {
         if (!el || el.dataset.wbTypingPrepared === 'true') return null;
+        // Skip elements containing <mark> search highlights so PJAX Swarm Rebuild
+        // never hides highlighted text with transparent host styling or plain-text overlays.
+        if (el.querySelector('mark')) return null;
         let targetNode = el;
         if ((el.tagName === 'H2' || el.tagName === 'H3') && el.querySelector('a')) {
             targetNode = el.querySelector('a');
@@ -1410,6 +1421,14 @@
                 job.frameBuilt = true;
                 job.cardEl.classList.remove('wb-swarm-item-pending');
                 job.cardEl.classList.add('wb-swarm-item-building');
+                if (!job.titleTyping) {
+                    job.hasTitle = true;
+                    job.cardEl.classList.add('wb-has-title');
+                }
+                if (!job.summaryTyping) {
+                    job.hasSummary = true;
+                    job.cardEl.classList.add('wb-has-summary');
+                }
             } else if (task.type === 'drag-article-block') {
                 job.cardEl.classList.remove('wb-swarm-block-pending', 'wb-swarm-block-building');
                 job.cardEl.classList.add('wb-swarm-block-built');

@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.search;
 
 import com.biliwind.blog.common.helper.RegionVisibility;
+import com.biliwind.blog.common.helper.SearchDictionaryCatalog;
 import com.biliwind.blog.common.helper.SearchQueryParser;
 import com.biliwind.blog.controller.IndexController;
 import com.biliwind.blog.model.Category;
@@ -218,27 +219,56 @@ public class PostSearchDatabaseAdapter {
                 params.put("userPattern", likePattern(parsed.user()));
             }
             if (!parsed.freeText().isEmpty()) {
-                wb.append("and (p.search_document @@ plainto_tsquery('simple', :freeText) "
-                        + "or lower(p.slug) like :freePattern escape '\\' "
-                        + "or lower(p.title::text) like :freePattern escape '\\' "
-                        + "or lower(coalesce(p.summary::text, '')) like :freePattern escape '\\') ");
-                params.put("freeText", parsed.freeText());
-                params.put("freePattern", likePattern(parsed.freeText()));
+                appendKeywordOrTokenizedMatch(wb, params, "free", parsed.freeText());
             }
             return wb.toString();
         }
 
-        params.put("keyword", keyword);
-        params.put("searchPattern", searchPattern);
-        wb.append("and (p.search_document @@ plainto_tsquery('simple', :keyword) "
-                + "or lower(p.slug) like :searchPattern escape '\\' "
-                + "or lower(p.title::text) like :searchPattern escape '\\' "
-                + "or lower(coalesce(p.summary::text, '')) like :searchPattern escape '\\') ");
+        appendKeywordOrTokenizedMatch(wb, params, "kw", keyword);
         if (threshold != null) {
             wb.append("and p.published_at >= :threshold ");
             params.put("threshold", threshold);
         }
         return wb.toString();
+    }
+
+    /**
+     * 同时支持“完整关键词匹配”与“内置词典分词后全词匹配”，避免数据库降级路径下
+     * 多词或中英混排查询因缺少中文分词而漏召回，也避免单字虚词污染结果。
+     */
+    private void appendKeywordOrTokenizedMatch(StringBuilder wb, Map<String, Object> params,
+                                               String prefix, String text) {
+        String rawParam = prefix + "Raw";
+        String patternParam = prefix + "Pattern";
+        params.put(rawParam, text);
+        params.put(patternParam, likePattern(text));
+
+        StringBuilder condition = new StringBuilder("(p.search_document @@ plainto_tsquery('simple', :")
+                .append(rawParam).append(") ")
+                .append("or lower(p.slug) like :").append(patternParam).append(" escape '\\' ")
+                .append("or lower(p.title::text) like :").append(patternParam).append(" escape '\\' ")
+                .append("or lower(coalesce(p.summary::text, '')) like :").append(patternParam).append(" escape '\\'");
+
+        List<String> terms = SearchDictionaryCatalog.segmentQuery(text);
+        if (terms.size() > 1) {
+            condition.append(" or (");
+            for (int i = 0; i < terms.size(); i++) {
+                if (i > 0) {
+                    condition.append(" and ");
+                }
+                String termRaw = prefix + "TermRaw" + i;
+                String termPattern = prefix + "TermPat" + i;
+                params.put(termRaw, terms.get(i));
+                params.put(termPattern, likePattern(terms.get(i)));
+                condition.append("(p.search_document @@ plainto_tsquery('simple', :").append(termRaw).append(") ")
+                        .append("or lower(p.slug) like :").append(termPattern).append(" escape '\\' ")
+                        .append("or lower(p.title::text) like :").append(termPattern).append(" escape '\\' ")
+                        .append("or lower(coalesce(p.summary::text, '')) like :").append(termPattern).append(" escape '\\')");
+            }
+            condition.append(")");
+        }
+        condition.append(") ");
+        wb.append("and ").append(condition);
     }
 
     private String postOrderBy(String sort) {

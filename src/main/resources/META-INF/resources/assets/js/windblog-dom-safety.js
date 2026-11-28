@@ -32,8 +32,9 @@
         'a', 'article', 'b', 'blockquote', 'br', 'button', 'caption', 'code', 'col', 'colgroup',
         'dd', 'del', 'div', 'dl', 'dt', 'em', 'fieldset', 'figcaption', 'figure', 'footer',
         'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'i', 'img', 'input',
-        'label', 'li', 'main', 'nav', 'ol', 'option', 'p', 'path', 'polyline', 'polygon',
-        'pre', 'section', 'select', 'small', 'span', 'strong', 'sub', 'sup', 'svg', 'table',
+        'kbd', 'label', 'li', 'line', 'main', 'mark', 'nav', 'ol', 'option', 'p', 'path',
+        'polyline', 'polygon', 'pre', 'rect', 'section', 'select', 'small', 'span', 'strong',
+        'sub', 'sup', 'svg', 'table', 'circle',
         'tbody', 'td', 'textarea', 'tfoot', 'th', 'thead', 'tr', 'u', 'ul', 'video',
         'template', 'time', 'aside', 'details', 'summary', 'picture', 'source'
     ]);

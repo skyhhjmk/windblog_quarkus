@@ -40,6 +40,9 @@ public final class SearchWeightHelper {
 
     /** 当前语言匹配额外提权加成 */
     public static final int CURRENT_LANG_MATCH_BOOST = 500;
+    public static final int EXACT_TITLE_EQUAL_BOOST = 2000;
+    public static final int EXACT_TITLE_PHRASE_BOOST = 500;
+    public static final int EXACT_CONTENT_PHRASE_BOOST = 200;
 
     private SearchWeightHelper() {
     }
@@ -341,6 +344,81 @@ public final class SearchWeightHelper {
             cursor = idx + foldedTerm.length();
         }
         return count;
+    }
+
+    /**
+     * 使用内置中英文词典与停用词提取搜索词项，保留专有名词与技术名词并过滤虚词。
+     */
+    public static List<String> extractSearchTerms(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        List<String> segmented = SearchDictionaryCatalog.segmentQuery(keyword);
+        return segmented.isEmpty() ? extractTerms(keyword) : segmented;
+    }
+
+    /**
+     * 计算“输入的所有内容完美匹配目标”时的额外权重加成：
+     * - 标题与完整输入完全一致：+2000
+     * - 标题完整包含输入字符串：+500
+     * - 正文完整包含输入字符串：+200
+     */
+    public static int calculateExactMatchBonus(
+            Map<String, String> titles,
+            Map<String, String> contents,
+            String keyword,
+            String currentLang) {
+        if (keyword == null || keyword.isBlank()) {
+            return 0;
+        }
+        String normalizedKeyword = keyword.trim().toLowerCase(Locale.ROOT);
+        String normalizedCurrentLang = LanguageHelper.normalizeToSupportedLang(currentLang);
+        if (normalizedCurrentLang == null) {
+            normalizedCurrentLang = LanguageConstant.DEFAULT_LANG;
+        }
+
+        int currentLangBonus = singleLangExactBonus(
+                titles != null ? findMatchingLanguageValue(titles, normalizedCurrentLang) : null,
+                contents != null ? findMatchingLanguageValue(contents, normalizedCurrentLang) : null,
+                normalizedKeyword);
+        if (currentLangBonus > 0) {
+            return currentLangBonus;
+        }
+
+        int maxOtherBonus = 0;
+        Set<String> allLangs = new LinkedHashSet<>();
+        if (titles != null) {
+            allLangs.addAll(titles.keySet());
+        }
+        if (contents != null) {
+            allLangs.addAll(contents.keySet());
+        }
+        for (String langKey : allLangs) {
+            String otherTitle = titles != null ? titles.get(langKey) : null;
+            String otherContent = contents != null ? contents.get(langKey) : null;
+            int bonus = singleLangExactBonus(otherTitle, otherContent, normalizedKeyword);
+            if (bonus > maxOtherBonus) {
+                maxOtherBonus = bonus;
+            }
+        }
+        return maxOtherBonus > 0 ? Math.max(100, maxOtherBonus / 2) : 0;
+    }
+
+    private static int singleLangExactBonus(String title, String content, String normalizedKeyword) {
+        int bonus = 0;
+        if (title != null && !title.isBlank()) {
+            String trimmedTitle = title.trim().toLowerCase(Locale.ROOT);
+            if (trimmedTitle.equals(normalizedKeyword)) {
+                bonus += EXACT_TITLE_EQUAL_BOOST;
+            } else if (trimmedTitle.contains(normalizedKeyword)) {
+                bonus += EXACT_TITLE_PHRASE_BOOST;
+            }
+        }
+        if (content != null && !content.isBlank()
+                && content.toLowerCase(Locale.ROOT).contains(normalizedKeyword)) {
+            bonus += EXACT_CONTENT_PHRASE_BOOST;
+        }
+        return bonus;
     }
 
     /**

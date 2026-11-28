@@ -110,14 +110,20 @@ class PostSearchRequestBodyTest {
     }
 
     @Test
-    void freeTextUsesControlledFuzzyMatchingAndPhraseBoost() throws Exception {
+    void freeTextSearchesBothTokenizedAndExactKeywordWithPerfectMatchBoost() throws Exception {
         JsonNode body = OBJECT_MAPPER.readTree(PostSearchRequestBody.build(
                 request("", null, "我的世界", null, null, null, 0), "<em>", "</em>").toString());
 
         JsonNode should = body.path("query").path("bool").path("must").get(0).path("bool").path("should");
-        JsonNode multiMatch = should.get(0).path("multi_match");
-        assertEquals("2<-1 5<75%", multiMatch.path("minimum_should_match").asText());
-        assertEquals("AUTO", multiMatch.path("fuzziness").asText());
-        assertTrue(should.toString().contains("match_phrase"), should.toString());
+        JsonNode tokenizedMatch = should.get(0).path("multi_match");
+        assertEquals("3<100% 6<75%", tokenizedMatch.path("minimum_should_match").asText());
+        assertFalse(tokenizedMatch.has("fuzziness"), "tokenized query should not enable noisy AUTO fuzziness");
+
+        String shouldText = should.toString();
+        assertTrue(shouldText.contains("match_phrase"), shouldText);
+        assertTrue(shouldText.contains("title.exact"), shouldText);
+        assertTrue(shouldText.contains("title.keyword"), shouldText);
+        assertTrue(shouldText.contains("\"boost\":60.0"), shouldText);
+        assertTrue(shouldText.contains("\"operator\":\"and\""), shouldText);
     }
 }

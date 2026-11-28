@@ -1,6 +1,7 @@
 package com.biliwind.blog.service.elasticsearch;
 
 import com.biliwind.blog.common.helper.RegionVisibility;
+import com.biliwind.blog.common.helper.SearchDictionaryCatalog;
 import com.biliwind.blog.model.BlogRegion;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,7 +22,12 @@ final class PostSearchRequestBody {
 
     private static final List<String> SEARCH_DOCUMENT_FIELDS = List.of(
             "title^5", "content", "summary", "translations^3", "seoTitle^2", "seoDescription",
-            "aiSummary", "seoKeywords", "tags^2");
+            "aiSummary", "seoKeywords.text^2", "tags.text^3");
+
+    private static final List<String> EXACT_DOCUMENT_FIELDS = List.of(
+            "title.exact^5", "content.exact", "summary.exact", "translations.exact^3",
+            "seoTitle.exact^2", "seoDescription.exact", "aiSummary.exact",
+            "seoKeywords.exact^2", "tags.exact^3");
 
     private PostSearchRequestBody() {
     }
@@ -47,8 +53,7 @@ final class PostSearchRequestBody {
 
         ArrayNode must = bool.putArray("must");
         if (request.title() != null) {
-            must.addObject().putObject("match").putObject("title")
-                    .put("query", request.title()).put("operator", "and");
+            addTitleFilter(must, request.title());
         }
         if (request.content() != null) {
             addSearchDocumentClause(must, request.content());
@@ -80,29 +85,81 @@ final class PostSearchRequestBody {
         return body;
     }
 
-    private static void addSearchDocumentClause(ArrayNode must, String value) {
+    private static void addTitleFilter(ArrayNode must, String value) {
         ObjectNode clause = must.addObject().putObject("bool");
         ArrayNode should = clause.putArray("should");
-        ObjectNode multiMatch = should.addObject().putObject("multi_match");
-        multiMatch.put("query", value);
-        multiMatch.put("type", "best_fields");
-        multiMatch.put("minimum_should_match", "2<-1 5<75%");
-        multiMatch.put("fuzziness", "AUTO");
-        ArrayNode fields = multiMatch.putArray("fields");
-        SEARCH_DOCUMENT_FIELDS.forEach(fields::add);
-        addPhraseBoost(should, "title", value, 6.0);
-        addPhraseBoost(should, "summary", value, 2.0);
-        addPhraseBoost(should, "content", value, 1.5);
-        ObjectNode slug = should.addObject().putObject("wildcard").putObject("slug");
-        slug.put("value", "*" + value.toLowerCase(Locale.ROOT) + "*");
-        slug.put("case_insensitive", true);
+
+        ObjectNode exactKeyword = should.addObject().putObject("term").putObject("title.keyword");
+        exactKeyword.put("value", value);
+        exactKeyword.put("case_insensitive", true);
+        exactKeyword.put("boost", 30.0);
+
+        addPhraseBoost(should, "title.exact", value, 0, 12.0);
+
+        ObjectNode tokenized = should.addObject().putObject("match").putObject("title");
+        tokenized.put("query", value);
+        tokenized.put("operator", "and");
         clause.put("minimum_should_match", 1);
     }
 
-    private static void addPhraseBoost(ArrayNode should, String field, String value, double boost) {
+    private static void addSearchDocumentClause(ArrayNode must, String value) {
+        ObjectNode clause = must.addObject().putObject("bool");
+        ArrayNode should = clause.putArray("should");
+
+        List<String> segmentedTerms = SearchDictionaryCatalog.segmentQuery(value);
+        String tokenizedQuery = segmentedTerms.isEmpty() ? value : String.join(" ", segmentedTerms);
+
+        // 1. 分词后结果：使用收紧后的 minimum_should_match，避免 3 词拆出高频虚词仅命中 2 词就召回
+        ObjectNode tokenizedMatch = should.addObject().putObject("multi_match");
+        tokenizedMatch.put("query", tokenizedQuery);
+        tokenizedMatch.put("type", "best_fields");
+        tokenizedMatch.put("minimum_should_match", "3<100% 6<75%");
+        ArrayNode fields = tokenizedMatch.putArray("fields");
+        SEARCH_DOCUMENT_FIELDS.forEach(fields::add);
+
+        // 2. 仅关键词匹配（不经停用词过滤，保留完整原始输入语序）
+        addPhraseBoost(should, "title.exact", value, 0, 25.0);
+        addPhraseBoost(should, "title.exact", value, 1, 8.0);
+        addPhraseBoost(should, "seoTitle.exact", value, 0, 12.0);
+        addPhraseBoost(should, "summary.exact", value, 0, 10.0);
+        addPhraseBoost(should, "translations.exact", value, 0, 10.0);
+        addPhraseBoost(should, "content.exact", value, 0, 6.0);
+        addPhraseBoost(should, "tags.exact", value, 0, 15.0);
+        addPhraseBoost(should, "seoKeywords.exact", value, 0, 10.0);
+
+        // 3. 完美匹配提权：如果输入的所有内容能完整/全词命中目标，大幅提高权重
+        addExactTermBoost(should, "title.keyword", value, 60.0);
+        addExactTermBoost(should, "tags", value, 35.0);
+        addExactTermBoost(should, "seoKeywords", value, 25.0);
+        addExactTermBoost(should, "slug", value.toLowerCase(Locale.ROOT), 30.0);
+
+        ObjectNode allExactTerms = should.addObject().putObject("multi_match");
+        allExactTerms.put("query", value);
+        allExactTerms.put("type", "cross_fields");
+        allExactTerms.put("operator", "and");
+        allExactTerms.put("boost", 4.0);
+        ArrayNode exactFields = allExactTerms.putArray("fields");
+        EXACT_DOCUMENT_FIELDS.forEach(exactFields::add);
+
+        ObjectNode slugWildcard = should.addObject().putObject("wildcard").putObject("slug");
+        slugWildcard.put("value", "*" + value.toLowerCase(Locale.ROOT) + "*");
+        slugWildcard.put("case_insensitive", true);
+        slugWildcard.put("boost", 5.0);
+
+        clause.put("minimum_should_match", 1);
+    }
+
+    private static void addExactTermBoost(ArrayNode should, String field, String value, double boost) {
+        ObjectNode term = should.addObject().putObject("term").putObject(field);
+        term.put("value", value);
+        term.put("case_insensitive", true);
+        term.put("boost", boost);
+    }
+
+    private static void addPhraseBoost(ArrayNode should, String field, String value, int slop, double boost) {
         ObjectNode phrase = should.addObject().putObject("match_phrase").putObject(field);
         phrase.put("query", value);
-        phrase.put("slop", 1);
+        phrase.put("slop", slop);
         phrase.put("boost", boost);
     }
 
